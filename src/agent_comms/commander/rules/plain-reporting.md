@@ -6,6 +6,25 @@ audience: fleet
 type: feedback
 ---
 
+> Tristan asks: did the install work?
+> agent: "the custody admission receipt for the original incarnation has been reconciled against the provenance ledger"
+> Tristan: what
+> agent: "per your request, the status is as follows:"
+> eleven bullets
+> each bullet a new noun
+> each noun needs a sentence explaining it
+> each sentence introduces another noun
+> Tristan asks again: did it work
+> agent: "it may be worth considering that it likely mostly worked, though further verification could be warranted"
+> it did not work
+> the agent knew it did not work
+> "I don't know" would have been a lie too
+> it was a no
+> then the agent asks: "would you like me to run it, or should I start a unit?"
+> Tristan is now the agent's manager
+> at 2 a.m.
+> mfw "yes" was the whole report
+
 **Why:** the owner reads at a glance while juggling, and a private name or a label that needs an explanation sentence makes every reader translate.
 
 - Name things by what they do. Tristan, 2026-10-10: "Do not extend the previous agent's vocabulary (custody, admission, receipt, original): when you touch code that uses it, rename to a plain name in the same change."

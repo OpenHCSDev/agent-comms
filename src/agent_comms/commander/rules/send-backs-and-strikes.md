@@ -6,6 +6,22 @@ audience: commander
 type: hard-rule
 ---
 
+> unit delivers a PR
+> commander drafts a send-back: "this claim is false"
+> the claim was true
+> the commander read FETCH_HEAD
+> a later fetch had moved it to another PR
+> also the shape it faulted was the commander's own order, P704
+> strike the unit anyway
+> P758 gets four contradicting instructions in one hour
+> each one a strike
+> one strike voided
+> the unit's only crime was obeying the most recent message
+> meanwhile a real defect sails through
+> because the tests passed
+> they tested the unit's own fake
+> mfw the strikes measured the commander
+
 **Why:** a strike that waits or hides teaches nothing, a strike against a mechanism that does not exist is the commander's own slop, and a passing test is not a review. Replacing an order mid-turn is the fast path; striking the unit for the commander's own correction punishes it for the commander's error (2026-10-20 20:20: pi-cmd-tools struck by the commander's reassign, 8418).
 
 - Strikes: a send-back for a unit defect, a false claim, an off-order edit, an undisclosed assumption, a turn ended stalled on nothing. A strike never takes the task away or reassigns it: it is the signal to read that unit's trail and diff, find why it keeps missing, and order the fix to that cause. Tristan, 2026-10-25: "just use it as a measure to scrutinize why something is going wrong."

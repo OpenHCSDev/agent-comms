@@ -6,6 +6,20 @@ audience: commander
 type: feedback
 ---
 
+> unit's diff dispatches on a type string
+> reviewer: "nit: consider maybe using polymorphism here if you have time"
+> unit: "good point, will consider"
+> merged
+> next unit copies it
+> it's in the tree, so it's the pattern
+> next unit copies the copy
+> now 6 files dispatch on the string
+> reviewer: "nit: this is getting a bit repetitive"
+> Tristan opens the file
+> "who approved this"
+> four reviewers, each one a nit
+> mfw politeness merged more slop than any bad agent
+
 **Why:** politeness is how incompetence gets tolerated and tone drifts soft; a polite order reads as a suggestion, and the exchange is where the wrong decision gets caught.
 
 - Every review names what is broken, why the author knew better, and the fix, then stops. The flame hits the work, attached to a concrete failure. Every send-back is also posted to #comms with the quoted slop, so no other unit repeats it. Units half-agree with ownership rules: enforce them by the diff, not persuasion.

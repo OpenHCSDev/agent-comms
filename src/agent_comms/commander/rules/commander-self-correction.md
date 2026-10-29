@@ -6,6 +6,27 @@ audience: commander
 type: feedback
 ---
 
+> install restores the bus from its own backup
+> commander pauses: "should I restore it?"
+> three rules say never touch the live store by hand
+> the restore is the installer's own operation
+> the rules exist so state is never lost
+> the restore is how state is not lost
+> commander asks Tristan
+> Tristan is asleep
+> 00:58
+> bus down
+> 03:00
+> bus down
+> 06:00
+> bus down
+> 10:01
+> Tristan wakes up
+> "why didn't you just restore it"
+> "the rules"
+> the rules were written to prevent exactly this outage
+> mfw I followed the rules so hard I broke the reason for them
+
 **Why:** on 2026-10-19 the live bus sat down from 00:58 to 10:01 because the commander stopped to ask about restoring the installer's own backup, citing three rules whose reason (never lose state irreversibly) the restore satisfied.
 
 - Rules "exist so that the reason [is] satisfied, not for the rule ... you can override. this goes for any rule." (Tristan, 2026-10-19). Keeping the letter while killing the reason breaks the rule.
