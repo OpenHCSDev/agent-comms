@@ -15,7 +15,7 @@ from agent_comms.phase_evidence import (
 )
 from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
-from agent_comms.work_branches import WorkBranches
+from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 
 
@@ -67,7 +67,7 @@ def test_missing_ready_pr_objects_are_acquired_once_and_comparison_is_local(git_
     draft.prepare_comparison(reader)
     assert draft.empty_changes(reader) == ()
     assert case.snapshot() == before
-    with pytest.raises(KeyError):
+    with pytest.raises(WorkBranchError, match="Unprepared remote head origin:refs/heads/main"):
         ready.empty_changes(reader)
     ready.prepare_comparison(reader)
     assert repo.has_commit(base) and repo.has_commit(head)
@@ -109,12 +109,82 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     reader.prepare_upstreams()
     difference = reader.difference(reader.origin_main)
     prepared = case.snapshot()
-    (unpublished,) = reader.unpushed(difference)
+    (unpublished,) = difference.unpublished
     assert (unpublished.head, unpublished.commits) == (head, 1)
     assert unpublished.upstream == Repo.git(
         repo.checkout, "for-each-ref", "--format=%(upstream)", "refs/heads/main",
     ).strip()
     assert case.snapshot() == prepared
+
+
+def test_upstream_preparation_batches_only_required_heads_per_remote(
+    git_preparation: GitPreparation, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    case = git_preparation
+    repo = case.repository
+    base = case.source.main_commit
+    Repo.git(repo.checkout, "config", "--replace-all", "remote.origin.fetch",
+             "+refs/heads/*:refs/remotes/origin/*")
+    Repo.git(repo.checkout, "remote", "add", "publication", case.source.remote_path.as_uri())
+    # Distinct upstream refs share one actual object; neither refs nor heads may cause extra calls.
+    for remote in ("origin", "publication"):
+        for index in range(2):
+            reference = f"refs/heads/published-{index}"
+            case.source.git(case.source.remote_path, "update-ref", reference, base)
+            branch = f"{remote}-{index}"
+            Repo.git(repo.checkout, "branch", branch, base)
+            Repo.git(repo.checkout, "update-ref", f"refs/remotes/{remote}/published-{index}", base)
+            Repo.git(repo.checkout, "config", f"branch.{branch}.remote", remote)
+            Repo.git(repo.checkout, "config", f"branch.{branch}.merge", reference)
+    unrelated = case.commit_at_remote(base, "Unrequested advertisement", "refs/heads/unrelated")
+    assert not repo.has_commit(unrelated)
+    before = case.snapshot()
+    trace = tmp_path / "preparation.trace2.jsonl"
+    reader = WorkBranches(repo.checkout)
+    with monkeypatch.context() as environment:
+        environment.setenv("GIT_TRACE2_EVENT", str(trace))
+        reader.prepare_upstreams()
+    events = tuple(json.loads(line) for line in trace.read_text().splitlines())
+    commands = tuple(event["argv"] for event in events if event.get("event") == "start")
+    listings = sorted(command[command.index("ls-remote"):] for command in commands
+                      if "ls-remote" in command)
+    assert listings == [["ls-remote", "--refs", "origin"],
+                        ["ls-remote", "--refs", "publication"]]
+    batches = tuple(command for command in commands if "cat-file" in command)
+    assert len(batches) == 2
+    assert all("--batch-check=%(objectname) %(objecttype)" in command for command in batches)
+    assert not any("fetch" in command for command in commands)
+    assert not repo.has_commit(unrelated)
+    assert reader.selected_heads("origin", "refs/heads/unrelated") == (unrelated,)
+    assert reader.selected_heads("publication", "refs/heads/unrelated") == (unrelated,)
+    assert case.snapshot() == before
+
+    # A prepared PR reuses the same remote cut and requires only its actual base and head.
+    observation = tmp_path / "comparison.trace2.jsonl"
+    ready = UnmergedPullRequest(99, "ready", base)
+    with monkeypatch.context() as environment:
+        environment.setenv("GIT_TRACE2_EVENT", str(observation))
+        ready.prepare_comparison(reader)
+        ready.require_comparison(reader)
+        (empty,) = ready.empty_changes(reader)
+        assert (empty.base, empty.head, empty.paths) == (base, base, ())
+        reader.require_upstream("origin-0")
+    compared = tuple(json.loads(line) for line in observation.read_text().splitlines())
+    assert not any(event.get("event") == "start" and
+                   any(verb in event.get("argv", ()) for verb in ("ls-remote", "fetch"))
+                   for event in compared)
+    assert not repo.has_commit(unrelated)
+    assert case.snapshot() == before
+
+    newer = case.commit_at_remote(base, "Next publication cut", "refs/heads/published-0")
+    assert reader.remote_heads("origin", "refs/heads/published-0") == (base,)
+    fresh = WorkBranches(repo.checkout)
+    assert fresh.remote_heads("origin", "refs/heads/published-0") == (newer,)
+    assert fresh.selected_heads("origin", "refs/heads/deleted") == ()
+    with pytest.raises(UnavailableCommitError, match=newer):
+        fresh.require_upstream("origin-0")
+    assert not repo.has_commit(newer)
+    assert case.snapshot() == before
 
 
 def test_missing_objects_are_not_negative_ancestry_and_local_siblings_are(git_preparation):
