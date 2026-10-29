@@ -16,7 +16,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError

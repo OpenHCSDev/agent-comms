@@ -23,7 +23,7 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

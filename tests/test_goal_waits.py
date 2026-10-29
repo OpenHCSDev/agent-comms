@@ -1,7 +1,7 @@
 from dataclasses import replace
 import sqlite3
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, GoalWaitTargetRow, RecordedGoalWait
 from agent_comms.thread_identity import RecordedThreadIncarnation

@@ -623,7 +623,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     import json
     from datetime import datetime
     from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
         "rateLimits": {"primary": {

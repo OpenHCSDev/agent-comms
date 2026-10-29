@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from .audience_manifest import AudiencedMessage, FrozenRecipient
 from .channel_targets import CommandTarget, NamedTarget
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .messages import Message
 from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision, WakePolicy
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 @dataclass(frozen=True)

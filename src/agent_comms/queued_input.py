@@ -34,7 +34,7 @@ from .coordination_session import (
 )
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import InputId, GoalId, RootId
+from agent_comms.nominal.field_codec import InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput

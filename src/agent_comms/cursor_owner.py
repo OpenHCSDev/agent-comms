@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import InputId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
 from .acp_extension import CursorObservation, EmptyCursorObservation, VerifiedCursorObservation

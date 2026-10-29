@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
 from agent_comms.repo import Checkout, DetachedStart, Repo
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,

@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent_comms.cli_commands import CheckoutGrant
 from agent_comms.cli_verbs.checkout import CheckoutCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import RepositoryCheckoutAllocation

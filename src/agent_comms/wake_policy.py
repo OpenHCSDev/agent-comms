@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
 
-from agent_comms.field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
 from .coordination_errors import IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .lifecycle_capability import Active, LifecycleCapability
 from .source_proof_requirement import (
     FullSourceProof,

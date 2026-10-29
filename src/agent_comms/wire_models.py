@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, TypeAdapter
 from pydantic._internal._model_construction import ModelMetaclass
 from typing_extensions import TypeForm
 
-from .declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
 
 
 class WireModel(BaseModel):

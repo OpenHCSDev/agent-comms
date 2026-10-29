@@ -4,7 +4,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Self
 
-from .field_codec import Sha256Text
+from agent_comms.nominal.field_codec import Sha256Text
 
 
 @dataclass(frozen=True, slots=True)

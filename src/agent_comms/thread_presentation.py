@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, RouteChangedError, UnregisteredThreadError
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 from .notification_evidence import NoNotificationWindow, NotificationWindow

@@ -13,7 +13,7 @@ from agent_comms.registry_document import ThreadRows
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
 from agent_comms.owner_lifecycle import OwnerRestartSelection, ProcessExitedOwnerCompletion

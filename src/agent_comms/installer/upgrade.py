@@ -53,8 +53,8 @@ from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode

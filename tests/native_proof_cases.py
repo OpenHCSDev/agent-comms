@@ -7,7 +7,7 @@ from contextlib import closing
 from collections.abc import Iterable
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_pi import NativeContextJournal, NativeContextProof, NativeContextRecord
 from agent_comms.native_session_files import NativeSessionFiles
 

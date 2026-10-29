@@ -7,8 +7,8 @@ import pytest
 from pydantic import JsonValue
 from typing_extensions import TypeForm
 
-from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
-from agent_comms.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     FlagDirective,
@@ -163,7 +163,7 @@ def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims(
 
 
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector() -> None:
-    from agent_comms.field_codec import DeclaredFieldPlan
+    from agent_comms.nominal.field_codec import DeclaredFieldPlan
 
     class ProbeDirective(FlagDirective):
         pass
@@ -185,7 +185,7 @@ def test_field_plan_discovers_a_new_flag_without_changing_the_selector() -> None
 
 
 def test_field_plan_refuses_an_unclaimed_representation() -> None:
-    from agent_comms.field_codec import FieldPlan
+    from agent_comms.nominal.field_codec import FieldPlan
 
     class UnclaimedPath(PathText):
         field_plan = FieldPlan  # The base has no registered field claim.
@@ -434,6 +434,8 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
     from agent_comms.typed_table import Column, TextStorage, TypedTable
 
     class HexInteger(TextRepresentation):
+        schema_description = "Hexadecimal integer text"
+
         @classmethod
         def encode(cls, value: object) -> str:
             if type(value) is not int:
@@ -615,7 +617,7 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None
     import math
     from typing import Literal
 
-    from agent_comms.field_codec import AcceptsNull, FieldRepresentation
+    from agent_comms.nominal.field_codec import AcceptsNull, FieldRepresentation
 
     class NullableInteger(AcceptsNull, FieldRepresentation):
 
@@ -994,7 +996,7 @@ class _SavedRow:
 def test_refused_record_data_raises_the_declared_error(wire: dict[str, JsonValue], refusal: str) -> None:
     with pytest.raises(MalformedRecord) as raised:
         FieldCodec.decode(_SavedRow, wire)
-    from agent_comms.field_codec import RecordProblems
+    from agent_comms.nominal.field_codec import RecordProblems
 
     assert type(raised.value) is RecordProblems
     assert len(raised.value.problems) == 1
@@ -1002,7 +1004,7 @@ def test_refused_record_data_raises_the_declared_error(wire: dict[str, JsonValue
 
 
 def test_record_reports_missing_unknown_and_malformed_siblings_together() -> None:
-    from agent_comms.field_codec import RecordProblems
+    from agent_comms.nominal.field_codec import RecordProblems
 
     with pytest.raises(RecordProblems) as raised:
         FieldCodec.decode(_SavedRow, {"path": 7, "at": 1.5, "extra": 0})
@@ -1100,7 +1102,7 @@ def test_nominal_ids_roundtrip_preserves_wire_schema_and_refuses_wrong_kind() ->
 
 @pytest.mark.parametrize("count", (1, 9, 17))
 def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> None:
-    from agent_comms.field_codec import HexDigits
+    from agent_comms.nominal.field_codec import HexDigits
 
     class DeclaredHex(HexDigits):
         digits = count
@@ -1115,7 +1117,7 @@ def test_hex_spelling_derives_new_lengths_from_the_declaration(count: int) -> No
 
 
 def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
-    from agent_comms.field_codec import GitCommitText
+    from agent_comms.nominal.field_codec import GitCommitText
 
     class InheritedCommit(GitCommitText):
         pass
@@ -1129,7 +1131,7 @@ def test_hex_commit_spelling_keeps_its_bounded_length_contract() -> None:
 
 
 def test_order_identity_owns_minting_and_wire_spelling() -> None:
-    from agent_comms.field_codec import OrderId, OrderIdText
+    from agent_comms.nominal.field_codec import OrderId, OrderIdText
 
     order = OrderId.mint()
     assert type(order) is OrderId

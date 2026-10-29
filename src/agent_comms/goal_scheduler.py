@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .agent_event_updates import AcpEventConsumer
 from .child_process import ProcessIdentity
 from .coordinator import Coordination

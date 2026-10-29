@@ -2,7 +2,7 @@
 import pytest
 
 from agent_comms.input_key import AcpInputKey
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_attempt import MissingInput, NotSentInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
 from agent_comms.turn_failure import (

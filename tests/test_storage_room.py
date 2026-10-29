@@ -19,7 +19,7 @@ from agent_comms.storage_rules import StorageRule
 from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.field_codec import RoomTicket
+from agent_comms.nominal.field_codec import RoomTicket
 
 
 def test_host_ledger_writer_carries_old_schema_and_preserves_peaks_and_claims(tmp_path):

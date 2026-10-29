@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder

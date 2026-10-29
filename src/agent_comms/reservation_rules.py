@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from typing import ClassVar
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class ReservationViolationError(ValueError):

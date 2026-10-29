@@ -10,7 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.field_codec import GoalId, ThreadLookup
+from agent_comms.nominal.field_codec import GoalId, ThreadLookup
 from .child_process import ProcessIdentity
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations

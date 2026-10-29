@@ -26,9 +26,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile

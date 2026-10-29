@@ -8,7 +8,7 @@ from typing import Never
 import signal
 import sys
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.launch import InstallRun, stopped
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.upgrade import Stack, TargetTree

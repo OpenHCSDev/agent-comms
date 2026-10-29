@@ -17,7 +17,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime import RuntimeProxy, socket_path

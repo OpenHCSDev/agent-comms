@@ -17,7 +17,7 @@ from agent_comms.activity import (
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 

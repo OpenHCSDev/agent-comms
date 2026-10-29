@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated
 
 from .channel_targets import CommandTarget
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, TurnId, WireOmitDefault
+from agent_comms.nominal.field_codec import FieldCodec, TurnId, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective

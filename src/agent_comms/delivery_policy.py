@@ -3,7 +3,7 @@
 from abc import abstractmethod
 
 from .audience_manifest import AudiencedMessage
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .wake import MessageControl, resolve_wake_cohort
 from .wake_policy import MessageAudience, RecipientDecision, WakeDecision
 

@@ -4,7 +4,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 
-from ..field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from ..relationships import RelationRecord
 from ..turn_context import InstructionSegment, OwnerProvenance
 

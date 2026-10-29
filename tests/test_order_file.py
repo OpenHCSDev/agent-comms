@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.commander.order import OrderFile, forwarders_added, main, overrides
 from agent_comms.commander.request import RequestAddVerb
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo

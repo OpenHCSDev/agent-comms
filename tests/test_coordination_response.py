@@ -27,7 +27,7 @@ from agent_comms.coordination_response import (
 from agent_comms.coordination_tables.executions import NoPointedExecution, WireOrigin
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import InputId, RootId, ThreadLookup, TurnId
+from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
 from agent_comms.assignment_states import CompletedAssignment

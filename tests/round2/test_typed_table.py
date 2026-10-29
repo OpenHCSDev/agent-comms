@@ -10,7 +10,7 @@ from typing import Annotated, ClassVar, Literal, Type
 
 import pytest
 
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
 )
 from agent_comms.messages import InfoKind, MessageKind

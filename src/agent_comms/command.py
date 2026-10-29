@@ -5,7 +5,7 @@ from typing import Self
 
 from collections.abc import Mapping
 
-from .field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 class Command[Context, Result](ABC):

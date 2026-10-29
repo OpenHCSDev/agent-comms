@@ -36,7 +36,7 @@ from nominal_refactor_advisor.codemod import (
     SourceTextReplacement,
 )
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type ImportNode = ast.Import | ast.ImportFrom

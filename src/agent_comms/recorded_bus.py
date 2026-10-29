@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from pathlib import Path
 
-from .field_codec import DeclaredWireType, FieldCodec, MalformedRecord, NullMember, SubclassUnion
+from agent_comms.nominal.field_codec import DeclaredWireType, FieldCodec, MalformedRecord, NullMember, SubclassUnion
 from .private_path import AbsentPath, FileIdentity, ObservedPath, PresentPath
 
 

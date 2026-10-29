@@ -26,7 +26,7 @@ from agent_comms.commander_heartbeat import (
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.comms import Comms, wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile

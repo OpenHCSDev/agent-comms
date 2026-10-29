@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .child_process import AttachedChild, ChildOutcome, join_retirement
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
 from .native_failures import NativePiUnavailable, NativeRequestFailure

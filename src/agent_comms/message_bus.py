@@ -25,7 +25,7 @@ from agent_comms.child_process import AsyncWork
 from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.maintenance_barrier import FreshIngress, MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds

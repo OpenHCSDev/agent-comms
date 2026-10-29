@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Self
 
 from .coordination_errors import IdentityConflict
-from .field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
 
 @dataclass(frozen=True, kw_only=True)

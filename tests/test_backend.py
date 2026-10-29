@@ -10,7 +10,7 @@ import pytest
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
 from agent_comms.agent_backend import InputContent, InputRequest, SteerInputPolicy
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_watchdog import ModelWait
 from pi_session_turn import one_turn_events

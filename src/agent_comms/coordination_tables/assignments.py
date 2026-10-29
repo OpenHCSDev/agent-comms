@@ -22,7 +22,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,

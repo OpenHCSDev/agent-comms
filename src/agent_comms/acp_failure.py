@@ -22,9 +22,9 @@ if TYPE_CHECKING:
     from .turn_input_source import OriginalTurnInput
 
 from .coordination_errors import Refused
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec, JsonShapeFamily, JsonShapeMember, NullMember, RecordMember, SubclassUnion,
     WireName, WireOmitDefault, boundary_decoder,
 )

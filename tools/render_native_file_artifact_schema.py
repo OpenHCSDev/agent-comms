@@ -3,7 +3,7 @@ import json
 import sys
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_file_artifact import Utf8FileWriteArtifact
 from agent_comms.pi_payloads import FileMutationToolDetails, NativeToolDetails
 

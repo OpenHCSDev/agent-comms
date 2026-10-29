@@ -18,14 +18,14 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 from agent_comms.participant_identity import ParticipantIdentity
 
 from .cli_options import JsonFlagRecord
-from .declared_family import (
+from agent_comms.nominal.declared_family import (
     DeclaredFamily,
     UniqueExternalSelector,
     UnknownFamilyMember,
     declared_words,
 )
 from .errors import RelationViolationError
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     TurnId,
     SingleFieldValue,

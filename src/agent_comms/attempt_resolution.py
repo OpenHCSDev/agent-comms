@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
-from .field_codec import MessageId, NullMember, OrderId, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import MessageId, NullMember, OrderId, RetryDecisionId, SubclassUnion, TaggedRecordMember, TurnId
 
 
 class WorkDecision(DeclaredFamily, affix="Decision"):

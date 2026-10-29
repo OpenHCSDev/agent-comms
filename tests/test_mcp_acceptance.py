@@ -36,7 +36,7 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.runtime import RuntimeProxy
 from agent_comms.thread_identity import NoObservedTurn, TurnFence

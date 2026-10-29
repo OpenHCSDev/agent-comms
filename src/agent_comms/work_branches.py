@@ -21,8 +21,8 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
-from .declared_family import DeclaredFamily
-from .field_codec import GitCommitText, PathText, projected
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import GitCommitText, PathText, projected
 from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel

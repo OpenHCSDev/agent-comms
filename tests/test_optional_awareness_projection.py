@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
-from agent_comms.field_codec import FieldCodec, MessageId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.lifecycle_capability import Executing
 
 from conftest import publish_initial, without_mutation_guards

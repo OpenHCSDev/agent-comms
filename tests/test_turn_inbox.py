@@ -13,7 +13,7 @@ from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.thread_model import UndeclaredModel
 from agent_comms.turn_failure import QueuedInputMissing, QueuedInputNotSent
 from native_response_fixture import native_response_session
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.turn_inputs import InputForwarding
 
 

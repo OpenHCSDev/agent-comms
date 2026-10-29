@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Self
 
-from ..field_codec import NullMember, RecordMember, SubclassUnion, WireName
+from agent_comms.nominal.field_codec import NullMember, RecordMember, SubclassUnion, WireName
 from ..goal_states import GoalState
 from ..thread_text import ThreadText
 

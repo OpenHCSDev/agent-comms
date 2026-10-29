@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .ordinary_turn_rules import OrdinaryGoalRule
 from .reservation_rules import ReservationViolationError
 from .tool_denial import SelectedToolDenied

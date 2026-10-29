@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .child_process import NoProcess, ProcessState
 from .publication_measurements import PublicationMeasurements
-from .field_codec import boundary_decoder
+from agent_comms.nominal.field_codec import boundary_decoder
 
 if TYPE_CHECKING:
     from .native_pi import NativePiRpcLaunch

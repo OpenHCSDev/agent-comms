@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import ClassVar, Never
 
-from .declared_family import DeclaredFamily
-from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import AcceptsNull, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
 
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""

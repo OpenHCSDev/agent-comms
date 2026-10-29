@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Never
 
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

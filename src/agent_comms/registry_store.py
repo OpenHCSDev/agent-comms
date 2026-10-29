@@ -17,7 +17,7 @@ from typing import ClassVar, Self
 from .coordination_database import CoordinationStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, NullMember, TurnId
 from .locked_store import DocumentBytes, LockedStore, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner

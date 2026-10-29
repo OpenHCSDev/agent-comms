@@ -10,7 +10,7 @@ from functools import cache
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .input_key import BusInputKey, InputKey, OwnedBusInputKey
 from .projection_source import ProducedRow, ProjectionSource
 

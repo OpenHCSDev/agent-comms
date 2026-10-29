@@ -23,8 +23,8 @@ from typing import (
 from pydantic import JsonValue
 
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.field_codec import (
     ExternalField,
     ExternalNull,
     ExternalNullMember,
@@ -671,6 +671,8 @@ class CodedProviderDiagnosticError(ProviderDiagnosticError):
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):
     """The native provider's scalar spelling, not a second record decoder."""
+
+    schema_description = "agent_comms.pi_payloads.TransportStageText text"
 
     @classmethod
     def encode(cls, value: ProviderTransportStage) -> str:

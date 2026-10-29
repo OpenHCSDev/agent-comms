@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities, ready
 
@@ -1082,12 +1082,12 @@ def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
 
 def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decoder(repo):
     marked = (
-        "from agent_comms.field_codec import boundary_decoder\n\n\n"
+        "from agent_comms.nominal.field_codec import boundary_decoder\n\n\n"
         "@boundary_decoder\ndef decoded(value: str):\n    return value\n"
     )
     files = {
         "plan.py": marked,
-        "foreign.py": marked.replace("agent_comms.field_codec", "elsewhere"),
+        "foreign.py": marked.replace("agent_comms.nominal.field_codec", "elsewhere"),
         "owner.py": "def owner(value: str):\n    return value\n",
     }
     base = repo.commit(files)

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Self
 
 from .build_identity import InstalledBuild
-from .field_codec import DisclosureIdentity, OrderId
+from agent_comms.nominal.field_codec import DisclosureIdentity, OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
 

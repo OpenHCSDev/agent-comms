@@ -8,7 +8,7 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import MergeReviewResult
 from agent_comms.comms import Comms
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_commands import ShellCommand

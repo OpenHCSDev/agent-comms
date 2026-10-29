@@ -33,9 +33,9 @@ from .command import Command
 from .context_store import ContextManifestReference
 from .coordination_database import CoordinationStore
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, FieldCodec, WireName, WireValue, GoalId
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal

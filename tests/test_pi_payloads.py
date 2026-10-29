@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
@@ -56,8 +56,8 @@ def test_idle_proof_requires_reported_native_state(state):
 
 
 def test_single_external_member_is_derived_and_requires_one_provided_case():
-    from agent_comms.declared_family import DeclaredFamily
-    from agent_comms.field_codec import ExternalNullMember, SingleExternalMember
+    from agent_comms.nominal.declared_family import DeclaredFamily
+    from agent_comms.nominal.field_codec import ExternalNullMember, SingleExternalMember
     from agent_comms.pi_payloads import PiPayload
 
     class Choice(SingleExternalMember, PiPayload, DeclaredFamily, affix="Choice"):

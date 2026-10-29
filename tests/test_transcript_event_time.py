@@ -7,7 +7,7 @@ from datetime import datetime
 import pytest
 from transcript_record_fixture import transcript_record
 
-from agent_comms.field_codec import MalformedRecord, RecordedTimestamp
+from agent_comms.nominal.field_codec import MalformedRecord, RecordedTimestamp
 from agent_comms.native_entries import NativeEntry, TranscriptProjection
 from agent_comms.routing import TurnRouting
 from agent_comms.transcript_events import AssistantTranscript

@@ -5,8 +5,8 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
-from .field_codec import JsonShapeFamily, JsonShapeMember, TurnId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import JsonShapeFamily, JsonShapeMember, TurnId
 
 
 class ReportedTurnState(DeclaredFamily, JsonShapeFamily, affix="ReportedTurnState"):

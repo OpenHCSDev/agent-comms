@@ -39,10 +39,10 @@ from pathlib import Path
 
 from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
 )
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
@@ -328,6 +328,7 @@ class WordedText(BoundedText):
     """Free text that must say at least its number of words. FieldCodec decodes every option
     of a verb at once, so every short text is refused in the same refusal."""
 
+    schema_description = "agent_comms.commander.judge.WordedText text"
     words: ClassVar[int]
     says: ClassVar[str]
 
@@ -351,6 +352,8 @@ class WordedText(BoundedText):
 class ReasonText(BoundedText):
     """VerdictReason owns how many words a reason takes and which words it may not use."""
 
+    schema_description = "agent_comms.commander.judge.ReasonText text"
+
     @classmethod
     def from_text(cls, value: str) -> str:
         if refused := VerdictReason.wording_refusal(super().from_text(value)):
@@ -359,6 +362,7 @@ class ReasonText(BoundedText):
 
 
 class RoastText(WordedText):
+    schema_description = "agent_comms.commander.judge.RoastText text"
     words = 12
     says = "name the duplicated fact and its owner, with because"
 
@@ -372,6 +376,7 @@ class RoastText(WordedText):
 
 
 class FixText(WordedText):
+    schema_description = "agent_comms.commander.judge.FixText text"
     words = 8
     says = "name the owner and the replacing shape"
 

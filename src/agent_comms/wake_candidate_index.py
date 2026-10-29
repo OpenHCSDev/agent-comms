@@ -9,7 +9,7 @@ from pathlib import Path
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CandidateQuery
-from .field_codec import MalformedRecord, MessageId, ThreadLookup
+from agent_comms.nominal.field_codec import MalformedRecord, MessageId, ThreadLookup
 from .wake_policy import WakePolicy
 
 

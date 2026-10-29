@@ -11,7 +11,7 @@ from agent_comms.assignment_states import DeferredAssignment, FullPendingAssignm
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.coordination_cohort import pending_sealed_assignments
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.private_path import FileRevision
 from agent_comms.queued_input import DeliveredInput

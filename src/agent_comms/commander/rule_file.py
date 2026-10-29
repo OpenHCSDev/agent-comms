@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import ClassVar, Self
 
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, boundary_decoder
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, boundary_decoder
 
 
 class RuleAudience(DeclaredFamily, affix="Audience"):

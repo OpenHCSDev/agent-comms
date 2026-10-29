@@ -36,7 +36,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .config_options import RunningSelection
 from .errors import RelationViolationError
-from .field_codec import (
+from agent_comms.nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     NullMember,

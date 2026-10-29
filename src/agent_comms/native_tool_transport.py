@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 from .child_process import join_retirement
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord, Token256Text
 from .lifecycle_capability import Complete
 from .native_tool_call import (
     DuplicateToolCallIdentity,

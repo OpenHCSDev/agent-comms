@@ -70,7 +70,7 @@ def test_read_capture_defers_when_coordinator_has_no_snapshot(private_comms):
     from agent_comms.coordination_errors import CoordinationReadUnavailable
     from agent_comms.coordination_session import ReadNativeCoordinationSession
     from agent_comms.coordinator import Coordination
-    from agent_comms.field_codec import ThreadLookup
+    from agent_comms.nominal.field_codec import ThreadLookup
     from agent_comms.store_files import StoreBusy
     held, release = threading.Event(), threading.Event()
     path = private_comms.root / "coordination.sqlite3"

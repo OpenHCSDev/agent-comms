@@ -12,8 +12,8 @@ from urllib.request import (
 )
 
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from .thread_identity import ThreadIncarnation
 from .turn_context import ContextSpan
 from .working_memory_questions import OtherSpan, SpanAnswer, SpanQuestion

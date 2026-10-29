@@ -11,7 +11,7 @@ from agent_comms.change_report import (
 )
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
-from agent_comms.field_codec import OwnerRequestKey
+from agent_comms.nominal.field_codec import OwnerRequestKey
 from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.repo import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId

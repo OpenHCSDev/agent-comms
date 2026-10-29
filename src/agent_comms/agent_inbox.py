@@ -16,7 +16,7 @@ from .bus_tables import MessageIdentitySource
 from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.harness_deliveries import HarnessDelivery
-from .field_codec import RecordMember
+from agent_comms.nominal.field_codec import RecordMember
 from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
 from .read_basis import ReadCursor
 

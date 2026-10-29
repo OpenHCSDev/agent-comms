@@ -11,9 +11,9 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
@@ -376,6 +376,8 @@ class RestartEnvironment(EnvironmentRecord):
 
 
 class TagListText(TextRepresentation[frozenset[str]]):
+    schema_description = "agent_comms.launch_runtime.TagListText text"
+
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, frozenset):
@@ -388,6 +390,8 @@ class TagListText(TextRepresentation[frozenset[str]]):
 
 
 class FlagText(TextRepresentation[bool]):
+    schema_description = "agent_comms.launch_runtime.FlagText text"
+
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, bool):

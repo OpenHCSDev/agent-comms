@@ -14,9 +14,9 @@ from types import MappingProxyType, SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
-from agent_comms.field_codec import InputId
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.pi_durable_backend import PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile

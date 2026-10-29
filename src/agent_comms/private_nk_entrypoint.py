@@ -7,7 +7,7 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
-from agent_comms.field_codec import RootId
+from agent_comms.nominal.field_codec import RootId
 
 import shutil
 from abc import ABC, abstractmethod

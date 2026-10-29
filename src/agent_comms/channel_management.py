@@ -14,7 +14,7 @@ from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
 from .messages import InfoKind, MembershipConversationRole, Message

@@ -12,7 +12,7 @@ from agent_comms.acp_extension import (
     NativeRoundCommittedUpdate,
 )
 from agent_comms.coordination_errors import TranscriptChanged
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )

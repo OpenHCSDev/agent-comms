@@ -18,7 +18,7 @@ from .coordination_errors import Refused
 from .active_route import resolve_comms_route
 from .launch_root import LaunchRoot
 from .bus import Bus
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
@@ -34,7 +34,7 @@ from .pi_commands import (
 from .watched import FileSource
 
 if TYPE_CHECKING:
-    from .field_codec import AcpSessionId
+    from agent_comms.nominal.field_codec import AcpSessionId
     from .session_config_options import SessionConfigOptions
     from .active_route import CommsRoute
     from .native_package import VerifiedNativePackage

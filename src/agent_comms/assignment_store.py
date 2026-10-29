@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from agent_comms.field_codec import AssignmentId, ThreadLookup
+from agent_comms.nominal.field_codec import AssignmentId, ThreadLookup
 
 from collections.abc import Callable, Sequence
 from dataclasses import replace

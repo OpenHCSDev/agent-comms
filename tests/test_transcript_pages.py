@@ -160,7 +160,7 @@ def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
 
 def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_path):
     from agent_comms.cli_verbs.register import RegisterCliCommand
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.thread_execution import NativeThreadExecution
     from agent_comms.transcripts import NoNativeTranscriptCursor, TranscriptCursor
 

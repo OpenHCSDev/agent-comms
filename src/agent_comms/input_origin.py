@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import RootId
+from agent_comms.nominal.field_codec import RootId
 from .goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText

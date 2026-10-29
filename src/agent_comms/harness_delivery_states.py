@@ -12,8 +12,8 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
-from .declared_family import DeclaredFamily
-from .field_codec import TranscriptRecordId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState

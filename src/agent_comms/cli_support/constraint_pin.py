@@ -7,7 +7,7 @@ from typing import Annotated
 
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import WorktreeArgument
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 
 
 @dataclass(frozen=True, kw_only=True)

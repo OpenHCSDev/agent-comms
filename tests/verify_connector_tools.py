@@ -30,7 +30,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId, OrderId
 from agent_comms.goal_actions import CreateProblemGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.owner_requests import NewestOpenRequest

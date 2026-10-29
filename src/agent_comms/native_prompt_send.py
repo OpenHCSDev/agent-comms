@@ -19,7 +19,7 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .publication_measurements import PublicationMeasurements
-from .field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
 

@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
 
