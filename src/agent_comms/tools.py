@@ -90,7 +90,6 @@ from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
 from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
 from .work_branches import WorkBranch, WorkBranches
-from .turn_item import SourceTurn, NoSourceTurn
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -848,8 +847,8 @@ class SendTool(PublishingTool[ThreadCaller]):
         "Send a message to another thread or channel. Address specific threads with "
         "@thread-name in the body: the named threads are told they are the intended "
         "readers, and others dismiss quietly. Unknown names stay plain text. "
-        "External sends must supply source_turn or answers to link an answer; "
-        "an unnamed external turn contributes no inferred answer links."
+        "External sends may name received originals in answers; "
+        "source-turn identity is not a model argument."
     )
     target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: Annotated[str, *tool_field("Message text")]
@@ -864,9 +863,6 @@ class SendTool(PublishingTool[ThreadCaller]):
         *tool_field("Change report fields; required for the change-report kind"),
     ] = NoChangeReport()
 
-    source_turn: Annotated[
-        SourceTurn, *tool_field("Exact external source turn; never inferred from transcript recency")
-    ] = NoSourceTurn()
     answers: Annotated[
         tuple[MessageReference, ...],
         *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
@@ -881,7 +877,7 @@ class SendTool(PublishingTool[ThreadCaller]):
             result = comms.messaging.send(
                 sender, target.name, body, self.type, report=self.report,
                 task=self.attachment(comms, target), origin=caller.origin(),
-                source_turn=self.source_turn, answers=self.answers)
+                answers=self.answers)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,
