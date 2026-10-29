@@ -158,32 +158,7 @@ These are drafts to steer, built from each file's own record. Tristan's correcti
 
 ### slop-and-polymorphism
 
-> need to know if a message is from a unit or a channel
-> `if kind == "channel":`
-> works
-> need to know if it's a DM
-> `elif kind == "dm":`
-> works
-> need the third kind
-> `elif kind == "inbox":`
-> works
-> the string "inbox" now lives in 14 files
-> someone renames it "mailbox" in 9 of them
-> the other 5 still say "inbox"
-> nothing crashes
-> messages to the 5 silently route nowhere
-> bug report: "my messages disappeared"
-> fix the 5
-> add a test that the strings match
-> the test is a third copy of the strings
-> rename again next month
-> now there are three places to forget
-> the class `Channel` existed the entire time
-> it knew it was a channel
-> it would have said so if anyone had asked it a method
-> mfw I built a second type system out of crayons next to the real one
-
-Second draft, strings (Tristan asked for it 2026-10-28; pick one or merge):
+Chosen by Tristan, 2026-10-28.
 
 > need to store an execution id
 > could make a type
