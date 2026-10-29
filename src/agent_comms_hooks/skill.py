@@ -219,7 +219,8 @@ class DeckStart(DealtDeck):
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path."""
-        self.prepare(reader)
+        prompts = self.prompts()
+        self.prepare(reader, prompts)
         sources = reader.sources()
         return (
             self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
@@ -237,11 +238,11 @@ class DeckStart(DealtDeck):
             " doing about it right now}]}. This order is given once per session start or"
             " compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
-            self.owner_words(),
+            self.owner_words(prompts),
             reader.header(self),
         )
 
-    def owner_words(self) -> str:
+    def owner_words(self, prompts: tuple[str, ...]) -> str:
         """The person's own last prompts, verbatim from the transcript: the summary turned them
         into its paraphrase and a next step, and on 2026-10-29 the session followed the
         paraphrase while his words sat unanswered."""
@@ -249,7 +250,7 @@ class DeckStart(DealtDeck):
             "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary of it."
             " Your audit answers each one, and your next action serves them, not the summary's"
             " next step:",
-            *(f"> {words}" for words in self.prompts()),
+            *(f"> {words}" for words in prompts),
         ))
 
     def prompts(self) -> tuple[str, ...]:
@@ -278,7 +279,7 @@ class DeckStart(DealtDeck):
             for thread in snapshot.commander_project.commanders(snapshot):
                 yield root, snapshot, thread
 
-    def prepare(self, reader: DeckReader) -> None:
+    def prepare(self, reader: DeckReader, prompts: tuple[str, ...]) -> None:
         """A start or compaction drops what was read: the deck is dealt again from its start,
         and no file counts as read until it is read again."""
         self.calls.unlink(missing_ok=True)
@@ -286,7 +287,7 @@ class DeckStart(DealtDeck):
         self.audit.unlink(missing_ok=True)
         self.audit_due.write_text(json.dumps({
             "rules": [rule.name for rule in reader.rules()],
-            "owner_words": len(self.prompts()),
+            "owner_words": list(prompts),
         }), encoding="utf-8")
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
         self.dealt_files.write_text(

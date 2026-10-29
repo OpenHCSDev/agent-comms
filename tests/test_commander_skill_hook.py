@@ -45,7 +45,7 @@ from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
-from agent_comms_hooks.read_gate import GatedCall
+from agent_comms_hooks.read_gate import AuditDue, GatedCall, OwnerWordsAnswer, RuleAudit, SessionAudit
 from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
@@ -485,6 +485,20 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+
+
+def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
+    due = AuditDue(frozenset({"voice"}), ("fix the gate", "land the queue"))
+    audited = (RuleAudit("voice"),)
+    duplicated = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),) * 2)
+    assert "land the queue" in due.refusal(duplicated)
+    idle = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
+                                  OwnerWordsAnswer("land the queue", "  ")))
+    assert "no action" in due.refusal(idle)
+    answered = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
+                                      OwnerWordsAnswer("land the queue", "merging #3572")))
+    assert due.refusal(answered) == ""
+    assert "voice" in due.refusal(SessionAudit((), answered.owner_words))
 
 
 def test_a_subagent_and_an_unbound_session_are_never_gated(

@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import sys
 from abc import ABC, abstractmethod
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -63,6 +64,10 @@ class OwnerWordsAnswer:
     words: str
     doing: str
 
+    def acts(self) -> bool:
+        """An answer that names no action is not an answer."""
+        return bool(self.doing.strip())
+
 
 @dataclass(frozen=True)
 class SessionAudit:
@@ -77,16 +82,22 @@ class AuditDue:
     """What the deal requires the audit to answer: the dealt rules and the prompts shown."""
 
     rules: frozenset[str]
-    owner_words: int
+    owner_words: tuple[str, ...]
+    """The owner's prompts exactly as the deal showed them, each occurrence once."""
 
     def refusal(self, audit: SessionAudit) -> str:
-        """Why this audit does not answer the deal, or nothing when it does."""
+        """Why this audit does not answer the deal, or nothing when it does: every dealt rule
+        is audited, and every shown prompt is answered by its own words with an action."""
         missing = sorted(self.rules - {entry.rule for entry in audit.rules})
         if missing:
             return "the audit skips the dealt rules " + ", ".join(missing)
-        if len(audit.owner_words) < self.owner_words:
-            return (f"the audit answers {len(audit.owner_words)} of the owner's"
-                    f" {self.owner_words} prompts shown")
+        if idle := [answer.words for answer in audit.owner_words if not answer.acts()]:
+            return "the audit names no action for: " + " | ".join(idle)
+        unanswered = Counter(self.owner_words) - Counter(
+            answer.words for answer in audit.owner_words)
+        if unanswered:
+            return "the audit does not answer the owner's prompts: " + " | ".join(
+                unanswered.elements())
         return ""
 
 
