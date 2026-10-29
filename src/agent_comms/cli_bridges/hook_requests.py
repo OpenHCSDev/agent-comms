@@ -30,6 +30,7 @@ from .hook_read_gate import GatedCall
 from .hook_reread import BoardReminder
 from .hook_skill import DeckStart
 from .session_watch import WatchClaim
+from .shared import Binding
 from .monitor import MonitorPeer, MonitorService, SessionReady, SessionRefused, SessionReply, SessionRequest
 
 
@@ -68,14 +69,15 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
         return cast(type[Event], cls.declared_argument(HookRequest))
 
     @abstractmethod
-    def run_hook(self, event: Event, comms: Comms) -> None: ...
+    def run_hook(self, event: Event, comms: Comms, binding: Binding) -> None: ...
 
     def completed(self, service: MonitorService) -> None:
         """Most hook events do not retire the session that answered them."""
 
-    def evaluate(self, event: Event, comms: Comms, output: ResidentHookOutput) -> HookReply:
+    def evaluate(self, event: Event, comms: Comms, output: ResidentHookOutput,
+                 binding: Binding) -> HookReply:
         try:
-            self.run_hook(event, comms)
+            self.run_hook(event, comms, binding)
         except SystemExit as stopped:
             if stopped.code is None or stopped.code == 0:
                 return output.answer()
@@ -95,51 +97,52 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
             return SessionRefused(error=traceback.format_exc())
         if event.session_id != service.bridge.binding.thread or event.hook_event_name not in self.events:
             return SessionRefused(error="Hook event does not belong to this resident session/program")
-        reply = await asyncio.to_thread(self.evaluate, event, service.bridge.comms, output)
+        reply = await asyncio.to_thread(self.evaluate, event, service.bridge.comms, output,
+                                        service.bridge.binding)
         self.completed(service)
         return reply
 
 
 @dataclass(frozen=True)
 class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=ReadGateProgram.command()):
-    def run_hook(self, event: GatedCall, comms: Comms) -> None:
-        event.judge(comms)
+    def run_hook(self, event: GatedCall, comms: Comms, binding: Binding) -> None:
+        event.judge(comms, binding)
 
 
 @dataclass(frozen=True)
 class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.command()):
-    def run_hook(self, event: BoardReminder, comms: Comms) -> None:
-        number = GatedCall.of(self.payload, output=event.output).completed(comms)
+    def run_hook(self, event: BoardReminder, comms: Comms, binding: Binding) -> None:
+        number = GatedCall.of(self.payload, output=event.output).completed(comms, binding)
         event.warn(*event.take(number))
 
 
 @dataclass(frozen=True)
 class SkillRequest(SkillText, HookRequest[DeckStart], declared_name=SkillText.command()):
-    def run_hook(self, event: DeckStart, comms: Comms) -> None:
+    def run_hook(self, event: DeckStart, comms: Comms, binding: Binding) -> None:
         event.warn(*event.take())
 
 
 @dataclass(frozen=True)
 class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGuard.command()):
-    def run_hook(self, event: StopHook, comms: Comms) -> None:
+    def run_hook(self, event: StopHook, comms: Comms, binding: Binding) -> None:
         event.guard()
 
 
 @dataclass(frozen=True)
 class SubagentStartRequest(SubagentStartProgram, HookRequest[SubagentHook], declared_name=SubagentStartProgram.command()):
-    def run_hook(self, event: SubagentHook, comms: Comms) -> None:
+    def run_hook(self, event: SubagentHook, comms: Comms, binding: Binding) -> None:
         event.register()
 
 
 @dataclass(frozen=True)
 class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], declared_name=SubagentStopProgram.command()):
-    def run_hook(self, event: SubagentStopHook, comms: Comms) -> None:
+    def run_hook(self, event: SubagentStopHook, comms: Comms, binding: Binding) -> None:
         event.retire()
 
 
 @dataclass(frozen=True)
 class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.command()):
-    def run_hook(self, event: SessionSubagents, comms: Comms) -> None:
+    def run_hook(self, event: SessionSubagents, comms: Comms, binding: Binding) -> None:
         for refusal in event.end_subagents():
             raise SystemExit(refusal)
 
@@ -149,13 +152,13 @@ class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_na
 
 @dataclass(frozen=True)
 class BoundedWaitRequest(BoundedWaits, HookRequest[ClaudeToolHook], declared_name=BoundedWaits.command()):
-    def run_hook(self, event: ClaudeToolHook, comms: Comms) -> None:
+    def run_hook(self, event: ClaudeToolHook, comms: Comms, binding: Binding) -> None:
         BoundedWaits.judge(event)
 
 
 @dataclass(frozen=True)
 class QueueBypassRequest(QueueBypassGuard, HookRequest[ClaudeToolHook], declared_name=QueueBypassGuard.command()):
-    def run_hook(self, event: ClaudeToolHook, comms: Comms) -> None:
+    def run_hook(self, event: ClaudeToolHook, comms: Comms, binding: Binding) -> None:
         self.judge(event)
 
     @classmethod

@@ -1,10 +1,9 @@
-"""Compaction-deal call records and the notices derived from their progress."""
+"""Compaction-deal call records and their first-event transitions."""
 
 from __future__ import annotations
 
 import fcntl
 import os
-from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,39 +12,9 @@ from typing import BinaryIO
 
 from agent_comms_hooks import ClaudeTranscriptHook
 
+from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
 from .declared_family import DeclaredFamily
 from .field_codec import boundary_decoder
-from .recorded_time import RecordedEventTime
-from .thread_identity import RecordedThreadIncarnation
-
-
-@dataclass(frozen=True)
-class CompactionNotice(ABC):
-    """One event's actual actor, call ordinal and time; both harnesses render it here."""
-
-    owner: RecordedThreadIncarnation
-    tool: str
-    call_number: int
-    at: RecordedEventTime
-
-    @property
-    @abstractmethod
-    def body(self) -> str: ...
-
-
-class IgnoredCompactionDeal(CompactionNotice):
-    @property
-    def body(self) -> str:
-        return (f"{self.owner.name} ignored the compaction deal at {self.at.clock()}: "
-                f"first refused call was {self.tool}; call #{self.call_number}, refused.")
-
-
-class StartedRuleReading(CompactionNotice):
-    @property
-    def body(self) -> str:
-        return (f"{self.owner.name} finally read its first dealt rule at {self.at.clock()}: "
-                f"{self.tool}, call #{self.call_number} since this compaction.")
-
 
 class GateNotices(DeclaredFamily):
     """The existing call record's leading byte owns which first event remains to report."""

@@ -15,7 +15,6 @@ from .errors import (
     UnreceivedAnswerError,
     UnregisteredThreadError,
 )
-from .instruction_deck import CompactionNotice
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
@@ -109,10 +108,6 @@ class Messaging:
         else:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
-
-    def report_compaction(self, notice: CompactionNotice) -> SendResult:
-        """Harnesses supply the same notice; publication owns its channel and passive role."""
-        return self.send(notice.owner.name, "#comms", notice.body, role=NoticeRole())
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""

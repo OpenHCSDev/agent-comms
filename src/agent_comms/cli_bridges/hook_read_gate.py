@@ -8,15 +8,17 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms_hooks import ClaudeToolHook, HookRecord
 
 from .hook_forks import SeatedSubagent
-from .session_watch import WatchClaim
+from .shared import Binding
 from ..comms import Comms
+from ..compaction_notices import CompactionNotice
 from ..declared_family import DeclaredFamily
 from ..field_codec import FieldCodec, MalformedRecord
-from ..instruction_deck import CompactionNotice, DealtCalls
+from ..instruction_deck import DealtCalls
 from ..pattern_sources import ReadThenRepeatedFailure
 from ..recorded_time import RecordedEventTime
 from ..turn_phase import ToolRunningPhase
@@ -112,6 +114,45 @@ class AuditDue:
         return ""
 
 
+class DealRefusal(ABC):
+    """A declared reason the session cannot act; the members own its human wording."""
+
+    before: ClassVar[str]
+
+    @property
+    @abstractmethod
+    def reason(self) -> str: ...
+
+    def render(self, tool: str, number: int, audit: Path, due: tuple[AuditDue, ...]) -> str:
+        return "\n\n".join((
+            f"You just tried {tool} before {self.before}. Call #{number}"
+            " since this compaction, refused.", self.reason,
+            *(requirement.reminder(audit) for requirement in due),
+        ))
+
+
+@dataclass(frozen=True)
+class UnreadRules(DealRefusal):
+    sources: tuple[Path, ...]
+    before: ClassVar[str] = "reading"
+
+    @property
+    def reason(self) -> str:
+        return ("Read the rules you were dealt first, each in full with the Read tool"
+                " (no offset or limit): " + ", ".join(str(source) for source in self.sources)
+                + ". Your summary is a paraphrase of them, not a reading.")
+
+
+@dataclass(frozen=True)
+class UnauditedRules(DealRefusal):
+    failure: str
+    before: ClassVar[str] = "writing the required audit"
+
+    @property
+    def reason(self) -> str:
+        return f"Reading is passive; {self.failure}."
+
+
 class DefaultGate(ABC):
     """The gated call every tool the family does not name decodes as."""
 
@@ -130,45 +171,37 @@ class GatedCall(ClaudeToolHook, DealtCalls, DeclaredFamily):
         return cls.member_or_default(tool, DefaultGate).decode(record, **context)
 
     @abstractmethod
-    def judge(self, comms: Comms) -> None:
+    def judge(self, comms: Comms, binding: Binding) -> None:
         """PreToolUse: refuse this call, or let it run."""
 
-    def completed(self, comms: Comms) -> int:
+    def completed(self, comms: Comms, binding: Binding) -> int:
         """A successful call records once, before any reminder or read notice consumes it."""
         return self.count_call() if self.dealt_read.exists() else 0
 
-    def announce(self, comms: Comms, notices: tuple[type[CompactionNotice], ...], number: int) -> None:
-        for notice in notices:
-            (binding,) = (record for record in WatchClaim(self.session_id).state().bindings()
-                          if Path(record.root).resolve() == comms.root.resolve())
-            owner = comms.registry.require(binding.bus).incarnation.require_recorded()
-            comms.messaging.report_compaction(notice(
-                owner, self.tool_name, number, RecordedEventTime(time.time())))
+    def announce(self, comms: Comms, binding: Binding,
+                 notices: tuple[type[CompactionNotice], ...], number: int) -> None:
+        for declaration in notices:
+            notice = declaration(binding.owner.require_recorded(), self.tool_name, number,
+                                 RecordedEventTime(time.time()))
+            comms.messaging.send(notice.owner.name, notice.channel, notice.body, role=notice.role)
 
-    def gate(self, comms: Comms) -> None:
+    def gate(self, comms: Comms, binding: Binding) -> None:
         """Refuse this call while a dealt file is unread or the audit does not answer the deal."""
         due = self.required_audits()
         if unread := self.unread():
-            self.refuse(comms, "reading", "Read the rules you were dealt first, each in full with the"
-                        " Read tool (no offset or limit): "
-                        + ", ".join(str(source) for source in unread)
-                        + ". Your summary is a paraphrase of them, not a reading.", due)
+            self.refuse(comms, binding, UnreadRules(unread), due)
             return
         for requirement in due:
             if refusal := self.unaudited(requirement):
-                self.refuse(comms, "writing the required audit", f"Reading is passive; {refusal}.", due)
+                self.refuse(comms, binding, UnauditedRules(refusal), due)
 
-    def refuse(self, comms: Comms, before: str, reason: str, due: tuple[AuditDue, ...]) -> None:
+    def refuse(self, comms: Comms, binding: Binding, refusal: DealRefusal,
+               due: tuple[AuditDue, ...]) -> None:
         with self.recorded_call() as call:
-            self.respond(
-                permissionDecision="deny",
-                permissionDecisionReason="\n\n".join((
-                    f"You just tried {self.tool_name} before {before}. Call #{call.number}"
-                    " since this compaction, refused.", reason,
-                    *(requirement.reminder(self.audit) for requirement in due),
-                )),
-            )
-            self.announce(comms, call.refused(), call.number)
+            self.respond(permissionDecision="deny",
+                         permissionDecisionReason=refusal.render(
+                             self.tool_name, call.number, self.audit, due))
+            self.announce(comms, binding, call.refused(), call.number)
 
     def required_audits(self) -> tuple[AuditDue, ...]:
         if not self.audit_due.exists():
@@ -205,16 +238,16 @@ class GatedCall(ClaudeToolHook, DealtCalls, DeclaredFamily):
 class ReadCall(GatedCall, declared_name="Read"):
     """A Read always runs; once it completes, a read covering a whole dealt file counts it."""
 
-    def judge(self, comms: Comms) -> None:
+    def judge(self, comms: Comms, binding: Binding) -> None:
         pass
 
-    def completed(self, comms: Comms) -> int:
+    def completed(self, comms: Comms, binding: Binding) -> int:
         read = ReadInput.decode(self.tool_input)
         path = read.file_path
         if str(path.resolve()) not in self.sources() or not read.covers(path):
-            return super().completed(comms)
+            return super().completed(comms, binding)
         with self.recorded_call() as call:
-            self.announce(comms, call.read(self.dealt_read, path), call.number)
+            self.announce(comms, binding, call.read(self.dealt_read, path), call.number)
             return call.number
 
 
@@ -222,26 +255,26 @@ class ReadCall(GatedCall, declared_name="Read"):
 class OtherCall(GatedCall, DefaultGate):
     """Any other tool waits for every dealt file to be read and the audit to answer the deal."""
 
-    def judge(self, comms: Comms) -> None:
-        self.gate(comms)
+    def judge(self, comms: Comms, binding: Binding) -> None:
+        self.gate(comms, binding)
 
 
 @dataclass(frozen=True)
 class WriteCall(GatedCall, declared_name="Write"):
     """Writing the audit itself is the way through the gate; any other write waits like the rest."""
 
-    def judge(self, comms: Comms) -> None:
+    def judge(self, comms: Comms, binding: Binding) -> None:
         if WriteInput.decode(self.tool_input).file_path.resolve() != self.audit.resolve():
-            self.gate(comms)
+            self.gate(comms, binding)
 
 
 @dataclass(frozen=True)
 class SubagentCall(GatedCall, SeatedSubagent):
     """A subagent bypasses its parent's read gate but reports its own tool activity."""
 
-    def judge(self, comms: Comms) -> None:
+    def judge(self, comms: Comms, binding: Binding) -> None:
         self.enter(ToolRunningPhase(self.tool_name))
 
-    def completed(self, comms: Comms) -> int:
+    def completed(self, comms: Comms, binding: Binding) -> int:
         """A subagent's event never increments its parent's deal record."""
         return 0
