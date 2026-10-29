@@ -247,18 +247,69 @@ class BranchComparison:
 
 
 @dataclass(frozen=True)
-class BranchUpstream:
-    """Git's upstream record, captured once for this pass's branch comparisons."""
+class BranchUpstream(DeclaredFamily):
+    """Git's upstream decoded once; each member owns acquisition and publication answers."""
 
     branch: str
+
+    @classmethod
+    def from_git(cls, row: str) -> BranchUpstream:
+        branch, tracking, remote, reference = row.split("\0")
+        if not tracking:
+            return NoUpstream(branch)
+        if remote == Repo.local_remote:
+            return LocalUpstream(branch, tracking)
+        return PublishedUpstream(branch, tracking, remote, reference)
+
+    def prepare(self, reader: WorkBranches) -> None:
+        """No configured publication means no remote acquisition."""
+
+    def tracking_name(self) -> str:
+        return ""
+
+    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
+        # A local, absent or deleted upstream cannot make its stale tracking ref publication.
+        tracking = self.tracking_name()
+        remotes = tuple(ref for ref in reader._git(
+            "for-each-ref", "--format=%(refname)", "refs/remotes/",
+        ).splitlines() if ref != tracking)
+        count = int(reader._git("rev-list", "--count", head, "--not", *remotes))
+        return (UnpushedHead(head, count, tracking),) if count else ()
+
+
+class NoUpstream(BranchUpstream):
+    """This local branch declares no upstream."""
+
+
+@dataclass(frozen=True)
+class TrackedUpstream(BranchUpstream, declared_name=None):
     tracking: str
+
+    def tracking_name(self) -> str:
+        return self.tracking
+
+
+class LocalUpstream(TrackedUpstream):
+    """Git's dot remote names another local branch, never a publication."""
+
+
+@dataclass(frozen=True)
+class PublishedUpstream(TrackedUpstream):
     remote: str
     reference: str
 
-    @property
-    def published(self) -> bool:
-        # Git's local-branch remote is not publication.
-        return bool(self.tracking) and self.remote != "."
+    def prepare(self, reader: WorkBranches) -> None:
+        Repo.require_commits(reader.checkout, self.remote,
+                             *reader.remote_heads(self.remote, self.reference))
+
+    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
+        published = reader.selected_heads(self.remote, self.reference)
+        if published:
+            (remote_head,) = published
+            Repo.require_local_commits(reader.checkout, remote_head)
+            count = int(reader._git("rev-list", "--count", f"{remote_head}..{head}"))
+            return (UnpushedHead(head, count, self.tracking),) if count else ()
+        return super().unpushed(reader, head)
 
 
 @dataclass(frozen=True)
@@ -314,7 +365,7 @@ query($owner: String!, $name: String!, $after: String) {
         try:
             self._git("--no-optional-locks", "rev-parse", "--git-dir")
         except GitCommandError as error:
-            return UnreadableCheckoutRead(self.checkout, error.stderr.strip())
+            return UnreadableCheckoutRead(self.checkout, str(error))
         return ReadableCheckoutRead(self)
 
     def uncommitted(self) -> tuple[Path, ...]:
@@ -361,23 +412,18 @@ query($owner: String!, $name: String!, $after: String) {
 
     def selected_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """Consume the prepared remote cut; an unexpected comparison never opens another cut."""
-        try:
-            return self._remote_heads[remote, reference]
-        except KeyError as error:
-            raise WorkBranchError(
-                f"Git in {self.checkout}: remote {remote} reference {reference} was not prepared"
-            ) from error
+        return self._remote_heads[remote, reference]
 
     def _pull_request_base(self, base: str) -> str:
-        published = self.selected_heads("origin", f"refs/heads/{base}")
+        published = self.selected_heads(Repo.remote, f"refs/heads/{base}")
         if not published:
             raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
         (base_head,) = published
         return base_head
 
     def prepare_pull_request(self, base: str, head: str) -> None:
-        self.remote_heads("origin", f"refs/heads/{base}")
-        Repo.require_commits(self.checkout, "origin", self._pull_request_base(base), head)
+        self.remote_heads(Repo.remote, f"refs/heads/{base}")
+        Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
 
     def pull_request_base(self, base: str, head: str) -> str:
         base_head = self._pull_request_base(base)
@@ -387,7 +433,7 @@ query($owner: String!, $name: String!, $after: String) {
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            BranchUpstream(*line.split("\0")) for line in self._git(
+            BranchUpstream.from_git(line) for line in self._git(
                 "for-each-ref",
                 "--format=%(refname:strip=2)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
                 "refs/heads/",
@@ -401,9 +447,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     def prepare_upstreams(self) -> None:
         for upstream in self.upstreams.values():
-            if upstream.published:
-                Repo.require_commits(self.checkout, upstream.remote,
-                                     *self.remote_heads(upstream.remote, upstream.reference))
+            upstream.prepare(self)
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
@@ -433,7 +477,7 @@ query($owner: String!, $name: String!, $after: String) {
         try:
             return SharedCommitBase(self._git('merge-base', main, head).strip())
         except GitCommandError as error:
-            if error.returncode != 1:
+            if not error.unrelated_history():
                 raise
             return UnrelatedCommitBase()
 
@@ -465,34 +509,8 @@ query($owner: String!, $name: String!, $after: String) {
 
     def unpushed(self, difference: BranchDifference) -> tuple[UnpushedHead, ...]:
         """Compare this HEAD with its actual upstream, without trusting a stale tracking ref."""
-        head = difference.head
-        try:
-            upstream = self.upstreams[difference.branch]
-        except KeyError as error:
-            raise WorkBranchError(
-                f"Git in {self.checkout}: branch {difference.branch} is absent from prepared upstreams"
-            ) from error
-        Repo.require_local_commits(self.checkout, head)
-        if upstream.published:
-            published = self.selected_heads(upstream.remote, upstream.reference)
-            if published:
-                (remote_head,) = published
-                Repo.require_local_commits(self.checkout, remote_head)
-                count = int(self._git("rev-list", "--count", f"{remote_head}..{head}"))
-                return (UnpushedHead(head, count, upstream.tracking),) if count else ()
-        # Without a published upstream, count work absent from the other known remotes.
-        # A deleted upstream's stale tracking ref cannot count as publication.
-        remotes = tuple(
-            ref
-            for ref in self._git(
-                "for-each-ref",
-                "--format=%(refname)",
-                "refs/remotes/",
-            ).splitlines()
-            if ref != upstream.tracking
-        )
-        count = int(self._git("rev-list", "--count", head, "--not", *remotes))
-        return (UnpushedHead(head, count, upstream.tracking),) if count else ()
+        Repo.require_local_commits(self.checkout, difference.head)
+        return self.upstreams[difference.branch].unpushed(self, difference.head)
 
     @cached_property
     def repository(self) -> tuple[str, str]:
@@ -501,7 +519,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def origin_main(self) -> str:
-        return self._git("rev-parse", f"refs/remotes/origin/{self.main}").strip()
+        return self._git("rev-parse", f"refs/remotes/{Repo.remote}/{self.main}").strip()
 
     def difference(self, main: str) -> BranchDifference:
         """Git owns ancestry and changed paths; pin both commits before comparing."""
@@ -560,9 +578,9 @@ query($owner: String!, $name: String!, $after: String) {
     def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:
         """A pull request head against its declared base branch, so a request stacked on
         another is charged only its own lines; fetched without touching FETCH_HEAD."""
-        self._git("fetch", "-q", "--no-write-fetch-head", "origin",
+        self._git("fetch", "-q", "--no-write-fetch-head", Repo.remote,
                   branch, f"refs/pull/{pr}/head")
-        base = self._git("merge-base", f"refs/remotes/origin/{branch}", head).strip()
+        base = self._git("merge-base", f"refs/remotes/{Repo.remote}/{branch}", head).strip()
         return self.source_growth(base, head, self.changed(base, head))
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
@@ -618,13 +636,13 @@ query($owner: String!, $name: String!, $after: String) {
         refs = {
             ref.removeprefix("refs/heads/"): oid
             for oid, ref in (
-                line.split() for line in self._git("ls-remote", "--heads", "origin").splitlines()
+                line.split() for line in self._git("ls-remote", "--heads", Repo.remote).splitlines()
             )
         }
         main = refs[self.main]
         # Git already owns commit ancestry. Ask it once for all locally named
         # commits, rather than asking GitHub to compare every branch separately.
-        Repo.require_commits(self.checkout, "origin", *refs.values())
+        Repo.require_commits(self.checkout, Repo.remote, *refs.values())
         commits = {
             oid: (int(ahead), date)
             for oid, date, ahead, _behind in (
@@ -633,7 +651,7 @@ query($owner: String!, $name: String!, $after: String) {
                     "for-each-ref",
                     f"--format=%(objectname) %(committerdate:iso-strict) %(ahead-behind:{main})",
                     "refs/heads",
-                    "refs/remotes/origin",
+                    f"refs/remotes/{Repo.remote}",
                 ).splitlines()
             )
         }

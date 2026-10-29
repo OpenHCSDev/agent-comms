@@ -25,7 +25,7 @@ from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.repo import GitCommandError, UnavailableCommitError
+from agent_comms.repo import GitCommandError
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
@@ -218,7 +218,6 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
         except (
             OSError,
             GitCommandError,
-            UnavailableCommitError,
             WorkBranchError,
             TimeoutExpired,
             NativePiUnavailable,

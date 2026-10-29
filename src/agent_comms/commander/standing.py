@@ -137,7 +137,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                 pulls: ProgressRead) -> None:
         """Fetching changes Git state, so the heartbeat joins it before observation."""
         for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
-            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
+            repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
 
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
@@ -148,9 +148,9 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
-        target = core.git(core.checkout, "rev-parse", "origin/main").strip()
+        target = core.git(core.checkout, "rev-parse", f"{core.remote}/main").strip()
         for repo in runtime_repos:
-            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
+            main = repo.git(repo.checkout, "rev-parse", f"{repo.remote}/main").strip()
             recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.
             merges = UninstalledMerge.read(repo, recorded.commit, main)
@@ -625,11 +625,8 @@ class UnownedObservation:
     rule: UnownedWheelSpin
 
 
-class UnownedOrderWatch(WatchPass[None, tuple[UnownedObservation, ...]]):
+class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
     """Keep dispatch preparation joined; only individually audited readers can be dropped."""
-
-    def prepare(self, comms: Comms) -> None:
-        pass
 
     def observe(self, comms: Comms, prepared: None) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()

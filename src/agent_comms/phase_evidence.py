@@ -15,6 +15,7 @@ import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from threading import Lock
@@ -26,7 +27,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.private_path import FileObservation, FileRevision
-from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
+from agent_comms.repo import GitCommandError, Repo
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -46,7 +47,7 @@ class MainTree:
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
-        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"origin/{cls.branch}").strip())
+        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"{repo.remote}/{cls.branch}").strip())
 
     def advanced(self) -> MainTree:
         """An explicitly selected historical tree never moves."""
@@ -128,10 +129,7 @@ class MainTree:
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
-        try:
-            return self.repo.contains(sha, self.commit)
-        except (GitCommandError, UnavailableCommitError) as error:
-            raise UnreadableEvidenceError(str(error)) from error
+        return self.repo.contains(sha, self.commit)
 
 
 @dataclass(frozen=True)
@@ -145,7 +143,7 @@ class LiveMainTree(MainTree):
     def of(cls, repo: Repo) -> LiveMainTree:
         loose, packed = Repo.git(
             repo.checkout, 'rev-parse', '--path-format=absolute',
-            '--git-path', f'refs/remotes/origin/{cls.branch}', '--git-path', 'packed-refs',
+            '--git-path', f'refs/remotes/{repo.remote}/{cls.branch}', '--git-path', 'packed-refs',
         ).splitlines()
         references = (Path(loose), Path(packed))
         revisions = tuple(FileRevision.capture(path) for path in references)
@@ -221,19 +219,23 @@ class PlanReading:
         default_factory=dict, compare=False, repr=False
     )
 
+    @contextmanager
+    def source(self, evidence: PhaseEvidence) -> Iterator[None]:
+        """One failure boundary for acquiring and observing the evidence's source."""
+        try:
+            yield
+        except (GitCommandError, OSError, TimeoutExpired, UnreadableEvidenceError) as error:
+            self.reads[evidence] = EvidenceUnread(str(error))
+
     def prepare(self, evidence: PhaseEvidence) -> None:
         if evidence not in self.reads:
-            try:
+            with self.source(evidence):
                 evidence.prepare(self)
-            except (GitCommandError, UnavailableCommitError, OSError, TimeoutExpired) as error:
-                self.reads[evidence] = EvidenceUnread(str(error))
 
     def read(self, evidence: PhaseEvidence) -> EvidenceRead:
         if evidence not in self.reads:
-            try:
+            with self.source(evidence):
                 self.reads[evidence] = EvidenceFound(evidence.holds(self))
-            except UnreadableEvidenceError as error:
-                self.reads[evidence] = EvidenceUnread(str(error))
         return self.reads[evidence]
 
     def following(self, todos: tuple[Todo, ...]) -> PlanReading:
@@ -329,10 +331,7 @@ class MainEvidence(PhaseEvidence):
     """Read the selected immutable main; PlanReading owns the answer's lifetime."""
 
     def holds(self, reading: PlanReading) -> bool:
-        try:
-            return self.read(reading.main)
-        except (GitCommandError, UnavailableCommitError) as error:
-            raise UnreadableEvidenceError(str(error)) from error
+        return self.read(reading.main)
 
     @abstractmethod
     def read(self, main: MainTree) -> bool: ...
@@ -349,7 +348,8 @@ class CommitMerged(MainEvidence):
     sha: str
 
     def prepare(self, reading: PlanReading) -> None:
-        Repo.require_commits(reading.main.repo.checkout, "origin", self.sha, reading.main.commit)
+        Repo.require_commits(reading.main.repo.checkout, reading.main.repo.remote,
+                             self.sha, reading.main.commit)
 
     def read(self, main: MainTree) -> bool:
         return main.contains(self.sha)

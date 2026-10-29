@@ -34,7 +34,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import GitCommandError, UnavailableCommitError
+from agent_comms.repo import GitCommandError
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
@@ -461,7 +461,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                 reader.prepare_upstreams()
                 for pull in pulls.open_for(todo):
                     pull.prepare_comparison(reader)
-            except (OSError, GitCommandError, UnavailableCommitError,
+            except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
                 pulls.unread(todo, error)
 
@@ -1089,7 +1089,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
                  for todo in todos}
         candidates: list[str] = []
         for repo in repos:
-            log = repo.git(repo.checkout, 'log', 'origin/main', '--since=7.days',
+            log = repo.git(repo.checkout, 'log', f'{repo.remote}/main', '--since=7.days',
                            '--name-only', '--format=', '--', repo.source)
             churn = Counter(str((repo.checkout / name).resolve())
                             for name in log.splitlines()

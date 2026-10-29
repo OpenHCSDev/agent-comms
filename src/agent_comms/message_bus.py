@@ -65,20 +65,26 @@ class Watch(AsyncWork, DeclaredFamily, ABC):
     maintenance waits for that stop, so systemd killed it at 90 s (installs 17 and 18).
     """
 
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        with opened_wire() as comms:
-            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
+    @abstractmethod
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
         """A service may report its failed pass; ordinary watches need no extra action."""
 
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        """Whole joined watches implement this; phased watches enter through their run."""
-        raise NotImplementedError(type(self).__name__)
+
+class JoinedWatch(Watch):
+    """The whole pass is one joined operation under maintenance."""
+
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        with opened_wire() as comms:
+            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
+
+    @abstractmethod
+    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
 
 
-class WatchPass[Prepared, Observed](Watch):
+class PreparedWatchPass[Prepared, Observed](Watch):
     """Joined effects finish; a source-proved safe read can drop observation."""
 
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
@@ -95,6 +101,13 @@ class WatchPass[Prepared, Observed](Watch):
 
     @abstractmethod
     def pass_body(self, comms: Comms, observed: Observed) -> None: ...
+
+
+class WatchPass[Observed](PreparedWatchPass[None, Observed]):
+    """A phased watch with no acquisition; only watches with real inputs override preparation."""
+
+    def prepare(self, comms: Comms) -> None:
+        pass
 
 
 class MessageBus[Writes: Publisher]:

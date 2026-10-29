@@ -20,11 +20,8 @@ from source_revision_fixture import SourceRepository
 from connector_shutdown_fixture import HeldCall
 
 
-class ShutdownWatch(HeldCall, WatchPass[None, None], affix="ShutdownWatch"):
+class ShutdownWatch(HeldCall, WatchPass[None], affix="ShutdownWatch"):
     """A private declaration family, never an extra production watch registration."""
-
-    def prepare(self, comms: Comms) -> None:
-        pass
 
     def observe(self, comms: Comms, prepared: None) -> None:
         pass

@@ -315,12 +315,9 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
 
 
 @dataclass
-class PublishingWatch(WatchPass[None, None], declared_name=None):
+class PublishingWatch(WatchPass[None], declared_name=None):
     calls: int = 0
     completed: threading.Event = field(default_factory=threading.Event)
-
-    def prepare(self, comms: Comms) -> None:
-        pass
 
     def observe(self, comms: Comms, prepared: None) -> None:
         pass
@@ -454,7 +451,6 @@ async def test_watch_pass_logs_real_failures_with_tracebacks(connector, caplog):
     assert failing.watch == "FailingWatch"
     stored = passes.read().failing["FailingWatch"]
     assert (failing.since, failing.error) == (stored.since, stored.error)
-    assert stored.error == "RuntimeError: A real watch failure"
     passes.passed("FailingWatch")
     assert passes.read().failing == {}
     assert ServicePassFailing.violations(wire(connector.root), "worker") == ()

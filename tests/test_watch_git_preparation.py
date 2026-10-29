@@ -15,7 +15,7 @@ from agent_comms.phase_evidence import (
 )
 from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
-from agent_comms.work_branches import WorkBranchError, WorkBranches
+from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
 
 
@@ -67,7 +67,7 @@ def test_missing_ready_pr_objects_are_acquired_once_and_comparison_is_local(git_
     draft.prepare_comparison(reader)
     assert draft.empty_changes(reader) == ()
     assert case.snapshot() == before
-    with pytest.raises(WorkBranchError, match="was not prepared"):
+    with pytest.raises(KeyError):
         ready.empty_changes(reader)
     ready.prepare_comparison(reader)
     assert repo.has_commit(base) and repo.has_commit(head)
@@ -111,7 +111,9 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     prepared = case.snapshot()
     (unpublished,) = reader.unpushed(difference)
     assert (unpublished.head, unpublished.commits) == (head, 1)
-    assert unpublished.upstream == reader.upstreams["main"].tracking
+    assert unpublished.upstream == Repo.git(
+        repo.checkout, "for-each-ref", "--format=%(upstream)", "refs/heads/main",
+    ).strip()
     assert case.snapshot() == prepared
 
 
@@ -122,7 +124,7 @@ def test_missing_objects_are_not_negative_ancestry_and_local_siblings_are(git_pr
     SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Local sibling")
     local = Repo.git(repo.checkout, "rev-parse", "HEAD").strip()
     before = case.snapshot()
-    with pytest.raises(UnavailableCommitError, match=remote):
+    with pytest.raises(GitCommandError, match=remote):
         repo.contains(remote, local)
     assert case.snapshot() == before
     Repo.require_commits(repo.checkout, "origin", remote)

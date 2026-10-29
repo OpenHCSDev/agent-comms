@@ -13,7 +13,7 @@ from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
-from agent_comms.message_bus import WatchPass
+from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
@@ -58,7 +58,7 @@ class CommanderObservation:
 
 
 class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
-                         WatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
+                         PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:

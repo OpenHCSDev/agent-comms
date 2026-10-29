@@ -60,7 +60,6 @@ class HeartbeatFrame(CommanderInputs):
     @classmethod
     def capture(cls, comms: Comms, commander: str, inputs: CommanderInputs,
                 plans: PlanReadings) -> Self:
-        scan = inputs
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()
         with comms.goals.todos.snapshot() as db:
@@ -69,14 +68,13 @@ class HeartbeatFrame(CommanderInputs):
                 db, (head.request for head in closed.lost))
         plan = plans.observe_reading(inputs.plan,
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
-        pulls = inputs.pulls
         return cls(
-            scan.live,
-            scan.orphaned,
-            pulls,
+            inputs.live,
+            inputs.orphaned,
+            inputs.pulls,
             plan,
-            OwedAnswer.read_scan(comms, commander, scan),
+            OwedAnswer.read_scan(comms, commander, inputs),
             closed,
             reviews,
-            EditWorkplaces.capture(comms, snapshot, scan.live, plan.todos, pulls),
+            EditWorkplaces.capture(comms, snapshot, inputs.live, plan.todos, inputs.pulls),
         )

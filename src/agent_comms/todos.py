@@ -131,7 +131,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
+from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import StorageRule, UnitStorage
@@ -244,7 +244,7 @@ class FreshMainCheck:
     """Undelivered work is checked against fetched main, independent of the local branch."""
 
     def check_base(self, repo: Path) -> str:
-        return f"origin/{WorkBranches.main}"
+        return f"{Repo.remote}/{WorkBranches.main}"
 
 
 class BranchPointCheck:
@@ -256,7 +256,7 @@ class BranchPointCheck:
     def work_commit(self) -> str: ...
 
     def check_base(self, repo: Path) -> str:
-        main = f"origin/{WorkBranches.main}"
+        main = f"{Repo.remote}/{WorkBranches.main}"
         line = set(Repo.git(repo, "rev-list", "--first-parent", main).split())
         for commit in Repo.git(repo, "rev-list", "--first-parent", f"{self.work_commit}^1").split():
             if commit in line:
@@ -460,8 +460,9 @@ class CommitSourceDelivery(BranchPointCheck, CheckedDelivery, declared_name=None
 
     def merged_commits(self, repo: Repo) -> tuple[str, ...]:
         # Called by the joined merge closure, never by the observation frame.
-        Repo.require_commits(repo.checkout, "origin", self.commit, f"origin/{WorkBranches.main}")
-        return (self.commit,) if repo.contains(self.commit, f"origin/{WorkBranches.main}") else ()
+        Repo.require_commits(repo.checkout, repo.remote, self.commit,
+                             f"{repo.remote}/{WorkBranches.main}")
+        return (self.commit,) if repo.contains(self.commit, f"{repo.remote}/{WorkBranches.main}") else ()
 
     def check_failed(self, goals: Goals, todo: Todo, error: OrderCheckFailedError) -> None:
         if self.commit != self.delivered:
@@ -748,7 +749,7 @@ class MergedPullRequest(PullRequest):
 
     def delivery(self, repo: Path, evidence: DeliveryEvidence) -> CommitDelivery:
         """GitHub owns which pushed head produced the checked merge, for every merge style."""
-        Repo.git(repo, "fetch", "-q", "origin", self.base, f"refs/pull/{self.number}/head")
+        Repo.git(repo, "fetch", "-q", Repo.remote, self.base, f"refs/pull/{self.number}/head")
         return CommitDelivery(commit=self.merge, delivered_commit=self.head, evidence=evidence)
 
     def delivery_merges(self, delivery: CommitDelivery) -> tuple[DeliveryMerge, ...]:
@@ -1383,7 +1384,7 @@ class UnreadCheckout(ProgressCheckout):
 
 
 class PresentCheckout(ProgressCheckout):
-    default_reference: ClassVar[str] = "refs/remotes/origin/HEAD"
+    default_reference: ClassVar[str] = f"refs/remotes/{Repo.remote}/HEAD"
 
     @property
     def default_refs(self) -> tuple[str, ...]:
@@ -1402,7 +1403,7 @@ class PresentCheckout(ProgressCheckout):
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
         return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              "refs/remotes/origin/").splitlines())
+                              f"refs/remotes/{Repo.remote}/").splitlines())
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1664,7 +1665,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
             source.checkout.require_read()
             return next((progress for member in members
                          for progress in member.observations(source)), NoCommitProgress())
-        except (OSError, GitCommandError, UnavailableCommitError,
+        except (OSError, GitCommandError,
                 WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
@@ -2563,7 +2564,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def require_check_acceptance(self, check: OrderCheck, worktrees: Path) -> None:
         repo = check.directory
-        Repo.git(repo, 'fetch', '-q', 'origin', 'main')
+        Repo.git(repo, 'fetch', '-q', Repo.remote, 'main')
         check.require_acceptance(self.check_base(repo), worktrees)
 
     def source_refusals(self, context: CommanderContext, document: OrderFile,
@@ -2699,7 +2700,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self, repo: Repo, source: PullRequestSource
     ) -> tuple[MergedProblemOrder, ...]:
         candidates = tuple(MergedProgress.found(source))
-        Repo.require_commits(repo.checkout, "origin", *(merged.sha for merged in candidates))
+        Repo.require_commits(repo.checkout, repo.remote, *(merged.sha for merged in candidates))
         return tuple(self.merged(merged.sha) for merged in candidates if repo.contains(merged.sha))
 
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
@@ -3072,7 +3073,7 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         return self.claim.head
 
     def check_base(self, repo: Path) -> str:
-        Repo.git(repo, "fetch", "-q", "origin", f"refs/pull/{self.claim.pull_request.number}/head")
+        Repo.git(repo, "fetch", "-q", Repo.remote, f"refs/pull/{self.claim.pull_request.number}/head")
         return super().check_base(repo)
 
     def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
@@ -4191,7 +4192,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
             reader.prepare_pull_request(current.base, current.head)
             reviewed_change = record.request.change_identity(reader, current.base)
             current_change = current.change_identity(reader, current.base)
-        except (GitCommandError, UnavailableCommitError, WorkBranchError, subprocess.TimeoutExpired):
+        except (GitCommandError, WorkBranchError, subprocess.TimeoutExpired):
             return False
         if reviewed_change != current_change:
             return False

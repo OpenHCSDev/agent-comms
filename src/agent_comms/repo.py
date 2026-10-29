@@ -7,7 +7,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -36,7 +36,23 @@ class RepositorySelection(ABC):
 
 
 class GitCommandError(RuntimeError, CommandFailure):
-    """A Git operation failure, not malformed order data to aggregate and continue past."""
+    """An unreadable Git input; concrete failures own the evidence for narrower answers."""
+
+    def source_path_absent(self, sha: str, file: str) -> bool:
+        return False
+
+    def no_such_revision(self) -> bool:
+        return False
+
+    def no_check_ran_on(self, sha: str) -> bool:
+        return False
+
+    def unrelated_history(self) -> bool:
+        return False
+
+
+class FailedGitCommand(GitCommandError):
+    """A completed Git process owns its exit status and original stderr."""
 
     def __init__(self, repository: str, run: subprocess.CompletedProcess[bytes]):
         self.returncode = run.returncode
@@ -61,8 +77,11 @@ class GitCommandError(RuntimeError, CommandFailure):
             "", f"error: no note found for object {sha}.\n",
         )
 
+    def unrelated_history(self) -> bool:
+        return self.returncode == 1
 
-class UnavailableCommitError(RuntimeError, CommandFailure):
+
+class UnavailableCommitError(GitCommandError):
     """Required Git objects are unavailable, not a negative ancestry or absent-path answer."""
 
     def __init__(self, checkout: Path | str, objects: tuple[str, ...], detail: str = ""):
@@ -74,6 +93,8 @@ class Repo(GitLaunch, BaseModel, WireValue):
     """A repository the fleet works on: its check checkout, its GitHub name and its source root."""
 
     model_config = ConfigDict(frozen=True)
+    remote: ClassVar[str] = "origin"
+    local_remote: ClassVar[str] = "."
 
     checkout: Path
     github: InstanceOf[
@@ -146,14 +167,14 @@ class Repo(GitLaunch, BaseModel, WireValue):
         """The origin's declared default, never a guessed branch name."""
         try:
             reference = self.git(
-                self.checkout, "symbolic-ref", "--short", "refs/remotes/origin/HEAD",
+                self.checkout, "symbolic-ref", "--short", f"refs/remotes/{self.remote}/HEAD",
             ).strip()
         except GitCommandError as error:
             raise ValueError(
                 f"Origin's default branch is unset in {self.checkout}; "
                 "run git remote set-head origin --auto in that checkout."
             ) from error
-        return reference.removeprefix("origin/")
+        return reference.removeprefix(f"{self.remote}/")
 
     @classmethod
     def missing_commits(cls, checkout: Path | str, *objects: str) -> tuple[str, ...]:
@@ -232,7 +253,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
     def _output(checkout: Path | str, run: subprocess.CompletedProcess[bytes]) -> bytes:
         """The shared failure boundary for captured and streamed Git answers."""
         if run.returncode:
-            raise GitCommandError(str(checkout), run)
+            raise FailedGitCommand(str(checkout), run)
         return run.stdout
 
     @classmethod
@@ -252,7 +273,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
         repository, an unreadable object store) is a GitCommandError, never a no."""
         run = cls._run(checkout, *args)
         if run.returncode not in (0, 1):
-            raise GitCommandError(str(checkout), run)
+            raise FailedGitCommand(str(checkout), run)
         return run.returncode == 0
 
     @classmethod
@@ -274,13 +295,13 @@ class Repo(GitLaunch, BaseModel, WireValue):
         if run.returncode == 1:
             return ()
         if run.returncode:
-            raise GitCommandError(str(checkout), run)
+            raise FailedGitCommand(str(checkout), run)
         return tuple(run.stdout.decode().splitlines())
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
-        url = cls.git(checkout, "remote", "get-url", "origin").strip()
+        url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
         return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
 
@@ -349,7 +370,7 @@ class PinnedSubmodule:
             Repo.store_serves(self.store, *question)
             for question in (
                 ("rev-parse", "--verify", "--quiet", "HEAD^{commit}"),
-                ("remote", "get-url", "origin"),
+                ("remote", "get-url", Repo.remote),
             )
         )
 
