@@ -19,6 +19,7 @@ from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
+    DeclaredWireType,
     ExternalJsonShape,
     FieldCodec,
     MalformedRecord,
@@ -312,37 +313,30 @@ class InvalidRegistryDocument(RelationViolationError):
 
 
 @dataclass(frozen=True)
-class ThreadRow(GoalOwner):
-    """One captured declaration: determining facts are nominal, only the rest stays raw."""
+class ThreadRow(GoalOwner, DeclaredWireType):
+    """A captured Thread wire value and its already-decoded determining fields."""
 
-    remainder: Annotated[Mapping[str, JsonValue], WireTransient()] = field(
-        default_factory=dict, kw_only=True,
-    )
+    wire_type = Thread
+    raw: Annotated[Mapping[str, JsonValue], WireTransient()] = field(kw_only=True)
 
     @classmethod
-    def capture(cls, raw: dict[str, JsonValue]) -> ThreadRow:
-        keys = {
-            key for entry in FieldCodec.field_plans(cls) if entry.records
-            for key in FieldCodec.field_plan(Thread, entry.name).wire_keys
-        }
+    def from_wire(cls, raw: object) -> Self:
+        wire = FieldCodec.decode(dict[str, JsonValue], raw)
         return FieldCodec.project_record(
-            cls, raw, source=Thread,
-            decoded_fields={"remainder": MappingProxyType({
-                key: value for key, value in raw.items() if key not in keys
-            })},
+            cls, wire, source=Thread,
+            decoded_fields={"raw": MappingProxyType(wire)},
         )
 
     def to_wire(self) -> dict[str, JsonValue]:
-        return {**self.remainder, **FieldCodec.encode_fields(self)}
+        return dict(self.raw)
 
     def __reduce__(self):
-        # The row owns its immutable remainder; restoration re-enters the same boundary.
-        return type(self).capture, (self.to_wire(),)
+        return type(self).from_wire, (self.to_wire(),)
 
     def decoded(self) -> Thread:
         values = {entry.name: entry.current(self)
                   for entry in FieldCodec.field_plans(type(self)) if entry.records}
-        return FieldCodec.decode_record(Thread, dict(self.remainder), decoded_fields=values)
+        return FieldCodec.decode_record(Thread, dict(self.raw), decoded_fields=values)
 
 
 class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
@@ -380,7 +374,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return tuple(
             self[name] for name in self
             if (self._decoded[name].parent.named(parent) if name in self._decoded
-                else self._raw[name].remainder.get(key) == expected)
+                else self._raw[name].raw.get(key) == expected)
         )
 
     def creation_time(self, name: str) -> CreationTime:
@@ -428,8 +422,9 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._decoded.pop(name, None)
 
     def to_wire(self) -> dict[str, JsonValue]:
-        return {**{name: row.to_wire() for name, row in self._raw.items()},
-                **{name: FieldCodec.encode(thread) for name, thread in self._decoded.items()}}
+        # A read memo is not an edit: __setitem__ removes raw only for actual writes.
+        return {name: FieldCodec.encode(row)
+                for name, row in ChainMap(self._raw, self._decoded).items()}
 
     @classmethod
     def schema(cls) -> dict[str, JsonValue]:
@@ -444,7 +439,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         for name, row in raw.items():
             if not isinstance(name, str) or not isinstance(row, dict):
                 raise MalformedRecord("thread name differs from its declaration")
-            captured = ThreadRow.capture(row)
+            captured = ThreadRow.from_wire(row)
             if captured.name != name:
                 raise MalformedRecord("thread name differs from its declaration")
             result[name] = captured

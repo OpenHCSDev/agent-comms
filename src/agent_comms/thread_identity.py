@@ -420,13 +420,19 @@ class ThreadIncarnationRecord:
     def __post_init__(self) -> None:
         self.require_name(self.name)
 
+    @property
+    def birth(self) -> float:
+        """The external identity clock; float records already carry its wire value."""
+        return self.created_at
+
     @cached_property
     def incarnation(self) -> ThreadIncarnation:
         """One birth derivation, shared by full declarations and captured narrow rows."""
+        birth = self.birth
         try:
-            member = BirthlessIncarnation.member_selected(self.created_at)
+            member = BirthlessIncarnation.member_selected(birth)
         except UnknownFamilyMember:
-            return RecordedThreadIncarnation(self.name, self.created_at)
+            return RecordedThreadIncarnation(self.name, birth)
         return member.recorded_as(self.name)
 
     @classmethod
@@ -440,6 +446,10 @@ class ThreadBirthRecord(ThreadIncarnationRecord):
     """A registered declaration retains its recorded/generated creation-clock capability."""
 
     created_at: RequiredCreationTime
+
+    @property
+    def birth(self) -> float:
+        return self.created_at.to_wire()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "created_at", FieldCodec.decode(

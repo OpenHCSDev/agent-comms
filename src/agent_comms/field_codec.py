@@ -649,7 +649,7 @@ class FieldPlan:
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
-    def encoded(self, value, *, key=None):
+    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
         return {key or self.key: value}
 
     def schema_fields(self):
@@ -780,7 +780,7 @@ class ContextFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return ()
 
-    def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
+    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
         return {}
 
     def decoded(self, data: object) -> dict[str, object]:
@@ -841,7 +841,9 @@ class InlineFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(entry.key for entry in self.record.fields)
 
-    def encoded(self, value, *, key=None):
+    def encoded(self, value: JsonValue, *, key: str | None = None) -> dict[str, JsonValue]:
+        if not isinstance(value, dict):
+            raise MalformedRecord("An inline record must encode a JSON object.")
         return value
 
     def captured(self, data: object) -> dict[str, object]:
@@ -2400,7 +2402,7 @@ class FieldCodec(MroDispatch, Sealed):
     def encode_fields(cls, value: object) -> dict[str, JsonValue]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        return cast(dict[str, JsonValue], _member_decoder(type(value)).encode(value))
+        return _member_decoder(type(value)).encode(value)
 
     @classmethod
     def decode_bound(cls, target: TypeForm[T], data: object, **context: object) -> T:
@@ -2575,7 +2577,7 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _project_record(cls, value: object, view: str) -> JsonValue:
         """A record's view: its tag, its view's fields and the properties the view owns."""
-        result = cls._tag(value)
+        result: dict[str, JsonValue] = {**cls._tag(value)}
         result.update(cls._record_plan(type(value)).encoded(
             value, view, lambda entry, current: cls.project(current, view, entry.annotation)
         ))
@@ -2606,8 +2608,11 @@ class FieldCodec(MroDispatch, Sealed):
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
             return tuple((plan.declared, plan.key) for plan in self.bindings)
 
-        def encoded(self, value, view, encode_value) -> dict[str, object]:
-            result: dict[str, object] = {}
+        def encoded(
+            self, value: object, view: str,
+            encode_value: Callable[[FieldPlan, object], JsonValue],
+        ) -> dict[str, JsonValue]:
+            result: dict[str, JsonValue] = {}
             for entry in self.bindings:
                 current = entry.current(value)
                 if not entry.excluded_in(view) and not entry.omitted(
@@ -3444,11 +3449,11 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         plan = self.plan
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
-    def encode(self, value: object) -> dict[str, object]:
+    def encode(self, value: object) -> dict[str, JsonValue]:
         if not isinstance(value, self.target):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = self.plan.encoded(
-            value, "wire", lambda entry, current: entry.value.encode(current)
+            value, "wire", lambda entry, current: FieldCodec.encode(current, entry.annotation)
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))
@@ -3614,14 +3619,14 @@ class _PydanticDecoder(ValueDecoder[object]):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target.model_validate(data)
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: object) -> dict[str, JsonValue]:
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 @lru_cache(maxsize=None)
-def _member_decoder(target: object) -> ValueDecoder[object]:
+def _member_decoder(target: object) -> _RecordDecoder[object] | _PydanticDecoder:
     """A concrete record, enum or scalar, after any family tag is removed."""
     if isinstance(target, type) and is_dataclass(target):
         return _RecordDecoder(target)
