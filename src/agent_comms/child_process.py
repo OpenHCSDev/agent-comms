@@ -2343,7 +2343,7 @@ class SpawnedProcess(SynchronousProcess):
 class GitChildPermission:
     """An entered business operation retains its child launches through shutdown."""
 
-    def require_admission(self, closing: threading.Event) -> None:
+    def require_open(self, closing: threading.Event) -> None:
         pass
 
     def stopping(self, child: SpawnedProcess) -> tuple[SpawnedProcess, ...]:
@@ -2359,9 +2359,9 @@ class CancellableGitChild(GitChildPermission):
     def __init__(self) -> None:
         self.cancelled = threading.Event()
 
-    def require_admission(self, closing: threading.Event) -> None:
+    def require_open(self, closing: threading.Event) -> None:
         if closing.is_set():
-            raise GitAcquisitionCancelled("Connector closed acquisition admission")
+            raise GitAcquisitionCancelled("Connector closed acquisition launches")
 
     def stopping(self, child: SpawnedProcess) -> tuple[SpawnedProcess, ...]:
         self.cancelled.set()
@@ -2373,7 +2373,7 @@ class CancellableGitChild(GitChildPermission):
 
 
 class GitChildren:
-    """One connector's actual gated children, admitted with their operation's permission."""
+    """One connector's actual gated children, registered with their operation's permission."""
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
@@ -2384,15 +2384,15 @@ class GitChildren:
     def enter_phase(self) -> None:
         with self.lock:
             if self.closing.is_set():
-                raise GitAcquisitionCancelled("Connector closed phase admission")
+                raise GitAcquisitionCancelled("Connector closed new phases")
 
-    def admit(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
         with self.lock:
-            permission.require_admission(self.closing)
+            permission.require_open(self.closing)
             self.active[child] = permission
 
     def retire(self, child: SpawnedProcess) -> None:
-        # Never hold admission while signalling, waiting, draining or closing streams.
+        # Never hold the launch lock while signalling, waiting, draining or closing streams.
         child.stop_sync(deadline=time.monotonic() + 2 * STOP_GRACE_SECONDS)
         child.close_streams()
         with self.lock:
@@ -2439,12 +2439,12 @@ class OwnedGitOpening(GitOpening):
         permission = self.permission()
         try:
             with self.children.lock:
-                permission.require_admission(self.children.closing)
+                permission.require_open(self.children.closing)
             with ExitStack() as cleanup:
                 with SpawnedProcess.launching(
                     command, env=env, stdin=stdin, output=stdout, stderr=stderr,
                 ) as child:
-                    self.children.admit(child, permission)
+                    self.children.register(child, permission)
                     cleanup.callback(self.children.retire, child)
                 yield child.process
         except ChildRetirementError:

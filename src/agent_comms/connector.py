@@ -30,7 +30,6 @@ import secrets
 import signal
 import socket
 import sys
-import threading
 import time
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
@@ -513,9 +512,6 @@ class Connector:
     )
     git_children: GitChildren = field(default_factory=GitChildren, init=False, repr=False, compare=False)
 
-    @property
-    def closing(self) -> threading.Event:
-        return self.git_children.closing
     watch_tasks: set[asyncio.Task[None]] = field(
         default_factory=set, init=False, repr=False, compare=False,
     )
@@ -533,7 +529,7 @@ class Connector:
         arguments: Mapping[str, object], caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
         """Start once; a disconnected HTTP client cannot abandon its write."""
-        if self.closing.is_set():
+        if self.git_children.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
         with OwnedGitOpening(self.git_children).bound():
             pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
@@ -542,7 +538,7 @@ class Connector:
         return await asyncio.shield(pending)
 
     async def begin_shutdown(self, app: web.Application) -> None:
-        """Close acquisition admission before any shutdown hook can join entered work."""
+        """Close acquisition launches before any shutdown hook can join entered work."""
         retirement = self.git_children.start_shutdown()
         for task in self.watch_tasks:
             task.cancel()

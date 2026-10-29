@@ -419,7 +419,7 @@ async def test_shutdown_retires_both_pipeline_children_and_readwork_child(
                 await asyncio.gather(pending, return_exceptions=True)
 
 
-class PausedAdmission(GitChildren):
+class PausedRegistration(GitChildren):
     def __init__(self) -> None:
         super().__init__()
         self.gated: Future[SpawnedProcess] = Future()
@@ -431,21 +431,21 @@ class PausedAdmission(GitChildren):
             raise TimeoutError("Gated launch control was never released")
 
 
-class BeforeAdmission(PausedAdmission):
-    def admit(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+class BeforeRegistration(PausedRegistration):
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
         self.pause(child)
-        super().admit(child, permission)
+        super().register(child, permission)
 
 
-class AfterAdmission(PausedAdmission):
-    def admit(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
-        super().admit(child, permission)
+class AfterRegistration(PausedRegistration):
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+        super().register(child, permission)
         self.pause(child)
 
 
-@pytest.mark.parametrize("collection", (BeforeAdmission, AfterAdmission))
+@pytest.mark.parametrize("collection", (BeforeRegistration, AfterRegistration))
 async def test_shutdown_closes_gated_launch_before_user_code(
-    collection: type[PausedAdmission], tmp_path: Path,
+    collection: type[PausedRegistration], tmp_path: Path,
 ) -> None:
     children = collection()
     executed = tmp_path / "executed"

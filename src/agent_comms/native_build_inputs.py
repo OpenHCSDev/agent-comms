@@ -92,7 +92,7 @@ class GitOpening:
         yield
 
     def enter_phase(self) -> None:
-        """A standalone operation has no connector phase admission."""
+        """A standalone operation has no connector phase gate."""
 
 
 _git_opening: ContextVar[GitOpening] = ContextVar("git_opening", default=GitOpening())
