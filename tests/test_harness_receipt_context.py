@@ -12,22 +12,22 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.notification_progress import HarnessConsumedProgress
 from agent_comms.notification_evidence import UnansweredResponse
-from agent_comms.read_basis import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from transcript_record_fixture import transcript_record
 
 
-@pytest.mark.parametrize(('outcome', 'monitor', 'consumed', 'arrived'), (
-    (UnconfirmedOutcome, UnrecordedMonitor(), False, 0),
-    (EmittedOutcome, UnrecordedMonitor(), False, 0),
-    (FilteredOutcome, UnrecordedMonitor(), False, 0),
-    (DeliveredOutcome, UnrecordedMonitor(), False, 0),
-    (AcceptedOutcome, UnrecordedMonitor(), False, 1),
-    (PersistedOutcome, UnrecordedMonitor(), False, 1),
-    (DeliveredOutcome, ObservedMonitor(transcript_record('complete-original'), 1791964800.125), True, 1),
+@pytest.mark.parametrize(('outcome', 'monitor', 'consumed'), (
+    (UnconfirmedOutcome, UnrecordedMonitor(), False),
+    (EmittedOutcome, UnrecordedMonitor(), False),
+    (FilteredOutcome, UnrecordedMonitor(), False),
+    (DeliveredOutcome, UnrecordedMonitor(), False),
+    (AcceptedOutcome, UnrecordedMonitor(), False),
+    (PersistedOutcome, UnrecordedMonitor(), False),
+    (DeliveredOutcome, ObservedMonitor(transcript_record('complete-original'), 1791964800.125), True),
 ))
 def test_only_retained_complete_body_proof_promotes_consumption(
-    tmp_path, outcome, monitor, consumed, arrived,
+    tmp_path, outcome, monitor, consumed,
 ):
     """This exercises projection of recorded evidence, not transcript acquisition.
 
@@ -56,7 +56,6 @@ def test_only_retained_complete_body_proof_promotes_consumption(
     assert current.state.consumed is consumed
     assert current.answer == UnansweredResponse()
     assert not current.displayed_to
-    assert recorded.monitor.arrival_count(recorded.outcome) == arrived
     assert recorded.monitor == monitor
     if consumed:
         assert current.label == current.timed_state(HarnessConsumedProgress.label, 1791964800125)

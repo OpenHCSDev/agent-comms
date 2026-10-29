@@ -57,9 +57,9 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .read_basis import AfterRecipient, FirstRecipient, RecipientCursor
+from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
 from .presentation import ChannelView, MessageNotification
-from .notification_evidence import RecipientSelection
+from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -691,16 +691,12 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
     reference: Annotated[
         MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
     ]
-    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = RecipientSelection.max_limit
+    limit: Annotated[RecipientLimit, *tool_field("Maximum recipient rows in this page")] = RecipientLimit()
     after: Annotated[
         RecipientCursor, *tool_field("The previous page's next cursor; omit for the first page")
     ] = FirstRecipient()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
-        try:
-            RecipientSelection.require_limit(self.limit)
-        except ValueError as error:
-            raise ToolRefusedError(str(error)) from error
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
         if not caller.outcome_viewer(comms.registry).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")

@@ -12,7 +12,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from typing import Annotated, ClassVar, Literal
 
 from pydantic import JsonValue
 
@@ -28,6 +28,7 @@ from .field_codec import (
 )
 from .locked_store import DurableFile, PatternFile, SQLiteFile
 from .native_failures import NativePiUnavailable
+from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .turn_item import FreshNativeId
 from .private_path import FileIdentity, PrivateFileRole
@@ -40,14 +41,9 @@ from .typed_table import (
     IntegerStorage,
     ReconciledFile,
     TableSchema,
+    TypedTable,
     WithoutRowid,
 )
-
-if TYPE_CHECKING:
-    from . import pi_events as pi
-    from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry
-    from .native_session_files import NativeSessionFiles
-
 
 @dataclass(frozen=True, slots=True)
 class NativeInputCommit:
@@ -82,13 +78,13 @@ class NativeInputLocation(NativeInputCommit):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextRecord(NativeInputCommit):
+class NativeContextRecord(NativeInputCommit, PositiveNativeIntegerBounds):
     """Native context facts extend the original committed input declaration."""
 
     request_generation: Annotated[
         int,
         WireName("requestGeneration"),
-        Column(primary_key=True, check="request_generation BETWEEN 1 AND 9007199254740991"),
+        Column(primary_key=True, check=PositiveNativeIntegerBounds.sql_check("request_generation")),
     ]
     llm_context_digest: Annotated[
         str,
@@ -100,34 +96,13 @@ class NativeContextRecord(NativeInputCommit):
     committed_at_ms: Annotated[
         int,
         WireName("committedAtMs"),
-        Column(check="committed_at_ms BETWEEN 1 AND 9007199254740991"),
+        Column(check=PositiveNativeIntegerBounds.sql_check("committed_at_ms")),
     ]
-
-    @classmethod
-    def from_events(
-        cls, input_id: InputId, session_id: PiSessionId,
-        input_event: pi.InputCommitted, context_event: pi.ContextCommitted,
-    ) -> NativeContextRecord:
-        """Strictly join the two emitted records through the context declaration.
-
-        This is an emitted acknowledgement, not proof of durable inclusion. A journal
-        read must independently corroborate the same complete located record.
-        """
-        emitted = FieldCodec.encode(context_event)
-        record = FieldCodec.decode(cls, {key: emitted[key]
-                                         for _, key in FieldCodec.record_fields(cls)})
-        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
-            raise NativePiUnavailable("Native Pi context names another original input")
-        if record.input_commit != input_event.input_commit:
-            raise NativePiUnavailable("Native Pi input/context events disagree")
-        return record
 
     def __post_init__(self) -> None:
         Sha256Text.decode(self.llm_context_digest)
-        if not 0 < self.request_generation <= 2**53 - 1:
-            raise ValueError("Native context generation is outside its native range")
-        if not 0 < self.committed_at_ms <= 2**53 - 1:
-            raise ValueError("Native context commit time is outside its native range")
+        self.require_integer(self.request_generation, "Native context generation")
+        self.require_integer(self.committed_at_ms, "Native context commit time")
 
     def at(self, session_file: Path, *, session_entry_start: int) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
@@ -180,7 +155,7 @@ class NativeContextJournal(
 
     @classmethod
     @contextmanager
-    def open_evidence(cls, files: NativeSessionFiles) -> Iterator[sqlite3.Connection]:
+    def open_evidence(cls, path: Path) -> Iterator[sqlite3.Connection]:
         """Read an indexed snapshot after SQLite's bounded hot-journal recovery.
 
         A read is corroboration, never a fresh acknowledgement. Keep the private inode
@@ -188,7 +163,6 @@ class NativeContextJournal(
         Open existing storage read/write for SQLite rollback, then forbid SQL
         writes. A cold history view can recover without a model turn or acknowledgement.
         """
-        path = files.input_proof
         with ExitStack() as ownership:
             try:
                 held = ownership.enter_context(closing(
@@ -215,7 +189,7 @@ class NativeContextJournal(
     @classmethod
     def for_input(
         cls, db: sqlite3.Connection, input_id: InputId,
-        generations: range = range(1, 2**53),
+        generations: range = NativeContextRecord.interval(),
     ) -> NativeContextJournal:
         """Require the latest input proof in this indexed generation interval."""
         if generations.step != 1:
@@ -232,15 +206,14 @@ class NativeContextJournal(
             raise NativePiUnavailable("The input has no assembled-context proof") from missing
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, entry: NativeEntry, *,
-        session_entry_start: int,
+        self, session_file: Path, location: NativeInputLocation,
     ) -> NativeContextProof:
-        if self.session_id != header.id or self.session_entry_id != entry.id:
+        if self.input_commit != location.input_commit:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
-        return self.at(session_file, session_entry_start=session_entry_start)
+        return self.at(session_file, session_entry_start=location.session_entry_start)
 
 
-class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
+class NativeInputProof(DurableFile, ReconciledFile, PatternFile, DurableTables):
     """The retained proof file names its journal without joining their two families."""
 
     __slots__ = ()
@@ -248,7 +221,11 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
 
     @classmethod
     def table_schema(cls) -> type[TableSchema]:
-        return NativeContextJournal
+        return cls
+
+    @classmethod
+    def schema_rows(cls) -> tuple[type[TypedTable], ...]:
+        return (NativeContextJournal,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -270,20 +247,3 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
             raise IdentityConflict("Native context precedes its original acknowledgement")
         if context.request_generation == self.request_generation and context != self:
             raise IdentityConflict("Native request has contradictory context evidence")
-
-    def corroborates_input(
-        self, input_id: InputId, *, files: NativeSessionFiles,
-        evidence: NativeEvidenceRead,
-    ) -> bool:
-        """Check an already-observed live event against its isolated saved proof.
-
-        This grants neither replay nor recovery authority. History IO occurs
-        before the coordinator read transaction, as on the native return path.
-        """
-        if self.input_id != input_id or files.session != self.session_file:
-            return False
-        return evidence.context_proof(
-            files, input_id,
-            generations=range(self.request_generation, self.request_generation + 1),
-            session_entry_start=self.session_entry_start,
-        ) == self

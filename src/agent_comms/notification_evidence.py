@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from bisect import bisect_left, bisect_right
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from itertools import batched
@@ -11,8 +12,14 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
+from .field_codec import (
+    FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember,
+    SingleFieldValue, SubclassUnion, ThreadLookup, boundary_decoder,
+)
 from .message_reference import MessageReference
+from .recorded_bus import RecordedBusIdentity
+
+from .participant_identity import FrozenRecipientIdentity
 from .thread_identity import ThreadIncarnation
 
 
@@ -23,8 +30,6 @@ class ConsumptionEvidence(ABC):
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
 
 if TYPE_CHECKING:
-    from .audience_manifest import FrozenRecipient
-    from .read_basis import OutcomeViewer
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
@@ -32,6 +37,173 @@ if TYPE_CHECKING:
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import AssignmentProgress, DeliveryProgress
     from .presentation import MessageNotification, WireRevision
+
+
+@dataclass(frozen=True)
+class RecipientLimit(SingleFieldValue):
+    """Decode one bounded recipient-window size at the request boundary."""
+
+    maximum: ClassVar[int] = 100
+    value: int = maximum
+
+    def __post_init__(self) -> None:
+        if not 1 <= self.value <= self.maximum:
+            raise ValueError(f"Recipient limit must be between 1 and {self.maximum}")
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "integer", "minimum": 1, "maximum": cls.maximum}
+
+
+@dataclass(frozen=True)
+class RecipientSelection:
+    """A bounded slice of original frozen positions, never a replacement audience."""
+
+    source: Delivered
+    eligible: range
+    limit: RecipientLimit
+
+    @property
+    def positions(self) -> range:
+        return self.eligible[:self.limit.value]
+
+    @property
+    def remaining(self) -> int:
+        return len(self.eligible) - len(self.positions)
+
+    @property
+    def recipients(self) -> tuple[FrozenRecipientIdentity, ...]:
+        return tuple(self.source.recipients[position] for position in self.positions)
+
+    @property
+    def entries(self) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipientIdentity], ...]:
+        return tuple(((recipient.recipient_lookup, self.source.message.reference), recipient)
+                     for recipient in self.recipients)
+
+
+@dataclass(frozen=True)
+class NotificationSelection:
+    """The exact per-original recipient cuts used by every expensive evidence reader."""
+
+    viewer: OutcomeViewer
+    pages: tuple[RecipientSelection, ...]
+
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return tuple(page.source for page in self.pages)
+
+    @property
+    def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
+        return tuple(key for page in self.pages for key, _recipient in page.entries)
+
+
+class RecipientCursor(SubclassUnion, affix=""):
+    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
+
+    @abstractmethod
+    def positions(self, source: Delivered) -> range: ...
+
+
+@dataclass(frozen=True)
+class FirstRecipient(NullMember, RecipientCursor):
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
+
+
+@dataclass(frozen=True)
+class AfterRecipient(RecordMember, RecipientCursor):
+    recipient: FrozenRecipientIdentity
+
+    def positions(self, source: Delivered) -> range:
+        start = bisect_right(source.recipients, self.recipient.recipient_lookup,
+                             key=lambda item: item.recipient_lookup)
+        return range(start, len(source.recipients))
+
+
+class OutcomeViewer(ABC):
+    """Who reads a delivery window decides which of its outcomes are shown."""
+
+    @abstractmethod
+    def positions(self, source: Delivered) -> range: ...
+
+    def selection(self, sources: Sequence[Delivered], *, after: RecipientCursor = FirstRecipient(),
+                  limit: RecipientLimit = RecipientLimit()) -> NotificationSelection:
+        pages = []
+        for source in sources:
+            eligible, following = self.positions(source), after.positions(source)
+            pages.append(RecipientSelection(
+                source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
+        return NotificationSelection(self, tuple(pages))
+
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        """Unscoped/operator and agent readers retain every human read mark."""
+        return displayed_to
+
+    @abstractmethod
+    def sees_direct_read(self, source: Delivered) -> bool:
+        pass
+
+    @abstractmethod
+    def sees(self, source: Delivered) -> bool:
+        """Whether this reader may read the message at all."""
+
+
+@dataclass(frozen=True, slots=True)
+class AllOutcomes(OutcomeViewer):
+    """An unscoped reader sees every recipient's outcome and every human read."""
+
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
+
+    def sees_direct_read(self, source: Delivered) -> bool:
+        return True
+
+    def sees(self, source: Delivered) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayOutcomes(AllOutcomes):
+    """Full operator access, minus only this display's source-matching viewer.
+
+    Incarnation equality owns rename/recreation; the captured bus owns namespace.
+    The live registry cannot establish either fact for an archived display.
+    """
+
+    viewer: ThreadIncarnation
+    bus_identity: RecordedBusIdentity
+
+    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
+                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+        return tuple(reader for reader in displayed_to
+                     if reader != self.viewer or not self.bus_identity.matches(source))
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerOutcomes(OutcomeViewer):
+    """A sender sees all outcomes; a recipient sees only its original outcome."""
+
+    lookup: ThreadLookup
+
+    @classmethod
+    def of(cls, owner: ThreadIncarnation) -> OwnerOutcomes:
+        return cls(owner.require_recorded().lookup)
+
+    def positions(self, source: Delivered) -> range:
+        if source.sender_lookup == self.lookup:
+            return range(len(source.recipients))
+        position = bisect_left(source.recipients, self.lookup, key=lambda item: item.recipient_lookup)
+        if position < len(source.recipients) and source.recipients[position].recipient_lookup == self.lookup:
+            return range(position, position + 1)
+        return range(0)
+
+    def sees_direct_read(self, source: Delivered) -> bool:
+        return source.sender_lookup == self.lookup
+
+    def sees(self, source: Delivered) -> bool:
+        """The message's sender and its original recipients may read it."""
+        return self.lookup == source.sender_lookup or bool(self.positions(source))
 
 
 @dataclass(frozen=True)
@@ -71,7 +243,7 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
 class UnansweredResponse(AssignmentResponse):
     def recorded(self, message: Delivered) -> AssignmentResponse:
         return AnsweredResponse(
-            message.reference, int(message.timestamp * 1000)
+            message.reference, message.at_ms
         )
 
     def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
@@ -117,55 +289,8 @@ class SourceEvidence:
         return progress
 
 
-@dataclass(frozen=True)
-class RecipientSelection:
-    """A bounded slice of original frozen positions, never a replacement audience."""
-
-    source: Delivered
-    eligible: range
-    limit: int
-    max_limit: ClassVar[int] = 100
-
-    def __post_init__(self) -> None:
-        self.require_limit(self.limit)
-
-    @classmethod
-    def require_limit(cls, limit: int) -> None:
-        if not 1 <= limit <= cls.max_limit:
-            raise ValueError(f"Recipient limit must be between 1 and {cls.max_limit}")
-
-    @property
-    def positions(self) -> range:
-        return self.eligible[:self.limit]
-
-    @property
-    def remaining(self) -> int:
-        return len(self.eligible) - len(self.positions)
-
-    @property
-    def recipients(self) -> tuple[FrozenRecipient, ...]:
-        return tuple(self.source.recipients[position] for position in self.positions)
-
-    @property
-    def entries(self) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipient], ...]:
-        return tuple(((recipient.recipient_lookup, self.source.message.reference), recipient)
-                     for recipient in self.recipients)
 
 
-@dataclass(frozen=True)
-class NotificationSelection:
-    """The exact per-original recipient cuts used by every expensive evidence reader."""
-
-    viewer: OutcomeViewer
-    pages: tuple[RecipientSelection, ...]
-
-    @property
-    def sources(self) -> tuple[Delivered, ...]:
-        return tuple(page.source for page in self.pages)
-
-    @property
-    def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
-        return tuple(key for page in self.pages for key, _recipient in page.entries)
 
 
 @dataclass(frozen=True)
@@ -228,7 +353,7 @@ class NotificationReadMark:
     """
 
     source: Delivered = field(compare=False)
-    recipient: FrozenRecipient
+    recipient: FrozenRecipientIdentity
     displayed_to: tuple[ThreadIncarnation, ...]
     reference: MessageReference = field(init=False)
 

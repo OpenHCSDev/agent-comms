@@ -10,7 +10,8 @@ from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
-from .read_basis import OperatorOutcomes, OutcomeViewer, OwnerOutcomes, ReadAuthority
+from .read_basis import OperatorOutcomes, ReadAuthority
+from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
@@ -138,7 +139,7 @@ class ThreadCaller(ToolCaller):
         return ThreadListing(threads, SentMessageSummary.for_sources(presentation.sent_notifications()))
 
     def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
-        return OwnerOutcomes.of(registry.require(self.name))
+        return OwnerOutcomes.of(registry.require(self.name).incarnation)
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(

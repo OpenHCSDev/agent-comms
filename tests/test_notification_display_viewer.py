@@ -13,7 +13,7 @@ from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
-from agent_comms.read_basis import AllOutcomes, OutcomeViewer, OwnerOutcomes
+from agent_comms.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
 from agent_comms.presentation import MessageNotification
 from agent_comms.registration import Registration
 from agent_comms.read_basis import HistoricalDisplay, HistoricalSelection, NamedViewer
@@ -82,7 +82,7 @@ def test_display_subtraction_preserves_raw_other_reads_and_real_audience(
     live_document = fixture.live.bus.reads.read()
     raw = fixture.notifications(AllOutcomes())
     shown = fixture.notifications(identity.outcome_viewer(fixture.live.registry))
-    agent = fixture.notifications(OwnerOutcomes.of(fixture.source.provenance.require('sender')))
+    agent = fixture.notifications(OwnerOutcomes.of(fixture.source.provenance.require('sender').incarnation))
     key = (fixture.message.seq, fixture.message.message_id)
     before = {item.recipient_identity: item for item in raw.outcomes[key]}
     after = {item.recipient_identity: item for item in shown.outcomes[key]}

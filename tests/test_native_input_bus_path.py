@@ -56,7 +56,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
             assert NativeInputProofArgument(str(files.input_proof)).argv in tuple(zip(launch.argv, launch.argv[1:]))
             assert files.input_proof.is_relative_to(native.root)
             assert not native.session.with_name(native.session.name+'.input-proof').exists()
-            with NativeContextJournal.open_evidence(files) as db:
+            with NativeContextJournal.open_evidence(files.input_proof) as db:
                 rows = NativeContextJournal.select(db)
             assert len(rows) == 1
             record = next(record for record in NativeTranscript(native.session).forward(

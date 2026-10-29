@@ -56,7 +56,7 @@ from .native_child import PiSessionChild
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
 from .native_input_proof import NativeContextProof
-from .native_pi import NativePiRpcLaunch, _verify_context, read_tracked_input_commitment
+from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
 from .native_session_reopen import SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
@@ -637,9 +637,9 @@ class TrackedInputContext:
         source_reads: NativeEvidenceScope,
     ) -> NativeContextProof:
         evidence = source_reads.for_source(files.session)
-        proof = _verify_context(
-            files, self.command.input_id, session_id,
-            self.input_commit.require(), self.context_commit.require(), evidence=evidence,
+        proof = evidence.verify_context(
+            files, self.input_commit.require(),
+            self.context_commit.require().record_for(self.command.input_id, session_id),
         )
         committed = read_tracked_input_commitment(
             proof.session_file, self.command.input_id, evidence=evidence,

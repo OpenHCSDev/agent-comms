@@ -74,7 +74,7 @@ from agent_comms.order_tools import (
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import OrderPhase, PlanPhase
-from agent_comms.read_basis import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject

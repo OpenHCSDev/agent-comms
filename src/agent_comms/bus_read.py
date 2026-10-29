@@ -9,7 +9,8 @@ from .comms import Comms
 from .owner_connection import (
     OwnerConnection, OwnerReading, OwnerReplyConnection, ResultRuntimeRequest, RuntimeRequestContext,
 )
-from .read_basis import DisplayCut, NoDisplaySelection, OutcomeViewer, ReadAuthority
+from .read_basis import DisplayCut, NoDisplaySelection, ReadAuthority
+from .notification_evidence import OutcomeViewer
 from .registration import Registration
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool

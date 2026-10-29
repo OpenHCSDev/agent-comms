@@ -2,7 +2,7 @@
 
 
 from agent_comms.notification_evidence import AssignmentResponse, AnsweredResponse, UnansweredResponse
-from agent_comms.read_basis import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.presentation import MessageNotification
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
@@ -127,7 +127,7 @@ def test_harness_consumption_survives_human_display(archived_notification):
 
     consumed = notification()
     assert consumed.state.consumed and not consumed.displayed_to
-    assert consumed.label == consumed.timed_state('Consumed', round(shown.timestamp * 1000))
+    assert consumed.label == consumed.timed_state('Consumed', shown.at_ms)
     ledger = live.bus.reads.read()
     assert human_display() == ()
     # The UI's "mark read" on the agent's thread, as the registered human viewer.
@@ -413,7 +413,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
 
     assert response.answers == (original.reference,)
     assert notification.label.startswith("Answered ")
-    assert notification.answer == AnsweredResponse(response.reference, int(response.timestamp * 1000))
+    assert notification.answer == AnsweredResponse(response.reference, response.at_ms)
 
 
 def test_recorded_response_resolution_keeps_other_collective_lifecycles(
@@ -481,7 +481,7 @@ def test_live_cli_ack_does_not_become_archived_ack(archived_notification):
         messages[0].seq, messages[0].message_id
     ]
     assert current.state.consumed and not current.displayed_to
-    assert current.label == current.timed_state('Consumed', round(messages[0].timestamp * 1000))
+    assert current.label == current.timed_state('Consumed', messages[0].at_ms)
     with live.bus.history.read_sources() as sources:
         archived, = source.notification_references(sources, (messages[0].reference,), AllOutcomes()).outcomes[
             messages[0].seq, messages[0].message_id

@@ -16,6 +16,7 @@ from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
 from .notification_evidence import ConsumptionEvidence
+from .recorded_time import Timestamped
 from .notification_progress import HarnessConsumedProgress
 
 if TYPE_CHECKING:
@@ -24,7 +25,6 @@ if TYPE_CHECKING:
     from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
-    from .presentation import MessageNotification
 
 
 class Outcome(DeclaredFamily, affix="Outcome"):
@@ -37,24 +37,8 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         successor.record(assignments, db)
         return successor
 
-    @classmethod
-    def arrival_count(cls) -> int:
-        return 0
-
-    @classmethod
-    def arrival_label(cls, notification: MessageNotification) -> str:
-        return "Arrival unknown"
-
-    @classmethod
-    def input_detail(cls) -> str:
-        return "Attempt is uncertain; no replay is permitted."
-
 
 class FilteredOutcome(Outcome):
-    @classmethod
-    def input_detail(cls) -> str:
-        return "No input was submitted."
-
     @classmethod
     def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
                db: sqlite3.Connection) -> HarnessDelivery:
@@ -74,39 +58,17 @@ class DeliveredOutcome(FilteredOutcome):
     A producer name alone cannot upgrade their evidence to model context.
     """
 
-    @classmethod
-    def input_detail(cls) -> str:
-        return "Harness reported delivery; model context is unproved."
-
 
 class AcceptedOutcome(DeliveredOutcome):
-    @classmethod
-    def arrival_count(cls) -> int:
-        return 1
-
-    @classmethod
-    def arrival_label(cls, notification: MessageNotification) -> str:
-        return "Arrived (RPC accepted; time unrecorded)"
-
-    @classmethod
-    def input_detail(cls) -> str:
-        return "RPC accepted input; model context proof is unavailable."
+    pass
 
 
 class PersistedOutcome(AcceptedOutcome):
-    @classmethod
-    def arrival_label(cls, notification: MessageNotification) -> str:
-        return "Arrived (saved input; time unrecorded)"
-
-    @classmethod
-    def input_detail(cls) -> str:
-        return "Harness saved input; model context proof is unavailable."
+    pass
 
 
 class EmittedOutcome(UnconfirmedOutcome):
-    @classmethod
-    def input_detail(cls) -> str:
-        return "Emitted; recipient context remains unconfirmed."
+    pass
 
 
 @dataclass(frozen=True)
@@ -127,12 +89,6 @@ class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
 
     def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
         return ()
-
-    def arrival_count(self, outcome: type[Outcome]) -> int:
-        return outcome.arrival_count()
-
-    def arrival_label(self, outcome: type[Outcome], notification: MessageNotification) -> str:
-        return outcome.arrival_label(notification)
 
     def finished_with(self, export: MonitorReadFile) -> None:
         """A body without a complete original transcript proof keeps its export."""
@@ -163,6 +119,7 @@ class WakeOnlyMonitor(PendingMonitor):
         "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
         "tool call; later calls print one unchanged count."
     )
+
     @classmethod
     def displayed_body(cls, body: str) -> str:
         return cls.board_wake
@@ -210,7 +167,7 @@ class MismatchedMonitor(MonitorEvidence):
 
 
 @dataclass(frozen=True)
-class ObservedMonitor(MonitorEvidence):
+class ObservedMonitor(MonitorEvidence, Timestamped):
     record_id: TranscriptRecordId
     timestamp: float
 
@@ -219,16 +176,10 @@ class ObservedMonitor(MonitorEvidence):
         return DeliveredOutcome, self
 
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
-        return progress.model_consumed(HarnessConsumedProgress(round(self.timestamp * 1000)))
+        return progress.model_consumed(HarnessConsumedProgress(self.at_ms))
 
     def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
         return state.harness_delivery()
-
-    def arrival_count(self, outcome: type[Outcome]) -> int:
-        return 1
-
-    def arrival_label(self, outcome: type[Outcome], notification: MessageNotification) -> str:
-        return notification.timed_state("Arrived", round(self.timestamp * 1000))
 
     def finished_with(self, export: MonitorReadFile) -> None:
         export.retire()

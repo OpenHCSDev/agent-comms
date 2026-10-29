@@ -39,7 +39,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .importing import ImportedSessionMetadata
-from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
+from .native_input_proof import NativeContextJournal, NativeContextProof, NativeContextRecord, NativeInputLocation
 from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
@@ -407,18 +407,48 @@ class NativeEvidenceRead:
 
     def context_proof(
         self, files: NativeSessionFiles, input_id: InputId, *,
-        generations: range = range(1, 2**53), session_entry_start: int,
+        generations: range = NativeContextRecord.interval(), session_entry_start: int,
     ) -> NativeContextProof:
         """Corroborate a journal row against this reader's original acquired bytes."""
         session_file = files.session.absolute()
         with self.borrow(session_file, self) as evidence:
-            with NativeContextJournal.open_evidence(files) as db:
+            with NativeContextJournal.open_evidence(files.input_proof) as db:
                 row = NativeContextJournal.for_input(db, input_id, generations)
             location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
                                            session_entry_start=session_entry_start)
             entry = evidence.read_input(location)
-            return row.corroborate(session_file, evidence.header(), entry,
-                                   session_entry_start=session_entry_start)
+            return row.corroborate(session_file, NativeInputLocation(
+                input_id, evidence.header().id, entry.id,
+                session_entry_start=session_entry_start,
+            ))
+
+    def corroborates_context(
+        self, context: NativeContextProof, *, input_id: InputId, files: NativeSessionFiles,
+    ) -> bool:
+        """Corroborate a located context through this reader's own pinned bytes.
+
+        This grants neither input replay nor recovery authority.
+        """
+        if context.input_id != input_id or files.session != context.session_file:
+            return False
+        return self.context_proof(
+            files, input_id,
+            generations=range(context.request_generation, context.request_generation + 1),
+            session_entry_start=context.session_entry_start,
+        ) == context
+
+    def verify_context(
+        self, files: NativeSessionFiles, input_event: NativeInputLocation,
+        context: NativeContextRecord,
+    ) -> NativeContextProof:
+        """Join the normalized acknowledgement and this acquired durable evidence exactly."""
+        if context.input_commit != input_event.input_commit:
+            raise NativePiUnavailable("Native Pi input/context events disagree")
+        emitted = context.at(files.session, session_entry_start=input_event.session_entry_start)
+        with self.borrow(files.session, self) as evidence:
+            if not evidence.corroborates_context(emitted, input_id=input_event.input_id, files=files):
+                raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
+            return emitted
 
     def stopped_input(self, input_id: InputId):
         """Read only this input's contiguous branch, ending at the next input.

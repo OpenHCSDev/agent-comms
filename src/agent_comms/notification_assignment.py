@@ -27,8 +27,8 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import (AssignmentResponse, ConsumptionEvidence, NotificationAssignmentRead, NotificationWindow,
-                                    NotificationSelection, UnansweredResponse)
+from .notification_evidence import AssignmentResponse, ConsumptionEvidence, NotificationAssignmentRead, NotificationWindow, UnansweredResponse
+from .notification_evidence import NotificationSelection
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow

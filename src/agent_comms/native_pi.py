@@ -32,7 +32,7 @@ from .launch_root import LaunchRoot
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
-from .native_input_proof import NativeContextProof, NativeContextRecord
+from .native_input_proof import NativeContextProof
 from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
 from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from .native_entries import NativeEvidenceRead
     from .selected_session import SelectedSession
     from .turn_failure import TurnFailure
-    from .native_session_reopen import PiSessionId
 
 CAPABILITY = "pi-native-input-v1-live-only"
 
@@ -672,25 +671,3 @@ def read_tracked_input_commitment(
             return CommittedInput(evidence.tracked(input_id).message.input_digest.require())
         except NativeInputUncommitted:
             return UncommittedInput()
-
-
-def _verify_context(
-    files: NativeSessionFiles,
-    input_id: InputId,
-    session_id: PiSessionId,
-    input_event: pi.InputCommitted,
-    context_event: pi.ContextCommitted,
-    *, evidence: NativeEvidenceRead | None = None,
-) -> NativeContextProof:
-    from .native_entries import NativeInputEvidenceRead
-
-    session_file = files.session
-    try:
-        emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(
-            session_file, session_entry_start=input_event.session_entry_start)
-    except MalformedRecord as error:
-        raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
-    with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        if not emitted.corroborates_input(input_id, files=files, evidence=evidence):
-            raise NativePiUnavailable("Native Pi emitted an event without matching durable proof")
-        return emitted

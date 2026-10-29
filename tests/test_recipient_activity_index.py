@@ -13,7 +13,7 @@ from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.read_basis import AllOutcomes, OwnerOutcomes
+from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.presentation import MessageNotification
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_ledger import ReadDocument, ReadLedger
@@ -104,7 +104,7 @@ def test_a_viewer_follows_frozen_lookups_through_rename_and_never_into_a_rebirth
     key = (sent.seq, sent.message_id)
 
     def seen_by(name: str) -> set[str]:
-        viewer = OwnerOutcomes.of(comms.registry.require(name))
+        viewer = OwnerOutcomes.of(comms.registry.require(name).incarnation)
         read = NotificationAssignment.read(comms.root, viewer.selection((original,)))
         assert read.selection.viewer == viewer
         window = MessageNotification.delivery_window(comms.root, comms.registry, read)
@@ -128,7 +128,7 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
     original = comms.bus.bus.delivery(sent.seq)
     CoordinationStore.path_in(comms.root).unlink(missing_ok=True)
-    viewer = OwnerOutcomes.of(comms.registry.require("peer-a"))
+    viewer = OwnerOutcomes.of(comms.registry.require("peer-a").incarnation)
     read = NotificationAssignment.read(comms.root, viewer.selection((original,)))
     assert (read.sources, read.rows, read.attempts, read.selection.viewer) == ((original,), (), (), viewer)
     window = MessageNotification.delivery_window(comms.root, comms.registry, read)

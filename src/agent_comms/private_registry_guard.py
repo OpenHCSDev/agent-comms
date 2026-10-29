@@ -46,7 +46,8 @@ from .private_nk_entrypoint import (
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
-from .notification_evidence import NotificationAssignmentRead, NotificationSelection
+from .notification_evidence import NotificationAssignmentRead
+from .notification_evidence import NotificationSelection
 
 
 if TYPE_CHECKING:

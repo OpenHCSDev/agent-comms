@@ -15,7 +15,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 
 def read_context_proof(
     files: NativeSessionFiles, input_id: InputId, *, session_entry_start: int,
-    generations: range = range(1, 2**53), evidence: NativeEvidenceRead | None = None,
+    generations: range = NativeContextRecord.interval(), evidence: NativeEvidenceRead | None = None,
 ) -> NativeContextProof:
     """Keep fixture reads inside the same production byte-reader lifetime."""
     with NativeInputEvidenceRead.borrow(files.session, evidence) as reader:
@@ -57,7 +57,7 @@ def write_proof_rows(files: NativeSessionFiles, rows: Iterable[dict[str, object]
 
 
 def read_proof_rows(files: NativeSessionFiles) -> list[dict[str, object]]:
-    with NativeContextJournal.open_evidence(files) as db:
+    with NativeContextJournal.open_evidence(files.input_proof) as db:
         return [
             FieldCodec.encode(row)
             for row in NativeContextJournal.select(db, order_by=("request_generation", "input_id"))

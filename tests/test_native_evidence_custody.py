@@ -121,7 +121,7 @@ def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
     files = _evidence(tmp_path)
     original = sqlite3.OperationalError("consumer transaction refused")
     with pytest.raises(sqlite3.OperationalError) as caught:
-        with NativeContextJournal.open_evidence(files) as db:
+        with NativeContextJournal.open_evidence(files.input_proof) as db:
             assert NativeContextJournal.for_input(db, INPUT_ID) is not None
             raise original
     assert caught.value is original

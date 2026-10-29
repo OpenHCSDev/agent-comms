@@ -14,7 +14,8 @@ from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.notification_evidence import AnsweredResponse, NotificationAssignmentRead
-from agent_comms.read_basis import AllOutcomes, ChannelDisplayScope, ConversationCursor
+from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.registration import Registration
 from agent_comms.proven_source_coverage import SourcePrefix
@@ -134,7 +135,7 @@ def test_notification_answers_require_frozen_delivery_not_a_public_answer_refere
     assert key not in NotificationAssignment.capture_responses(bus.path.parent, read).responses
     reply = append_reply(bus, owner, peer, answers=(original.reference,))
     assert NotificationAssignment.capture_responses(bus.path.parent, read).responses[key] == (
-        AnsweredResponse(reply.reference, int(reply.timestamp * 1000)))
+        AnsweredResponse(reply.reference, reply.at_ms))
 
 
 def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, peer):

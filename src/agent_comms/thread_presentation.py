@@ -269,12 +269,12 @@ class ThreadPresentation(ThreadStatusDisplay):
         as the thread's owner may see them; the incoming outcomes carry public envelopes."""
         from .notification_assignment import NotificationAssignment
         from .presentation import MessageNotification
-        from .read_basis import OwnerOutcomes
+        from .notification_evidence import OwnerOutcomes
 
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        viewer = OwnerOutcomes.of(window.read.identity.thread)
+        viewer = OwnerOutcomes.of(window.read.identity.thread.incarnation)
         notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, notification_read)

@@ -13,7 +13,7 @@ from agent_comms.field_codec import InputId
 from agent_comms.notification_evidence import UnansweredResponse
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.read_basis import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.selected_triage import AbsentTriageDecisionRecord, DecidedTriageRecord, IgnoreSelectedTriage

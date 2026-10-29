@@ -163,8 +163,8 @@ class NativeSendStage(ABC):
         # Disk evidence corroborates those events, never authorizes recovery.
         with source_reads.borrow():
             evidence = source_reads.for_source(context.session_file)
-            if not context.corroborates_input(
-                input_id, evidence=evidence,
+            if not evidence.corroborates_context(
+                context, input_id=input_id,
                 files=NativeSessionFiles.for_identity(NativeSessionIdentity.from_context(context),
                                          root=store.session.path.parent,
                                          owner=owner.thread.incarnation.require_recorded()),

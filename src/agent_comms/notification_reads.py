@@ -8,17 +8,17 @@ from .bus_read import UiRead
 from .comms import Comms
 from .historical_views import HistorySource, HistorySourceKey
 from .message_reference import MessageReference
-from .notification_evidence import NotificationWindow, RecipientSelection
+from .notification_evidence import FirstRecipient, NotificationWindow, RecipientCursor, RecipientLimit
 from .notification_read import NotificationsRead
 from .presentation import WireRevision
-from .read_basis import FirstRecipient, ReadAuthority, RecipientCursor
+from .read_basis import ReadAuthority
 
 
 @dataclass(frozen=True)
 class NotificationRead(UiRead[NotificationWindow], ABC):
     references: tuple[MessageReference, ...]
     after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
-    limit: int = field(default=RecipientSelection.max_limit, kw_only=True)
+    limit: RecipientLimit = field(default_factory=RecipientLimit, kw_only=True)
 
     @abstractmethod
     def changed_since(self, comms: Comms, revision: WireRevision,

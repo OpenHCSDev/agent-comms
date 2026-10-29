@@ -68,8 +68,10 @@ from .read_basis import (
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import AssignmentResponse, NotificationAssignmentRead, NotificationReadMark, NotificationWindow, RecipientSelection
-from .read_basis import FirstRecipient, OutcomeViewer, RecipientCursor
+from .notification_evidence import (
+    AssignmentResponse, FirstRecipient, NotificationAssignmentRead, NotificationReadMark,
+    NotificationWindow, OutcomeViewer, RecipientCursor, RecipientLimit,
+)
 from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -196,7 +198,7 @@ class MessageNotification:
     def references(
         cls, root: Path, registry: Registration, log: Bus,
         references: Sequence[MessageReference], *, viewer: OutcomeViewer,
-        after: RecipientCursor = FirstRecipient(), limit: int = RecipientSelection.max_limit,
+        after: RecipientCursor = FirstRecipient(), limit: RecipientLimit = RecipientLimit(),
     ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
@@ -244,7 +246,7 @@ class MessageNotification:
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
                                  sources: Sequence[Delivered], *,
                                  viewer: OutcomeViewer, after: RecipientCursor = FirstRecipient(),
-                                 limit: int = RecipientSelection.max_limit) -> NotificationWindow:
+                                 limit: RecipientLimit = RecipientLimit()) -> NotificationWindow:
         selection = viewer.selection(sources, after=after, limit=limit)
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()

@@ -37,7 +37,7 @@ from .notification_assignment import NotificationAssignment
 from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .read_basis import OwnerOutcomes
+from .notification_evidence import OwnerOutcomes
 from .presentation import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
@@ -250,7 +250,7 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, OwnerOutcomes.of(sent_owner).selection(sent_sources), privacy,
+                store.session._connection, OwnerOutcomes.of(sent_owner.incarnation).selection(sent_sources), privacy,
             )
         sent_read = NotificationAssignment.capture_detached(comms.root, sent_read)
         if pending:

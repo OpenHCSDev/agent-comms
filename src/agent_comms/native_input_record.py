@@ -31,6 +31,7 @@ from .field_codec import (
     MalformedRecord,
     NativeContext,
 )
+from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import SqlStorage, TextStorage
@@ -377,7 +378,7 @@ class UnrecordedNativeInputReference(NativeContextReference):
 
 
 @dataclass(frozen=True)
-class NativeInputReference(NativeContextReference):
+class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
     """A cursor's bounded reference to original recorded native context."""
 
     input_id: InputId
@@ -386,6 +387,11 @@ class NativeInputReference(NativeContextReference):
     request_generation: int
 
     recorded = True
+
+    def __post_init__(self) -> None:
+        self.require_integer(self.request_generation, "Native reference generation")
+        if not self.session_id:
+            raise ValueError("Native reference lacks recorded identity")
 
     def require_recorded(self) -> NativeInputReference:
         return self
@@ -397,14 +403,9 @@ class NativeInputReference(NativeContextReference):
             result = FieldCodec.construct(cls, dict(
                 input_id=row.context_value("input_id"),
                 stage=row.reference_stage,
-                session_id=row.context_value("session_id"),
+                session_id=FieldCodec.decode(PiSessionId, row.context_value("session_id")),
                 request_generation=row.context_value("request_generation"),
             ))
-            result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
-            if not 0 < result.request_generation <= 2**53 - 1:
-                raise MalformedRecord("Native reference generation is outside its native range")
-            if not result.session_id:
-                raise MalformedRecord("Native reference lacks recorded identity")
             return result
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error

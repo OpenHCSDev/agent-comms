@@ -15,14 +15,18 @@ from .field_codec import (
     DeclaredWireType,
     FieldCodec,
     FieldPlan,
+    InputId,
+    MalformedRecord,
     ToolCallId,
     TurnId,
     WireName,
     WireNullDefault,
     WireOmitDefault,
+    boundary_decoder,
 )
 from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeInputCommit, NativeInputLocation
+from .native_input_proof import NativeContextRecord, NativeInputCommit, NativeInputLocation
+from .native_session_reopen import PiSessionId
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
@@ -422,6 +426,27 @@ class ContextCommitted(NativePiEvent, NativeInputCommit):
         PiOmitted()
     )
     committed_at_ms: Annotated[int | PiOmitted, WireName("committedAtMs")] = PiOmitted()
+
+    @boundary_decoder
+    def record_for(
+        self, input_id: InputId, session_id: PiSessionId,
+    ) -> NativeContextRecord:
+        """Normalize the optional native acknowledgement into its required record.
+
+        This event is not durable proof. The acquired evidence reader must corroborate
+        the complete located record independently.
+        """
+        emitted = FieldCodec.encode(self)
+        try:
+            record = FieldCodec.decode(NativeContextRecord, {
+                key: emitted[key] for _, key in FieldCodec.record_fields(NativeContextRecord)
+                if key in emitted
+            })
+        except MalformedRecord as error:
+            raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
+        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
+            raise NativePiUnavailable("Native Pi context names another original input")
+        return record
 
 
 @dataclass(frozen=True, kw_only=True)

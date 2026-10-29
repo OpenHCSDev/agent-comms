@@ -14,8 +14,9 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.native_arguments import SelectedModel
-from agent_comms.native_entries import NativeEntry
+from agent_comms.native_entries import NativeEntry, NativeInputEvidenceRead
 from agent_comms.native_failures import NativePiUnavailable
+from agent_comms.pi_events import ContextCommitted, InputCommitted
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_pi import (
     NativePiRpcLaunch,
@@ -248,8 +249,6 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
 
 def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     from dataclasses import replace
-    from agent_comms.native_pi import _verify_context
-    from agent_comms.pi_events import ContextCommitted, InputCommitted
 
     files = _evidence(tmp_path)
     session = files.session
@@ -262,13 +261,16 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     assert read_context_proof(files, INPUT_ID, session_entry_start=record.start).request_generation == 2
     assert read_context_proof(files, INPUT_ID, generations=range(1, 2), session_entry_start=record.start) == recorded
     with NativeEntry.open_evidence(session) as evidence:
-        assert recorded.corroborates_input(INPUT_ID, files=files, evidence=evidence)
-        assert not recorded.corroborates_input('e'*32, files=files, evidence=evidence)
+        assert evidence.corroborates_context(recorded, input_id=INPUT_ID, files=files)
+        assert not evidence.corroborates_context(recorded, input_id=InputId('e'*32), files=files)
     input_event = InputCommitted(input_id=INPUT_ID,session_id=PiSessionId('sid'),session_entry_id=FreshNativeId('entry'),session_entry_start=record.start)
     context_event = ContextCommitted.from_wire({key:value for key,value in first.items() if key != 'schema'})
-    assert _verify_context(files,INPUT_ID,'sid',input_event,context_event) == recorded
-    with pytest.raises(NativePiUnavailable):
-        _verify_context(files,INPUT_ID,'sid',input_event,replace(context_event,llm_context_digest='d'*64))
+    with NativeInputEvidenceRead.open(session) as evidence:
+        assert evidence.verify_context(files, input_event,
+                                       context_event.record_for(INPUT_ID, PiSessionId('sid'))) == recorded
+        with pytest.raises(NativePiUnavailable):
+            evidence.verify_context(files, input_event,
+                replace(context_event, llm_context_digest='d'*64).record_for(INPUT_ID, PiSessionId('sid')))
     with pytest.raises(NativePiUnavailable):
         read_context_proof(files,INPUT_ID,generations=range(3, 4),session_entry_start=record.start)
 
@@ -291,7 +293,7 @@ def test_proof_observation_rejects_file_replacement(tmp_path):
     files = _evidence(tmp_path)
     journal = files.input_proof
     with pytest.raises(NativePiUnavailable):
-        with NativeContextJournal.open_evidence(files) as db:
+        with NativeContextJournal.open_evidence(files.input_proof) as db:
             assert NativeContextJournal.for_input(db,INPUT_ID).input_id == INPUT_ID
             changed = journal.with_name('replacement')
             changed.write_bytes(journal.read_bytes())

@@ -32,7 +32,7 @@ from agent_comms.turn_lease import TurnLeaseFence
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_events import ContextCommitted, InputCommitted
 from agent_comms.private_send_claim import PrivateSendClaim
-from agent_comms.read_basis import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.private_sidecar import native_request_digest
 from conftest import accept_initial, publish_initial
 from native_proof_cases import append_input_entry

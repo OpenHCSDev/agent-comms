@@ -15,8 +15,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.notification_evidence import AnsweredResponse
-from agent_comms.read_basis import AllOutcomes, AfterRecipient, OwnerOutcomes
-from agent_comms.notification_evidence import RecipientSelection
+from agent_comms.notification_evidence import AllOutcomes, AfterRecipient, OwnerOutcomes
+from agent_comms.notification_evidence import RecipientLimit
 from agent_comms.presentation import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
@@ -62,7 +62,7 @@ def test_acquired_rows_and_proofs_are_exact_bounded_subset_without_rewriting_ori
     before_wire = comms.bus.bus.revision()
     viewer = AllOutcomes()
     full = NotificationAssignment.read(comms.root, viewer.selection((source,)))
-    selection = viewer.selection((source,), limit=3)
+    selection = viewer.selection((source,), limit=RecipientLimit(3))
     bounded = NotificationAssignment.read(comms.root, selection)
     selected = {recipient.recipient_lookup for recipient in selection.pages[0].recipients}
     assert len(full.rows) == len(frozen) > len(bounded.rows) == 3
@@ -83,15 +83,14 @@ def test_retained_cut_ignores_other_recipient_change_but_observes_its_own_proof(
     frozen_window: tuple[Comms, Delivered],
 ) -> None:
     comms, source = frozen_window
-    selection = AllOutcomes().selection((source,), limit=3)
+    selection = AllOutcomes().selection((source,), limit=RecipientLimit(3))
     before = NotificationAssignment.read(comms.root, selection)
     record_attempt(comms, source, len(source.recipients) - 1)
     assert NotificationAssignment.changed((before,), comms.root) == ()
     record_attempt(comms, source, 0)
     assert NotificationAssignment.changed((before,), comms.root) == (before,)
     changed = NotificationAssignment.read(comms.root, selection)
-    assert len(changed.attempts) == 1
-    assert changed.attempts[0].recipient_lookup == source.recipients[0].recipient_lookup
+    assert tuple(changed.consumption) == ((source.recipients[0].recipient_lookup, source.reference),)
 
 
 def test_cursor_and_owner_scope_are_applied_by_actual_read_request_before_acquisition(
@@ -99,21 +98,21 @@ def test_cursor_and_owner_scope_are_applied_by_actual_read_request_before_acquis
 ) -> None:
     comms, source = frozen_window
     reference = source.message.reference
-    first = ReadNotifications(str(comms.root), LiveNotificationRead((reference,), limit=3)).read(comms)
+    first = ReadNotifications(str(comms.root), LiveNotificationRead((reference,), limit=RecipientLimit(3))).read(comms)
     key = reference.seq, reference.message_id
     cursor = AfterRecipient(first.outcomes[key][-1].recipient_identity)
     second = ReadNotifications(
-        str(comms.root), LiveNotificationRead((reference,), after=cursor, limit=3)).read(comms)
+        str(comms.root), LiveNotificationRead((reference,), after=cursor, limit=RecipientLimit(3))).read(comms)
     assert len(first.outcomes[key]) == len(second.outcomes[key]) == 3
     assert {row.recipient_identity for row in first.outcomes[key]}.isdisjoint(
         row.recipient_identity for row in second.outcomes[key])
     assert second.remaining(reference) == len(source.recipients) - 6
     own = source.recipients[-1]
     recipient = comms.views.message_notifications_for_references(
-        OwnerOutcomes(own.recipient_lookup), (reference,), limit=1)
+        OwnerOutcomes(own.recipient_lookup), (reference,), limit=RecipientLimit(1))
     assert tuple(row.recipient_identity for row in recipient.outcomes[key]) == (own,)
     with pytest.raises(ValueError):
-        AllOutcomes().selection((source,), limit=RecipientSelection.max_limit + 1)
+        RecipientLimit(RecipientLimit.maximum + 1)
 
 
 def test_reply_acquisition_returns_only_first_reply_of_selected_frozen_author(
@@ -135,7 +134,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     frozen_window: tuple[Comms, Delivered],
 ) -> None:
     comms, source = frozen_window
-    selection = AllOutcomes().selection((source,), limit=1)
+    selection = AllOutcomes().selection((source,), limit=RecipientLimit(1))
     recipient = selection.pages[0].recipients[0]
     record_attempt(comms, source, 0)
     before = NotificationAssignment.read(comms.root, selection)
@@ -146,14 +145,14 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     after = NotificationAssignment.read(comms.root, selection)
     window = MessageNotification.delivery_window(comms.root, comms.registry, after)
     row, = window.outcomes[source.message.seq, source.message.message_id]
-    assert row.answer == response.reference
+    assert row.answer == AnsweredResponse(response.reference, response.at_ms)
     assert not row.state.consumed
-    assert after.rows == before.rows and after.attempts == before.attempts
+    assert after.rows == before.rows and after.consumption == before.consumption
     assert ReadLedger.at(comms.root).read() == reads
     later = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                  "A later independent answer", answers=(source.message.reference,)).message
     assert NotificationAssignment.changed((after,), comms.root) == ()
-    assert AnsweredResponse(later.reference, int(later.timestamp * 1000)).answered(row) is row
+    assert AnsweredResponse(later.reference, later.at_ms).answered(row) is row
 
 
 def test_independent_reply_without_any_claim_is_retained_without_context_or_read_mutation(
@@ -162,20 +161,20 @@ def test_independent_reply_without_any_claim_is_retained_without_context_or_read
     comms, _accepted_source = frozen_window
     message = publish_initial(comms, "sender", "#team", "An original without a handling claim")
     source = comms.bus.bus.delivery(message.seq)
-    selection = AllOutcomes().selection((source,), limit=1)
+    selection = AllOutcomes().selection((source,), limit=RecipientLimit(1))
     recipient = selection.pages[0].recipients[0]
     reads = ReadLedger.at(comms.root).read()
     before = NotificationAssignment.read(comms.root, selection)
-    assert before.rows == before.attempts == ()
+    assert before.rows == () and not before.consumption
     response = comms.messaging.send(recipient.canonical_thread, source.message.sender,
                                     "An answer without an input claim", answers=(message.reference,)).message
     assert NotificationAssignment.changed((before,), comms.root) == (before,)
     after = NotificationAssignment.read(comms.root, selection)
-    assert after.rows == after.attempts == ()
+    assert after.rows == () and not after.consumption
     assert after.responses[recipient.recipient_lookup, message.reference] == AnsweredResponse(
-        response.reference, int(response.timestamp * 1000))
+        response.reference, response.at_ms)
     window = MessageNotification.delivery_window(comms.root, comms.registry, after)
     row, = window.outcomes[message.seq, message.message_id]
-    assert row.answer == response.reference and row.changed
+    assert row.answer == AnsweredResponse(response.reference, response.at_ms) and row.changed
     assert not row.state.consumed and not row.displayed_to
     assert ReadLedger.at(comms.root).read() == reads

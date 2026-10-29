@@ -57,6 +57,7 @@ from .field_codec import (
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
+from .recorded_time import Timestamped
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
@@ -831,7 +832,7 @@ class PublicSender(NullMember):
 
 
 @dataclass(frozen=True, slots=True)
-class MessageInput(Addressed, BusCapability):
+class MessageInput(Timestamped, Addressed, BusCapability):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message
