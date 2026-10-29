@@ -323,8 +323,8 @@ class PiSessionChild(PiChild):
             PartRead(selected) if full_read and selected in self.rule_parts else NotPartRead())
 
     def completed_part_read(self, call_id: ToolCallId, result: PiToolResult) -> None:
-        # Reset withdraws prior admissions; an older completion has no part-read proof.
-        self.pending_part_reads.pop(call_id, NotPartRead()).complete(result, self.parts_read)
+        # Every successful Read must have its admission; a missing record fails closed.
+        self.pending_part_reads.pop(call_id).complete(result, self.parts_read)
 
     @classmethod
     async def start(
