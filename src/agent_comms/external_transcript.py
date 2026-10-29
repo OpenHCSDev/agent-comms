@@ -583,6 +583,8 @@ class ExternalTranscript(TranscriptSource, DurableStore):
         return GeneratedTimestamp.decode(timestamp)
 
     def delivered(self, turn_id: NativeTurnId, references: tuple[MessageReference, ...]) -> None:
+        if not references:
+            return  # Protocol notices and already-confirmed history introduce no input.
         with self.writing() as connection:
             turn = ExternalTurn.opened(connection, self.lookup, turn_id)
             turn.replies.delivered(connection, turn, references)
