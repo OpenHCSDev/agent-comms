@@ -105,16 +105,6 @@ class ClaudeTranscriptHook(ClaudeHook):
     """Transcript bytes read from the end."""
 
     @property
-    def calls(self) -> Path:
-        """One byte per completed or refused tool call since this deal."""
-        return Path(self.transcript_path).with_suffix(".calls")
-
-    def count_call(self) -> int:
-        with self.calls.open("ab", buffering=0) as calls:
-            calls.write(b".")
-            return calls.tell()
-
-    @property
     def dealt_files(self) -> Path:
         """The packaged rule files dealt to a bound session, one path per line, written by the
         session start hook beside the transcript; it exists only in a session bound to a bus.

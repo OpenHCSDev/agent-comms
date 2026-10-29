@@ -102,15 +102,14 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
 @dataclass(frozen=True)
 class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=ReadGateProgram.command()):
     def run_hook(self, event: GatedCall, comms: Comms) -> None:
-        event.judge()
+        event.judge(comms)
 
 
 @dataclass(frozen=True)
 class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.command()):
     def run_hook(self, event: BoardReminder, comms: Comms) -> None:
-        GatedCall.of(self.payload, output=event.output).completed()
-        if texts := event.take():
-            event.warn(*texts)
+        number = GatedCall.of(self.payload, output=event.output).completed(comms)
+        event.warn(*event.take(number))
 
 
 @dataclass(frozen=True)

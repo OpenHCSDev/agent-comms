@@ -1,0 +1,129 @@
+"""Compaction-deal call records and the notices derived from their progress."""
+
+from __future__ import annotations
+
+import fcntl
+import os
+from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import dataclass
+from pathlib import Path
+from typing import BinaryIO
+
+from agent_comms_hooks import ClaudeTranscriptHook
+
+from .declared_family import DeclaredFamily
+from .field_codec import boundary_decoder
+from .recorded_time import RecordedEventTime
+from .thread_identity import RecordedThreadIncarnation
+
+
+@dataclass(frozen=True)
+class CompactionNotice(ABC):
+    """One event's actual actor, call ordinal and time; both harnesses render it here."""
+
+    owner: RecordedThreadIncarnation
+    tool: str
+    call_number: int
+    at: RecordedEventTime
+
+    @property
+    @abstractmethod
+    def body(self) -> str: ...
+
+
+class IgnoredCompactionDeal(CompactionNotice):
+    @property
+    def body(self) -> str:
+        return (f"{self.owner.name} ignored the compaction deal at {self.at.clock()}: "
+                f"first refused call was {self.tool}; call #{self.call_number}, refused.")
+
+
+class StartedRuleReading(CompactionNotice):
+    @property
+    def body(self) -> str:
+        return (f"{self.owner.name} finally read its first dealt rule at {self.at.clock()}: "
+                f"{self.tool}, call #{self.call_number} since this compaction.")
+
+
+class GateNotices(DeclaredFamily):
+    """The existing call record's leading byte owns which first event remains to report."""
+
+    @classmethod
+    def marker(cls) -> bytes:
+        return cls.declared_name.encode("ascii")
+
+    @classmethod
+    @boundary_decoder
+    def from_marker(cls, marker: bytes) -> GateNotices:
+        return cls.member_named((marker or QuietGate.marker()).decode("ascii"))()
+
+    def refused(self) -> tuple[type[CompactionNotice], ...]:
+        return ()
+
+    def first_read(self) -> tuple[type[CompactionNotice], ...]:
+        return ()
+
+
+class QuietGate(GateNotices, declared_name="."):
+    def refused(self) -> tuple[type[CompactionNotice], ...]:
+        return (IgnoredCompactionDeal,)
+
+
+class RefusedGate(GateNotices, declared_name="!"):
+    def first_read(self) -> tuple[type[CompactionNotice], ...]:
+        return (StartedRuleReading,)
+
+
+@dataclass(frozen=True)
+class RecordedGateCall:
+    """The call's ordinal and pre-call state, used only while its counter is locked."""
+
+    notices: GateNotices
+    number: int
+    record: BinaryIO
+
+    def refused(self) -> tuple[type[CompactionNotice], ...]:
+        self.record.seek(0)
+        self.record.write(RefusedGate.marker())
+        return self.notices.refused()
+
+    def read(self, read_record: Path, source: Path) -> tuple[type[CompactionNotice], ...]:
+        line = f"{source.resolve()}\n".encode("utf-8")
+        with read_record.open("ab", buffering=0) as record:
+            record.write(line)
+            first = record.tell() == len(line)
+        return self.notices.first_read() if first else ()
+
+
+class DealtCalls(ClaudeTranscriptHook):
+    """One byte per completed/refused call, retaining the existing .calls representation.
+
+    The leading byte also records that a refusal occurred. Its remaining bytes are
+    count padding, not another log to scan. Parallel refusals claim the first notice
+    under this file's lock; ordinary counts remain one atomic append.
+    """
+
+    @property
+    def calls(self) -> Path:
+        return Path(self.transcript_path).with_suffix(".calls")
+
+    def count_call(self) -> int:
+        with self.calls.open("ab", buffering=0) as calls:
+            calls.write(QuietGate.marker())
+            return calls.tell()
+
+    @contextmanager
+    def recorded_call(self) -> Iterator[RecordedGateCall]:
+        """Order the refusal/read transition and its publication against parallel calls.
+
+        The first-read record and the refusal marker must observe the same order as
+        their ordinals. Keep this session's lock through publication so the read notice
+        cannot overtake the refusal it answers. Ordinary tool completions only append.
+        """
+        fd = os.open(self.calls, os.O_CREAT | os.O_RDWR, 0o600)
+        with os.fdopen(fd, "r+b", buffering=0) as record:
+            fcntl.flock(record, fcntl.LOCK_EX)
+            notices = GateNotices.from_marker(record.read(1))
+            yield RecordedGateCall(notices, self.count_call(), record)

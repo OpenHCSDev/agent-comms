@@ -15,7 +15,7 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from agent_comms_hooks import ClaudeTranscriptHook
+from ..instruction_deck import DealtCalls
 
 from .claude_transcript import ClaudeJsonLines
 from .session_watch import WatchClaim
@@ -189,7 +189,7 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
 
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook):
+class DealtDeck(DealtCalls):
     """The slices the session start hook dealt beside the transcript, and the calls since."""
 
     def deck(self, reader: DeckReader) -> Path:
@@ -201,14 +201,14 @@ class DeckStart(DealtDeck):
     owner_prompts: ClassVar[int] = 6
     """How many of the person's own last prompts the deal puts back in front of the session."""
 
-    def take(self) -> tuple[str, ...]:
+    def take(self, number: int = 0) -> tuple[str, ...]:
         """What this hook says: nothing to a session no bus binding names, the fleet's deck to
         a bound session, and the commander's deck to the one the registry names commander now."""
         return WatchClaim(self.session_id).state().by_role(
-            unbound=tuple, fleet=lambda record: self.taken(FleetReader()),
-            commander=lambda record: self.taken(CommanderReader()))
+            unbound=tuple, fleet=lambda record: self.taken(FleetReader(), number),
+            commander=lambda record: self.taken(CommanderReader(), number))
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
+    def taken(self, reader: DeckReader, number: int) -> tuple[str, ...]:
         """A session start deals the deck."""
         return self.dealt(reader)
 

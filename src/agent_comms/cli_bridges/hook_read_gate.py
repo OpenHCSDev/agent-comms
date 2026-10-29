@@ -1,26 +1,24 @@
-"""Resident Claude read_gate hook behavior, behind the existing session socket."""
+"""Resident read permissions and first-event notices for the session's rule deal."""
 from __future__ import annotations
 
-from abc import (
-    ABC,
-    abstractmethod,
-)
+import json
+import time
+from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms_hooks import (
-    ClaudeToolHook,
-    HookRecord,
-)
+from agent_comms_hooks import ClaudeToolHook, HookRecord
 
 from .hook_forks import SeatedSubagent
+from .session_watch import WatchClaim
+from ..comms import Comms
 from ..declared_family import DeclaredFamily
-from ..field_codec import (
-    FieldCodec,
-    MalformedRecord,
-)
+from ..field_codec import FieldCodec, MalformedRecord
+from ..instruction_deck import CompactionNotice, DealtCalls
+from ..pattern_sources import ReadThenRepeatedFailure
+from ..recorded_time import RecordedEventTime
 from ..turn_phase import ToolRunningPhase
 
 
@@ -81,6 +79,23 @@ class AuditDue:
     owner_words: tuple[str, ...]
     """The owner's prompts exactly as the deal showed them, each occurrence once."""
 
+    def reminder(self, audit_path: Path) -> str:
+        failure = ReadThenRepeatedFailure()
+        audit = SessionAudit(
+            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
+            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
+        )
+        return "\n\n".join((
+            *(f"Tristan told you, verbatim:\n{words}\nYou did not."
+              for words in self.owner_words[-1:]),
+            f"{failure.title}\n{failure.cite()}\n"
+            "This session is repeating it, not observing another session's mistake.",
+            f"Write this SessionAudit to {audit_path}. Fill only broke and doing; keep every"
+            " rule name and quoted words unchanged. Empty broke means the rule was kept;"
+            " doing must name your current action:\n"
+            + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
+        ))
+
     def refusal(self, audit: SessionAudit) -> str:
         """Why this audit does not answer the deal, or nothing when it does: every dealt rule
         is audited, and every shown prompt is answered by its own words with an action."""
@@ -102,7 +117,7 @@ class DefaultGate(ABC):
 
 
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, DeclaredFamily):
+class GatedCall(ClaudeToolHook, DealtCalls, DeclaredFamily):
     """One tool call the read gate judges before it runs and sees after it completes; a member
     names its tool in its declaration and says only what that tool means."""
 
@@ -115,38 +130,53 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
         return cls.member_or_default(tool, DefaultGate).decode(record, **context)
 
     @abstractmethod
-    def judge(self) -> None:
+    def judge(self, comms: Comms) -> None:
         """PreToolUse: refuse this call, or let it run."""
 
-    def completed(self) -> None:
-        """PostToolUse: what this completed call records; most record nothing."""
+    def completed(self, comms: Comms) -> int:
+        """A successful call records once, before any reminder or read notice consumes it."""
+        return self.count_call() if self.dealt_read.exists() else 0
 
-    def gate(self) -> None:
+    def announce(self, comms: Comms, notices: tuple[type[CompactionNotice], ...], number: int) -> None:
+        for notice in notices:
+            (binding,) = (record for record in WatchClaim(self.session_id).state().bindings()
+                          if Path(record.root).resolve() == comms.root.resolve())
+            owner = comms.registry.require(binding.bus).incarnation.require_recorded()
+            comms.messaging.report_compaction(notice(
+                owner, self.tool_name, number, RecordedEventTime(time.time())))
+
+    def gate(self, comms: Comms) -> None:
         """Refuse this call while a dealt file is unread or the audit does not answer the deal."""
+        due = self.required_audits()
         if unread := self.unread():
-            self.respond(
-                permissionDecision="deny",
-                permissionDecisionReason=(
-                    "Read the rules you were dealt first, each in full with the Read tool (no"
-                    " offset or limit): " + ", ".join(str(source) for source in unread)
-                    + ". Your summary is a paraphrase of them, not a reading."),
-            )
-        elif refusal := self.unaudited():
-            self.respond(
-                permissionDecision="deny",
-                permissionDecisionReason=(
-                    f"Reading is passive; {refusal}. Write the audit to {self.audit} as the deal"
-                    " ordered: every dealt rule with each action that broke it, and what you are"
-                    " doing about each of Tristan's prompts it quoted. On 2026-10-29 a session"
-                    " read every rule after compaction, skipped this audit, and repeated the"
-                    " first story in them for seven hours."),
-            )
+            self.refuse(comms, "reading", "Read the rules you were dealt first, each in full with the"
+                        " Read tool (no offset or limit): "
+                        + ", ".join(str(source) for source in unread)
+                        + ". Your summary is a paraphrase of them, not a reading.", due)
+            return
+        for requirement in due:
+            if refusal := self.unaudited(requirement):
+                self.refuse(comms, "writing the required audit", f"Reading is passive; {refusal}.", due)
 
-    def unaudited(self) -> str:
-        """Why no tool may run yet for want of the audit, or nothing once it answers the deal."""
+    def refuse(self, comms: Comms, before: str, reason: str, due: tuple[AuditDue, ...]) -> None:
+        with self.recorded_call() as call:
+            self.respond(
+                permissionDecision="deny",
+                permissionDecisionReason="\n\n".join((
+                    f"You just tried {self.tool_name} before {before}. Call #{call.number}"
+                    " since this compaction, refused.", reason,
+                    *(requirement.reminder(self.audit) for requirement in due),
+                )),
+            )
+            self.announce(comms, call.refused(), call.number)
+
+    def required_audits(self) -> tuple[AuditDue, ...]:
         if not self.audit_due.exists():
-            return ""
-        due = FieldCodec.decode(AuditDue, FieldCodec.parse(self.audit_due.read_bytes()))
+            return ()
+        return (FieldCodec.decode(AuditDue, FieldCodec.parse(self.audit_due.read_bytes())),)
+
+    def unaudited(self, due: AuditDue) -> str:
+        """Why no tool may run yet for want of the audit, or nothing once it answers the deal."""
         if not self.audit.exists():
             return "no audit is written"
         try:
@@ -175,38 +205,43 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
 class ReadCall(GatedCall, declared_name="Read"):
     """A Read always runs; once it completes, a read covering a whole dealt file counts it."""
 
-    def judge(self) -> None:
-        return
+    def judge(self, comms: Comms) -> None:
+        pass
 
-    def completed(self) -> None:
+    def completed(self, comms: Comms) -> int:
         read = ReadInput.decode(self.tool_input)
         path = read.file_path
         if str(path.resolve()) not in self.sources() or not read.covers(path):
-            return
-        with self.dealt_read.open("a", encoding="utf-8") as record:
-            record.write(f"{path.resolve()}\n")
+            return super().completed(comms)
+        with self.recorded_call() as call:
+            self.announce(comms, call.read(self.dealt_read, path), call.number)
+            return call.number
 
 
 @dataclass(frozen=True)
 class OtherCall(GatedCall, DefaultGate):
     """Any other tool waits for every dealt file to be read and the audit to answer the deal."""
 
-    def judge(self) -> None:
-        self.gate()
+    def judge(self, comms: Comms) -> None:
+        self.gate(comms)
 
 
 @dataclass(frozen=True)
 class WriteCall(GatedCall, declared_name="Write"):
     """Writing the audit itself is the way through the gate; any other write waits like the rest."""
 
-    def judge(self) -> None:
+    def judge(self, comms: Comms) -> None:
         if WriteInput.decode(self.tool_input).file_path.resolve() != self.audit.resolve():
-            self.gate()
+            self.gate(comms)
 
 
 @dataclass(frozen=True)
 class SubagentCall(GatedCall, SeatedSubagent):
     """A subagent bypasses its parent's read gate but reports its own tool activity."""
 
-    def judge(self) -> None:
+    def judge(self, comms: Comms) -> None:
         self.enter(ToolRunningPhase(self.tool_name))
+
+    def completed(self, comms: Comms) -> int:
+        """A subagent's event never increments its parent's deal record."""
+        return 0
