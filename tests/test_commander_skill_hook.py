@@ -487,6 +487,43 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
 
 
+def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    words = ("Read the rules.\nThen write the audit.",)
+    start.prepare(CommanderReader(), words)
+    for attempt, tool in enumerate(("Bash", "Edit"), 1):
+        gated(transcript, tool, {}).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert f"You just tried {tool} before reading. Refused attempt #{attempt}" in reason
+        assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
+        assert "this session is repeating it" in reason
+    for source in CommanderReader.sources():
+        gated(transcript, "Read", {"file_path": str(source)}).completed()
+    gated(transcript, "Bash", {}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    template = FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):]))
+    due = FieldCodec.decode(AuditDue, json.loads(start.audit_due.read_text()))
+    assert {entry.rule for entry in template.rules} == due.rules
+    assert tuple(answer.words for answer in template.owner_words) == words
+    assert all(not answer.doing for answer in template.owner_words)
+    assert due.refusal(template)  # the blank template cannot count as the completed audit
+    for invalid in ("not JSON", '{"rules": [], "owner_words": []}'):
+        start.audit.write_text(invalid)
+        gated(transcript, "Bash", {}).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):])) == template
+    start.prepare(CommanderReader(), words)
+    gated(transcript, "Bash", {}).judge()
+    assert "Refused attempt #1" in capsys.readouterr().out
+
+
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
     due = AuditDue(frozenset({"voice"}), ("fix the gate", "land the queue"))
     audited = (RuleAudit("voice"),)
