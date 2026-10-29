@@ -26,7 +26,7 @@ import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Future, ProcessPoolExecutor, wait
 from contextlib import (
     AbstractContextManager,
     ExitStack,
@@ -2165,7 +2165,17 @@ class SynchronousProcess(ChildProcess):
             else:
                 for (_process, _guard, future), outcome in zip(owned, outcomes, strict=True):
                     future.set_result(outcome)
-        return tuple(result.result() for result in pending)
+        collected: list[ChildOutcome] = []
+        for retirement in pending:
+            # A waiter borrows the original stop, not its owner's deadline.
+            # wait distinguishes wait expiry from an exception stored by that owner.
+            remaining = None if deadline == math.inf else max(0, deadline - time.monotonic())
+            _done, unattested = wait((retirement,), timeout=remaining)
+            if unattested:
+                raise ChildRetirementFailed("Child retirement was not attested before deadline") from (
+                    TimeoutError("The original stop owner has not completed retirement"))
+            collected.append(retirement.result())
+        return tuple(collected)
 
     @staticmethod
     def _stop_together(stops, *, deadline=math.inf) -> tuple[ChildOutcome, ...]:
@@ -2193,7 +2203,7 @@ class SynchronousProcess(ChildProcess):
                 except StopIteration as done:
                     stages[index] = done.value
                     del plans[index]
-                except ChildRetirementFailed as error:
+                except (ProcessLookupError, ChildRetirementFailed) as error:
                     errors.append(error)
                     del plans[index]
             if waits:
@@ -2204,7 +2214,8 @@ class SynchronousProcess(ChildProcess):
                     members, min(timeout for _identities, timeout in waits),
                 )
         if errors:
-            raise errors[0] if len(errors) == 1 else ExceptionGroup("Process retirement failed", errors)
+            cause = errors[0] if len(errors) == 1 else ExceptionGroup("Process retirement failed", errors)
+            raise ChildRetirementFailed("Child retirement was not attested") from cause
         return tuple(stages[index](process.reap()) for index, (process, _) in enumerate(stops))
 
 

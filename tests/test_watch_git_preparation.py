@@ -10,15 +10,16 @@ import sys
 import threading
 from concurrent.futures import Future
 from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import pytest
 
 from agent_comms.child_process import (
-    AsyncWork, GitChildPermission, GitChildren, OwnedGitOpening, ReadWork, SpawnedProcess,
-    join_retirement,
+    AsyncWork, ChildRetirementFailed, GitChildPermission, GitChildren, ObservedProcess,
+    OwnedGitOpening, ReadWork, SpawnedProcess, SynchronousProcess, join_retirement,
 )
 from agent_comms.native_build_inputs import GitAcquisitionCancelled, GitLaunch
 from agent_comms.coordinator import Coordination
@@ -600,6 +601,68 @@ async def test_cancelled_watch_preserves_existing_service_failure(
         await Coordination.watch_worker(watch, lambda: nullcontext(comms), passes)
     assert passes.path.read_bytes() == before
     assert not failed.exists()
+
+
+@pytest.mark.parametrize("count", (1, 2), ids=("single", "aggregate"))
+async def test_cancelled_git_retains_shared_physical_retirement_failure(count: int) -> None:
+    children = GitChildren()
+    handles: tuple[SpawnedProcess, ...] = ()
+
+    @contextmanager
+    def original_authority(child: SpawnedProcess):
+        # A real exited original cannot grant observed-process signal authority.
+        ObservedProcess(child.identity).require_stop_authority()
+        yield
+
+    try:
+        with pytest.raises(ChildRetirementFailed) as opening_failure:
+            with OwnedGitOpening(children).bound(), Repo.acquiring(), ExitStack() as exchanges:
+                for _ in range(count):
+                    process = exchanges.enter_context(Repo.opening(
+                        (sys.executable, "-c", "pass"), env=os.environ,
+                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    ))
+                    process.communicate(timeout=10)
+                    assert process.returncode == 0
+                with children.lock:
+                    handles = tuple(children.active)
+                assert len(handles) == count and all(child.retired for child in handles)
+                with pytest.raises(ChildRetirementFailed) as stopped:
+                    SynchronousProcess.stop_together(tuple(
+                        (child, partial(original_authority, child)) for child in handles))
+                failure = stopped.value
+                cause = failure.__cause__
+                if count == 1:
+                    assert isinstance(cause, ProcessLookupError)
+                else:
+                    assert isinstance(cause, ExceptionGroup)
+                    assert len(cause.exceptions) == count
+                    assert all(isinstance(error, ProcessLookupError) for error in cause.exceptions)
+                # Shutdown sets each acquisition's cancellation, then joins the
+                # original failed Futures. Also cancel the joining task itself.
+                async def cancelled_shutdown() -> None:
+                    shutdown = children.start_shutdown()
+                    caller = asyncio.current_task()
+                    assert caller is not None
+                    caller.cancel()
+                    await join_retirement(shutdown)
+
+                with pytest.raises(ChildRetirementFailed) as shutdown_failure:
+                    await asyncio.create_task(cancelled_shutdown())
+                assert shutdown_failure.value is failure
+                with children.lock:
+                    permissions = tuple(children.active.values())
+                for permission in permissions:
+                    with pytest.raises(GitAcquisitionCancelled):
+                        permission.completed()
+                # Scope exit reaches the same failed Future through GitChildren.retire.
+        assert opening_failure.value is failure
+        assert all(child in children.active for child in handles)
+    finally:
+        # These real children already exited. Failed attestation retains their
+        # registrations; releasing the test's pipe descriptors is not a stop claim.
+        for child in handles:
+            child.close_streams()
 
 
 async def test_owned_git_ordinary_timeout_and_nonzero_keep_their_errors(

@@ -6,7 +6,9 @@ import asyncio
 import os
 import subprocess
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, contextmanager, nullcontext
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +19,7 @@ from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
     ChildOutcome,
+    ChildRetirementFailed,
     DiesWithLauncherLifetime,
     ExitedOutcome,
     ForcedStopOutcome,
@@ -100,6 +103,50 @@ def test_stop_batch_shares_one_force_deadline() -> None:
     finally:
         for child in children:
             child.close()
+
+
+def test_shared_retirement_waiter_deadline_retains_original_stop_owner() -> None:
+    child = SpawnedProcess.launch(
+        (sys.executable, "-c", "import time; print('ready',flush=True); time.sleep(60)"),
+        output=subprocess.PIPE,
+    )
+    entered = threading.Event()
+    release = threading.Event()
+    signals: list[float] = []
+
+    @contextmanager
+    def held_guard():
+        signals.append(time.monotonic())
+        entered.set()
+        if not release.wait(10):
+            raise TimeoutError("The original stop guard was not released")
+        yield
+
+    try:
+        assert child.process.stdout is not None
+        assert child.process.stdout.readline() == b"ready\n"
+        with ThreadPoolExecutor(max_workers=2) as stoppers:
+            original = stoppers.submit(child.stop_sync, guard=held_guard)
+            try:
+                assert entered.wait(5)
+                infinite_waiter = stoppers.submit(child.stop_sync)
+                for _ in range(2):
+                    started = time.monotonic()
+                    with pytest.raises(ChildRetirementFailed) as failed:
+                        child.stop_sync(deadline=started + .05)
+                    assert isinstance(failed.value.__cause__, TimeoutError)
+                    assert time.monotonic() - started < 5
+                    assert child.alive() and not original.done() and not infinite_waiter.done()
+                    assert len(signals) == 1, "A waiter started a competing stop plan"
+            finally:
+                release.set()
+            outcome = original.result(timeout=10)
+            assert infinite_waiter.result(timeout=10) is outcome
+            assert child.stop_sync(deadline=time.monotonic()) is outcome
+            assert child.retired and len(signals) == 1
+    finally:
+        release.set()
+        child.close()
 
 
 @pytest.mark.asyncio
@@ -193,11 +240,17 @@ def test_stop_batch_retires_live_child_after_an_original_identity_exits() -> Non
     try:
         exited.process.wait(timeout=5)
         original = ObservedProcess(exited.identity)
-        with pytest.raises(ProcessLookupError):
+        with pytest.raises(ChildRetirementFailed) as failed:
             SynchronousProcess.stop_together(((original, nullcontext), (live, nullcontext)))
+        assert isinstance(failed.value.__cause__, ProcessLookupError)
         assert live.retired
+        with pytest.raises(ChildRetirementFailed) as repeated:
+            live.stop_sync()
+        assert repeated.value is failed.value
     finally:
-        live.close()
+        # The batch retired the live member but could not attest the whole batch.
+        # Its retained failure must not be overwritten by another stop plan.
+        live.close_streams()
         exited.close()
 
 
