@@ -28,7 +28,7 @@ from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec, OrderId
-from agent_comms.pattern_sources import PostmortemFailure
+from agent_comms.pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
 from agent_comms.commander.spinning import SpinningUnit
@@ -80,10 +80,12 @@ def test_the_commander_session_start_reads_all_package_files(tmp_path, source, c
     transcript.write_text("")
     result = session_start(transcript, source)
     assert result.returncode == 0, result.stderr
-    context = json.loads(result.stdout.splitlines()[0])["hookSpecificOutput"]["additionalContext"]
-    assert len(context) < 10_000
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
     assert context.startswith("Commander: claude-code.")
-    dealt = tuple(Path(line) for line in context.splitlines()[1:])
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "FUCK YOUR COMPACTION" in context
+    dealt = tuple(Path(line) for line in transcript.with_suffix(".dealt").read_text().splitlines())
+    assert all(str(path) in context for path in dealt)
     assert dealt == (
         CommanderPackage.voice(),
         CommanderPackage.indictment(),
@@ -319,8 +321,7 @@ def test_the_installed_commands_order_the_reads_once_then_put_slices_inline(
     assert run(None, "SessionStart")
     outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
-    (document,) = outputs[-1].splitlines()
-    context = json.loads(document)["hookSpecificOutput"]["additionalContext"]
+    context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
     assert context == CommanderReader.slices()[0]
     assert "Read each of these" not in context
 
@@ -347,11 +348,10 @@ def test_a_unit_session_gets_the_fleet_deck_and_no_commander_reminders(
     transcript.write_text("")
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path / "state"))
     run = run_installed(monkeypatch, capsys, transcript)
-    order, owner_words, header = (json.loads(line)["hookSpecificOutput"]["additionalContext"]
-                                  for line in run(None, "SessionStart").splitlines())
-    assert "Read each of these" in order and "Your summary is a paraphrase" in header
-    assert owner_words.startswith("WHAT TRISTAN ACTUALLY SAID LAST")
-    assert "What your units actually hold" not in header
+    context = json.loads(run(None, "SessionStart"))["hookSpecificOutput"]["additionalContext"]
+    assert "Read each of these" in context and "Your summary is a paraphrase" in context
+    assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
+    assert "What your units actually hold" not in context
     outputs = [run(None, "PostToolUse") for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
     context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
@@ -485,6 +485,44 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+
+
+def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
+        tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    words = ("Read the rules.\nThen write the audit.",)
+    start.prepare(CommanderReader(), words)
+    for attempt, tool in enumerate(("Bash", "Edit"), 1):
+        gated(transcript, tool, {}).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert f"You just tried {tool} before reading. Call #{attempt} since this compaction, refused." in reason
+        assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
+        assert ReadThenRepeatedFailure().cite() in reason
+        assert ReadThenRepeatedFailure.title in reason
+    for source in CommanderReader.sources():
+        gated(transcript, "Read", {"file_path": str(source)}).completed()
+    gated(transcript, "Bash", {}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    template = FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):]))
+    due = FieldCodec.decode(AuditDue, json.loads(start.audit_due.read_text()))
+    assert {entry.rule for entry in template.rules} == due.rules
+    assert tuple(answer.words for answer in template.owner_words) == words
+    assert all(not answer.doing for answer in template.owner_words)
+    assert due.refusal(template)  # the blank template cannot count as the completed audit
+    for invalid in ("not JSON", '{"rules": [], "owner_words": []}'):
+        start.audit.write_text(invalid)
+        gated(transcript, "Bash", {}).judge()
+        output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert output["permissionDecision"] == "deny"
+        reason = output["permissionDecisionReason"]
+        assert FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):])) == template
+    start.prepare(CommanderReader(), words)
+    gated(transcript, "Bash", {}).judge()
+    assert "Call #1 since this compaction, refused." in capsys.readouterr().out
 
 
 def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
