@@ -958,9 +958,9 @@ def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
     transcript = tmp_path / "commander.jsonl"
     WatchClaim("commander").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
 
-    def run(program, event):
+    def run(program, event, **stop):
         record = {"session_id": "commander", "hook_event_name": event,
-                  "transcript_path": str(transcript), "agent_id": "a1"}
+                  "transcript_path": str(transcript), "agent_id": "a1", **stop}
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
         program()
         return capsys.readouterr().out
@@ -978,7 +978,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop") == ""
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
     run(forks.started, "SubagentStart")
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
@@ -988,13 +988,44 @@ def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
         subagent_hook, tmp_path):
     comms, run = subagent_hook
     run(forks.started, "SubagentStart")
-    assert json.loads(run(forks.stopped, "SubagentStop"))["decision"] == "block"
+    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
     assert comms.registry.status("claude-a1").receiving
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop") == ""
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+
+
+def test_a_sent_back_stop_ends_a_fork_that_recorded_nothing_and_reports_it_missing(subagent_hook):
+    """Claude Code ends the fork on the stop after a send-back; it must not stay subscribed."""
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
+    assert run(forks.stopped, "SubagentStop", stop_hook_active=True) == ""
+    assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    assert "stopped without recording what it found" in report.body
+
+
+def test_a_commander_session_end_ends_each_subagent_core_still_has(subagent_hook, tmp_path):
+    """A subagent killed without a SubagentStop ends with its session, once."""
+    comms, run = subagent_hook
+    run(forks.started, "SubagentStart")
+    subagents = tmp_path / "commander" / "subagents"
+    subagents.mkdir(parents=True)
+    for agent in ("a1", "never-joined"):
+        (subagents / f"agent-{agent}.jsonl").write_text("")
+    session = forks.SessionSubagents.decode({
+        "session_id": "commander", "hook_event_name": "SessionEnd",
+        "transcript_path": str(tmp_path / "commander.jsonl")})
+    for _ in range(2):
+        ended, = session.end_subagents()
+        assert ended.returncode == 0, ended.stderr
+        assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
+    assert "claude-never-joined" not in comms.registry
+    report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
+    assert "its work is missing" in report.body
 
 
 def test_a_subagent_of_a_session_that_is_not_commander_is_not_its_fork(fork_bus, tmp_path, monkeypatch, capsys):

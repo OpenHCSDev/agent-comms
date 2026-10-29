@@ -66,6 +66,8 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     stopped: ClassVar[bool] = False
     # Whether a message sent now is read now; each status answers, none by default.
     receiving: ClassVar[bool] = False
+    # Whether the thread has left every new audience and presence; only an archive has.
+    archived: ClassVar[bool] = False
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
@@ -358,6 +360,8 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
 
 
 class ArchivedThreadStatus(ThreadStatus):
+    archived = True
+
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived
 

@@ -2,7 +2,9 @@
 
 Claude Code names each subagent by `agent_id` on its start and stop, and keeps that id when
 the subagent is resumed. Core's own commander verbs register and retire the fork; the hook
-only relays them, and Core's refusal to retire a fork that recorded nothing refuses the stop.
+only relays them. Core's refusal to retire a fork that recorded nothing sends its first stop
+back; the stop Claude Code makes after that send-back ends the fork, and Core archives it
+and reports the missing record to its commander.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import json
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
@@ -40,13 +43,50 @@ class SubagentHook(CommanderSession):
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
 
+
+
+@dataclass(frozen=True)
+class SubagentStopHook(SubagentHook):
+    """A subagent's stop; `stop_hook_active` says this hook already sent this stop back once."""
+
+    stop_hook_active: bool
+
     def retire(self) -> None:
         if not self.commands:
+            return
+        if self.stop_hook_active:
+            self.end()
             return
         run = self.commanding("retire")
         if run.returncode:
             print(json.dumps({"decision": "block",
                               "reason": run.stderr.strip() or f"exit status {run.returncode}"}))
+
+    def end(self) -> None:
+        """A send-back is never repeated: the fork ends here whatever it recorded."""
+        run = self.commanding("end")
+        if run.returncode:
+            raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
+
+
+class SessionSubagents(CommanderSession):
+    """A commander session's subagents end with it. SubagentStop never comes for one killed
+    or cut off by the session's end, so the session ends whatever Core still has registered."""
+
+    def subagents(self) -> tuple[SubagentId, ...]:
+        """Claude Code keeps each subagent's transcript beside the session's own."""
+        directory = Path(self.transcript_path).with_suffix("") / "subagents"
+        return tuple(SubagentId(path.stem.removeprefix("agent-"))
+                     for path in sorted(directory.glob("agent-*.jsonl")))
+
+    def end_subagents(self) -> tuple[subprocess.CompletedProcess[str], ...]:
+        """Core's one run for this session's subagents, or none for a session with none."""
+        subagents = self.subagents() if self.commands else ()
+        if not subagents:
+            return ()
+        return (subprocess.run(
+            (*SubagentHook.command, "session-end", "--forks", *(agent.fork for agent in subagents)),
+            capture_output=True, text=True, timeout=SubagentHook.timeout),)
 
 
 class SubagentStartProgram(ClaudeHookProgram):
@@ -70,4 +110,4 @@ def started() -> None:
 
 
 def stopped() -> None:
-    SubagentHook.read().retire()
+    SubagentStopHook.read().retire()
