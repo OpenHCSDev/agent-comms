@@ -18,7 +18,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
-    DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, PullRequestHead, ReadPullRequestHead,
+    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, OrdinaryInput, PullRequestHead, ReadPullRequestHead,
 )
 from agent_comms.integration import IntegrationRun
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
@@ -39,7 +39,7 @@ from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
     CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
-    HeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
+    HeadVerdict, PromotedHeadVerdict, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from github_fixture import GitHubFixture
@@ -105,6 +105,12 @@ def invoke(comms, request, verdict, order=NoHeadOrder()):
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
 
 
+def review_posts(github: GitHubFixture, head: str) -> tuple[tuple[str, ...], ...]:
+    """Count source decisions independently of their derived merge withdrawal."""
+    return tuple(call for call in github.calls() if f"statuses/{head}" in call[1]
+                 and f"context={HeadReview.context}" in call)
+
+
 def test_qualification_records_each_open_order_cut_without_promoting_or_finishing_work(
         linked_head_bus, claim_order):
     """A ready companion's source stage is a decision, not permission to ship its incomplete pair."""
@@ -136,7 +142,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
     invoke(comms, request, UnderReviewHeadVerdict(), OrderHeadReview.for_request(
         (todo,), request, UnquotedHeadReview.of))
     qualify_unchanged()  # Reviewing: the recorded source cut changes no held work.
-    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    posts = review_posts(github, request.head)
     assert len(posts) == 4
     assert all("state=pending" in call for call in posts)
     assert not any(call[:2] == ("pr", "merge") for call in github.calls())
@@ -227,7 +233,7 @@ def test_native_companion_adoption_is_the_same_reviewed_orders_actual_qualificat
     linked = comms.goals.todos.get(before.id)
     assert linked == replace(before, revision=before.revision + 1,
                              order=before.order.checked().linked_to(pair.client.link))
-    inputs = IntegrationRun(pair.checkout, pair.output, "native qualified companion discovery").qualify(pair.context, ("P2",))
+    inputs = pair.capture(("P2",), "native qualified companion discovery")
     assert inputs.source(pair.client.github).heads == (
         PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit),)
     assert comms.goals.todos.get(before.id) == linked
@@ -339,17 +345,19 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     comms, github, request = head_bus
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
-    assert len(arms) == 1 and HeadReview.accepted(request.repo, request.head)
+    assert arms == () and HeadReview.accepted(request.repo, request.head)
+    with pytest.raises(TodoError):
+        ReviewedHeadVerdict.require_merge(request)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
     assert not HeadReview.accepted(request.repo, request.head)
     assert tuple(call for call in github.calls() if call[:2] == ("pr", "merge")) == arms
-    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    posts = review_posts(github, request.head)
     assert "state=pending" in posts[-1]
-    # Only a later full acceptance can permit promotion and request an arm again.
+    # Reaccepting this source permits combination, never an individual merge.
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert HeadReview.accepted(request.repo, request.head)
-    assert len(tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))) == 2
+    assert not any(call[:2] == ("pr", "merge") for call in github.calls())
 
 
 def test_qualification_codec_and_head_only_cli_require_a_reason():
@@ -420,7 +428,7 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
 @pytest.fixture
 def captured_input(reviewed_source: SourceRepository) -> IntegrationInput:
     source = reviewed_source
-    return IntegrationInput((IntegrationSource(
+    return OrdinaryInput((IntegrationSource(
         RepositoryCommit(source.github, source.main_commit),
         (PullRequestHead(source.github, source.number, source.branch_commit),),
         source.git(source.checkout, "rev-parse", f"{source.branch_commit}^{{tree}}").strip(),
@@ -473,7 +481,7 @@ def test_integration_source_refuses_duplicates_abbreviations_and_foreign_members
     with pytest.raises(MalformedRecord):
         replace(source, heads=(replace(head, repo=RepositoryName.from_wire("other/repository")),))
     with pytest.raises(MalformedRecord):
-        IntegrationInput((source, source))
+        OrdinaryInput((source, source))
     with pytest.raises(ToolRefusedError):
         captured_input.require_repositories((source.repository, RepositoryName.from_wire("other/repository")))
 
@@ -488,7 +496,7 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
         (PullRequestHead(companion.github, companion.number, companion.branch_commit),),
         companion.git(companion.checkout, "rev-parse", f"{companion.branch_commit}^{{tree}}").strip(),
     )
-    inputs = IntegrationInput(tuple(sorted((*captured_input.sources, client), key=lambda row: row.repository.key)))
+    inputs = replace(captured_input, sources=tuple(sorted((*captured_input.sources, client), key=lambda row: row.repository.key)))
     companion.git(companion.checkout, "checkout", "feature")
     owner = companion.checkout / "owner.py"
     owner.write_text(owner.read_text() + "new_export = True\n")
@@ -520,23 +528,32 @@ def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier
     client = PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit)
     invoke(comms, client, UnderReviewHeadVerdict())
     run = IntegrationRun(pair.checkout, pair.output, "pending inputs compute without promotion")
-    inputs = run.qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), run.risk)
     carrier = pair.publish_carrier(github_cli)
     invoke(comms, carrier, UnderReviewHeadVerdict())
     for verdict in (UnderReviewHeadVerdict(), QualifiedHeadVerdict(QUALIFIED)):
         invoke(comms, client, verdict)
         with pytest.raises(TodoError, match="no accepted exact-head source review"):
-            invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+            invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
         assert not HeadReview.accepted(carrier.repo, carrier.head)
     invoke(comms, client, ReviewedHeadVerdict(ACCEPTED))
     assert HeadReview.accepted(client.repo, client.head)
     original, = inputs.source(pair.core.github).heads
     assert not HeadReview.accepted(original.repo, original.head)
-    invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+    with pytest.raises(TodoError, match="no accepted exact-head source review"):
+        invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
+    invoke(comms, original, ReviewedHeadVerdict(ACCEPTED))
+    invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
     assert HeadReview.accepted(carrier.repo, carrier.head)
-    assert StoredHeadReview.current_verdict(comms.goals.todos, carrier) is ReviewedHeadVerdict
+    assert PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+    assert StoredHeadReview.current_verdict(comms.goals.todos, carrier) is PromotedHeadVerdict
     assert carrier.current().arm() == DraftMergeArm()
     assert run.accepted_heads() == ()
+    invoke(comms, carrier, QualifiedHeadVerdict(QUALIFIED))
+    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+    invoke(comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+    assert HeadReview.accepted(carrier.repo, carrier.head)
+    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
@@ -544,7 +561,7 @@ def test_a_moved_companion_refuses_final_review_without_writing_acceptance(
         mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
     pair = mutual_sources
     run = IntegrationRun(pair.checkout, pair.output, "a changed actual source invalidates the input")
-    run.qualify(pair.context, ("P2", "P3"))
+    pair.capture(("P2", "P3"), run.risk)
     carrier = pair.publish_carrier(github_cli)
     pair.client.publish_change("Move the companion", *pair.client.write_files({
         Path("src/new_file.py"): "changed = True\n",
@@ -554,9 +571,45 @@ def test_a_moved_companion_refuses_final_review_without_writing_acceptance(
         pair.client.number, "feature", pair.client.branch_commit, stamp, "main", reviewable_times=(stamp,),
     ))
     with pytest.raises(TodoError, match="moved"):
-        invoke(pair.context.comms, carrier, ReviewedHeadVerdict(ACCEPTED))
+        invoke(pair.context.comms, carrier, PromotedHeadVerdict(ACCEPTED))
     assert not HeadReview.accepted(carrier.repo, carrier.head)
     assert not StoredHeadReview.head_reviews(pair.context.comms.goals.todos, carrier)
+
+
+@pytest.mark.parametrize("damage", ("member", "tree", "carrier", "missing-source"))
+def test_combined_promotion_refuses_changed_members_trees_carriers_and_missing_sources(
+        mutual_sources: MutualSources, github_cli: GitHubFixture, damage: str) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    inputs = pair.capture(("P2", "P3"), "every captured identity must survive promotion")
+    carrier = pair.publish_carrier(github_cli)
+    for source in inputs.sources:
+        for head in source.heads:
+            invoke(comms, head, ReviewedHeadVerdict(ACCEPTED))
+    if damage == "member":
+        moved = pair.core.publish_change("Change a captured local source", *pair.core.write_files({
+            Path("src/agent_comms/moved.py"): "moved = True\n"}))
+        opened(github_cli, pair.core, pair.core.number, moved)
+    elif damage == "tree":
+        path = pair.checkout.path / "not-reviewed.py"
+        path.write_text("unreviewed = True\n")
+        pair.core.git(pair.checkout.path, "add", "not-reviewed.py")
+        pair.core.git(pair.checkout.path, "commit", "-m", f"Change the combined tree\n\n{inputs.trailer}")
+        carrier = pair.publish_carrier(github_cli)
+    elif damage == "carrier":
+        # The same Git payload under another PR number is not its captured carrier.
+        pair.core.git(pair.checkout.path, "push", "origin", f"{carrier.head}:refs/pull/102/head")
+        carrier = opened(github_cli, pair.core, 102, carrier.head)
+    else:
+        # Keep valid canonical encoding while attempting to omit an actual declared client.
+        incomplete = replace(inputs, sources=(inputs.source(pair.core.github),))
+        pair.core.git(pair.checkout.path, "commit", "--allow-empty", "-m", incomplete.trailer)
+        carrier = pair.publish_carrier(github_cli)
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, carrier, PromotedHeadVerdict(ACCEPTED))
+    assert not PromotedHeadVerdict.accepted(carrier.repo, carrier.head)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, carrier)
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):
@@ -589,7 +642,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
     current = ReadPullRequestHead(request.repo, request.pr, request.head, base="main")
     assert StoredHeadReview.head_reviews(comms.goals.todos, current) == StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert tuple(todo.strike_count for todo in comms.goals.todos.list(request.repo)) == before
-    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    posts = review_posts(github, request.head)
     assert len(posts) == 2
     assert "state=success" in posts[0] and "state=failure" in posts[1]
 
@@ -610,43 +663,57 @@ def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(he
                 "--slop", "IMPL-5", "--fact", "the same decision is written twice",
                 "--at", location, "--derive", "base-method", "--by", location], context)
     assert isinstance(StoredHeadReview.head_reviews(comms.goals.todos, request)[0].verdict, RejectedHeadVerdict)
-    assert len(tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])) == 2
+    assert len(review_posts(github, request.head)) == 2
 
 
-def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudly(
-        head_bus, reviewed_source, capsys):
-    """2026-10-26: #3454 printed ok and stayed unarmed; #3444 needed a hand bypass-merge."""
-    comms, github, request = head_bus
-    for number in (8, 9):
-        reviewed_source.git(reviewed_source.checkout, "push", "-q", "origin",
-                            f"{request.head}:refs/pull/{number}/head")
+@pytest.mark.parametrize("ready,refused", ((False, False), (True, False), (True, True)))
+def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_forge_failure(
+        mutual_sources: MutualSources, github_cli: GitHubFixture, capsys,
+        ready: bool, refused: bool) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    inputs = pair.capture(("P2", "P3"), "explicit combined promotion owns enqueue")
+    request = pair.publish_carrier(github_cli)
+    for source in inputs.sources:
+        for head in source.heads:
+            invoke(comms, head, ReviewedHeadVerdict(ACCEPTED))
+    assert request.pr not in {head.pr for head in inputs.source(request.repo).heads}
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+    if ready:
+        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+        github_cli.put(request.repo, UnmergedListedPullRequest(
+            request.pr, "combined", request.head, stamp, "main", reviewable_times=(stamp,)))
+    if refused:
+        github_cli.refuse_arm(request.repo, request.pr, "Merge permission denied")
+    arguments = ["promote", "--repo", request.repo.to_wire(), "--pr", str(request.pr),
+                 "--head", request.head, "--why", ACCEPTED.text]
     context = order.Commander.read_root(comms.root)
-    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-    github.put(request.repo, DraftListedPullRequest(
-        8, "fix/draft", request.head, stamp, "main", reviewable_times=(stamp,)))
-    github.put(request.repo, UnmergedListedPullRequest(
-        9, "fix/refused", request.head, stamp, "main", reviewable_times=(stamp,)))
-    github.refuse_arm(request.repo, 9, "Merge permission denied")
+    if refused:
+        with pytest.raises(ToolRefusedError, match="Merge permission denied"):
+            judge.main(arguments, context)
+    else:
+        judge.main(arguments, context)
+    arms = [call for call in github_cli.calls() if call[:2] == ("pr", "merge")]
+    assert arms == ([("pr", "merge", str(request.pr), "--repo", request.repo.to_wire(),
+                     "--auto", "--merge", "--match-head-commit", request.head)] if ready else [])
+    if not ready:
+        assert f"#{request.pr} is a draft, so not armed" in capsys.readouterr().out
+    assert StoredHeadReview.current_verdict(comms.goals.todos, request) is PromotedHeadVerdict
+    assert PromotedHeadVerdict.accepted(request.repo, request.head)
+    PromotedHeadVerdict.require_merge(request)
 
-    def ok(number):
-        judge.main(["ok", "--repo", request.repo.to_wire(), "--pr", str(number),
-                    "--head", request.head, "--why", ACCEPTED.text], context)
 
-    def arms(number):
-        return [call for call in github.calls() if call[:3] == ("pr", "merge", str(number))]
-
-    ok(request.pr)
-    assert arms(request.pr) == [("pr", "merge", str(request.pr), "--repo", request.repo.to_wire(),
-                                 "--auto", "--merge", "--match-head-commit", request.head)]
-    assert f"#{request.pr} merge requested at {request.head}" in capsys.readouterr().out
-    ok(8)
-    assert not arms(8)
-    assert "#8 is a draft, so not armed" in capsys.readouterr().out
-    with pytest.raises(ToolRefusedError, match="Merge permission denied"):
-        ok(9)
-    assert "ok" not in capsys.readouterr().out
-    assert isinstance(StoredHeadReview.head_reviews(
-        comms.goals.todos, replace(request, pr=9))[0].verdict, ReviewedHeadVerdict)
+def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:
+    comms, github, request = head_bus
+    context = order.Commander.read_root(comms.root)
+    arguments = ["--repo", request.repo.to_wire(), "--pr", str(request.pr),
+                 "--head", request.head, "--why", ACCEPTED.text]
+    judge.main(["ok", *arguments], context)
+    assert HeadReview.accepted(request.repo, request.head)
+    with pytest.raises(ToolRefusedError, match="captured combined carrier"):
+        judge.main(["promote", *arguments], context)
+    assert not PromotedHeadVerdict.accepted(request.repo, request.head)
+    assert not any(call[:2] == ("pr", "merge") for call in github.calls())
 
 
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
@@ -680,7 +747,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     common = ["--pr", str(request.pr), "--head", request.head]
     judge.main(["ok", *common, "--why", ACCEPTED.text], context)
     judge.main(["reviewing", *common], context)
-    posts = tuple(call for call in github.calls() if f"statuses/{request.head}" in call[1])
+    posts = review_posts(github, request.head)
     assert [next(part for part in post if part.startswith("state=")) for post in posts] == [
         "state=success", "state=pending"]
 
@@ -715,7 +782,7 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert pulls.open(request.repo)[0].has_head_review
     assert StoredHeadReview.head_reviews(comms.goals.todos, moved)[0].verdict == CarriedHeadVerdict(ACCEPTED, request)
     assert not OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", pulls)
-    carried_posts = tuple(call for call in github.calls() if f"statuses/{merged}" in call[1])
+    carried_posts = review_posts(github, merged)
     assert len(carried_posts) == 1
     assert f"description=carried from {request.head[:9]}: same change" in carried_posts[0]
 
@@ -868,7 +935,7 @@ def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_fil
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
     invoke(comms, request, GrownHeadVerdict(ACCEPTED, GrowthReason(
         "grown.py declares forty one values that the reviewed request needs as separate names")))
-    posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
+    posts = review_posts(github, head)
     assert len(posts) == 1 and any(f"(src +{grown})" in part for part in posts[0])
 
     # The actual CLI must report both independent failures, then infer the unique
@@ -930,7 +997,7 @@ def test_a_stacked_head_is_charged_only_its_own_growth_over_its_base_branch(
     github.put(source.github, UnmergedListedPullRequest(
         9, "fix/child", head, stamp, "fix/parent", reviewable_times=(stamp,)))
     invoke(comms, PullRequestHead(source.github, 9, head), ReviewedHeadVerdict(ACCEPTED))
-    posts = tuple(call for call in github.calls() if f"statuses/{head}" in call[1])
+    posts = review_posts(github, head)
     assert len(posts) == 1 and any("(src +1)" in part for part in posts[0])
 
 

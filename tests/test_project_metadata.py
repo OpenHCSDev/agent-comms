@@ -15,7 +15,6 @@ from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import ProjectMetadata, StackSources
-from agent_comms.integration import IntegrationRun
 from agent_comms.repository_name import RepositoryName
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
@@ -113,7 +112,7 @@ def test_materialized_metadata_is_built_once_and_revalidated_when_borrowed(
     materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
-    inputs = IntegrationRun(pair.checkout, pair.output, "backend metadata lifetime").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "backend metadata lifetime")
     resource = materialized_clients(pair.output, inputs)
     metadata = resource.metadata
     built = len(resource.commands.clock.phases)

@@ -15,7 +15,6 @@ from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import CorePackage, GitSource, ResolvedLock
-from agent_comms.integration import IntegrationRun
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import DraftListedPullRequest
@@ -62,7 +61,7 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.core.github, DraftListedPullRequest(
         pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
-    inputs = IntegrationRun(pair.checkout, pair.output, "full private checker project").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "full private checker project")
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
                                runtime=LaunchRuntime.running(), source_directory=pair.output,
@@ -116,8 +115,7 @@ def test_bootstrap_extra_is_runtime_only_when_the_virtual_root_requests_it(
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.core.github, DraftListedPullRequest(
         pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
-    inputs = IntegrationRun(pair.checkout, pair.output, "runtime root extras, not bootstrap extras").qualify(
-        pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "runtime root extras, not bootstrap extras")
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
             runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
@@ -176,8 +174,7 @@ def common_checker(
             source.git(source.checkout, "push", "origin", f"HEAD:refs/pull/{source.number}/head")
             github_cli.put(source.github, DraftListedPullRequest(
                 source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,)))
-        inputs = IntegrationRun(pair.checkout, pair.output, "one complete runtime/checker solve").qualify(
-            pair.context, ("P2", "P3"))
+        inputs = pair.capture(("P2", "P3"), "one complete runtime/checker solve")
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
             runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
         checker.write_project()

@@ -54,9 +54,9 @@ from agent_comms.todos import (
     EditSendBackVerdict,
     PeerAcceptedVerdict,
     RewrittenVerdict,
-    GrownHeadVerdict,
     GrowthReason,
     ReviewedHeadVerdict,
+    PromotedHeadVerdict,
     QualifiedHeadVerdict,
     RejectedHeadVerdict,
     HeadVerdict,
@@ -493,12 +493,12 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(ReasonedVerb, QuotingVerb):
-    verdict = ReviewedHeadVerdict
-    help = "the edit or exact PR head is accepted"
+    verdict: ClassVar[type[ReviewedHeadVerdict]] = ReviewedHeadVerdict
+    help = "the edit or exact source PR head is accepted, without enqueueing it"
 
     def head_operation(self) -> HeadVerdict:
         reason = VerdictReason(self.why)
-        return (GrownHeadVerdict(reason, GrowthReason.every(self.growth)) if self.growth
+        return (self.verdict.grown(reason, GrowthReason.every(self.growth)) if self.growth
                 else self.verdict(reason))
     growth: Annotated[
         tuple[str, ...],
@@ -560,6 +560,12 @@ class HeadOnlyVerb(HeadVerdictVerb, declared_name=None):
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class PromoteVerb(OkVerb, HeadOnlyVerb):
+    help = "explicitly review and enqueue this captured combined carrier, never an individual source"
+    verdict = PromotedHeadVerdict
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -15,7 +15,6 @@ import tomli_w
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
 from debt_ratchet import ClientTypeErrors
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
-from agent_comms.integration import IntegrationRun
 from agent_comms.todos import DraftListedPullRequest
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
@@ -55,7 +54,7 @@ def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
     materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],
 ) -> None:
     pair = mutual_sources
-    inputs = IntegrationRun(pair.checkout, pair.output, "materialized module clients").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "materialized module clients")
     core = inputs.source(pair.core.github)
     base = BaseSide.require_materialized(pair.output, core)
     head = HeadSide.require_materialized(pair.output, core)
@@ -95,7 +94,7 @@ def test_actual_client_membership_stays_absent_on_its_own_cut(
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.core.github, DraftListedPullRequest(
         pair.core.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
-    inputs = IntegrationRun(pair.checkout, pair.output, "actual added and removed client").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "actual added and removed client")
     resource = materialized_clients(pair.output, inputs)
     core = inputs.source(pair.core.github)
     tested = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
@@ -117,7 +116,7 @@ def test_materialized_client_files_come_from_each_actual_cut(
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
-    inputs = IntegrationRun(pair.checkout, pair.output, "side-specific client files").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "side-specific client files")
     cuts: dict[type[Side], set[str]] = {}
     resource = materialized_clients(pair.output, inputs)
     for side in (BaseSide, HeadSide):
@@ -150,7 +149,7 @@ def test_materialized_selection_includes_peer_imports_but_not_absent_paths(
         pair.core.number, "feature", core_head, stamp, "main", reviewable_times=(stamp,)))
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", commit, stamp, "main", reviewable_times=(stamp,)))
-    inputs = IntegrationRun(pair.checkout, pair.output, "selected file union").qualify(pair.context, ("P2", "P3"))
+    inputs = pair.capture(("P2", "P3"), "selected file union")
     resource = materialized_clients(pair.output, inputs)
     core = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()

@@ -11,13 +11,13 @@ import pytest
 from agent_comms.commander.order import Commander, CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
-from agent_comms.head_review import IntegrationInput, PullRequestHead
+from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.integration import IntegrationCheckout
+from agent_comms.integration import IntegrationCheckout, IntegrationRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.todos import DraftListedPullRequest, RecordPullRequest
+from agent_comms.todos import DraftListedPullRequest, PullRequests, RecordPullRequest
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
@@ -31,16 +31,32 @@ class MutualSources:
     client: SourceRepository
     checkout: IntegrationCheckout
     output: Path
+    github: GitHubFixture
+    carrier_number: int = 101
 
     def publish_carrier(self, github: GitHubFixture) -> PullRequestHead:
-        """Only tests emulate the root's explicit publication to the existing primary PR."""
+        """Publish the separate combined PR; source-member refs and Todo links stay intact."""
         commit = self.core.git(self.checkout.path, "rev-parse", "HEAD").strip()
-        self.core.git(self.checkout.path, "push", "origin", f"{commit}:refs/pull/{self.core.number}/head")
+        self.core.git(self.checkout.path, "push", "origin", f"{commit}:refs/pull/{self.carrier_number}/head")
         stamp = "2026-10-24T00:00:00Z"
         github.put(self.core.github, DraftListedPullRequest(
-            self.core.number, "feature", commit, stamp, "main", reviewable_times=(stamp,),
+            self.carrier_number, "combined", commit, stamp, "main", reviewable_times=(stamp,),
         ))
-        return PullRequestHead(self.core.github, self.core.number, commit)
+        return PullRequestHead(self.core.github, self.carrier_number, commit)
+
+    def prepare_carrier(self, problems: tuple[str, ...]) -> PullRequestHead:
+        """Fixture setup owns an actual published combination before production capture."""
+        todos = tuple(self.context.comms.goals.todos.get(problem) for problem in problems)
+        linked = PullRequests.linked_among(todos, self.core.github)
+        heads = tuple(PullRequestHead(self.core.github, row.number, row.head)
+                      for row in PullRequests(todos).rows(self.core.github, tuple(sorted(linked)))
+                      if row.as_unmerged())
+        self.checkout.combine_sources(IntegrationSource.main_head(self.core), heads)
+        return self.publish_carrier(self.github)
+
+    def capture(self, problems: tuple[str, ...], risk: str) -> CombinedInput:
+        return IntegrationRun(self.checkout, self.output, risk).qualify(
+            self.context, problems, carrier=self.prepare_carrier(problems))
 
 
 @pytest.fixture
@@ -92,7 +108,7 @@ def source_pair(
             source.number, "feature", source.branch_commit, stamp, "main", reviewable_times=(stamp,),
         ))
     checkout = IntegrationCheckout.create(core, tmp_path / "qualification", core.main_commit)
-    return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs")
+    return MutualSources(context, core, client, checkout, tmp_path / "qualified-inputs", github_cli)
 
 
 @pytest.fixture

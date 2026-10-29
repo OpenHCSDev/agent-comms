@@ -20,14 +20,14 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
-from .head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, IntegrationSource, PullRequestHead, Side
+from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, OrdinaryInput, PullRequestHead, Side
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
-from .todos import PullRequests
+from .todos import PromotedHeadVerdict, PullRequests
 from .work_branches import WorkBranches
 
 class IntegrationFailed(ToolRefusedError):
@@ -288,10 +288,11 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     environment: RunnerEnvironment = field(kw_only=True, compare=False)
     resolve_option: ClassVar[str] = "--resolve-ci-inputs"
     revalidate_option: ClassVar[str] = "--revalidate-ci-inputs"
+    merge_option: ClassVar[str] = "--check-merge-inputs"
 
     @classmethod
     def options(cls) -> tuple[str, ...]:
-        return cls.resolve_option, cls.revalidate_option
+        return cls.resolve_option, cls.revalidate_option, cls.merge_option
 
     @property
     def parents(self) -> tuple[str, ...]:
@@ -334,8 +335,20 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     def main_commits(self, inputs: IntegrationInput) -> dict[RepositoryName, str]:
         return {source.repository: source.baseline.commit for source in inputs.sources}
 
-    def require_local_candidate(self, source: IntegrationSource) -> None:
-        source.require_candidate(self.repository, self.carrier)
+    def require_local_candidate(self, inputs: IntegrationInput) -> None:
+        inputs.require_local_candidate(self.repository, self.carrier)
+
+    def require_merge_review(self) -> None:
+        """A PR can compute before its review; queue admission requires explicit promotion."""
+
+    def check_merge_inputs(self, directory: Path) -> IntegrationInput:
+        """The required hosted check uses the same typed carrier proof as native promotion."""
+        inputs = self.materialize(directory)
+        inputs.require_carrier(self.repository, self.carrier)
+        inputs.require_source_reviews()
+        self.require_merge_review()
+        print(f"COMBINED CARRIER #{self.carrier.pr} {self.carrier.head}; inputs {inputs.digest}", flush=True)
+        return inputs
 
     def materialize(self, directory: Path) -> IntegrationInput:
         """Capture once from Git/forge, then use these same exact checkouts for every consumer."""
@@ -366,7 +379,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
                 WorkBranches(repository.checkout).require_commits("origin", commit)
                 tree = Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
                 sources.append(IntegrationSource(RepositoryCommit(repository.github, commit), (), tree))
-            inputs = IntegrationInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
+            inputs = OrdinaryInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
         self.validate(inputs, tuple(repositories))
         for source in inputs.sources:
             repository = Repo.selected(tuple(repositories), source.repository.to_wire())
@@ -423,8 +436,8 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             repository = Repo.selected(repositories, source.repository.to_wire())
             if IntegrationSource.main_head(repository) != mains[source.repository]:
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
-        self.require_local_candidate(local)
-        for source in (source for source in inputs.sources if source.repository != self.repository.github):
+        self.require_local_candidate(inputs)
+        for source in inputs.companions(self.repository.github):
             source.require_candidate(Repo.selected(repositories, source.repository.to_wire()), self.carrier)
 
 
@@ -444,6 +457,11 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
 
 
 class MergeGroupSources(TestedSources, declared_name="merge_group"):
+    def require_merge_review(self) -> None:
+        if not (HeadReview.accepted(self.carrier.repo, self.carrier.head)
+                and PromotedHeadVerdict.accepted(self.carrier.repo, self.carrier.head)):
+            raise IntegrationFailed("The exact combined carrier has no explicit reviewed merge promotion")
+
     @classmethod
     @boundary_decoder
     def resolve(cls, repository: Repo, tested: str, document: object, *,
@@ -506,9 +524,10 @@ class MainSources(TestedSources, declared_name="push"):
     def main_commits(self, inputs: IntegrationInput) -> dict[RepositoryName, str]:
         return {**super().main_commits(inputs), self.repository.github: self.tested}
 
-    def require_local_candidate(self, source: IntegrationSource) -> None:
+    def require_local_candidate(self, inputs: IntegrationInput) -> None:
         """Main owns the transition from exact open sources to exact merged ancestry."""
-        source.require_tree(self.repository)
+        source = inputs.source(self.repository.github)
+        source.require_ancestry(self.repository, self.carrier.head)
         for head in (head for head in source.heads if not head.same_pull_request(self.carrier)):
             rows = tuple(row for row in PullRequests().rows(head.repo, (head.pr,))
                          if row.head == head.head and row.base == WorkBranches.main)
@@ -543,8 +562,9 @@ class IntegrationRun:
             if HeadReview.accepted(repo.github, request.head)
         )
 
-    def qualify(self, context: CommanderContext, problems: tuple[str, ...]) -> IntegrationInput:
-        """Prepare one checking carrier from stored orders; never test, post, ready or arm it."""
+    def qualify(self, context: CommanderContext, problems: tuple[str, ...], *,
+                carrier: PullRequestHead) -> CombinedInput:
+        """Capture the existing resolved carrier and its distinct stored source members."""
         self.checkout.require_editable()
         self.failure.require_qualification()
         if not problems or len(set(problems)) != len(problems):
@@ -580,14 +600,13 @@ class IntegrationRun:
                     raise IntegrationFailed("A linked source is closed, ambiguous or targets another base")
                 selected.append(PullRequestHead(repo.github, row.number, row.head))
             heads[repo.github] = tuple(selected)
-        primary = PullRequests.linked_among((todos[0],), core.github)
-        carriers = tuple(head for head in heads[core.github] if head.pr in primary)
-        if len(carriers) != 1:
-            raise IntegrationFailed("The primary problem has no unique existing local carrier")
+        current = carrier.current()
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        if current.repo != core.github or current.base != WorkBranches.main or current.head != candidate_commit:
+            raise IntegrationFailed("Capture requires the actual published combined carrier at this checkout's HEAD")
         self.output.mkdir(parents=True, exist_ok=False)
         IntegrationCheckout.create(registered_core, BaseSide.checkout(self.output, core.github), base)
-        tree = self.checkout.combine_sources(base, heads[core.github])
-        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
         if linked_repositories - set(required):
             raise IntegrationFailed("A selected order links an unknown stack repository")
@@ -614,8 +633,10 @@ class IntegrationRun:
                 raise IntegrationFailed("A captured main moved; preserve this failed attempt and recapture")
             for head in source.heads:
                 head.current()
-            if source.expected_tree(repo) != source.candidate_tree:
-                raise IntegrationFailed("Actual and reproduced candidate trees differ")
+            if source.repository == core.github:
+                source.require_ancestry(repo, candidate_commit)
+            else:
+                source.require_tree(repo)
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
         for todo in current_todos:
             todo.require_commander(context.incarnation)
@@ -623,15 +644,16 @@ class IntegrationRun:
             linked = PullRequests.linked_among(current_todos, source.repository)
             if any(head.pr not in linked for head in source.heads):
                 raise IntegrationFailed("A selected problem no longer links its captured source")
-        inputs = IntegrationInput(tuple(sorted(sources, key=lambda source: source.repository.key)))
+        inputs = CombinedInput(tuple(sorted(sources, key=lambda source: source.repository.key)), carrier)
         context.comms.goals.todos.require_input_links(inputs)
         if Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip() == inputs.source(core.github).candidate_tree:
             raise IntegrationFailed("The Core carrier has no substantive source change")
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
         if IntegrationInput.from_message(original_message):
             raise IntegrationFailed("Capture requires a fresh substantive integration commit, not nested metadata")
-        Repo.git(self.checkout.path, "commit", "--amend", "-m",
-                 f"{original_message.rstrip()}\n\n{inputs.trailer}")
+        carrier.current()
+        Repo.git(self.checkout.path, "commit", "--allow-empty", "-m",
+                 f"Capture the resolved combined sources\n\n{inputs.trailer}")
         commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         IntegrationCheckout.create(registered_core, HeadSide.checkout(self.output, core.github), commit)
         inputs.write(self.output)
@@ -751,9 +773,13 @@ def run() -> int:
                            help="materialize the actual GitHub event's exact compared sources; no bus")
     operation.add_argument(TestedSources.revalidate_option, type=Path, metavar="OUTPUT",
                            help="revalidate the same event/input and source heads before CI success")
+    operation.add_argument(TestedSources.merge_option, type=Path, metavar="OUTPUT",
+                           help="require a real combined carrier and its exact reviewed source members")
     operation.add_argument("--qualify", default="", metavar="PROBLEM",
                            help="prepare sources from this actual primary order, without running tests")
     local_options.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
+    local_options.add_argument("--carrier", type=int, default=0, metavar="PR",
+                              help="the existing separate combined PR at this checkout's published HEAD")
     local_options.add_argument("--comms-root", type=Path,
                         help="the existing authorized root for stored-problem qualification")
     parser.add_argument(
@@ -770,7 +796,7 @@ def run() -> int:
         pytest_arguments = pytest_arguments[1:]
     arguments.pytest_arguments = pytest_arguments
     values = vars(arguments)
-    if arguments.resolve_ci_inputs or arguments.revalidate_ci_inputs:
+    if arguments.resolve_ci_inputs or arguments.revalidate_ci_inputs or arguments.check_merge_inputs:
         forbidden = {option.dest for option in local_options._group_actions if values[option.dest]}
         if forbidden:
             parser.error("CI source resolution does not accept tests, a bus root or local qualification options: "
@@ -779,8 +805,10 @@ def run() -> int:
         graph = TestedSources.read((arguments.checkout or Path.cwd()).resolve())
         if arguments.resolve_ci_inputs:
             graph.materialize(arguments.resolve_ci_inputs.resolve())
-        else:
+        elif arguments.revalidate_ci_inputs:
             graph.revalidate(arguments.revalidate_ci_inputs.resolve())
+        else:
+            graph.check_merge_inputs(arguments.check_merge_inputs.resolve())
         return 0
     missing = {option.dest for option in (checkout_option, output_option, risk_option)
                if not values[option.dest]}
@@ -798,10 +826,14 @@ def run() -> int:
         if pytest_arguments:
             parser.error("Qualification cannot run tests")
         context = CommanderContext.read_root(resolve_comms_route(arguments.comms_root).root)
-        run.qualify(context, (arguments.qualify, *arguments.with_problem))
+        if arguments.carrier <= 0:
+            parser.error("Qualification requires --carrier naming the actual separate combined PR")
+        carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)
+        run.qualify(context, (arguments.qualify, *arguments.with_problem),
+                    carrier=PullRequestHead(carrier.repo, carrier.pr, carrier.head))
         return 0
-    if arguments.with_problem:
-        parser.error("--with-problem requires --qualify")
+    if arguments.with_problem or arguments.carrier:
+        parser.error("--with-problem and --carrier require --qualify")
     return run.execute()
 
 
