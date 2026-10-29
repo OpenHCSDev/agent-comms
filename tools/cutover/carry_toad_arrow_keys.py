@@ -14,7 +14,7 @@ from textual.keys import DownKey, LeftKey, NavigationKey, RightKey, UpKey
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, NominalSpelling, NominalText
-from cutover.carry_toad_key_mode import ToadKeyMode, ToadSettingsCarry
+from cutover.carry_toad_key_mode import ToadSettingsCarry
 from toad.key_modes import KeyMode
 from toad.keymap import KeyInvocationId, Keymap, KeyRemap
 from toad.preferences import ToadSettings, UiSettings
@@ -76,10 +76,6 @@ class PreviousKeyRemap:
 
 
 class ToadArrowKeys(ToadSettingsCarry):
-    # The older step validates complete settings when changing its own retired field.
-    # Retired arrow references must already have crossed their boundary by then.
-    precedes = (ToadKeyMode,)
-
     def rewrite(self, document: dict[str, JsonValue]) -> int:
         ui_key = FieldCodec.record_key(ToadSettings, "ui")
         ui = FieldCodec.decode(dict[str, JsonValue], document.get(ui_key, {}))

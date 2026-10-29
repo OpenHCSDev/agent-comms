@@ -43,9 +43,9 @@ class ToadSettingsCarry(Carry):
         if not path.exists():
             return Carried(0)
         document = FieldCodec.decode(dict[str, JsonValue], FieldCodec.parse(path.read_text()))
-        changed = self.rewrite(document)
+        changed = sum(member(self.files, self.spill_dir).rewrite(document)
+                      for member in ToadSettingsCarry.members_with(ToadSettingsCarry))
         if not changed:
-            # A later carry may still own retired fields in this document.
             return Carried(0)
         FieldCodec.decode(ToadSettings, document)
         if apply:
