@@ -21,10 +21,13 @@ from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.private_send_claim import PrivateSendClaim
+from agent_comms.private_send_stage import TriageNativeSend
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.selected_request import SelectedRequest
 from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_participant import SelectedParticipant
 from agent_comms.selected_session import SelectedSession
-from agent_comms.selected_turn import SelectedAttempt
+from agent_comms.selected_turn import SelectedAttempt, SelectedPrompt
 from agent_comms.selected_write_authority import NoSelectedWritePlans
 from agent_comms.text_digest import TextDigest
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows
@@ -115,13 +118,13 @@ class FailedHistory(ClaimedHistory):
 
 
 @asynccontextmanager
-async def prepared_native_input(
-    directory: Path, *, max_attempts: int = 1, source_bodies: tuple[str, ...] = (),
-) -> AsyncIterator[PrivateSendClaim]:
-    """Keep the real selected attempt and its bound input open for an owner operation."""
-    root, root_id, comms, _initial, _people = _root(directory, direct=True)
+async def prepared_native_participant(
+    directory: Path, *, direct: bool, source_bodies: tuple[str, ...] = (),
+) -> AsyncIterator[SelectedParticipant]:
+    """One real publication/selection/store lifetime for full and triage controls."""
+    root, root_id, comms, initial, _people = _root(directory, direct=direct)
     for body in source_bodies:
-        message = publish_initial(comms, 'sender', 'beta', body)
+        message = publish_initial(comms, 'sender', initial.message.target, body)
         with Coordination(root / 'coordination.sqlite3') as store:
             accept_initial(comms.bus, root_id, message.seq, store)
     with closing(CursorDelivery()) as cursor_delivery:
@@ -130,22 +133,48 @@ async def prepared_native_input(
                 comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery,
             ) as participant:
                 assert participant is not None
-                created = store.create(
-                    participant.batch.execution_id, WireOrigin,
-                    participant.lookup, max_attempts,
-                    sources=participant.batch.sources,
-                ).value
-                attempt = await SelectedAttempt.engage(participant, created)
-                directory = participant.owner.thread.native_session_directory(root)
-                identity = create_fresh_private_session(directory, worktree=Path(participant.owner.thread.worktree))
-                participant.owner = comms.registry.attach_native_session(participant.owner, identity.session_file)
-                session = SelectedSession.for_launch(
-                    directory, identity.path, root=root,
-                    worktree=Path(participant.owner.thread.worktree),
-                    owner=participant.owner.thread.incarnation.require_recorded(),
-                )
-                request, _action = await attempt.prepare(session, CodingSelectedAction(), NoSelectedWritePlans())
-                yield request.claim_scope
+                yield participant
+
+
+def attach_native_session(participant: SelectedParticipant) -> SelectedSession:
+    root, comms = participant.comms.root, participant.comms
+    directory = participant.owner.thread.native_session_directory(root)
+    identity = create_fresh_private_session(directory, worktree=Path(participant.owner.thread.worktree))
+    participant.owner = comms.registry.attach_native_session(participant.owner, identity.session_file)
+    return SelectedSession.for_launch(
+        directory, identity.path, root=root,
+        worktree=Path(participant.owner.thread.worktree),
+        owner=participant.owner.thread.incarnation.require_recorded(),
+    )
+
+
+@asynccontextmanager
+async def prepared_native_input(
+    directory: Path, *, max_attempts: int = 1, source_bodies: tuple[str, ...] = (),
+) -> AsyncIterator[PrivateSendClaim]:
+    """Keep the real selected attempt and its bound input open for an owner operation."""
+    async with prepared_native_participant(directory, direct=True, source_bodies=source_bodies) as participant:
+        created = participant.store.create(
+            participant.batch.execution_id, WireOrigin,
+            participant.lookup, max_attempts, sources=participant.batch.sources,
+        ).value
+        attempt = await SelectedAttempt.engage(participant, created)
+        session = attach_native_session(participant)
+        request, _action = await attempt.prepare(session, CodingSelectedAction(), NoSelectedWritePlans())
+        yield request.claim_scope
+
+
+@asynccontextmanager
+async def prepared_native_triage(directory: Path) -> AsyncIterator[PrivateSendClaim]:
+    """Reserve an actual triage batch; no native process or model is substituted."""
+    async with prepared_native_participant(directory, direct=False) as participant:
+        assert participant.batch.requires_triage
+        session = attach_native_session(participant)
+        request = await SelectedRequest.reserve(
+            participant, session, TriageNativeSend(participant.batch.assignments),
+            prepare_fence_token(), SelectedPrompt(participant).triage(),
+        )
+        yield request.claim_scope
 
 
 async def release_native_input(directory: Path, history: type[NativeSendHistory] = FailedHistory) -> ReleasedNativeInput:

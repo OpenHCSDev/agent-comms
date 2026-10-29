@@ -15,9 +15,10 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.presentation import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_sidecar import native_request_digest
+from agent_comms.selected_triage import AbsentTriageDecisionRecord, DecidedTriageRecord, IgnoreSelectedTriage
 from native_proof_cases import append_input_entry, recorded_context, write_proof_rows
 from test_coordinated_runtime import tmp_path  # noqa: F401
-from test_native_failure_recovery import SentHistory, prepared_native_input
+from test_native_failure_recovery import SentHistory, prepared_native_input, prepared_native_triage
 
 
 def recorded_input_context(claim: PrivateSendClaim) -> NativeContextProof:
@@ -76,6 +77,48 @@ async def test_reserved_context_notifies_before_any_assistant_reply(tmp_path: Pa
             claim.commit(store, context)
             retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert retained == original
+
+
+async def test_triage_consumption_precedes_and_survives_later_verdict(tmp_path: Path):
+    async with prepared_native_triage(tmp_path) as claim:
+        context = recorded_input_context(claim)
+        originals = tuple(row.source for row in claim.stage.assignments)
+        before = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
+        assert all(not row.state.consumed for rows in before.outcomes.values() for row in rows)
+        await acknowledge_context(claim, context)
+        active = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), originals)
+        assert sum(row.state.consumed for rows in active.outcomes.values() for row in rows) == 1
+        assert all(row.answer is None and not row.displayed_to
+                   for rows in active.outcomes.values() for row in rows)
+        with Coordination(claim.store_path) as store:
+            original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
+            assert original.verdict == AbsentTriageDecisionRecord()
+            claim.commit(store, context)
+            claim.stage.commit(store, claim.participant, claim.input_id, claim.token_digest,
+                               context, IgnoreSelectedTriage())
+            retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
+            assert retained.require_context_proof() == context
+            assert retained.verdict == DecidedTriageRecord(IgnoreSelectedTriage)
+            with store.session.writing() as db:
+                with pytest.raises(IdentityConflict):
+                    retained.commit_context(db, replace(context, llm_context_digest='e' * 64))
+                with pytest.raises(sqlite3.IntegrityError):
+                    NativeRuntimeInput.update(db, where='input_id=?', parameters=(claim.input_id,),
+                                              verdict=AbsentTriageDecisionRecord())
+
+
+async def test_triage_failure_keeps_previously_acknowledged_context_and_no_retry(tmp_path: Path):
+    async with prepared_native_triage(tmp_path) as claim:
+        context = recorded_input_context(claim)
+        await acknowledge_context(claim, context)
+        with Coordination(claim.store_path) as store:
+            claim.stage.fail_decision(store, claim.participant, claim.input_id, claim.token_digest, context)
+            retained = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
+            assert retained.require_context_proof() == context
+            assert retained.verdict == AbsentTriageDecisionRecord()
+            with pytest.raises(IdentityConflict):
+                claim.stage.reserve(store, claim.participant, claim.token_digest)
+            assert len(NativeRuntimeInput.select(store.session._connection)) == 1
 
 
 async def test_later_corroborated_request_preserves_first_context_receipt(tmp_path: Path):
