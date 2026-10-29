@@ -14,13 +14,12 @@ from agent_comms.instruction_deck import CommanderReader, DeckReader, FleetReade
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.registry_store import RegistryStore
 from agent_comms.threads import Thread
-from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
 from agent_comms_hooks.watch import WatchClaim
 
 
-class HookReader(DeckReader):
-    """Bridge reminders compose with Core's source-reading behavior."""
+class HookReader:
+    """Bridge reminder capability, composed with a source reader rather than defining one."""
 
     def deaf(self, session: str) -> tuple[str, ...]:
         return ()
@@ -48,21 +47,20 @@ class DealtDeck(ClaudeTranscriptHook):
     def deck(self, reader: DeckReader) -> Path:
         return Path(self.transcript_path).with_suffix(reader.deck_suffix)
 
-    @property
-    def calls(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".calls")
-
 
 @dataclass(frozen=True)
 class DeckStart(DealtDeck):
     owner_prompts: ClassVar[int] = 6
+    """How many of the person's own last prompts the deal puts back in front of the session."""
 
     def take(self) -> tuple[str, ...]:
+        """Unbound sessions get nothing; bound sessions get their declared role's reader."""
         return WatchClaim(self.session_id).state().by_role(
             unbound=tuple, fleet=lambda record: self.taken(FleetDeck()),
             commander=lambda record: self.taken(CommanderDeck()))
 
-    def taken(self, reader: HookReader) -> tuple[str, ...]:
+    def taken(self, reader: FleetDeck) -> tuple[str, ...]:
+        """A session start deals the deck."""
         return self.dealt(reader)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
@@ -82,6 +80,9 @@ class DeckStart(DealtDeck):
         )
 
     def owner_words(self, prompts: tuple[str, ...]) -> str:
+        """The person's own last prompts, verbatim from the transcript: the summary turned them
+        into its paraphrase and a next step, and on 2026-10-29 the session followed the
+        paraphrase while his words sat unanswered."""
         return "\n\n".join((
             "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary of it."
             " Your audit answers each one, and your next action serves them, not the summary's"
@@ -90,6 +91,7 @@ class DeckStart(DealtDeck):
         ))
 
     def prompts(self) -> tuple[str, ...]:
+        """A new session starts before Claude Code writes its transcript: nobody has spoken."""
         transcript = Path(self.transcript_path)
         if not transcript.exists():
             return ()
@@ -98,11 +100,12 @@ class DeckStart(DealtDeck):
                 stream, transcript.stat().st_size, self.owner_prompts)
 
     def held(self) -> Iterator[str]:
+        """Every actual held order from the Todo store, not a summary's paraphrase."""
         for root, snapshot, commander in self.commanders():
-            for hold in HeldOrders.of(TodoStore(root), snapshot, commander.name).live:
-                yield hold.recalled()
+            yield from HeldOrders.recalled(root, snapshot, commander.name)
 
     def commanders(self) -> Iterator[tuple[Path, RegistrySnapshot, Thread]]:
+        """Each commander registered on a bound bus, with that bus's registry cut."""
         for record in WatchClaim(self.session_id).state().bindings():
             root = Path(record.root)
             snapshot = RegistryStore.at(root).snapshot()
@@ -110,6 +113,8 @@ class DeckStart(DealtDeck):
                 yield root, snapshot, thread
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...]) -> None:
+        """A start or compaction drops what was read: deal from the start again, and count no
+        file as read until it is read again."""
         self.calls.unlink(missing_ok=True)
         self.dealt_read.write_text("", encoding="utf-8")
         self.audit.unlink(missing_ok=True)
@@ -137,8 +142,7 @@ class SkillText(ClaudeHookProgram):
 
 def main() -> None:
     start = DeckStart.read()
-    for text in start.take():
-        start.warn(text)
+    start.warn(*start.take())
 
 
 if __name__ == "__main__":

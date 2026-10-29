@@ -30,7 +30,6 @@ from .native_package import VerifiedNativePackage
 from .participant_identity import ParticipantIdentity
 from .registry_store import RegistryStore
 from .held_orders import HeldOrders
-from .todos import TodoStore
 from .pi_commands import ExtensionUiResponse, PiCommand
 from .pi_payloads import PiResponseData, StateData
 from .threads import Thread
@@ -306,8 +305,7 @@ class PiSessionChild(PiChild, RuleReads, ContextObservations):
         reader = snapshot.commander_project.session_output(
             owner.incarnation, commander=CommanderReader(), commanded=FleetReader())
         parts = reader.prepare()
-        header = reader.header(lambda: (
-            hold.recalled() for hold in HeldOrders.of(TodoStore(launch.root), snapshot, owner.name).live))
+        header = reader.header(lambda: HeldOrders.recalled(launch.root, snapshot, owner.name))
         return RuleReadingSegment.for_parts(owner.incarnation, parts, header)
 
     async def forget_context(self) -> None:

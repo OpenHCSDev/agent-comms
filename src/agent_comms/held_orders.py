@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from textwrap import shorten
 from typing import TYPE_CHECKING
 
 from agent_comms.threads import Thread
-from agent_comms.todos import Todo
+from agent_comms.todos import Todo, TodoStore
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -15,7 +16,6 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.thread_identity import ThreadIncarnation
-    from agent_comms.todos import TodoStore
 
 
 @dataclass(frozen=True)
@@ -51,6 +51,11 @@ class HeldOrders:
         """The held orders in ``store`` for ``commander`` as ``snapshot`` registers them."""
         return HeldOrders.split(store.held_for_commander(snapshot.require(commander).incarnation),
                                 snapshot)
+
+    @classmethod
+    def recalled(cls, root: Path, snapshot: RegistrySnapshot, commander: str) -> tuple[str, ...]:
+        """The actual held-order reminder, captured and rendered through this owner."""
+        return tuple(hold.recalled() for hold in cls.of(TodoStore(root), snapshot, commander).live)
 
     @classmethod
     def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> HeldOrders:

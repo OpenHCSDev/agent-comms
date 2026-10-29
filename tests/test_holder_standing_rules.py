@@ -5,6 +5,7 @@ from pathlib import Path
 from agent_comms.repo import Checkout
 import asyncio
 import json
+from contextlib import nullcontext
 import os
 import re
 import time
@@ -29,6 +30,7 @@ from agent_comms.commander.standing import (
     UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -41,7 +43,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import AcpInputKey
@@ -172,7 +174,7 @@ def claim_order(held_bus):
 
 
 def state_cards(comms, member):
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     return tuple(state for state in UnitState.current(comms, "lead", frame)
                  if isinstance(state, member))
 
@@ -259,7 +261,7 @@ def test_order_claim_publishes_only_to_its_retained_commander_birth(
 
 
 def unanswered(comms):
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     return UnitAskUnanswered.broken(
         comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
 
@@ -315,7 +317,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
         comms.registry.remove(name)
     comms.registry.declare(Thread("worker", frozenset({"comms"}), worker.worktree))
 
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     broken = StandingRule.broken(
         comms, "lead", observed=UnitState.current(comms, "lead", frame), frame=frame)
     gone = {rule.todo.id: rule.line() for rule in broken if isinstance(rule, HolderGone)}
@@ -634,7 +636,7 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
     from agent_comms.commander.vibe_check import VibeCheck
 
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    frame = HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
+    frame = capture_frame(held_bus, "lead", ProgressRead())
     assert [rule.message.message_id for rule in OwedAnswer.scan_observed(
         held_bus, "lead", (), frame)] == [ask.message_id]
     assert VibeCheck.scan_observed(held_bus, "lead", (), frame) == ()
@@ -772,7 +774,7 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
     blocked_holder(held_bus)
     blocked, = state_cards(held_bus, Blocked)
-    frame = HeartbeatFrame.capture(held_bus, "lead", ProgressRead())
+    frame = capture_frame(held_bus, "lead", ProgressRead())
     states = UnitState.current(held_bus, "lead", frame)
     assert tuple(state for state in states if state.unit == blocked.unit) == (blocked,)
     assert blocked not in StandingRule.broken(
@@ -788,7 +790,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     saved, = CommanderUpdate.latest(held_bus, commander.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
@@ -836,12 +838,12 @@ def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus, inst
     alive = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
     heartbeat = CommanderHeartbeat()
     held_bus.registry.register(alive)
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     passes = ServicePassStore.at(held_bus.root)
     completed = passes.read().commander_completed[commander.incarnation]
     held_bus.registry.register(commander)
-    assert heartbeat.observe(held_bus) == ()
-    heartbeat.pass_body(held_bus, ())
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
+    assert CommanderFrame.read_all(held_bus.root) == ()
     held_bus.registry.register(alive)
     assert passes.read().commander_completed[commander.incarnation] == completed
     assert HeartbeatSilent.violations(held_bus, "lead") == ()

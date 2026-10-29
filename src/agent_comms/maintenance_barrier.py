@@ -480,6 +480,16 @@ class HoldTarget(DurableFile):
         return replace(state, target=self.target)
 
 
+class FreshIngress:
+    """A new operation checks the root's existing witness before entering stores."""
+
+    __slots__ = ()
+
+    @classmethod
+    def require_entry_open(cls, root: Path) -> None:
+        MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
+
+
 class MaintenanceIngress(ABC):
     @abstractmethod
     def ingress_async(self) -> AbstractAsyncContextManager[MaintenanceStatus]: ...

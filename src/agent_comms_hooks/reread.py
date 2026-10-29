@@ -22,7 +22,7 @@ from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHookProgram
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import DeckStart, HookReader
+from agent_comms_hooks.skill import DeckStart, FleetDeck
 
 
 @dataclass(frozen=True)
@@ -31,13 +31,11 @@ class SliceReminder(DeckStart):
 
     every: ClassVar[int] = 5
 
-    def taken(self, reader: HookReader) -> tuple[str, ...]:
+    def taken(self, reader: FleetDeck) -> tuple[str, ...]:
         deck = self.deck(reader)
         if not deck.exists():
             return self.dealt(reader)  # the session was bound, or changed role, after it started
-        with self.calls.open("ab") as calls:
-            calls.write(b".")
-            count = calls.tell()
+        count = self.count_call()
         if count % self.every:
             return ()
         slices = json.loads(deck.read_text(encoding="utf-8"))
@@ -49,7 +47,7 @@ class DeafReminder(SliceReminder):
     """Beside the deck's slice, the RE-ARM line while the commander session's bridge has no
     Monitor reading it. The line rides the next tool call, never the bridge it reports dead."""
 
-    def taken(self, reader: HookReader) -> tuple[str, ...]:
+    def taken(self, reader: FleetDeck) -> tuple[str, ...]:
         return super().taken(reader) + reader.deaf(self.session_id)
 
 
@@ -60,7 +58,7 @@ class BoardReminder(DeafReminder):
     The bridge derives current lines from Core and owns their delivery evidence.
     """
 
-    def taken(self, reader: HookReader) -> tuple[str, ...]:
+    def taken(self, reader: FleetDeck) -> tuple[str, ...]:
         return super().taken(reader) + reader.board(self.session_id)
 
 
@@ -79,7 +77,7 @@ def main() -> None:
     GatedCall.of(record).completed()
     hook = BoardReminder.decode(record)
     if texts := hook.take():
-        hook.warn("\n\n".join(texts))
+        hook.warn(*texts)
 
 
 if __name__ == "__main__":

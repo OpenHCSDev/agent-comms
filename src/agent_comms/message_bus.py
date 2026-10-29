@@ -21,12 +21,13 @@ from typing import TYPE_CHECKING
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
+from agent_comms.child_process import AsyncWork
 from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+from agent_comms.maintenance_barrier import FreshIngress, MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
@@ -56,7 +57,7 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-class Watch(DeclaredFamily, ABC):
+class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -64,31 +65,57 @@ class Watch(DeclaredFamily, ABC):
     maintenance waits for that stop, so systemd killed it at 90 s (installs 17 and 18).
     """
 
-    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
-        with opened_wire() as comms:
-            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
+    @abstractmethod
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
+
+    def enter_phase[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
+        """Refuse a new watch phase before its effects, without borrowing a store lock."""
+        self.require_entry_open(comms.root)
+        return operation()
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
         """A service may report its failed pass; ordinary watches need no extra action."""
 
+
+class JoinedWatch(Watch):
+    """The whole pass is one joined operation under maintenance."""
+
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        with opened_wire() as comms:
+            await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.watch_pass, opened_wire)))
+
     @abstractmethod
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
 
 
-class WatchPass[Observed](Watch):
-    """The pass owns its observed value; the scheduler only needs Watch.run."""
+class PreparedWatchPass[Prepared, Observed](Watch):
+    """Joined effects finish; a source-proved safe read can drop observation."""
 
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            observed = self.observe(comms)
-            self.pass_body(comms, observed)
+            prepared = await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.prepare, comms)))
+            observed = await self.run_async(partial(self.observe, comms, prepared))
+            await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.pass_body, comms, observed)))
 
     @abstractmethod
-    def observe(self, comms: Comms) -> Observed: ...
+    def prepare(self, comms: Comms) -> Prepared: ...
+
+    @abstractmethod
+    def observe(self, comms: Comms, prepared: Prepared) -> Observed: ...
 
     @abstractmethod
     def pass_body(self, comms: Comms, observed: Observed) -> None: ...
+
+
+class WatchPass[Observed](PreparedWatchPass[None, Observed]):
+    """A phased watch with no acquisition; only watches with real inputs override preparation."""
+
+    def prepare(self, comms: Comms) -> None:
+        pass
 
 
 class MessageBus[Writes: Publisher]:

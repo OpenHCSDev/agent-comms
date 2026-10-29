@@ -79,11 +79,9 @@ class CodingToolOwner(ABC):
         return NoRoomNeeded()
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
-        call.progress.observation.require(Executing, ToolNotExecuting())
-        call.require_instructions(turn.native)
-
         def check(store: Coordination) -> None:
             call.progress.observation.require(Executing, ToolNotExecuting())
+            call.require_instructions(turn.native)
             snapshot = self.comms.registry.snapshot()
             self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
@@ -214,10 +212,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     async def allow(self, round_number: int, call: CodingCall) -> None:
         # The owner rechecks authority after its unlocked room wait. The
         # transport holds the returned reservation for this exact tool call.
-        reservation = await self.owner.allow(self.turn, round_number, call)
-        async with reservation.checking():
-            call.progress.observation.require(Executing, ToolNotExecuting())
-            call.progress.room = reservation
+        call.progress.room = await self.owner.allow(self.turn, round_number, call)
 
     def tool_started(self, event: ToolExecutionStart) -> CodingCall:
         call = super().tool_started(event)

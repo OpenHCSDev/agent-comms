@@ -1130,8 +1130,10 @@ class RuleReadingSegment(OncePerContextSegment):
 
     @classmethod
     def for_parts(cls, owner: ThreadIncarnation, parts: Mapping[Path, str], header: str) -> Self:
-        revision = hashlib.sha256("\n".join(map(str, parts)).encode()).hexdigest()
-        return super().capture((OwnerProvenance(owner, revision),), parts=MappingProxyType(dict(parts)), header=header)
+        parts = MappingProxyType(dict(parts))
+        revision = hashlib.sha256(json.dumps(
+            FieldCodec.encode((tuple(parts.items()), header))).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner, revision),), parts=parts, header=header)
 
     def values(self) -> dict[str, object]:
         return {"read_order": DeckReader.order(self.parts), "header": self.header}

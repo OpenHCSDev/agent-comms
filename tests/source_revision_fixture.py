@@ -19,8 +19,8 @@ class SourceRepository(Repo):
     number: int = 7
 
     @property
-    def remote(self) -> Path:
-        return Path(self.git(self.checkout, 'remote', 'get-url', 'origin').strip())
+    def remote_path(self) -> Path:
+        return Path(self.git(self.checkout, 'remote', 'get-url', self.remote).strip())
 
     @property
     def main_commit(self) -> str:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from agent_comms.instruction_deck import CommanderReader, FleetReader
 from agent_comms.pi_events import CompactionEnd
 from agent_comms.pi_payloads import CompactionData, ReportedCompaction, ReportedFlag
 from agent_comms.turn_context import CoordinationSegment, RuleReadingSegment
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture
 
@@ -130,6 +132,21 @@ def test_prepared_rules_are_the_original_packaged_files(reader):
     assert tuple(prepared) == tuple(source.resolve() for source in reader.sources())
     assert all(text == path.read_text(encoding="utf-8", newline="")
                for path, text in prepared.items())
+
+
+def test_rule_reading_revision_covers_frozen_source_text_and_header() -> None:
+    owner = RecordedThreadIncarnation("reader", 1.0)
+    path = Path("/packaged/rule.md")
+    parts = {path: "original source"}
+    original = RuleReadingSegment.for_parts(owner, parts, "original header")
+    assert original.provenance == RuleReadingSegment.for_parts(
+        owner, parts, "original header").provenance
+    parts[path] = "changed source at the same path"
+    assert original.parts[path] == "original source"
+    assert original.provenance != RuleReadingSegment.for_parts(
+        owner, parts, "original header").provenance
+    assert original.provenance != RuleReadingSegment.for_parts(
+        owner, original.parts, "changed header").provenance
 
 
 @pytest.mark.asyncio

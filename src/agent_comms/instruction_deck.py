@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from .commander.package import CommanderPackage
-from .commander.rule_file import RuleFile
+from .commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
 from .field_codec import ToolCallId
 from .pattern_sources import PostmortemFailure
 from .slop import Slop
@@ -18,14 +18,26 @@ from .tool_denial import SelectedToolDenied
 
 
 class DeckReader(ABC):
-    """Every bound session reads every rule; each file declares its audience."""
+    """The packaged sources for the audiences this reader declares and inherits.
 
+    Every bound session follows the fleet rules; the registered commander also follows the
+    commander's. RuleFile's audience owns that split, not a second list of rule names.
+    """
+
+    audiences: ClassVar[tuple[type[RuleAudience], ...]] = ()
     deck_suffix: ClassVar[str]
+    """A role change finds no deck of the new kind and deals it again."""
     slice_chars: ClassVar[int] = 2_500
+    """A longer paragraph splits at its lines; a rule's wake-up is never split."""
+
+    def __init_subclass__(cls, *, audiences: tuple[type[RuleAudience], ...] = (),
+                          **options: object) -> None:
+        super().__init_subclass__(**options)
+        cls.audiences = (*cls.audiences, *audiences)
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
-        return RuleFile.packaged()
+        return tuple(rule for rule in RuleFile.packaged() if rule.audience in cls.audiences)
 
     @classmethod
     def preface(cls) -> tuple[Path, ...]:
@@ -71,16 +83,21 @@ class DeckReader(ABC):
             " until each one is read. Use no offset or limit. Then, before your next action,"
             " check what you did since your last start or compaction against them and say,"
             " one line each, every rule you broke and the action that broke it, and fix what"
-            " you can. This order returns after each context reset." + audit + "\n"
+            " you can: reading alone is passive, the audit is what finds the breaks"
+            " (on 2026-10-27 one reread found six broken rules in one session)."
+            " This order returns after each context reset." + audit + "\n"
             + "\n".join(str(source) for source in files)
         )
 
     @classmethod
     @abstractmethod
-    def streams(cls) -> tuple[tuple[str, ...], ...]: ...
+    def streams(cls) -> tuple[tuple[str, ...], ...]:
+        """The slice streams interleaved one slice per stream in each round."""
 
     @classmethod
     def slices(cls) -> list[str]:
+        """The shortest stream returns every round; the longest runs through once. Recorded
+        failures are the habits already caught, called out by name repeatedly."""
         streams = cls.streams()
         rounds = max(len(stream) for stream in streams)
         return [stream[number % len(stream)] for number in range(rounds) for stream in streams]
@@ -99,6 +116,7 @@ class DeckReader(ABC):
 
     @classmethod
     def paragraphs(cls, text: str) -> tuple[str, ...]:
+        """Keep headings with their blank-line paragraph; split long paragraphs at lines."""
         found: list[str] = []
         heading = ""
         for block in (block.strip() for block in text.split("\n\n")):
@@ -111,6 +129,7 @@ class DeckReader(ABC):
 
     @classmethod
     def sliced(cls, paragraph: str) -> tuple[str, ...]:
+        """Consecutive whole lines, each run within slice_chars."""
         runs: list[str] = []
         for line in paragraph.splitlines():
             if runs and len(runs[-1]) + 1 + len(line) <= cls.slice_chars:
@@ -120,7 +139,7 @@ class DeckReader(ABC):
         return tuple(runs)
 
 
-class FleetReader(DeckReader):
+class FleetReader(DeckReader, audiences=(FleetAudience,)):
     deck_suffix = ".fleet-deck.json"
 
     @classmethod
@@ -128,7 +147,7 @@ class FleetReader(DeckReader):
         return (cls.voice(), cls.tells(), cls.failures())
 
 
-class CommanderReader(FleetReader):
+class CommanderReader(FleetReader, audiences=(CommanderAudience,)):
     deck_suffix = ".deck.json"
 
     @classmethod
