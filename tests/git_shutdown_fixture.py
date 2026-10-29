@@ -13,7 +13,20 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from agent_comms.child_process import SpawnedProcess
+from agent_comms.native_build_inputs import ConfiguredChildStdio, GitLaunch, GitOpening
+from agent_comms.child_process import GitChildren, OwnedGitOpening, SpawnedProcess
+
+
+def inherited_stdio(owned: bool) -> None:
+    opening = OwnedGitOpening(GitChildren()) if owned else GitOpening()
+    with opening.bound():
+        result = GitLaunch.completed(
+            (sys.executable, "-c", "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"),
+            env=os.environ, timeout=10,
+            stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        )
+    result.check_returncode()
+    sys.stdout.buffer.write(result.stdout)
 
 
 def pipe_holder() -> None:
@@ -50,7 +63,8 @@ class GitHTTPHandler(BaseHTTPRequestHandler):
             environment["HTTP_GIT_PROTOCOL"] = protocol
         with SpawnedProcess.launch(
             ("git", "http-backend"), cwd=self.server.remote.parent, env=environment,
-            stdin=subprocess.PIPE, output=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdio=ConfiguredChildStdio(
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
         ) as backend:
             response, error = backend.process.communicate(self.rfile.read(length), timeout=10)
             if backend.process.wait():

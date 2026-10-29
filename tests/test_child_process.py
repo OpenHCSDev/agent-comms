@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
     AttachedChild,
     BoundedRun,
@@ -77,7 +78,8 @@ def test_stop_batch_shares_one_force_deadline() -> None:
         "import signal,time; signal.signal(signal.SIGTERM, signal.SIG_IGN); "
         "print('ready',flush=True); time.sleep(60)"
     ))
-    children = tuple(SpawnedProcess.launch(command, output=subprocess.PIPE) for _ in range(2))
+    children = tuple(SpawnedProcess.launch(
+        command, stdio=DetachedChildStdio(stdout=subprocess.PIPE)) for _ in range(2))
     try:
         for child in children:
             assert child.process.stdout is not None
@@ -108,7 +110,7 @@ def test_stop_batch_shares_one_force_deadline() -> None:
 def test_shared_retirement_waiter_deadline_retains_original_stop_owner() -> None:
     child = SpawnedProcess.launch(
         (sys.executable, "-c", "import time; print('ready',flush=True); time.sleep(60)"),
-        output=subprocess.PIPE,
+        stdio=DetachedChildStdio(stdout=subprocess.PIPE),
     )
     entered = threading.Event()
     release = threading.Event()
@@ -166,7 +168,7 @@ async def test_fork_pool_parent_death_retires_workers_and_nested_child_group(tmp
     announcement = tmp_path / "pool-tree.json"
     child = SpawnedProcess.launch(
         (sys.executable, str(Path(__file__).with_name("process_pool_child.py")), str(announcement)),
-        output=subprocess.PIPE,
+        stdio=DetachedChildStdio(stdout=subprocess.PIPE),
     )
     observed = ()
     try:
@@ -605,7 +607,8 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
             (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running(),
             DiesWithLauncherLifetime,
         ) as launch,
-        launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
+        launch.spawn(stdio=DetachedChildStdio(
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE)) as child,
     ):
         launch.release(child.identity)
         launch.verify()

@@ -11,6 +11,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from contextlib import AbstractContextManager, contextmanager
 from contextvars import Context, ContextVar
@@ -19,7 +20,7 @@ from functools import cache
 from pathlib import Path
 from tempfile import TemporaryFile
 from time import monotonic
-from typing import BinaryIO, ClassVar, TextIO, cast
+from typing import IO, ClassVar, TypedDict, Unpack, cast
 
 INPUTS_PREFIX = "# agent-comms-native-inputs-v1 "
 PREPARATION_SCHEME = "sealed-native-store-v1"
@@ -56,6 +57,51 @@ class Executable(NamedProgram):
         super().__init_subclass__(names=names)
 
 
+class StdioOptions(TypedDict, total=False):
+    """Only provided Popen selectors; omitted endpoints inherit their real descriptors."""
+
+    stdin: int | IO[bytes] | IO[str]
+    stdout: int | IO[bytes] | IO[str]
+    stderr: int | IO[bytes] | IO[str]
+
+
+class AsyncStdioOptions(StdioOptions, total=False):
+    limit: int
+
+
+class ChildStdio(ABC):
+    """Launch endpoints shared by stdlib construction and Core's gated children."""
+
+    @property
+    @abstractmethod
+    def streams(self) -> StdioOptions: ...
+
+    @property
+    def options(self) -> AsyncStdioOptions:
+        return {**self.streams}
+
+
+class ConfiguredChildStdio(ChildStdio):
+    def __init__(self, **provided: Unpack[StdioOptions]) -> None:
+        self.provided = provided
+
+    @property
+    def streams(self) -> StdioOptions:
+        return self.provided
+
+
+class DetachedChildStdio(ConfiguredChildStdio):
+    """Detached launches keep their original quiet input/output and merged errors."""
+
+    def __init__(self, **provided: Unpack[StdioOptions]) -> None:
+        defaults: StdioOptions = {
+            "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.STDOUT,
+        }
+        defaults.update(provided)
+        super().__init__(**defaults)
+
+
 class GitAcquisitionCancelled(asyncio.CancelledError):
     """Shutdown interrupted an explicitly cancellable Git acquisition, not a Git failure."""
 
@@ -65,12 +111,9 @@ class GitOpening:
 
     @contextmanager
     def opening(
-        self, command: tuple[str, ...], *, env: Mapping[str, str],
-        stdin: int | BinaryIO | TextIO | None,
-        stdout: int | BinaryIO | TextIO | None,
-        stderr: int | BinaryIO | TextIO | None,
+        self, command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
     ) -> Iterator[subprocess.Popen[bytes]]:
-        with subprocess.Popen(command, env=env, stdin=stdin, stdout=stdout, stderr=stderr) as process:
+        with subprocess.Popen[bytes](command, env=env, **stdio.streams) as process:
             try:
                 yield process
             except BaseException:
@@ -158,16 +201,13 @@ class GitLaunch(Executable):
     def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
         """Git declares local selectors; the binary's stamp keys this immutable answer."""
         command = (str(program), "rev-parse", "--local-env-vars")
-        with GitLaunch.opening(
-            command, stdin=None, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        probe = GitLaunch.completed(
+            command, stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
             env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
-            | {"LC_ALL": "C"},
-        ) as process:
-            stdout, stderr = process.communicate(timeout=10)
-            probe = subprocess.CompletedProcess(
-                command, process.wait(), stdout.decode(), stderr.decode())
+            | {"LC_ALL": "C"}, timeout=10,
+        )
         probe.check_returncode()
-        return frozenset(probe.stdout.splitlines())
+        return frozenset(probe.stdout.decode().splitlines())
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:
@@ -188,13 +228,9 @@ class GitLaunch(Executable):
 
     @staticmethod
     def opening(
-        command: tuple[str, ...], *, env: Mapping[str, str],
-        stdin: int | BinaryIO | TextIO | None,
-        stdout: int | BinaryIO | TextIO | None,
-        stderr: int | BinaryIO | TextIO | None,
+        command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
     ) -> AbstractContextManager[subprocess.Popen[bytes]]:
-        return _git_opening.get().opening(
-            command, env=env, stdin=stdin, stdout=stdout, stderr=stderr)
+        return _git_opening.get().opening(command, env=env, stdio=stdio)
 
     @staticmethod
     def acquiring() -> AbstractContextManager[None]:
@@ -211,14 +247,23 @@ class GitLaunch(Executable):
         return context
 
     @classmethod
+    def completed(
+        cls, command: tuple[str, ...], *, env: Mapping[str, str], stdio: ChildStdio,
+        timeout: float, input: bytes = b"",
+    ) -> subprocess.CompletedProcess[bytes]:
+        with cls.opening(command, stdio=stdio, env=env) as process:
+            stdout, stderr = process.communicate(input=input, timeout=timeout)
+            return subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
+
+    @classmethod
     def _run(
         cls, checkout: Path | str, *args: str, timeout: float = 60, input: bytes = b""
     ) -> subprocess.CompletedProcess[bytes]:
-        command = cls.command(checkout, *args)
-        with cls.opening(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                         stderr=subprocess.PIPE, env=cls.environment(os.environ)) as process:
-            stdout, stderr = process.communicate(input=input, timeout=timeout)
-            return subprocess.CompletedProcess(command, process.wait(), stdout, stderr)
+        return cls.completed(
+            cls.command(checkout, *args), env=cls.environment(os.environ), timeout=timeout,
+            input=input, stdio=ConfiguredChildStdio(
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        )
 
     @classmethod
     def _pipe(cls, checkout: Path | str, producer: tuple[str, ...], consumer: tuple[str, ...],
@@ -233,12 +278,13 @@ class GitLaunch(Executable):
         with TemporaryFile() as source, TemporaryFile() as errors:
             source.write(input)
             source.seek(0)
-            with cls.opening(producer_command, stdin=source,
-                             stdout=subprocess.PIPE, stderr=errors, env=environment) as first:
-                with cls.opening(consumer_command, stdin=first.stdout,
-                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                 env=environment) as last:
-                    cast(BinaryIO, first.stdout).close()
+            with cls.opening(producer_command, stdio=ConfiguredChildStdio(
+                    stdin=source, stdout=subprocess.PIPE, stderr=errors), env=environment) as first:
+                assert first.stdout, "Git PIPE producer has no output stream"
+                with cls.opening(consumer_command, stdio=ConfiguredChildStdio(
+                        stdin=first.stdout, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+                        env=environment) as last:
+                    first.stdout.close()
                     output, error = last.communicate(
                         timeout=max(0, timeout - (monotonic() - started)))
                 result = first.wait(timeout=max(0, timeout - (monotonic() - started)))

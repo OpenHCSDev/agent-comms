@@ -21,7 +21,9 @@ from agent_comms.child_process import (
     AsyncWork, ChildRetirementFailed, GitChildPermission, GitChildren, ObservedProcess,
     OwnedGitOpening, ReadWork, SpawnedProcess, SynchronousProcess, join_retirement,
 )
-from agent_comms.native_build_inputs import GitAcquisitionCancelled, GitLaunch
+from agent_comms.native_build_inputs import (
+    ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,
+)
 from agent_comms.coordinator import Coordination
 from agent_comms.comms import Comms
 from agent_comms.message_bus import Watch
@@ -453,8 +455,8 @@ async def test_shutdown_closes_gated_launch_before_user_code(
     def exchange() -> None:
         with Repo.acquiring(), Repo.opening(
             (sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).touch()",
-             str(executed)), env=os.environ, stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+             str(executed)), env=os.environ, stdio=DetachedChildStdio(
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE),
         ) as process:
             process.communicate(timeout=10)
 
@@ -533,7 +535,7 @@ async def test_shutdown_retires_exited_leaders_pipe_holder(tmp_path: Path) -> No
             (sys.executable, "-c", "from git_shutdown_fixture import exited_leader; exited_leader()"),
             env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(Path(__file__).parent),
                                                           os.environ.get("PYTHONPATH", "")))),
-            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
         ) as process:
             assert process.stdout is not None
             assert process.stdout.readline() == b"pipe holder ready\n"
@@ -562,6 +564,26 @@ async def test_shutdown_retires_exited_leaders_pipe_holder(tmp_path: Path) -> No
         await asyncio.gather(pending, return_exceptions=True)
 
 
+@pytest.mark.parametrize("owned", (False, True), ids=("bootstrap", "core"))
+def test_git_opening_preserves_inherited_stdin(owned: bool) -> None:
+    payload = b"inherited descriptor, not DEVNULL\n"
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "rb") as given:
+        with os.fdopen(write_fd, "wb") as producer:
+            producer.write(payload)
+        with SpawnedProcess.launch(
+            (sys.executable, "-c", "import sys; from git_shutdown_fixture import inherited_stdio; "
+             "inherited_stdio(sys.argv[1] == 'core')", "core" if owned else "bootstrap"),
+            env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(Path(__file__).parent),
+                                                          os.environ.get("PYTHONPATH", "")))),
+            stdio=ConfiguredChildStdio(
+                stdin=given, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as child:
+            result = child.collect(timeout=10)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stdout == payload
+
+
 def test_git_bootstrap_opening_works_without_core_imports(git_preparation: GitPreparation) -> None:
     source = Path(__file__).resolve().parents[1] / "src/agent_comms/native_build_inputs.py"
     program = (
@@ -573,7 +595,7 @@ def test_git_bootstrap_opening_works_without_core_imports(git_preparation: GitPr
     )
     with SpawnedProcess.launch(
         (sys.executable, "-I", "-c", program, str(source), str(git_preparation.repository.checkout)),
-        output=subprocess.PIPE, stderr=subprocess.PIPE,
+        stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
     ) as child:
         result = child.collect(timeout=10)
     assert result.returncode == 0, result.stderr.decode(errors="replace")
@@ -620,7 +642,7 @@ async def test_cancelled_git_retains_shared_physical_retirement_failure(count: i
                 for _ in range(count):
                     process = exchanges.enter_context(Repo.opening(
                         (sys.executable, "-c", "pass"), env=os.environ,
-                        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                        stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
                     ))
                     process.communicate(timeout=10)
                     assert process.returncode == 0
