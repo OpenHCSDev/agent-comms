@@ -186,7 +186,7 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
     hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), (),
-                       CodexUsage(UnreadableUsage(reason='not requested')))
+                       CodexUsage(UnreadableUsage(reason='not requested')), open_pings=())
     CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
 
 

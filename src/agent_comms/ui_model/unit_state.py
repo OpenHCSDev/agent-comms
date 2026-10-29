@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.disclosure_text import AccentTone, SuccessTone, ViewHeading, WarningTone
 from agent_comms.field_codec import (
     MalformedRecord,
     ToolCallId,
@@ -187,10 +188,8 @@ class ExpandedHudGroup:
         return tuple(line for table in tables for line in table)
 
 
-class HudGroup(DeclaredFamily, affix="Group"):
+class HudGroup(ViewHeading, affix="Group"):
     """The declared order and headings shared by heartbeat and native table views."""
-
-    terminal_colour: ClassVar[int]
 
     @classmethod
     def table_lines(cls, tables: Iterable[tuple[str, ...]]) -> tuple[str, ...]:
@@ -200,43 +199,40 @@ class HudGroup(DeclaredFamily, affix="Group"):
     def needs_hand(cls) -> bool:
         return False
 
-    @classmethod
-    def heading(cls) -> str:
-        return cls.declared_name.replace("_", " ").upper()
-
-    @classmethod
-    def count_heading(cls, count: int) -> str:
-        return f"{cls.heading()} · {count}"
-
-    @classmethod
-    def paint(cls, text: str, colour: bool) -> str:
-        return f"\x1b[{cls.terminal_colour}m{text}\x1b[0m" if colour else text
-
-
 class UrgentGroup(ExpandedHudGroup, HudGroup):
-    terminal_colour = 33
+    tone = WarningTone
 
     @classmethod
     def needs_hand(cls) -> bool:
         return True
 
 
-class InProgressGroup(HudGroup):
-    terminal_colour = 32
+class InProgressGroup(ExpandedHudGroup, HudGroup):
+    tone = SuccessTone
 
 
-class ReadyToTestGroup(HudGroup):
-    terminal_colour = 36
+class ReadyToTestGroup(ExpandedHudGroup, HudGroup):
+    tone = AccentTone
 
 
 class IdleGroup(HudGroup):
-    terminal_colour = 90
+    pass
 
 
-class NeedsCommanderAttention:
-    """Urgent siblings share their ping behavior without claiming each other's state."""
+class ReadyForApplication:
+    """Delivered and installed states share their declared presentation capability."""
+
+    hud_group: ClassVar[type[HudGroup]] = ReadyToTestGroup
+
+
+class UrgentPresentation:
+    """A row can be urgent even when another rule already owns its request."""
 
     hud_group: ClassVar[type[HudGroup]] = UrgentGroup
+
+
+class NeedsCommanderAttention(UrgentPresentation):
+    """Urgent siblings share their ping behavior without claiming each other's state."""
 
     @classmethod
     def attention(cls) -> bool:
@@ -518,7 +514,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
         )
 
 
-class ReviewDue(NeedsCommanderAttention, ConditionalState, UnitState):
+class ReviewDue(UrgentPresentation, ConditionalState, UnitState):
     """The frame's review rounds require the commander even while the unit keeps working."""
 
     question = "its review timer is up. what did it actually do?"
@@ -529,7 +525,7 @@ class ReviewDue(NeedsCommanderAttention, ConditionalState, UnitState):
         return bool(source.review_timers)
 
 
-class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+class DeliveredUnclosed(ReadyForApplication, NeedsCommanderAttention, ConditionalState, UnitState):
     question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
@@ -543,12 +539,11 @@ class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
         )
 
 
-class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
+class AwaitingApplicationRun(ReadyForApplication, NeedsCommanderAttention, UnitState):
     """Installed merged orders wait on their holder's application run, so no commander verb
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
 
-    hud_group = ReadyToTestGroup
     question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
     commander_disposes = False

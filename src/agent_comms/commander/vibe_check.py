@@ -28,6 +28,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.messages import Message
 from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_sender import ServiceSender
 from agent_comms.standing_rules import (
@@ -228,8 +229,8 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"vibe check {self.cited} is {age} min old. still ignoring it? -> answer it"
+        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
+                " still ignoring it? -> answer it")
 
 
 class Indictment:

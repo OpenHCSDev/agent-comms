@@ -3,59 +3,51 @@
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, is_dataclass
-from functools import cached_property, singledispatchmethod
+from dataclasses import dataclass
+from functools import cached_property
 from itertools import zip_longest
 from textwrap import wrap
 from typing import ClassVar, Hashable
 
-from agent_comms.declared_family import FamilyMeta
-from agent_comms.field_codec import DisclosureIdentity, FieldCodec, FieldPlan, ViewColumn
+from agent_comms.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.field_codec import FieldCodec, FieldPlan, ValueDescription, ViewColumn
 
 
 @dataclass(frozen=True)
-class DisclosureText:
+class DisclosureText(ValueDescription["DisclosureText"]):
     value: object
 
-    @singledispatchmethod
     @classmethod
     def of(cls, value: object) -> DisclosureText:
-        """Recover foreign shape once, before heartbeat and UI consumers borrow it."""
-        if is_dataclass(value):
-            identity = tuple(
-                plan for plan in FieldCodec.field_plans(type(value))
-                if DisclosureIdentity.read(plan.annotation, False)
-            )
-            if identity:
-                return IdentifiedRecordText(value, identity)
-            return RecordText(value)
+        return FieldCodec.describe(value, cls)
+
+    @classmethod
+    def scalar(cls, value: object) -> DisclosureText:
         return cls(value)
 
-    @of.register(type)
     @classmethod
-    def _class(cls, value: type) -> DisclosureText:
+    def record(cls, value: object) -> DisclosureText:
+        return RecordText(value)
+
+    @classmethod
+    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
+        return IdentifiedRecordText(value, identity)
+
+    @classmethod
+    def class_value(cls, value: type) -> DisclosureText:
         return ClassText(value)
 
-    @of.register(FamilyMeta)
     @classmethod
-    def _family(cls, value: FamilyMeta) -> DisclosureText:
+    def family_value(cls, value: FamilyMeta) -> DisclosureText:
         return FamilyText(value)
 
-    @of.register(Mapping)
     @classmethod
-    def _mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
+    def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
         return MappingText(value)
 
-    @of.register(Sequence)
     @classmethod
-    def _sequence(cls, value: Sequence[object]) -> DisclosureText:
+    def sequence(cls, value: Sequence[object]) -> DisclosureText:
         return SequenceText(value)
-
-    @of.register(str)
-    @of.register(bytes)
-    @classmethod
-    def _scalar(cls, value: str | bytes) -> DisclosureText:
-        return cls(value)
 
     def summary(self, width: int | None = None) -> str:
         text = str(self.value)[:width]
@@ -69,25 +61,58 @@ class DisclosureText:
 
 
 @dataclass(frozen=True)
+class ViewFacts:
+    """Declared displayed values; paint-time fields may exclude publication comparison."""
+
+    record: type
+    columns: tuple[str, ...]
+    rows: tuple[tuple[str, ...], ...]
+
+
+@dataclass(frozen=True)
+class ViewSectionFacts:
+    heading: str
+    tables: tuple[ViewFacts, ...]
+
+
+@dataclass(frozen=True)
 class ViewTable[R]:
-    """One declared column set owns cells, content demand and optional reader-side fitting."""
+    """One declaration owns semantic cells and both wide and stacked presentation."""
 
     record: type[R]
     view: str
     records: tuple[R, ...]
+    show_header: ClassVar[bool] = True
+    row_separator: ClassVar[tuple[str, ...]] = ()
 
     @cached_property
-    def columns(self) -> tuple[ViewColumn, ...]:
+    def declared_columns(self) -> tuple[ViewColumn, ...]:
         return FieldCodec.view_columns(self.record, self.view)
+
+    @property
+    def columns(self) -> tuple[ViewColumn, ...]:
+        return self.declared_columns
 
     @cached_property
     def cells(self) -> tuple[tuple[DisclosureText, ...], ...]:
-        return tuple(tuple(DisclosureText.of(column.current(record)) for column in self.columns)
+        return tuple(tuple(DisclosureText.of(column.current(record)) for column in self.declared_columns)
                      for record in self.records)
 
     @cached_property
     def texts(self) -> tuple[tuple[str, ...], ...]:
         return tuple(tuple(cell.summary() for cell in row) for row in self.cells)
+
+    @cached_property
+    def facts(self) -> ViewFacts:
+        retained = tuple(index for index, column in enumerate(self.declared_columns)
+                         if not column.excluded_in("publication"))
+        return ViewFacts(self.record, tuple(self.declared_columns[index].label for index in retained),
+                         tuple(tuple(row[index].summary() for index in retained) for row in self.cells))
+
+    @cached_property
+    def minimums(self) -> tuple[int, ...]:
+        return tuple(column.minimum_width(row[index] for row in self.texts)
+                     for index, column in enumerate(self.columns))
 
     def widths(self, available: int | None = None) -> tuple[int, ...]:
         weights = tuple(max(len(column.label), max(
@@ -95,22 +120,116 @@ class ViewTable[R]:
         )) for index, column in enumerate(self.columns))
         if available is None:
             return weights
-        minimums = tuple(column.minimum_width(row[index] for row in self.texts)
-                         for index, column in enumerate(self.columns))
-        return ViewColumn.fit_widths(weights, available, minimums)
+        return ViewColumn.fit_widths(weights, available, self.minimums)
+
+    def layout(self, available: int | None) -> ViewTable[R]:
+        """Geometry classification happens once here, never again in the native adapter."""
+        if available is not None and sum(self.minimums) > available:
+            return StackedViewTable(self.record, self.view, self.records)
+        return self
+
+    def header_rows(self) -> tuple[tuple[str, ...], ...]:
+        return (tuple(column.label for column in self.columns),)
 
     def lines(self, width: int | None = None) -> tuple[str, ...]:
-        """A producer supplies no width. Only a reader may ask this view to fit its viewport."""
         available = None if width is None else width - len("  ") * (len(self.columns) - 1)
+        layout = self.layout(available)
+        available = None if width is None else width - len("  ") * (len(layout.columns) - 1)
+        return layout.render_lines(available)
+
+    def render_lines(self, available: int | None) -> tuple[str, ...]:
         widths = self.widths(available)
         lines = []
-        for row in (tuple(column.label for column in self.columns), *self.texts):
+        for row in (*self.header_rows(), *self.texts):
             wrapped = tuple(tuple(part for line in text.splitlines() or ("",)
-                                  for part in wrap(line, cell_width, replace_whitespace=False) or ("",))
+                                  for part in wrap(line, max(1, cell_width), replace_whitespace=False,
+                                                   break_long_words=False, break_on_hyphens=False) or ("",))
                             for text, cell_width in zip(row, widths))
             lines.extend("  ".join(value.ljust(cell_width) for value, cell_width in zip(parts, widths)).rstrip()
                          for parts in zip_longest(*wrapped, fillvalue=""))
+            lines.extend(self.row_separator)
         return tuple(lines)
+
+    def labelled_lines(self, width: int | None = None) -> tuple[str, ...]:
+        """Compact strips use declared labels too, not another list of metric names."""
+        records = tuple(" · ".join(f"{column.label}: {cell}"
+                                    for column, cell in zip(self.columns, row)) for row in self.texts)
+        if width is None:
+            return records
+        return tuple(line for record in records
+                     for line in wrap(record, max(1, width), break_long_words=False, break_on_hyphens=False))
+
+
+class StackedViewTable[R](ViewTable[R]):
+    """One native transport cell retains every declared label/value and original record."""
+
+    show_header = False
+    row_separator = ("",)
+
+    @property
+    def columns(self) -> tuple[ViewColumn, ...]:
+        return self.declared_columns[:1]
+
+    @cached_property
+    def texts(self) -> tuple[tuple[str, ...], ...]:
+        return tuple(("\n".join(f"{column.label}: {cell.summary()}"
+                                 for column, cell in zip(self.declared_columns, row)),)
+                     for row in self.cells)
+
+    def widths(self, available: int | None = None) -> tuple[int, ...]:
+        return (max(1, available),) if available is not None else super().widths()
+
+    def layout(self, available: int | None) -> ViewTable[R]:
+        return self
+
+    def header_rows(self) -> tuple[tuple[str, ...], ...]:
+        return ()
+
+
+class HudTone(DeclaredFamily, affix="Tone"):
+    terminal_colour: ClassVar[int]
+
+    @classmethod
+    def paint(cls, text: str, colour: bool) -> str:
+        return f"\x1b[{cls.terminal_colour}m{text}\x1b[0m" if colour else text
+
+
+class MutedTone(HudTone):
+    terminal_colour = 90
+
+
+class WarningTone(HudTone):
+    terminal_colour = 33
+
+
+class SuccessTone(HudTone):
+    terminal_colour = 32
+
+
+class AccentTone(HudTone):
+    terminal_colour = 36
+
+
+class ErrorTone(HudTone):
+    terminal_colour = 31
+
+
+class ViewHeading(DeclaredFamily, declared_name=None):
+    """Alarm sections and unit groups share paint/headings, not family membership."""
+
+    tone: ClassVar[type[HudTone]] = MutedTone
+
+    @classmethod
+    def heading(cls) -> str:
+        return cls.declared_name.replace("_", " ").upper()
+
+    @classmethod
+    def count_heading(cls, count: int) -> str:
+        return f"{cls.heading()} · {count}"
+
+    @classmethod
+    def paint(cls, text: str, colour: bool) -> str:
+        return cls.tone.paint(text, colour)
 
 
 class RecordText(DisclosureText):

@@ -11,11 +11,11 @@ import os
 import re
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
-from functools import cache, cached_property, lru_cache, partial, reduce
+from functools import cache, cached_property, lru_cache, partial, reduce, singledispatchmethod
 from operator import or_
 from pathlib import Path
 from typing import (
@@ -47,7 +47,7 @@ from pydantic_core import core_schema
 from python_introspect import declared_field_label
 from typing_extensions import TypeAliasType, TypeForm
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, FamilyMeta
 from .json_schema import JsonScalar, JsonSchemaOwner
 from .sealed import Sealed
 
@@ -541,6 +541,14 @@ class ViewColumn(ABC):
     @abstractmethod
     def current(self, record: object) -> object: ...
 
+    @cached_property
+    def view_exclusions(self) -> tuple[ViewExclusion, ...]:
+        return ViewExclusion.on(self.annotation)
+
+    def excluded_in(self, view: str) -> bool:
+        return any(directive.value for directive in self.view_exclusions
+                   if type(directive).declared_name == view)
+
     def minimum_width(self, values: Iterable[str]) -> int:
         """Keep headers and individual words intact while the viewport can afford them."""
         return max(len(self.label), max((len(word) for value in values for word in value.split()), default=0))
@@ -550,9 +558,10 @@ class ViewColumn(ABC):
                    minimums: Iterable[int]) -> tuple[int, ...]:
         """Allocate measured content proportionally after retaining readable words."""
         weights = tuple(max(1, weight) for weight in weights)
+        available = min(available, sum(weights))
         minimums = tuple(minimums)
         if sum(minimums) > available:
-            minimums = (1,) * len(weights)
+            return minimums
         flexible = max(0, available - sum(minimums))
         demands = tuple(max(0, weight - minimum) for weight, minimum in zip(weights, minimums))
         demands = demands if sum(demands) else weights
@@ -625,19 +634,11 @@ class FieldPlan(ViewColumn):
     def view_names(self) -> tuple[ViewName, ...]:
         return ViewName.on(self.annotation)
 
-    @cached_property
-    def view_exclusions(self) -> tuple[ViewExclusion, ...]:
-        return ViewExclusion.on(self.annotation)
-
     def key_in(self, view: str) -> str:
         for directive in self.view_names:
             if type(directive).declared_name == view:
                 return directive.value
         return self.key
-
-    def excluded_in(self, view: str) -> bool:
-        return any(directive.value for directive in self.view_exclusions
-                   if type(directive).declared_name == view)
 
     @cached_property
     def value(self) -> ValueDecoder[object]:
@@ -2247,6 +2248,38 @@ class GitCommitText(HexDigits):
         return 7
 
 
+class ValueDescription[Product](ABC):
+    """A nominal presentation implements the canonical boundary's recovered Python shapes."""
+
+    @classmethod
+    @abstractmethod
+    def scalar(cls, value: object) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def record(cls, value: object) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def class_value(cls, value: type) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def family_value(cls, value: FamilyMeta) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def mapping(cls, value: Mapping[Hashable, object]) -> Product: ...
+
+    @classmethod
+    @abstractmethod
+    def sequence(cls, value: Sequence[object]) -> Product: ...
+
+
 class Projected(ViewColumn, property):
     """A computed field declared by its owner for a named read-only view."""
 
@@ -2294,6 +2327,43 @@ class FieldCodec(MroDispatch, Sealed):
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
+
+    @singledispatchmethod
+    @classmethod
+    def describe[T](cls, value: object, presentation: type[ValueDescription[T]]) -> T:
+        """Recover foreign presentation shape here, never in either renderer."""
+        if is_dataclass(value):
+            identity = tuple(plan for plan in cls.field_plans(type(value))
+                             if DisclosureIdentity.read(plan.annotation, False))
+            return (presentation.identified_record(value, identity) if identity
+                    else presentation.record(value))
+        return presentation.scalar(value)
+
+    @describe.register(type)
+    @classmethod
+    def _describe_class[T](cls, value: type, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.class_value(value)
+
+    @describe.register(FamilyMeta)
+    @classmethod
+    def _describe_family[T](cls, value: FamilyMeta, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.family_value(value)
+
+    @describe.register(Mapping)
+    @classmethod
+    def _describe_mapping[T](cls, value: Mapping[Hashable, object], presentation: type[ValueDescription[T]]) -> T:
+        return presentation.mapping(value)
+
+    @describe.register(Sequence)
+    @classmethod
+    def _describe_sequence[T](cls, value: Sequence[object], presentation: type[ValueDescription[T]]) -> T:
+        return presentation.sequence(value)
+
+    @describe.register(str)
+    @describe.register(bytes)
+    @classmethod
+    def _describe_scalar[T](cls, value: str | bytes, presentation: type[ValueDescription[T]]) -> T:
+        return presentation.scalar(value)
 
     @classmethod
     def decode_external[T](

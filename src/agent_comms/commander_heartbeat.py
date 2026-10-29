@@ -80,7 +80,7 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), thread.name))
                     sections = AlarmGroup.sections((update,), update.open_pings(actions))
                     update.send(comms, now, (
-                        HudUnavailableGroup.heading(), failure.line(),
+                        HudUnavailableGroup.heading(),
                         *CommanderHud.alarm_text(sections, now),
                     ))
 
@@ -99,7 +99,7 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merged)
-                previous = CommanderUpdate.latest(comms, item.thread.incarnation)
+                previous = item.hud.packets
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
@@ -107,6 +107,8 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
+                # Observations may have waited on forge/provider reads. Acknowledgements
+                # committed during those reads belong to this publication, not the old capture.
                 actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), item.thread.name))
                 for delivery in CommanderUpdate.derive(
                     item.thread.incarnation,
@@ -115,8 +117,7 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     now=now, history=actions,
                     undisposed=tuple(
                         ping for packet in previous
-                        for ping in packet.undisposed(comms, item.thread.name,
-                                                      now - AwaitingCommander.seconds)),
+                        for ping in packet.undisposed(actions, now - AwaitingCommander.seconds)),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 ):

@@ -87,6 +87,9 @@ class EventTime(DeclaredFamily, affix="EventTime"):
     def clock(self) -> str:
         return "-"
 
+    def stamp(self) -> str:
+        return "-"
+
     def age(self, now: float) -> str:
         return "unrecorded"
 
@@ -144,8 +147,18 @@ class RecordedEventTime(EventTime):
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
 
+    def stamp(self) -> str:
+        """A stable dated fact, unlike paint-time elapsed wording."""
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.at))
+
     def age(self, now: float) -> str:
-        return f"{max(0, int(now - self.at))} s ago"
+        minutes, seconds = divmod(max(0, int(now - self.at)), 60)
+        hours, minutes = divmod(minutes, 60)
+        days, hours = divmod(hours, 24)
+        parts = (f"{amount}{unit}" for amount, unit in (
+            (days, "d"), (hours, "h"), (minutes, "m"), (seconds, "s"),
+        ) if amount)
+        return f"{''.join(parts) or '0s'} ago"
 
     def aged_line(self, label: str, now: float) -> tuple[str, ...]:
         return (f"{label} {self.clock()} ({self.age(now)})",)

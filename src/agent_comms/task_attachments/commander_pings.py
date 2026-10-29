@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
@@ -18,7 +18,8 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
+from agent_comms.field_codec import FieldCodec, OrderId, PublicationExclude
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
@@ -30,7 +31,7 @@ from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_sources import TaskAttachment
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.unit_state import AwaitingCommander, HudGroup, UnitState
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
@@ -108,7 +109,10 @@ class Ping(DeclaredFamily, affix="Ping"):
         return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds)
 
     def render(self, now: float) -> str:
-        return self.board_entry().aged(now)
+        return f"{self.text} ({self.since.age(now)})"
+
+    def alarm_pings(self) -> tuple[Ping, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)
@@ -131,6 +135,9 @@ class RulePing(Ping):
     @property
     def commander_disposes(self) -> bool:
         return self.rule.disposes_subjects(self.subjects)
+
+    def alarm_pings(self) -> tuple[Ping, ...]:
+        return self.rule.alarm_pings(self)
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
@@ -161,6 +168,10 @@ class UnitPing(Ping):
     @property
     def commander_disposes(self) -> bool:
         return self.state.disposes_subjects(self.subjects)
+
+    def alarm_pings(self) -> tuple[Ping, ...]:
+        """The unit's row already carries this observation and its next action."""
+        return ()
 
     @classmethod
     def capture(cls, state: UnitState) -> Self:
@@ -207,7 +218,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         """The existing HUD owns presentation; this packet owns publication and history."""
         return "\n".join((
             *hud, "",
-            "Expand in Toad: F2 or /commander · original orders, story, commits, activity and every alert",
+            "Full evidence: comms_hud board/open_pings, or Toad /commander original details",
         ))
 
     def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
@@ -227,10 +238,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """The packet's wake decision is the same on every harness."""
 
-    def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+    def undisposed(self, history: CommanderHistory, cut: float) -> tuple[Ping, ...]:
+        """Read every subject through this pass's one captured actor/history reader."""
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
@@ -254,8 +263,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     @classmethod
     def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
         """The newest packet's lines still undisposed past ``cut``."""
+        history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot(), commander))
         return tuple(ping for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for ping in latest.undisposed(comms, commander, cut))
+                     for ping in latest.undisposed(history, cut))
 
     @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
@@ -349,8 +359,8 @@ class CommanderDecisions(CommanderUpdate):
         return self.decisions
 
 
-class AlarmGroup(HudGroup, affix="Alarms"):
-    """Alarm section membership and headings share the HUD family's declaration behavior."""
+class AlarmGroup(ViewHeading, affix="Alarms"):
+    """Alarm membership shares heading behavior, not the unit-group registry."""
 
     @classmethod
     @abstractmethod
@@ -358,38 +368,70 @@ class AlarmGroup(HudGroup, affix="Alarms"):
                 opened: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
 
     @classmethod
+    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        return pings
+
+    @classmethod
     def sections(cls, packets: tuple[CommanderUpdate, ...],
                  opened: tuple[Ping, ...]) -> tuple[AlarmSection, ...]:
         return tuple(AlarmSection(group, members)
                      for group in cls.members_with(cls)
-                     for members in (group.members(packets, opened),)
-                     if members or group.show_empty)
+                     for members in (group.members(packets, opened),) if members)
 
 
 class NewAlarms(AlarmGroup):
-    terminal_colour = 36
+    tone = AccentTone
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
                 opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return tuple(ping for packet in packets for ping in packet.new_pings())
+        return tuple(line for packet in packets for ping in packet.new_pings()
+                     for line in ping.alarm_pings())
 
 
-class StillOpenAlarms(AlarmGroup):
-    terminal_colour = 33
+class CompactAlarms:
+    """Persistent sections keep actionable representatives and explicit per-kind overflow."""
+
+    maximum_per_kind: ClassVar[int] = 1
+
+    @classmethod
+    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        return pings[:cls.maximum_per_kind]
+
+
+class StillOpenAlarms(CompactAlarms, AlarmGroup):
+    tone = WarningTone
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
                 opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
         new = frozenset(NewAlarms.members(packets, opened))
-        return tuple(ping for ping in opened if ping not in new)
+        return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new)
+
+
+class WatchingAlarms(CompactAlarms, AlarmGroup):
+    """A still-failing source remains visible, but it has no commander disposal to wake for."""
+
+    @classmethod
+    def members(cls, packets: tuple[CommanderUpdate, ...],
+                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        new = frozenset(NewAlarms.members(packets, opened))
+        return tuple(line for packet in packets for ping in packet.handled
+                     if not ping.commander_disposes for line in ping.alarm_pings() if line not in new)
 
 
 @dataclass(frozen=True)
-class AlarmSummary:
+class AlarmLine:
     kind: type[DeclaredFamily]
-    count: int
-    oldest_age: str
+    line: str
+    age: Annotated[str, PublicationExclude()]
+
+
+@dataclass(frozen=True)
+class AlarmOverflow:
+    kind: type[DeclaredFamily]
+    more: int
+    oldest_age: Annotated[str, PublicationExclude()]
 
 
 @dataclass(frozen=True)
@@ -400,10 +442,22 @@ class AlarmSection:
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
 
-    def summaries(self, now: float) -> tuple[AlarmSummary, ...]:
+    def tables(self, now: float) -> tuple[ViewTable[AlarmLine] | ViewTable[AlarmOverflow], ...]:
         grouped: dict[type[DeclaredFamily], list[Ping]] = {}
         for ping in self.pings:
             grouped.setdefault(ping.alarm_kind, []).append(ping)
-        return tuple(AlarmSummary(kind, len(pings),
-                                  min(pings, key=lambda ping: ping.since.chronology()).since.age(now))
-                     for kind, pings in grouped.items())
+        lines: list[AlarmLine] = []
+        overflow: list[AlarmOverflow] = []
+        for kind, members in grouped.items():
+            shown = self.group.visible(tuple(members))
+            lines.extend(AlarmLine(kind, ping.text, ping.since.age(now)) for ping in shown)
+            rest = members[len(shown):]
+            if rest:
+                overflow.append(AlarmOverflow(kind, len(rest), min(
+                    rest, key=lambda ping: ping.since.chronology()).since.age(now)))
+        tables: list[ViewTable[AlarmLine] | ViewTable[AlarmOverflow]] = [
+            ViewTable(AlarmLine, "hud", tuple(lines)),
+        ]
+        if overflow:
+            tables.append(ViewTable(AlarmOverflow, "hud", tuple(overflow)))
+        return tuple(tables)

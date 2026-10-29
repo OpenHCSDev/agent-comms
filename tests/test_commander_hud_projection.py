@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from agent_comms.commander.vibe_check import OverloadDegradation
-from agent_comms.commander_hud import CommanderHud, CommanderOrder, CommanderUnit, CodexUsage, UnreadableUsage
+from agent_comms.commander_hud import CommanderHud, CommanderOrder, CommanderUnit, CodexUsage, HudRecord, UnreadableUsage
 from agent_comms.disclosure_text import DisclosureText
 from agent_comms.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
@@ -13,7 +13,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OpenPrProgress
 from agent_comms.ui_model.unit_state import (
     AwaitingApplicationRun, Idle, IdleGroup, InProgressGroup, Moving, NoPendingClock,
-    ReadyToTestGroup, Stuck, UrgentGroup,
+    PendingClock, ReadyToTestGroup, Stuck, UrgentGroup,
 )
 
 
@@ -41,7 +41,7 @@ def example_hud() -> CommanderHud:
         ), (), OverloadDegradation(3, 1, 2), (),
         CodexUsage(UnreadableUsage(reason="not requested in source example")),
         (CommanderDecisions(commander, (old, new), (new,), (old,)),),
-        heartbeat=RecordedEventTime(990),
+        heartbeat=RecordedEventTime(990), open_pings=(),
     )
 
 
@@ -69,19 +69,40 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
         "blocked", "screen", "run-next", "idle",
     )
     plain = hud.hud_text(1000, width=120)
-    assert plain[0] == hud.status_strip(1000)
-    assert "LOAD 7 · REVIEW UP 1 · UNJUDGED 2 · FORKS 0" in plain[0]
-    assert plain[0].endswith("heartbeat 10 s ago")
+    status = tuple(hud.status_strip(1000, width=120).splitlines())
+    assert plain[:len(status)] == status
     assert "\x1b" not in "\n".join(plain)
     headings = [section.heading() for section in groups]
     assert [plain.index(heading) for heading in headings] == sorted(plain.index(heading) for heading in headings)
     assert "CommanderUnit" not in "\n".join(plain)
     assert "\x1b[" in "\n".join(hud.hud_text(1000, width=120, colour=True))
-    section, = hud.alarms
-    summary, = section.summaries(1000)
-    assert summary.kind is ServicePassFailing and summary.count == 1
+    assert sum(len(section.pings) for section in hud.alarms) == len(hud.packets[0].handled)
+    assert all(ping.text in "\n".join(hud.alarm_text(hud.alarms, 1000))
+               for ping in hud.packets[0].handled)
     assert hud.board == ()
-    assert hud.alarm_detail(hud.alarms, 1000) == (
-        section.heading(), hud.packets[0].new_pings()[0].render(1000),
-    )
+    assert all(ping.render(1000) in hud.alarm_detail(hud.alarms, 1000)
+               for ping in hud.packets[0].handled)
+    for section in groups:
+        for table in section.tables:
+            narrow = "\n".join(table.lines(60))
+            assert all(unit.unit.name in narrow for unit in table.records)
     assert tuple(unit.unit for unit in groups[0].records) == (hud.units[1].unit,)
+
+
+def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:
+    hud = example_hud()
+    unit = replace(hud.units[0], clock=PendingClock(1, 2))
+    hud = replace(hud, units=(unit, *hud.units[1:]))
+    later = replace(hud, units=(replace(unit, clock=PendingClock(1, 3)), *hud.units[1:]),
+                    heartbeat=RecordedEventTime(999))
+    assert hud.display_facts == later.display_facts
+    assert hud.status_table(1000).facts == hud.status_table(1060).facts
+    assert hud.display_facts != replace(hud, usage=CodexUsage(
+        UnreadableUsage(reason="a different visible usage observation"))).display_facts
+    assert hud.display_facts != replace(hud, units=(replace(unit, state=Stuck), *hud.units[1:])).display_facts
+
+
+def test_every_native_record_producer_declares_entity_identity() -> None:
+    for declaration in HudRecord.__subclasses__():
+        assert any(DisclosureIdentity.read(plan.annotation, False)
+                   for plan in FieldCodec.field_plans(declaration)), declaration

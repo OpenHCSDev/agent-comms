@@ -518,8 +518,8 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
-    assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
-    assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")
+    assert found[9].endswith(" -> land or supersede it")
+    assert found[7].endswith(" -> merge main into it")
 
 
 def working_on(comms, source, tmp_path, name, branch):
