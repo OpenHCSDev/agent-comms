@@ -15,6 +15,7 @@ from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessage
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
+from .turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -200,6 +201,7 @@ class SubagentCaller(ThreadCaller):
             return
         comms.registry.require(self.name).execution.require_subagent()
         self.leaving(comms)
+        comms.agents.enter_phase(self.name, IdlePhase())
         comms.registry.unregister(self.name)
         comms.threads.archive(self.name)
 
