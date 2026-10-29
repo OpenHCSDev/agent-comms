@@ -418,9 +418,9 @@ class LostTools(UndatedStandingRule):
 @dataclass(frozen=True)
 class HeldBranch:
     """One order still writing source, joined to its own allocated checkout. Only the branch
-    difference reads that worktree; its unit may retire it mid-frame, so every later Git read
-    goes through the order's repository, which owns the branch refs and remote heads and
-    outlives the worktree."""
+    difference and publication are captured from that worktree before observation; its unit
+    may retire it mid-frame. Later PR comparisons use the order's repository, which outlives
+    the worktree, never its possibly different local branch/upstream configuration."""
 
     todo: Todo
     holder: ThreadIncarnation
@@ -458,14 +458,18 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
     @classmethod
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
                 pulls: ProgressRead) -> None:
+        storage = comms.registry.storage_rule
         for held in holds.live:
             todo = held.todo
             directory = todo.order.checked().check.directory
             try:
                 reader = pulls.checkout(directory).branches
-                reader.prepare_upstreams()
                 for pull in pulls.open_for(todo):
                     pull.prepare_comparison(reader)
+                path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
+                if path.is_dir():
+                    pulls.checkout(path).branches.prepare_upstreams()
+                    pulls.branch_difference(path)
             except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
                 pulls.unread(todo, error)
@@ -474,19 +478,20 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         storage = comms.registry.storage_rule
-        snapshot = comms.registry.snapshot()
+        captured = frame.pulls.captured_branch_paths
         branches = []
         for state in observed:
             merges = state.source.merges()
-            writing = tuple(todo for todo in state.source.todos
-                            if todo.order.writes_source(todo, merges))
+            writing = frozenset(todo.id for todo in state.source.todos
+                                if todo.order.writes_source(todo, merges))
             for unit in state.readable_units():
-                for thread in snapshot.threads_for(unit.require_recorded()):
-                    for todo in writing:
-                        path = storage.order_checkout(storage.roots_of(thread), todo.id)
-                        if path.is_dir():
+                for held in frame.live:
+                    todo = held.todo
+                    if held.holder.incarnation == unit and todo.id in writing:
+                        path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
+                        if path.resolve() in captured:
                             branches.append(HeldBranch(
-                                todo, unit, frame.pulls.branch_difference(path), path,
+                                todo, unit, frame.pulls.require_branch_difference(path), path,
                                 frame.pulls.checkout(todo.order.checked().check.directory),
                                 state.source,
                             ))

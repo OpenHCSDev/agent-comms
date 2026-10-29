@@ -442,7 +442,7 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
 
     def empty(self) -> CommanderHud:
-        raise ToolRefusedError(f"heartbeat frame missing: {self.path}")
+        raise ToolRefusedError(f"Tristan frame missing: {self.path}")
 
     def changed(self, hud: CommanderHud) -> bool:
         """Only the disposable frame is compared; a prior schema cannot block its replacement."""
@@ -459,11 +459,11 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         completed = ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner)
         if not completed.since(time.time() - 3 * Coordination.watch_period):
             raise ToolRefusedError(
-                f"heartbeat frame stale for {owner.name} since {completed.clock()}"
+                f"Tristan stale for {owner.name} since {completed.clock()}: he has gone silent"
             )
         hud = cls.at(comms.root, owner).read()
         if hud.commander != owner:
-            raise ToolRefusedError(f"heartbeat frame belongs to another incarnation of {owner.name}")
+            raise ToolRefusedError(f"Tristan frame belongs to another incarnation of {owner.name}")
         return replace(hud, heartbeat=completed)
 
     @classmethod

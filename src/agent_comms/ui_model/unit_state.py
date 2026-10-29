@@ -162,16 +162,13 @@ class UnitObservation:
         )
 
     def require_read(self) -> None:
-        for progress in self.pulls.progress(self.todos, self.comms.registry).values():
+        for progress in self.frame.pulls.progress(self.todos, self.comms.registry).values():
             progress.require_read()
         for todo in self.todos:
-            reader = self.pulls.checkout(todo.order.checked().check.directory).branches
-            reader.require_prepared()
-            for pull in self.pulls.open_for(todo):
+            reader = self.frame.pulls.checkout(todo.order.checked().check.directory).branches
+            for pull in self.frame.pulls.open_for(todo):
                 pull.require_comparison(reader)
         if self.todos:
-            for path in self.thread.home_checkouts:
-                self.frame.pulls.branch_difference(path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 self.frame.pulls.checkout(path).require_read()
         for source in self.sources:
