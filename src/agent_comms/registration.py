@@ -20,7 +20,7 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
-from .thread_execution import CommanderForkExecution, ExternalThreadExecution
+from .thread_execution import ExternalThreadExecution, SubagentExecution
 from .thread_identity import GenerationCounter, UserThreadRole
 from .thread_status import (
     ConnectedThreadStatus,
@@ -28,7 +28,7 @@ from .thread_status import (
     ProcessThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent
+from .thread_text import ForkedParent, SubagentRole
 from .repo import Checkout
 from .threads import Thread
 
@@ -133,24 +133,40 @@ class Registration:
                 )
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
-    def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
-        """Declare or resume one child and its own goal under the registry's lock."""
+    def register_child(
+        self, name: str, parent_name: str, execution: type[SubagentExecution], goals: Goals,
+    ) -> Thread:
+        """Declare or resume one named child of `parent_name` under the registry's lock."""
+        with self.store.editing() as edit:
+            return self._child_in(edit, name, edit.document.require(parent_name), execution, goals)
+
+    def claim_slot(self, parent_name: str, role: SubagentRole, goals: Goals) -> Thread:
+        """Seat a subagent in the first vacant slot of its role under `parent_name`; a slot it
+        takes over keeps its bus history, so the new occupant reads what the last one did."""
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
-            if edit.document.canonical_name(name) != name:
-                raise RelationViolationError(f"Commander fork {name!r} is an alias.")
-            if edit.document.taken(name):
-                existing = edit.document.require(name)
-                existing.execution.require_commander_fork()
-                if not existing.parent.named(parent.name):
-                    raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
-                return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
-            child = parent.commanded_child(Thread(name, frozenset(), parent.worktree,
-                parent=ForkedParent(parent.name), model=parent.model,
-                thinking_level=parent.thinking_level, service_tier=parent.service_tier,
-                execution=CommanderForkExecution))
-            return self._declare_in(edit, child, _DEFAULT_PRESENCE,
-                prepare_goal=lambda prepared: goals.fork_goal(parent, prepared))
+            name = next(slot for slot in role.slot_names(parent.name)
+                        if not edit.document.taken(slot) or edit.document.status(slot).vacant)
+            return self._child_in(edit, name, parent, SubagentExecution, goals)
+
+    def _child_in(
+        self, edit: RegistryEdit, name: str, parent: Thread,
+        execution: type[SubagentExecution], goals: Goals,
+    ) -> Thread:
+        if edit.document.canonical_name(name) != name:
+            raise RelationViolationError(f"Child thread {name!r} is an alias.")
+        if edit.document.taken(name):
+            existing = edit.document.require(name)
+            execution.require_resumes(existing)
+            if not existing.parent.named(parent.name):
+                raise RelationViolationError(f"Thread {name!r} is not a child of {parent.name!r}.")
+            return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
+        child = execution.child_of(parent, Thread(name, frozenset(), parent.worktree,
+            parent=ForkedParent(parent.name), model=parent.model,
+            thinking_level=parent.thinking_level, service_tier=parent.service_tier,
+            execution=execution))
+        return self._declare_in(edit, child, _DEFAULT_PRESENCE,
+            prepare_goal=execution.child_goal(goals, parent))
 
     def register_commanded_unit(
         self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,

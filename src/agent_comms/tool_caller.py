@@ -12,6 +12,7 @@ from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
+from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
 
@@ -185,11 +186,23 @@ class ThreadCaller(ToolCaller):
 
 
 @dataclass(frozen=True)
-class CommanderForkCaller(ThreadCaller):
+class SubagentCaller(ThreadCaller):
+    """A child working inside its parent session's turn."""
+
+    def retire(self, comms: Comms) -> None:
+        """A child stops by archiving its thread; the next declaration of the same name
+        redeclares onto it and keeps its history."""
+        comms.registry.require(self.name).execution.require_subagent()
+        comms.registry.unregister(self.name)
+        comms.threads.archive(self.name)
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_commander_child(self.name, commander, comms.goals)
+        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
@@ -202,11 +215,9 @@ class CommanderForkCaller(ThreadCaller):
 
     def retire(self, comms: Comms) -> None:
         """A fork stops only after the bus holds something it sent, since every commander verb
-        that records announces it there; its thread is then archived, and a resumed fork of
-        the same name redeclares onto it."""
+        that records announces it there."""
         if self.name not in comms.bus.bus.activity_clocks().sent:
             raise ToolRefusedError(
                 f"{self.name} recorded nothing in Core: post what it found with"
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
-        comms.registry.unregister(self.name)
-        comms.threads.archive(self.name)
+        super().retire(comms)

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
@@ -13,6 +15,8 @@ from .thread_presentation import UnavailableThreadOwnerBinding
 from .thread_status import ThreadStatus
 
 if TYPE_CHECKING:
+    from .goals import GoalDeclaration
+    from .goal_management import Goals
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .threads import Thread
@@ -89,6 +93,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     @classmethod
     def require_commander_fork(cls) -> None:
         raise RelationViolationError('This thread is not a declared commander fork.')
+
+    @classmethod
+    def require_subagent(cls) -> None:
+        raise RelationViolationError('This thread is not a declared subagent.')
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
@@ -185,27 +193,61 @@ class ExternalThreadExecution(ThreadExecution):
         return status.external_presentation(thread.process_identity, ordinary)
 
 
-class CommanderForkExecution(ExternalThreadExecution):
-    """A commander child uses its CLI inbox, not a native process or bridge."""
+class SubagentExecution(ExternalThreadExecution):
+    """A child working inside its parent session's turn: it reads its CLI inbox, holds no
+    order and has no unit card of its own, and starts with its parent's audience."""
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
         return requested
 
     @classmethod
-    def require_commander_fork(cls) -> None:
+    def require_subagent(cls) -> None:
         pass
 
     @classmethod
     def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A fork works inside its commander's turn and never holds an order."""
+        """A child works inside its parent's turn and never holds an order."""
         return ()
 
     @classmethod
     def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A fork acts inside its commander's turn, so the commander's own card covers it."""
+        """A child acts inside its parent's turn, so the parent's own card covers it."""
         return ()
+
+    @classmethod
+    def child_of(cls, parent: Thread, child: Thread) -> Thread:
+        return replace(child, tags=parent.tags)
+
+    @classmethod
+    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+        return lambda prepared: prepared.goal
+
+    @classmethod
+    def require_resumes(cls, existing: Thread) -> None:
+        """A redeclared child keeps the execution it was declared with."""
+        existing.execution.require_subagent()
+
+
+class CommanderForkExecution(SubagentExecution):
+    """A commander's child: only a commander declares one, and it starts on its own goal."""
+
+    @classmethod
+    def require_commander_fork(cls) -> None:
+        pass
 
     @classmethod
     def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
         return (thread,)
+
+    @classmethod
+    def child_of(cls, parent: Thread, child: Thread) -> Thread:
+        return parent.commanded_child(child)
+
+    @classmethod
+    def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
+        return lambda prepared: goals.fork_goal(parent, prepared)
+
+    @classmethod
+    def require_resumes(cls, existing: Thread) -> None:
+        existing.execution.require_commander_fork()
