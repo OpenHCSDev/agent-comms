@@ -343,7 +343,7 @@ class NativeRuntimeInput(
             db,
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
-            session_entry_id=TextNativeColumn(context.session_entry_id),
+            session_entry_id=TextNativeColumn(FieldCodec.encode(context.session_entry_id)),
             session_entry_start=RecordedNativePosition(context.session_entry_start),
             request_generation=NumberNativeColumn(context.request_generation),
             llm_context_digest=TextNativeColumn(context.llm_context_digest),
