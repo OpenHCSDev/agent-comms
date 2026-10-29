@@ -143,18 +143,28 @@ class DisplayIdentity:
 
     viewer: ThreadIncarnation
     history_revision: FileObservation
+    bus_identity: RecordedBusIdentity
+
+    @property
+    def notification_identity(self) -> DisplayIdentity:
+        """The captured viewer/source cut, without an unrelated channel/DM payload."""
+        return DisplayIdentity(viewer=self.viewer, history_revision=self.history_revision,
+                               bus_identity=self.bus_identity)
+
+    def outcome_viewer(self) -> OutcomeViewer:
+        from .presentation import DisplayOutcomes
+
+        return DisplayOutcomes(self.viewer, self.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayIdentity(DisplayIdentity):
-    bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
-    bus_identity: RecordedBusIdentity
     project_path: Annotated[Path, PathText]
     requested_peer: str
     peer: ThreadIncarnation
@@ -171,6 +181,10 @@ class SelectedDisplay(ABC):
     @property
     @abstractmethod
     def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
+
+    @property
+    def notification_identity(self) -> DisplayIdentity | NoDisplaySelection:
+        return self.identity.notification_identity
 
     @abstractmethod
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None: ...
@@ -193,6 +207,15 @@ class NoDisplaySelection(SelectedDisplay):
     @property
     def identity(self):
         return self
+
+    @property
+    def notification_identity(self) -> NoDisplaySelection:
+        return self
+
+    def outcome_viewer(self) -> OutcomeViewer:
+        from .presentation import AllOutcomes
+
+        return AllOutcomes()
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         raise DMPaintedBoundChanged()
@@ -248,7 +271,8 @@ class HistoricalSelection(SelectedDisplay):
     @property
     def identity(self):
         return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
-                               history_revision=self.history_revision)
+                               history_revision=self.history_revision,
+                               bus_identity=self.displayed.displayed.bus_identity)
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
@@ -306,7 +330,7 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageKind
-    from .presentation import BusPresentation
+    from .presentation import BusPresentation, OutcomeViewer
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot, UserThreadLookup
