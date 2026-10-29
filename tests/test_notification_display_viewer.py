@@ -9,10 +9,13 @@ from agent_comms.bus import Bus
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.comms import Comms, wire
 from agent_comms.historical_views import HistorySource
+from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
+from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
-from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
-from agent_comms.read_basis import HistoricalDisplay, HistoricalSelection
+from agent_comms.presentation import AllOutcomes, MessageNotification, OutcomeViewer, OwnerOutcomes
+from agent_comms.registration import Registration
+from agent_comms.read_basis import HistoricalDisplay, HistoricalSelection, NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
@@ -38,7 +41,11 @@ class ArchivedReaders:
     def paint(self, name: str) -> None:
         self.selection(name).displayed.acknowledge(self.live.bus.history, self.live.registry)
 
-    def notifications(self, viewer):
+    def live_page(self, name: str) -> MessagePage:
+        """Read only this physical bus, not the integrated archive's nonempty page."""
+        return self.live.views.presentation.channel_page('#team', viewer=NamedViewer(name))
+
+    def notifications(self, viewer: OutcomeViewer) -> NotificationWindow:
         with self.live.bus.history.read_sources() as sources:
             return self.source.notification_references(sources, (self.message.reference,), viewer)
 
@@ -48,7 +55,7 @@ class ArchivedReaders:
 
 
 @pytest.fixture
-def archived_readers(tmp_path, *, thread_registration):
+def archived_readers(tmp_path: Path, *, thread_registration: Registration) -> ArchivedReaders:
     old = prepare_native_comms(wire(tmp_path / 'original'))
     live = prepare_native_comms(wire(tmp_path / 'current'))
     for comms in (old, live):
@@ -63,7 +70,9 @@ def archived_readers(tmp_path, *, thread_registration):
 
 
 @pytest.mark.parametrize('painted', (('self',), ('other',), ('self', 'other')))
-def test_display_subtraction_preserves_raw_other_reads_and_real_audience(archived_readers, painted):
+def test_display_subtraction_preserves_raw_other_reads_and_real_audience(
+    archived_readers: ArchivedReaders, painted: tuple[str, ...],
+) -> None:
     fixture = archived_readers
     for name in painted:
         fixture.paint(name)
@@ -94,13 +103,12 @@ def test_display_subtraction_preserves_raw_other_reads_and_real_audience(archive
     ) for mark in shown.read_marks)
 
 
-def test_archive_display_requires_its_own_bus_even_for_the_same_viewer(archived_readers):
+def test_archive_display_requires_its_own_bus_even_for_the_same_viewer(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     fixture.paint('self')
     captured = fixture.selection('self').notification_identity
-    live_page = fixture.live.views.channel_display_page(
-        '#team', viewer=fixture.live.views.display_viewer(fixture.live.registry.require('self').worktree),
-    )
+    live_page = fixture.live_page('self')
+    assert not live_page.messages
     foreign = live_page.selection.notification_identity
     assert foreign.viewer == captured.viewer
     assert not foreign.bus_identity.matches(captured.bus_identity)
@@ -109,7 +117,7 @@ def test_archive_display_requires_its_own_bus_even_for_the_same_viewer(archived_
     assert fixture.notifications(foreign.outcome_viewer()).outcomes == raw.outcomes
 
 
-def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(archived_readers):
+def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     fixture.paint('self')
     captured = fixture.selection('self').notification_identity
@@ -133,7 +141,7 @@ def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(a
     assert fixture.reads.read() == raw
 
 
-def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms, tmp_path):
+def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms: Comms, tmp_path: Path) -> None:
     worktree = Checkout(tmp_path)
     human = comms.messaging.user_identity(worktree)
     comms.registry.declare(Thread('sender', frozenset(), worktree))

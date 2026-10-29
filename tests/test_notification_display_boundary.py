@@ -8,10 +8,10 @@ from dataclasses import replace
 from agent_comms.notification_reads import RecordedNotificationRead
 from agent_comms.presentation import AllOutcomes
 from agent_comms.ui_model.observation import ReadNotifications
-from test_notification_display_viewer import archived_readers  # noqa: F401
+from test_notification_display_viewer import ArchivedReaders, archived_readers  # noqa: F401
 
 
-def test_notification_request_retains_viewer_source_and_full_operator_access(archived_readers):
+def test_notification_request_retains_viewer_source_and_full_operator_access(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     fixture.paint('self')
     fixture.paint('other')
@@ -34,14 +34,18 @@ def test_notification_request_retains_viewer_source_and_full_operator_access(arc
             for reader in row.displayed_to} == {'self'}
     # Anonymous/operator operations still expose the raw human evidence; display is UI envelope data.
     assert ReadNotifications(str(fixture.live.root), operation).read(fixture.live).outcomes == raw.outcomes
+    fixture.live.registry.rename('self', 'renamed')
+    renamed = fixture.selection('renamed').notification_identity
+    # A rename retains the incarnation and must not manufacture a different view/cache identity.
+    assert request == replace(request, display=renamed)
+    assert replace(request, display=renamed).read(fixture.live).outcomes == scoped.outcomes
 
 
-def test_same_viewer_in_a_foreign_source_is_a_distinct_notification_request(archived_readers):
+def test_same_viewer_in_a_foreign_source_is_a_distinct_notification_request(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     identity = fixture.selection('self').notification_identity
-    live_page = fixture.live.views.channel_display_page(
-        '#team', viewer=fixture.live.views.display_viewer(fixture.live.registry.require('self').worktree),
-    )
+    live_page = fixture.live_page('self')
+    assert not live_page.messages
     live_identity = live_page.selection.notification_identity
     assert identity.viewer == live_identity.viewer
     assert not identity.bus_identity.matches(live_identity.bus_identity)
