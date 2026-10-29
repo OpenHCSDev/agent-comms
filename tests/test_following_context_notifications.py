@@ -258,7 +258,8 @@ async def test_cancelled_input_or_released_lease_cannot_acquire_context(tmp_path
         live = following_input(claim, generation=3)
         live.start()
         proof = await live.verify()
-        claim.selected.comms.owners.release(claim.owner.thread.name)
+        lease = live.lease
+        assert claim.selected.comms.registry.release_turn(lease)[0]
         with pytest.raises(RelationViolationError):
             live.acknowledge(proof)
         assert all(not row.model_contexts() for row in live.dispositions.read(live.keys).rows.values())

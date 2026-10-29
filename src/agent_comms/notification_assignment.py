@@ -8,6 +8,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from itertools import batched
 from dataclasses import dataclass, replace
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, NoReturn
 
 from .audience_manifest import FrozenRecipient
@@ -21,7 +22,6 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
 from .message_reference import MessageReference
 from .notification_progress import (
-    AnsweredProgress,
     AssignmentProgress,
     QueuedProgress,
     SentProgress,
@@ -126,12 +126,7 @@ class AnsweredResponse(AssignmentResponse):
         )
 
     def answered(self, notification: MessageNotification) -> MessageNotification:
-        return replace(
-            notification,
-            state=AnsweredProgress(notification.state),
-            answer=self.reference,
-            answered_at_ms=self.received_at_ms,
-        )
+        return notification.state.answered_notification(notification, self.reference, self.received_at_ms)
 
 
 @dataclass(frozen=True)
@@ -266,32 +261,22 @@ class NotificationAssignment(NotificationSource):
     def capture_responses(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
         """Capture bounded independent replies after releasing the coordinator snapshot.
 
-        Retain them on the existing evidence so an open view notices a reply even
-        when neither the claim nor its context proof changed.
+        A reply belongs to its original/frozen author, not to a claim lifecycle or
+        model-context proof. The bus returns only the first reply per selected key,
+        in sequence order, including recipients with no claim at all.
         """
-        eligible = tuple(assignment for assignment, _activity in read.rows
-                         if assignment.lifecycle.records_conversation_response)
-        if not eligible:
+        keys = frozenset(read.selection.keys)
+        if not keys:
             return read
-        originals = {source.message.reference: source for source in read.sources}
-        captured = Bus(Bus.path_in(root)).recipient_replies(tuple(
-            (assignment.recipient_lookup, assignment.source) for assignment in eligible))
-        replies: dict[MessageReference, list[Delivered]] = {}
+        captured = Bus(Bus.path_in(root)).recipient_replies(read.selection.keys)
+        responses: dict[tuple[ThreadLookup, MessageReference], AssignmentResponse] = {}
         for record in captured:
             for reply in record.deliveries():
                 for answered in reply.message.answers:
-                    replies.setdefault(answered, []).append(reply)
-        resolved = []
-        for assignment, activity in read.rows:
-            if assignment.lifecycle.records_conversation_response:
-                response = assignment.lifecycle.recorded_response(
-                    originals[assignment.source], replies.get(assignment.source, ()),
-                    assignment.recipient_lookup,
-                )
-                if response is not None:
-                    activity = replace(activity, response=activity.response.recorded(response))
-            resolved.append((assignment, activity))
-        return replace(read, rows=tuple(resolved))
+                    key = (reply.sender_lookup, answered)
+                    if key in keys:
+                        responses[key] = responses.get(key, UnansweredResponse()).recorded(reply.message)
+        return replace(read, responses=MappingProxyType(responses))
 
     @classmethod
     def capture(

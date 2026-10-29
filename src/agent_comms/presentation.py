@@ -374,6 +374,7 @@ class MessageNotification:
                     recipient.recipient_lookup, notification.state)
                 notification = replace(notification, state=state,
                                        changed=notification.changed or state.consumed)
+                notification = evidence[source.message.reference].answered(recipient.recipient_lookup, notification)
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
                 )
