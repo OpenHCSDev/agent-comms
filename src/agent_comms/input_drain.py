@@ -52,7 +52,8 @@ from .input_attempt import (
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .lifecycle_capability import Executing
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
+from .maintenance_barrier import MaintenanceIngress
+from .locked_store import GoalWakeFile
 from .native_input_owner import RegistryOwner
 from .proven_source_coverage import SourcePrefix
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
@@ -209,6 +210,7 @@ class InputObservation(ABC):
         sources = (
             *(FileSource(path) for path in (
                 *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
+                *GoalWakeFile.watched_paths_in(self.comms.root),
             )),
             FileLifetimeSource(bus.path),
             FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
@@ -253,12 +255,16 @@ class InputObservation(ABC):
             await state.observation_ready.wait()
             state.observation_ready.clear()
             read = self.observed_registry
-            if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
-                changed = await Coordination.run_worker(partial(
-                    state.idle_revision.has_unobserved_inputs, bus, lookup))
-                if not changed:
-                    continue
             try:
+                if not state.owes_tick(self.effects.cursors.delivery(session_id).needs_refresh):
+                    changed = await Coordination.run_worker(partial(
+                        state.idle_revision.has_unobserved_inputs, bus, lookup))
+                    if not changed:
+                        # A goal-store commit is not an inbox item. Publish its
+                        # changed projection without draining or launching input.
+                        await self.effects.turns.goals.sync_goal_execution(
+                            session_id, self.sessions.require(session_id))
+                        continue
                 document = await asyncio.shield(read)
                 entry = document.entry(self.sessions.require(session_id))
             except UNAVAILABLE_DRAIN_ERRORS as error:
@@ -332,7 +338,7 @@ class InputObservation(ABC):
             and not self.owns_execution(session_id, owner.thread)
         ):
             observation = ExecutionWaitingObservation
-        maintenance = MaintenanceBarrier(self.comms.registry.store.path)._current_unlocked()
+        maintenance = self.comms.owners.maintenance._current_unlocked()
         return observation(source_prefix, entry, (
             root_id,
             self.auto_wake,

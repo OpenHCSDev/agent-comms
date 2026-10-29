@@ -11,6 +11,7 @@ import asyncio
 import os
 from dataclasses import dataclass, field
 from functools import partial
+from threading import Thread as ReaderThread
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import GoalId
@@ -28,6 +29,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
+from .goal_management import Goals, GoalSourceRevision
+from .agent_events import GoalChange, GoalUnchanged
 from .goal_scope import OneGoal
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
@@ -51,9 +54,18 @@ class GoalSessionPublication:
 
     snapshot: GoalPublicationSnapshot = field(default_factory=UnpublishedGoalSnapshot)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    revisions: dict[ReaderThread, GoalSourceRevision] = field(default_factory=dict)
 
     def in_standby(self) -> bool:
         return self.snapshot.standby()
+
+    def observe(self, goals: Goals, thread_name: str) -> tuple[GoalSourceRevision, GoalChange]:
+        """Do not rebuild an unchanged projection. Versions from different
+        pool-thread connections are never compared as one counter domain."""
+        revision = goals.source_revision()
+        if self.revisions.get(revision.reader_thread) == revision:
+            return revision, GoalUnchanged()
+        return revision, goals.goal_changed(thread_name, self.snapshot)
 
 
 class GoalScheduler:
@@ -232,9 +244,10 @@ class GoalScheduler:
         # A publication advances this session's snapshot only after delivery.
         record = self.publication(session_id)
         async with record.lock:
-            event = await Coordination.run_worker(partial(
-                self.comms.goals.goal_changed, thread_name, record.snapshot,
+            revision, event = await Coordination.run_worker(partial(
+                record.observe, self.comms.goals, thread_name,
             ))
             record.snapshot = await event.publish(
                 AcpEventConsumer(self.effects, session_id, self.effects._runtime), record.snapshot
             )
+            record.revisions[revision.reader_thread] = revision

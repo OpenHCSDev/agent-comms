@@ -67,7 +67,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import FileStore, WireWakeFile
+from .locked_store import FileStore, GoalWakeFile, SQLiteStorage
 from .maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
@@ -143,13 +143,12 @@ class Generation(GoalLedgerTable, TypedTable):
         self.lifecycle.require(Failed, FailureNotObserved())
         return self.attempt_identity
 
-    def failure_evidence(self, store: GoalAttemptStore) -> GoalFailureEvidence:
+    def failure_evidence(self, conn: sqlite3.Connection) -> GoalFailureEvidence:
         identity = self.failure_identity()
-        with closing(store._connect()) as conn:
-            return next(FailedTurnEvidence.stream(
-                conn, attempt_id=identity.attempt_id,
-                goal_id=identity.goal_id, generation=identity.generation,
-            ), NoFailedTurnEvidence())
+        return next(FailedTurnEvidence.stream(
+            conn, attempt_id=identity.attempt_id,
+            goal_id=identity.goal_id, generation=identity.generation,
+        ), NoFailedTurnEvidence())
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
         return self.lifecycle.ready and self.number == number and self.ready_digest == digest
@@ -163,8 +162,15 @@ class Generation(GoalLedgerTable, TypedTable):
     def read_in(cls, conn: sqlite3.Connection, goal_id: GoalId) -> Generation | None:
         try:
             return cls.one(conn, goal_id=goal_id)
-        except MalformedRecord as error:
+        except (sqlite3.Error, MalformedRecord) as error:
             raise StorageUncertainError("Invalid persisted goal generation.") from error
+
+    @classmethod
+    def require_in(cls, conn: sqlite3.Connection, goal_id: GoalId) -> Generation:
+        generation = cls.read_in(conn, goal_id)
+        if generation is None:
+            raise MissingGoalGenerationError(goal_id)
+        return generation
 
     def advance(
         self, conn: sqlite3.Connection, successor: Generation, *, digest: str = ""
@@ -659,7 +665,15 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptStore(FileStore, DrainSettledFile, StoreWriter, ReconciledFile, WireWakeFile):
+class GoalAttemptFile(FileStore, SQLiteStorage):
+    """An unopened ledger can observe its counter without creating launch state."""
+
+    def open(self) -> GoalAttemptStore:
+        self.path.parent.mkdir(mode=0o700, exist_ok=True)
+        return GoalAttemptStore.initialize(self.path.parent)
+
+
+class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, ReconciledFile, GoalWakeFile):
     """Owner-private SQLite authority; no synthetic model or context claims.
 
     The caller creates a private directory and explicitly initializes it in a
@@ -734,6 +748,9 @@ class GoalAttemptStore(FileStore, DrainSettledFile, StoreWriter, ReconciledFile,
     def root(self) -> Path:
         return self.path.parent
 
+    def open(self) -> GoalAttemptStore:
+        return self
+
     def _require_root(self) -> None:
         if not self.root.is_dir() or not Platform.current().is_private(self.root.stat(), 0o700):
             raise StorageUncertainError("Goal attempt root must remain owner-0700.")
@@ -796,16 +813,11 @@ class GoalAttemptStore(FileStore, DrainSettledFile, StoreWriter, ReconciledFile,
 
     def snapshot(self, goal_id: GoalId) -> Generation | None:
         with closing(self._connect()) as conn:
-            try:
-                return Generation.read_in(conn, goal_id)
-            except sqlite3.Error as error:
-                raise StorageUncertainError("Cannot read goal attempt state.") from error
+            return Generation.read_in(conn, goal_id)
 
     def require_generation(self, goal_id: GoalId) -> Generation:
-        generation = self.snapshot(goal_id)
-        if generation is None:
-            raise MissingGoalGenerationError(goal_id)
-        return generation
+        with closing(self._connect()) as conn:
+            return Generation.require_in(conn, goal_id)
 
     def read_attempt(self, attempt_id: AttemptId) -> LedgerAttempt:
         with closing(self._connect()) as conn:

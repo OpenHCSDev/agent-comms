@@ -2914,11 +2914,6 @@ class WalStore(StoreWriter, StoreLockFile):
 
     synchronous: ClassVar[str] = "FULL"
 
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The physical file, supplied by a root declaration or file constructor."""
-
     def _create_file(self) -> None:
         """Create only a new inode; never close a descriptor for a live SQLite inode."""
         try:
@@ -3064,7 +3059,7 @@ class TypedStore(WalStore, TableSchema):
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
         with self.committed_or_empty(
-            type(self), lambda: self.opened_reader(self.path)
+            type(self), self.reader_snapshot
         ) as connection:
             self.require_schema(connection)
             yield connection

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.field_codec import GoalId
-from agent_comms.agent_events import GoalUnchanged
+from agent_comms.agent_events import GoalChanged, GoalUnchanged
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -97,6 +97,44 @@ def test_goal_changed_compares_goal_snapshots(owner):
     assert event.snapshot == comms.goals.goal_snapshot("worker")
     assert event.snapshot.goal == changed
     assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
+
+
+def test_publication_probes_original_revisions_before_rebuilding(owner):
+    from agent_comms.goal_scheduler import GoalSessionPublication
+
+    comms, _ = owner
+    record = GoalSessionPublication(snapshot=comms.goals.goal_snapshot("worker"))
+    revision, event = record.observe(comms.goals, "worker")
+    assert isinstance(event, GoalUnchanged)
+    record.revisions[revision.reader_thread] = revision
+    before = comms.registry.store.cache.read_counts()
+    repeated, event = record.observe(comms.goals, "worker")
+    assert repeated == revision
+    assert isinstance(event, GoalUnchanged)
+    assert comms.registry.store.cache.read_counts().requests == before.requests
+
+    # A separate client changes the original store, not the publication record.
+    changed = wire(comms.root).goals.update_goal("worker", ActiveGoalAction(progress="external"))
+    revised, event = record.observe(comms.goals, "worker")
+    assert revised != revision
+    assert event == GoalChanged(comms.goals.goal_snapshot("worker"))
+    assert comms.registry.require("worker").goal == changed
+
+
+def test_publication_observes_attempt_commit_without_registry_change(owner):
+    from agent_comms.goal_scheduler import GoalSessionPublication
+
+    comms, _ = owner
+    record = GoalSessionPublication(snapshot=comms.goals.goal_snapshot("worker"))
+    revision, _ = record.observe(comms.goals, "worker")
+    record.revisions[revision.reader_thread] = revision
+    before = comms.registry.store.cache.read_counts()
+    comms.goals.open_goal_store().create_goal(GoalId.mint())
+    changed, event = record.observe(comms.goals, "worker")
+    assert changed.registry == revision.registry
+    assert changed.attempts != revision.attempts
+    assert isinstance(event, GoalUnchanged)
+    assert comms.registry.store.cache.read_counts().requests > before.requests
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():

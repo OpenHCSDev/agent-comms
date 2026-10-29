@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
 from .child_process import ProcessIdentity
-from .private_path import PrivateFileRole
+from .private_path import FileObservation, FileRevision, PrivateFileRole
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import (
@@ -517,6 +517,7 @@ class MaintenanceBarrier(MaintenanceIngress):
         self.marker_path = MaintenanceMarker.path_in(self.registry_path.parent)
         self.state_path = MaintenanceState.path_in(self.registry_path.parent)
         self.target_path = HoldTarget.path_in(self.registry_path.parent)
+        self.observations: dict[tuple[FileObservation, ...], MaintenanceStatus] = {}
 
     @property
     def witness_paths(self) -> tuple[Path, ...]:
@@ -546,11 +547,22 @@ class MaintenanceBarrier(MaintenanceIngress):
         return value
 
     def _current_unlocked(self) -> MaintenanceStatus:
-        """Read the paired witness; incomplete publication always refuses.
+        """Reuse an unchanged witness, never a timed permission or a writable mirror.
 
-        Admission reads under the registry lock that phase transitions own.
-        An unlocked observation can refuse work, never authorize a mutation.
+        All three physical revisions matter: loss/corruption of a companion
+        must still refuse even if the generation marker itself did not move.
+        Admission remains under the registry lock that excludes publication.
         """
+        revision = tuple(FileRevision.capture(path, follow_symlinks=False) for path in self.witness_paths)
+        if revision not in self.observations:
+            status = self._read_witness()
+            if revision != tuple(FileRevision.capture(path, follow_symlinks=False) for path in self.witness_paths):
+                raise RelationViolationError("Maintenance witness changed during observation")
+            self.observations = {revision: status}
+        return self.observations[revision]
+
+    def _read_witness(self) -> MaintenanceStatus:
+        """Decode one changed paired witness; incomplete publication always refuses."""
         marker = self._read(self.marker_path, MaintenanceMarker)
         state = self._read(self.state_path, MaintenanceState)
         if marker is None and state is None:

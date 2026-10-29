@@ -48,7 +48,7 @@ class TurnEventPublication(MroDispatch):
     effects: TurnEffects
     sync_goal_execution: Callable[[str, str], Awaitable[None]]
     session_id: str
-    @handles(events.InputStarted, events.Done, events.StreamSettled, events.ToolEnd)
+    @handles(events.InputStarted, events.Done)
     async def sync_goals(self, event: events.InputStarted) -> None:
         await self.sync_goal_execution(self.session_id, self.sessions.require(self.session_id))
 

@@ -499,17 +499,12 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class StoredBusReader(BusReader):
+class StoredBusReader(BusReader, SQLiteFile):
     """File-backed readers use SQLite snapshots; held snapshots need no connection."""
-
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The file named by this reader's owning declaration."""
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        with SQLiteFile.opened_reader(self.path) as db:
+        with self.reader_snapshot() as db:
             yield db
 
 
