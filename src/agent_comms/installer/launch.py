@@ -54,7 +54,6 @@ from agent_comms.installer.upgrade import (
     RehearsedUpgrade,
     Stack,
     TargetTree,
-    Upgrade,
     upgrade,
 )
 from agent_comms.repo import Repo

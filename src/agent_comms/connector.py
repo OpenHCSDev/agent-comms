@@ -504,15 +504,18 @@ class Connector:
         init=False, repr=False, compare=False,
     )
 
-    calls: dict[asyncio.Task[dict[str, JsonValue]], type[ToolRequest]] = field(
+    calls: dict[
+        asyncio.Task[dict[str, JsonValue]], type[ToolRequest] | type[ConnectorTool],
+    ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
     closing: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False, compare=False)
 
     async def call(
-        self, tool: type[ToolRequest], arguments: Mapping[str, object], caller: ConnectorCaller,
+        self, tool: type[ToolRequest] | type[ConnectorTool],
+        arguments: Mapping[str, object], caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
-        """Admit once; a disconnected HTTP client cannot abandon an admitted write."""
+        """Start once; a disconnected HTTP client cannot abandon its write."""
         if self.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
         pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))

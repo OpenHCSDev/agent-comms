@@ -124,7 +124,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     @classmethod
     def cancel_on_shutdown(cls, pending: asyncio.Future) -> None:
-        """An admitted mutation must finish, even if its worker has not started yet."""
+        """An accepted mutation must finish, even if its worker has not started yet."""
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:

@@ -1675,7 +1675,7 @@ class DroppableRead[Result](Future[Result], threading.Thread):
         return await asyncio.wrap_future(self)
 
 
-async def join_retirement(task: asyncio.Future):
+async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
     try:
