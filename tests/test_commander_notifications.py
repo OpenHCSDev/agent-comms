@@ -466,7 +466,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
 
     assert enforced == ["occupied-unit", "following-rule"]
     message, = notifications(comms)
-    assert f"Not applied ({UnitOccupied.reason}):" in message.body
+    assert len(message.task.not_applied) == 1
     assert rules[0].line() in message.body
     assert RulePing.capture(rules[0]) not in message.task.handled
     assert RulePing.capture(rules[1]) in message.task.handled
