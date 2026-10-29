@@ -305,6 +305,14 @@ class Description(ValueDirective[str]):
     pass
 
 
+class DisclosureIdentity(FlagDirective):
+    """Fields that identify the same entity across read-only disclosure refreshes.
+
+    A marked record field derives its identity through that record's declarations;
+    an immutable nominal identity supplies its existing equality and hash contract.
+    """
+
+
 class WireExclude(ViewExclusion):
     pass
 

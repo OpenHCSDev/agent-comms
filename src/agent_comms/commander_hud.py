@@ -20,7 +20,7 @@ from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import OrderId, WireTransient, projected
+from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 class CommanderOrder:
     """Small order card; identifiers/text come from Todo, review rounds from TodoStore."""
 
-    problem: str
+    problem: Annotated[str, DisclosureIdentity()]
     text: str
     order: OrderId
     state: str
@@ -72,7 +72,7 @@ class CommanderUnit(HudRow):
     view tells moving from circling without deriving either itself.
     """
 
-    unit: ThreadIncarnation
+    unit: Annotated[ThreadIncarnation, DisclosureIdentity()]
     state: type[UnitState]
     clock: UnitClock
     orders: tuple[CommanderOrder, ...]
@@ -140,7 +140,7 @@ class CommanderUnit(HudRow):
 class CommanderOrderDetail:
     """The selected card beside its original instructions, story and captured Git points."""
 
-    card: CommanderOrder
+    card: Annotated[CommanderOrder, DisclosureIdentity()]
     instructions: tuple[str, ...]
     story: OrderStory
     commits: tuple[ProgressPoint, ...]
@@ -150,7 +150,7 @@ class CommanderOrderDetail:
 class CommanderUnitDetail:
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
-    unit: CommanderUnit
+    unit: Annotated[CommanderUnit, DisclosureIdentity()]
     orders: tuple[CommanderOrderDetail, ...]
     activity: JsonValue
 
