@@ -17,6 +17,7 @@ the session's end ends every child Core still holds for it.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ from agent_comms.cli_commands import RegisteredResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.turn_phase import ModelWaitPhase, TurnPhase
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
@@ -90,8 +92,9 @@ class SubagentHook(SeatedSubagent):
 
     agent_type: str
 
-    def commanding(self, verb: str) -> subprocess.CompletedProcess[str]:
-        return self.run(*self.command, verb, "--fork", self.agent_id.fork)
+    def commanding(self, record: WatchRecord, verb: str) -> subprocess.CompletedProcess[str]:
+        return self.run(*self.command, verb, '--root', record.root,
+                        *ThreadCaller(record.bus).from_flag(), '--fork', self.agent_id.fork)
 
     def register(self) -> None:
         state = WatchClaim(self.session_id).state()
@@ -99,11 +102,12 @@ class SubagentHook(SeatedSubagent):
         self.enter(ModelWaitPhase())
 
     def join(self, record: WatchRecord) -> None:
-        run = self.commanding("join")
+        run = self.commanding(record, "join")
         if run.returncode:
             raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
         fork = self.agent_id.fork
-        self.warn(f"Core registered you as commander fork {fork}: pass `--fork {fork}`"
+        arguments = shlex.join((*ThreadCaller(record.bus).from_flag(), '--fork', fork))
+        self.warn(f"Core registered you as commander fork {fork}: pass `{arguments}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
 
@@ -138,16 +142,16 @@ class SubagentStopHook(SubagentHook):
 
     def retire_fork(self, record: WatchRecord) -> None:
         if self.stop_hook_active:
-            self.end()
+            self.end(record)
             return
-        run = self.commanding("retire")
+        run = self.commanding(record, "retire")
         if run.returncode:
             print(json.dumps({"decision": "block",
                               "reason": run.stderr.strip() or f"exit status {run.returncode}"}))
 
-    def end(self) -> None:
+    def end(self, record: WatchRecord) -> None:
         """A send-back is never repeated: the fork ends here whatever it recorded."""
-        run = self.commanding("end")
+        run = self.commanding(record, "end")
         if run.returncode:
             raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
 
@@ -176,7 +180,8 @@ class SessionSubagents(SubagentSeats):
         subagents = self.subagents()
         if not subagents:
             return ()
-        run = self.run(*self.command, "session-end", "--forks",
+        run = self.run(*self.command, "session-end", '--root', record.root,
+                       *ThreadCaller(record.bus).from_flag(), "--forks",
                        *(agent.fork for agent in subagents))
         return (run.stderr.strip() or f"exit status {run.returncode}",) if run.returncode else ()
 

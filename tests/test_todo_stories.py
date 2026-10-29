@@ -47,7 +47,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WordingCorrection,
 )
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from test_todos import order
 
 
@@ -161,7 +161,8 @@ def test_commander_unstrike_selects_the_newest_live_record(recorded_problem, sou
     second = replace(first, expected_revision=struck.revision,
         reason="The worker omitted the installed application check for its changed owner.")
     store.apply("P1", second)
-    commander = Commander.on_root("lead", (source_repository,), comms.root)
+    Commander.on_root("lead", (source_repository,), comms.root)
+    commander = Commander.read_root(comms.root, ThreadCaller('lead'))
     commander.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
     assert store.get("P1").live_strikes() == (first,)
 

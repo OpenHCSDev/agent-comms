@@ -151,7 +151,7 @@ def test_nominal_owner_and_real_commander_fork_may_select_without_becoming_revie
         caller = DirectorCaller('outsider')
     else:
         caller = CommanderForkCaller('real-review-fork')
-        caller.commanding(comms, 'lead')
+        caller.commanding(comms, ThreadCaller('lead'))
     select_reviewers(comms, nra.repo, (reviewer,), caller)
     project = comms.registry.snapshot().commander_project.require()
     assert project.repository_head_reviewers == (RepositoryHeadReviewers(nra.repo, (reviewer,)),)
@@ -330,7 +330,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
 
 def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     why = ACCEPTED.text
     common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
               "--why", why]
@@ -354,7 +354,7 @@ def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudl
     for number in (8, 9):
         reviewed_source.git(reviewed_source.checkout, "push", "-q", "origin",
                             f"{request.head}:refs/pull/{number}/head")
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     github.put(request.repo, DraftListedPullRequest(
         8, "fix/draft", request.head, stamp, "main", reviewable_times=(stamp,)))
@@ -386,7 +386,7 @@ def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudl
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
     """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     with pytest.raises(RecordProblems) as refused:
         judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
                     "--why", ACCEPTED.text, "--serves", ""], context)
@@ -402,7 +402,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     second_checkout = tmp_path / "second-review-checkout"
     reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
                         str(second_checkout))
@@ -649,7 +649,7 @@ def test_reassigned_order_cannot_be_reviewed_through_its_old_link(
     from test_review_assignment_lifecycle import declared_successor, release
 
     comms, request, old, scope = retained_linked_head
-    ctx = order.Commander.read_root(comms.root)
+    ctx = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     released, _ = release(ctx, old)
     action = declared_successor(ctx, reviewed_source, released)
     comms.goals.update_goal('outsider', action)

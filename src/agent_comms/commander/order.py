@@ -79,6 +79,8 @@ from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.cli_options import SingleArgument
 from agent_comms.repo import AcquiredRepositories
 from agent_comms.repo import Repo
 from agent_comms.slop import Slop
@@ -121,7 +123,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from agent_comms.typed_table import RowNotFoundError
 
 
@@ -388,17 +390,15 @@ class CommanderContext(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     root: Path
 
-    actor: Annotated[
-        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
-    ] = NoThreadCaller()
+    actor: Annotated[InstanceOf[ToolCaller], Field(exclude=True)] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
     def model_post_init(self, context: object) -> None:
         self._comms = wire(self.root)
 
     @classmethod
-    def read_root(cls, root: Path | str) -> Self:
-        return cls(root=Path(root).resolve())
+    def read_root(cls, root: Path | str, actor: ToolCaller = NoThreadCaller()) -> Self:
+        return cls(root=Path(root).resolve(), actor=actor)
 
     @classmethod
     def on_root(cls, commander: str, repos: tuple[Repo, ...], root: Path) -> Self:
@@ -415,9 +415,7 @@ class CommanderContext(BaseModel):
 
     @property
     def commander(self) -> str:
-        snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().commanders(snapshot)
-        return thread.name
+        return self.actor.commander(self.comms).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -454,11 +452,11 @@ class CommanderContext(BaseModel):
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return self.comms.registry.require(self.commander).incarnation
+        return self.actor_identity.commanding_identity
 
     @property
     def actor_name(self) -> str:
-        return self.actor.acting_name(self.commander)
+        return self.actor_identity.name
 
     @property
     def actor_identity(self) -> ThreadIncarnation:
@@ -470,9 +468,11 @@ class CommanderContext(BaseModel):
 
     def published(self, audience: VerdictAudience, body: str,
                   answers: tuple[MessageReference, ...] = ()) -> Message:
+        self.actor.own_thread()
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            origin=self.actor.origin()).message
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -484,7 +484,7 @@ class CommanderContext(BaseModel):
         return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
-        return self.actor.as_thread(self.commander).invoke(tool, self.comms)
+        return self.actor.invoke(tool, self.comms)
 
     def todos(self):
         return self.comms.goals.todos.for_commander(self.incarnation)
@@ -746,8 +746,12 @@ class Commander(CommanderContext):
             print(message.message_id, self.delivery(message.reference))
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
+            answer_flags = ('--answers', *(str(answer.message_id) for answer in answers)) if answers else ()
+            command = ('agent-comms-commander', *LaunchRoot.from_path(self.root).arguments(),
+                       'order', 'say', units, body_file,
+                       *self.actor.commander_arguments(self.comms), *answer_flags)
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
-                     'resend:\n  ' + shlex.join(('agent-comms-commander', *sys.argv[1:])))
+                     'resend:\n  ' + shlex.join(command))
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -871,7 +875,8 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         CommanderForkCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
         Argument(
-            flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
+            flags=("--fork",), options={"type": CommanderForkCaller, "action": SingleArgument,
+                                         "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
 
@@ -887,10 +892,14 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
     def who(self, ctx: Commander) -> str:
         return ctx.actor_name
 
+    def require_caller(self, ctx: Commander) -> None:
+        """Effectful verbs require the entrypoint's actual registered author."""
+        ctx.comms.registry.require(ctx.actor.own_thread())
+
     def apply(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(ctx.commander).require_commander()
-        self.fork.commanding(ctx.comms, ctx.commander)
-        ctx = ctx.model_copy(update={'actor': self.fork})
+        self.require_caller(ctx)
+        self.fork.commanding(ctx.comms, ctx.actor)
+        ctx = ctx.model_copy(update={'actor': self.fork.acting_caller(ctx.actor)})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:
@@ -906,6 +915,13 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
     @abstractmethod
     def run(self, ctx: Commander) -> None: ...
 
+
+
+class CommanderReadVerb(CommanderVerb, declared_name=None):
+    """An explicit operator read may inspect the configured fleet without publishing."""
+
+    def require_caller(self, ctx: Commander) -> None:
+        """No effect requires a named author; selecting a fork still requires its bound parent."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -957,19 +973,20 @@ class DirectiveVerb(CommanderVerb):
                                      f'{rule.clearing_action()}'
                          for rule in blocking}
             raise RecordProblems(problems | self.replies_clearing(
-                tuple(rule for rule in opened if rule.cited in problems)))
+                ctx, tuple(rule for rule in opened if rule.cited in problems)))
         self.respond(ctx, tuple(dict.fromkeys(message.reference for message in named)))
 
     @staticmethod
-    def replies_clearing(refused: tuple[OwedAnswer, ...]) -> dict[str, str]:
+    def replies_clearing(ctx: Commander, refused: tuple[OwedAnswer, ...]) -> dict[str, str]:
         """One `order say` per asker, naming every refused debt a reply to that asker answers."""
         askers: dict[str, list[str]] = {}
         for rule in refused:
             for asker in rule.answered_in():
                 askers.setdefault(asker, []).append(str(rule.message.message_id))
         return {f'--answers {" ".join(ids)} ({asker})':
-                f'agent-comms-commander {SayVerb.tool()} {SayVerb.declared_name} {asker} BODYFILE'
-                f' --answers {" ".join(ids)}'
+                shlex.join(('agent-comms-commander', *LaunchRoot.from_path(ctx.root).arguments(),
+                            SayVerb.tool(), SayVerb.declared_name, asker, 'BODYFILE',
+                            *ctx.actor.commander_arguments(ctx.comms), '--answers', *ids))
                 for asker, ids in askers.items()}
 
     def unnamed_answers(self, opened: tuple[OwedAnswer, ...],
@@ -1297,6 +1314,9 @@ class ServeVerb(OrderVerb):
 @dataclass(frozen=True, kw_only=True)
 class SayVerb(OrderVerb, DirectiveVerb):
     help = "a non-order message; refused if it orders work"
+
+    def gate(self, ctx: Commander) -> None:
+        """Messaging owns publication eligibility; a model is not another sender permission."""
     units: Annotated[
         str, Argument(flags=("units",), options={"metavar": "UNIT[,UNIT]"})
     ]
@@ -1484,7 +1504,7 @@ class HuntVerb(Reasoned, OrderVerb):
         ctx.hunt(self.where, self.why, self.sent)
 
 
-class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
+class NextHuntVerb(CommanderReadVerb, OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
     def run(self, ctx: Commander) -> None:
@@ -1502,7 +1522,7 @@ class InstallVerb(OrderVerb):
             print(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(ctx.comms)}")
 
 
-class IdleVerb(OrderVerb):
+class IdleVerb(CommanderReadVerb, OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:

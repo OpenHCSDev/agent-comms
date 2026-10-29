@@ -10,6 +10,16 @@ from typing import ClassVar, Self
 from .field_codec import FieldCodec
 
 
+class SingleArgument(argparse.Action):
+    """A caller selection is one explicit value, never last-writer-wins authority."""
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+                 values: object, option_string: str | None = None) -> None:
+        if getattr(namespace, self.dest) != self.default:
+            parser.error(f'{option_string} must be supplied only once')
+        setattr(namespace, self.dest, values)
+
+
 class JsonFlagRecord:
     """A record supplies its JSON-value flag; FieldCodec owns its representation."""
 

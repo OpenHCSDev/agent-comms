@@ -4,6 +4,7 @@ from agent_comms.comms import Comms
 
 from agent_comms import cli as comms_cli
 from agent_comms.cli_command import CliCommand
+from agent_comms.cli_options import SingleArgument
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import FieldCodec
 from agent_comms.field_codec import Normalize
@@ -27,7 +28,8 @@ class InvokeCliCommand(CliCommand[ToolReplyResult], declared_name="tool"):
         Normalize(FieldCodec.encode),
         Argument(
             flags=("--from",),
-            options={"type": ThreadCaller, "help": "Calling thread; omit for tools that need no thread"},
+            options={"type": ThreadCaller, "action": SingleArgument,
+                     "help": "Calling thread; omit for tools that need no thread"},
         ),
     ] = NoThreadCaller()
     tool: Annotated[str, Argument(flags=("--tool",))]

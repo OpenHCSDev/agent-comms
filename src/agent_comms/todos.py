@@ -11,6 +11,7 @@ import asyncio
 import calendar
 import json
 import re
+import shlex
 import sqlite3
 import subprocess
 import sys
@@ -185,6 +186,7 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
     from agent_comms.registry_document import CommanderProject, RegistrySnapshot
+    from agent_comms.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True)
@@ -2418,7 +2420,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
         """Triage has no implementation declarations to validate."""
 
     @abstractmethod
-    def instructions(self, problem: str) -> tuple[str, ...]: ...
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]: ...
 
     @abstractmethod
     def verified_claims(
@@ -2449,7 +2451,7 @@ class TriageScope(OrderScope[ReportDelivery]):
     def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> ReportDelivery:
         return ReportDelivery(report=Path(request.seen).read_text())
 
-    def instructions(self, problem: str) -> tuple[str, ...]:
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
 
@@ -2483,11 +2485,13 @@ class FixScope(OrderScope[CheckedDelivery]):
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.shape.require_references(roots, revision)
 
-    def instructions(self, problem: str) -> tuple[str, ...]:
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]:
+        commands = tuple(shlex.join(('agent-comms-commander', 'order', 'pr', problem,
+                                     *caller.from_flag(), '--title', '<title>', '--body-file', '<file>'))
+                         for caller in callers)
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
-                f"Open the PR with agent-comms-commander order pr {problem} "
-                "--title '<title>' --body-file <file>; Core records its link on this order.",
+                *(f'Open the PR with {command}; Core records its link on this order.' for command in commands),
                 "Record the unit's delivery claim in Core before waiting for the commander's "
                 "verdict; a chat report does not change the order.")
 
@@ -2759,8 +2763,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                   for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
 
     def instructions(self, todo):
+        from agent_comms.tool_caller import ThreadCaller
+        callers = tuple(ThreadCaller(assignment.owner) for assignment in todo.current_holder.current_assignments())
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
-            f"Order: {self.id}", *self.scope.instructions(todo.id),
+            f"Order: {self.id}", *self.scope.instructions(todo.id, callers),
             *self.work_instructions()))
 
     def delivered(self, delivery: CheckedDelivery):
@@ -2953,6 +2959,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     def message(self, context: CommanderContext, document: OrderFile, unit: str, group: Sequence[str],
                 replacing: bool, reassign: Reassignment) -> str:
         """Render owned fields; never parse this message back into an order."""
+        from agent_comms.tool_caller import ThreadCaller
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *self.work_instructions()))
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''
@@ -2964,7 +2971,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                 + '\nIf two lines of this order conflict, take the narrower reading, '
                 'say which one you took, and proceed; do not stop to ask.'
                 + '\nStart now and push as you go.\n'
-                + '\n'.join(line for pid in group for line in self.scope.instructions(pid)))
+                + '\n'.join(line for pid in group for line in self.scope.instructions(pid, (ThreadCaller(unit),))))
 
     def send(
         self, context: Commander, document: OrderFile, unit: str, clean: bool,

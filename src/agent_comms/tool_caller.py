@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import shlex
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .bus_publication import AgentOrigin
@@ -61,6 +62,10 @@ class ToolCaller(ABC):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
+    def commander_arguments(self, comms: Comms) -> tuple[str, ...]:
+        """Commander argv preserves the actual caller; forks also select their registered parent."""
+        return self.from_flag()
+
     @abstractmethod
     def own_thread(self) -> str:
         """The thread a tool acts on when its call names none."""
@@ -68,7 +73,7 @@ class ToolCaller(ABC):
     def subject(self, named: str) -> str:
         return named or self.own_thread()
 
-    def commanding(self, comms: Comms, commander: str) -> None:
+    def commanding(self, comms: Comms, commander: ToolCaller) -> None:
         """An ordinary caller needs no commander-child registration."""
         return None
 
@@ -77,6 +82,10 @@ class ToolCaller(ABC):
 
     def end(self, comms: Comms) -> None:
         raise ToolRefusedError('Only a commander fork can retire through this verb.')
+
+    @abstractmethod
+    def commander(self, comms: Comms) -> Thread:
+        """This caller's ordering identity, or the configured fleet for an operator read."""
 
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
@@ -109,6 +118,11 @@ class OperatorOutcomes:
 class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
+
+    def commander(self, comms: Comms) -> Thread:
+        snapshot = comms.registry.snapshot()
+        thread, = snapshot.commander_project.require().commanders(snapshot)
+        return thread
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return ThreadCaller(commander)
@@ -226,13 +240,18 @@ class SubagentCaller(ThreadCaller):
 class CommanderForkCaller(SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
-    def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
+    def commanding(self, comms: Comms, commander: ToolCaller) -> None:
+        parent = comms.registry.require(commander.own_thread())
+        parent.require_commander()
+        comms.registry.register_child(self.name, parent.name, CommanderForkExecution, comms.goals)
 
     def commander(self, comms: Comms) -> Thread:
-        fork = comms.registry.require(self.name)
-        parent, = fork.parent.names()
-        return comms.registry.require(parent)
+        snapshot = comms.registry.snapshot()
+        actor = self.identity_in(snapshot)
+        return snapshot.require(actor.commanding_identity.name)
+
+    def commander_arguments(self, comms: Comms) -> tuple[str, ...]:
+        return (*ThreadCaller(self.commander(comms).name).from_flag(), '--fork', self.name)
 
     def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
         fork = snapshot.require(self.name)
@@ -248,9 +267,11 @@ class CommanderForkCaller(SubagentCaller):
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
+            command = shlex.join(('agent-comms-commander', *LaunchRoot.from_path(comms.root).arguments(),
+                                  'order', 'say', '#comms', 'FILE', *self.commander_arguments(comms)))
             raise ToolRefusedError(
                 f"{self.name} recorded nothing in Core: post what it found with"
-                f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
+                f" `{command}` before it stops.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:

@@ -8,6 +8,7 @@ import json
 from contextlib import nullcontext
 import os
 import re
+import shlex
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -79,7 +80,7 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProgressRead,
 )
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 from cli_command import commander
@@ -629,7 +630,7 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
                     if reading.thread.incarnation == worker)
     assert question in observation.due_questions
     assert tuple(AwaitingCommander.derive(observation))
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / 'reply.txt'
     reply.write_text('Responding to the worker with the actual commander command')
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
@@ -648,7 +649,7 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
 
 def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
     question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
@@ -666,7 +667,7 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     """An answer is never refused for the debts it leaves: they warn and stay owed."""
     first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
     second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     capsys.readouterr()
@@ -684,11 +685,21 @@ def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp
     """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
     owed = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ripening = publish(held_bus, "worker", "lead", time.time() - 60)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     with pytest.raises(RecordProblems) as refused:
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
-    assert {owed.message_id, ripening.message_id} <= set(
-        re.search(r"order say worker BODYFILE --answers (.*)", str(refused.value)).group(1).split())
+    retry = next(value for value in refused.value.problems.values()
+                 if value.startswith('agent-comms-commander '))
+    arguments = shlex.split(retry)[1:]
+    assert arguments[arguments.index('--from') + 1] == 'lead'
+    assert arguments[arguments.index('--root') + 1] == str(held_bus.root)
+    assert {owed.message_id, ripening.message_id} <= set(arguments[arguments.index('--answers') + 1:])
+    reply = tmp_path / 'reply.txt'
+    reply.write_text('The generated reply reaches the actual asker as the same caller')
+    arguments[arguments.index('BODYFILE')] = str(reply)
+    result = commander(*arguments, caller=NoThreadCaller())
+    assert result.returncode == 0, result.stderr
+    assert unanswered(held_bus) == ()
 
 
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
@@ -710,7 +721,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     VibeCheckSender.register(held_bus.registry)
     check = publish(held_bus, VibeCheckSender.sender, "lead", time.time() - 3600)
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
@@ -721,7 +732,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
     question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
@@ -741,7 +752,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
     store.record_directive(selected[0].id, RequestDirective(
         directive.seq, directive.timestamp + RequestDirective.window))
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
     with pytest.raises(RecordProblems, match=re.escape(
@@ -794,7 +805,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
     def cli(*arguments):
-        run = commander('--root', str(held_bus.root), 'order', *arguments)
+        run = commander('--root', str(held_bus.root), 'order', *arguments, caller=ThreadCaller('lead'))
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 

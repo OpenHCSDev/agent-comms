@@ -403,10 +403,11 @@ def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *t
     repository = Repo.of(Path(__file__).resolve().parents[1])
 
     def configure(bus: Comms, *check_repositories: Repo) -> Commander:
+        from agent_comms.tool_caller import ThreadCaller
         github_cli.configure(*(repo.github for repo in (*check_repositories, repository)))
         return Commander.on_root(
             'lead', (*check_repositories, repository), bus.root,
-        )
+        ).model_copy(update={'actor': ThreadCaller('lead')})
 
     return configure
 

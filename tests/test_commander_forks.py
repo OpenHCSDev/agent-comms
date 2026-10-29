@@ -76,7 +76,7 @@ from agent_comms.todos import (
     Todo,
     UnlocatedProblemFinding,
 )
-from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
+from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller, ThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms_hooks import read_gate
 from agent_comms.tool_declaration import ToolDeclaration
@@ -153,7 +153,7 @@ def fork_bus(tmp_path, configured_repository):
 
 def command(comms, *args):
     """Exercise the real parser and state without cold-importing Core for every verb."""
-    return commander("--root", str(comms.root), *args)
+    return commander("--root", str(comms.root), *args, caller=ThreadCaller('lead'))
 
 
 def process_command(comms, *args):
@@ -165,6 +165,7 @@ def process_command(comms, *args):
             "from agent_comms.commander.cli import main; main()",
             "--root",
             str(comms.root),
+            *ThreadCaller('lead').from_flag(),
             *args,
         ],
         env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},

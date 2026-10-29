@@ -207,7 +207,7 @@ class JudgeVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ShowVerb(JudgeVerb):
+class ShowVerb(order.CommanderReadVerb, JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
     thread: Annotated[
         str, Argument(flags=("thread",), options={"nargs": "?"})
@@ -220,7 +220,7 @@ class ShowVerb(JudgeVerb):
         show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if self.selects(edit)])
 
 
-class AlarmVerb(JudgeVerb):
+class AlarmVerb(order.CommanderReadVerb, JudgeVerb):
     help = "loop: every minute, name edits unjudged for 5 min"
 
     def run(self, ctx: order.Commander) -> None:
