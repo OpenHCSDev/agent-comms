@@ -2606,7 +2606,7 @@ class UncarriedRecordFormat(ChangeMeasure):
         "spec.loader.exec_module(module); "
         "module.main(sys.argv[3:])"
     )
-    """This ratchet's reader, loaded by file, over only the revision's own source: a tools
+    """The revision's own reader, loaded by file, over only the revision's own source: a tools
     directory on the path would resolve the revision's bare imports into this one's tree."""
 
     @staticmethod
@@ -2640,7 +2640,9 @@ class UncarriedRecordFormat(ChangeMeasure):
         if not modules:
             return {}
         with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
-            source = git(repo, "archive", ref, "--", str(package))
+            # Each side runs its own revision's probe script: the head's may import modules
+            # that only the head's package declares (#3576 moved field_codec under nominal).
+            source = git(repo, "archive", ref, "--", str(package), "tools/stored_formats.py")
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             tree = Path(scratch)
             sources = cls.source_paths(root, tree)
@@ -2650,7 +2652,7 @@ class UncarriedRecordFormat(ChangeMeasure):
             paths = dict.fromkeys((str(tree / package), *sources))
             result = SpawnedProcess.run(
                 (sys.executable, "-c", cls.probe,
-                 str(Path(__file__).resolve().with_name("stored_formats.py")),
+                 str(tree / "tools/stored_formats.py"),
                  os.pathsep.join(paths), *modules), cwd=scratch,
                 env=cls.environment(root, tree), timeout=300,
             )
