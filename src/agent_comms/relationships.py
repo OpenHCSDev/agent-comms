@@ -27,7 +27,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
-from .messages import Message
+from .messages import MessageInput
 from .peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -280,7 +280,34 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
 
     @classmethod
     def build(cls, context: RelationshipContext) -> RelationshipGroup:
-        return cls({entry.target: entry for entry in cls.supply(context)})
+        return cls.from_entries({entry.target: entry for entry in cls.supply(context)}, context)
+
+    @classmethod
+    def from_entries(cls, entries: dict[str, RelationshipEntry],
+                     context: RelationshipContext) -> RelationshipGroup:
+        return cls(entries)
+
+    @classmethod
+    def capture(cls, context: RelationshipContext, views: HistoryViews) -> tuple[RelationshipGroup, ...]:
+        """Select declared entries first; acquire their views once on this identity cut."""
+        selected = tuple(group.build(context) for group in cls.members_with(cls))
+        names = dict.fromkeys(entry.target for group in selected for entry in group.entries.values())
+        context.people.update((view.thread.name, view) for view in presentation.ThreadView.roster(
+            context.registry, views.agents, views.goals, RosterVisibility(archived=True), names=names,
+        ))
+        return tuple(group.presented(context) for group in selected)
+
+    @staticmethod
+    def present_entry(entry: RelationshipEntry, context: RelationshipContext) -> RelationshipEntry:
+        return replace(entry, person=context.people.get(entry.target))
+
+    def ordered_entries(self, entries: dict[str, RelationshipEntry],
+                        context: RelationshipContext) -> dict[str, RelationshipEntry]:
+        return entries
+
+    def presented(self, context: RelationshipContext) -> RelationshipGroup:
+        entries = {name: self.present_entry(entry, context) for name, entry in self.entries.items()}
+        return replace(self, entries=self.ordered_entries(entries, context))
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return ()
@@ -302,7 +329,7 @@ class RecentRelationshipGroup(RelationshipGroup):
 
     @staticmethod
     @abstractmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]: ...
+    def targets(context: RelationshipContext, message: MessageInput) -> tuple[str, ...]: ...
 
 
 class InboundRelationshipGroup(RecentRelationshipGroup):
@@ -310,7 +337,7 @@ class InboundRelationshipGroup(RecentRelationshipGroup):
     empty_text = "No recent inbound"
 
     @staticmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+    def targets(context: RelationshipContext, message: MessageInput) -> tuple[str, ...]:
         sender = context.registry.canonical_name(message.sender)
         if sender == context.thread.name or not context.delivery.delivers(message.sender, message.target):
             return ()
@@ -322,7 +349,7 @@ class OutboundRelationshipGroup(RecentRelationshipGroup):
     empty_text = "No recent outbound"
 
     @staticmethod
-    def targets(context: RelationshipContext, message: Message) -> tuple[str, ...]:
+    def targets(context: RelationshipContext, message: MessageInput) -> tuple[str, ...]:
         if context.registry.canonical_name(message.sender) != context.thread.name:
             return ()
         return (CommandTarget.named(message.target).canonical_name(context.registry.canonical_name),)
@@ -349,19 +376,22 @@ class SortableRelationshipGroup(RelationshipGroup):
         return context.orders.get(cls, cls.default_order)
 
     @classmethod
-    def build(cls, context: RelationshipContext) -> SortableRelationshipGroup:
-        order = cls.selected_order(context)
+    def from_entries(cls, entries: dict[str, RelationshipEntry],
+                     context: RelationshipContext) -> SortableRelationshipGroup:
+        return cls(entries, cls.selected_order(context))
 
+    def ordered_entries(self, entries: dict[str, RelationshipEntry],
+                        context: RelationshipContext) -> dict[str, RelationshipEntry]:
         def key(item: RelationshipEntry) -> tuple[float, float, str]:
             person = item.person
-            return order.key(
+            return self.order.key(
                 item.target,
                 person.thread.created_at if person else 0,
                 person.activity.timestamp if person else 0,
                 context.sent.get(item.target, 0) if person else 0,
             )
 
-        return cls({entry.target: entry for entry in sorted(cls.supply(context), key=key)}, order)
+        return {entry.target: entry for entry in sorted(entries.values(), key=key)}
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return (self,)
@@ -384,9 +414,7 @@ class ChildrenRelationshipGroup(SortableRelationshipGroup):
     def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
         return tuple(
             context.entry(child.name)
-            for child in context.registry.threads.values()
-            for parent in child.parent.names()
-            if context.registry.canonical_name(parent) == context.thread.name
+            for child in context.registry.children(context.thread.name)
         )
 
 
@@ -402,10 +430,16 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
             identity = relation.counterpart(context.thread)
             if identity is None:
                 continue
-            person = context.people.get(identity.name)
-            available = person is not None and person.thread.incarnation == identity
-            entries[identity] = relation.entry(identity, person, available, entries.get(identity))
+            entries[identity] = relation.entry(
+                identity, None, identity.current(context.registry), entries.get(identity),
+            )
         return tuple(entries.values())
+
+    @staticmethod
+    def present_entry(entry: RelationshipEntry, context: RelationshipContext) -> RelationshipEntry:
+        person = context.people.get(entry.target)
+        available = entry.available and person is not None
+        return replace(entry, person=person if available else None, available=available)
 
 
 @dataclass(frozen=True, slots=True)
@@ -413,14 +447,14 @@ class RelationshipContext:
     registry: RegistrySnapshot
     thread: Thread
     people: dict[str, presentation.ThreadView]
-    messages: tuple[Message, ...]
+    messages: tuple[MessageInput, ...]
     delivery: DeliveryScope
     edges: tuple[Collaboration, ...]
     goal_contacts: tuple[GoalDerivedContact, ...]
     orders: dict[type[SortableRelationshipGroup], type[ThreadSort]]
     sent: dict[str, float]
 
-    def entry(self, name: str, *, message: Message | None = None,
+    def entry(self, name: str, *, message: MessageInput | None = None,
               detail: str = "") -> RelationshipEntry:
         target = CommandTarget.named(name)
         name = target.canonical_name(self.registry.canonical_name)
@@ -712,11 +746,7 @@ class ThreadRelationships:
         active goals in ONE registry snapshot; never changes an explicit contact or delivery."""
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
-        for owner in (
-            executor
-            for thread in registry.threads.values()
-            for executor in thread.role.executor(thread)
-        ):
+        for owner in registry.threads.active_goal_owners():
             for goal in owner.goal.active():
                 ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
         return (tuple(row for row in contacts if row.incident(thread)),
@@ -846,10 +876,10 @@ class ThreadRelationships:
         )
         return order
 
-    def _recent_messages(self) -> tuple[tuple[Message, ...], bool]:
+    def _recent_messages(self) -> tuple[tuple[MessageInput, ...], bool]:
         """One bounded sequence page, on a single committed read snapshot."""
         with self.bus.bus.reading() as source:
-            messages = source.page(source.revision() + 1, self.RECENT_MESSAGES + 1)
+            messages = source.input_page(source.revision() + 1, self.RECENT_MESSAGES + 1)
         return tuple(reversed(messages[:self.RECENT_MESSAGES])), len(messages) > self.RECENT_MESSAGES
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
@@ -860,14 +890,10 @@ class ThreadRelationships:
         edges = state.collaborations
         goal_contacts, goal_diagnostics = self._goal_contacts(registry, thread)
         delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
-        people = {
-            view.thread.name: view
-            for view in self.views.thread_views(RosterVisibility(archived=True))
-        }
         messages, limited = self._recent_messages()
 
         context = RelationshipContext(
-            registry, thread, people, messages, delivery, edges, goal_contacts,
+            registry, thread, {}, messages, delivery, edges, goal_contacts,
             {row.group: row.order for row in state.orders if row.incarnation == thread.incarnation},
             {},
         )
@@ -879,7 +905,7 @@ class ThreadRelationships:
         return ThreadCommsSnapshot(
             thread.name,
             str(self.root.resolve()),
-            tuple(group.build(context) for group in RelationshipGroup.members_with(RelationshipGroup)),
+            RelationshipGroup.capture(context, self.views),
             limited,
             len(messages),
             unresolved_goal_mentions=goal_diagnostics,

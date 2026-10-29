@@ -7,10 +7,10 @@ from dataclasses import fields, replace
 
 import pytest
 
-from agent_comms.registry_document import ThreadRows
+from agent_comms.registry_document import InvalidRegistryDocument, ThreadRows
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.display_references import CurrentDisplayReferences, HistoricalDisplayReference
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose
@@ -130,20 +130,50 @@ def test_current_reference_membership_and_lookup_share_the_retained_registry(com
 @pytest.mark.parametrize("decoded", (False, True))
 def test_current_reference_acquires_only_captured_incarnations(comms, declare_reference, decoded):
     original = declare_reference()
+    unread = declare_reference("unread")
     comms.registry.rename(original.name, "renamed")
     captured = comms.registry.snapshot()
-    snapshot = replace(captured, threads=ThreadRows.from_wire(captured.threads.to_wire()))
+    raw = captured.threads.to_wire()
+    raw[unread.name][FieldCodec.field_plan(Thread, "model").key] = 123
+    snapshot = replace(captured, threads=ThreadRows.from_wire(raw))
     if decoded:
         snapshot.require("renamed")
-    acquired_before = dict(snapshot.threads._decoded)
 
     references = CurrentDisplayReferences.from_registry(str(comms.root), snapshot, ("#comms",))
-
-    assert snapshot.threads._decoded == acquired_before
+    for _ in range(100):
+        repeated = CurrentDisplayReferences.from_registry(str(comms.root), snapshot, ("#comms",))
+        assert repeated.members["renamed"] is references.members["renamed"]
+        assert repeated.members["unread"] is references.members["unread"]
+    with pytest.raises(InvalidRegistryDocument):
+        snapshot.require(unread.name)
     assert references.members[original.name].name == "renamed"
     assert references.members["renamed"].wire_birth == original.incarnation.wire_birth
     assert references.find(f"@{original.name}")[0].reference.name == "renamed"
     assert references.find("#comms")[0].reference.name == "#comms"
+
+
+@pytest.mark.parametrize("entry,value", (
+    (FieldCodec.field_plan(Thread, "name"), "invalid name"),
+    (FieldCodec.field_plan(Thread, "created_at"), []),
+    (FieldCodec.field_plan(Thread, "goal"), []),
+    (FieldCodec.field_plan(Thread, "role"), []),
+))
+def test_captured_reference_rows_refuse_malformed_determining_fields(declare_reference, entry, value):
+    original = declare_reference()
+    raw = FieldCodec.encode_fields(original)
+    raw[entry.key] = value
+    with pytest.raises(MalformedRecord):
+        ThreadRows.from_wire({original.name: raw})
+
+
+def test_captured_reference_rows_refuse_unknown_or_absent_required_fields(declare_reference):
+    original = declare_reference()
+    raw = FieldCodec.encode_fields(original)
+    missing_birth = dict(raw)
+    del missing_birth[FieldCodec.field_plan(Thread, "created_at").key]
+    for malformed in ({**raw, "undeclared_field": "refuse"}, missing_birth):
+        with pytest.raises(MalformedRecord):
+            ThreadRows.from_wire({original.name: malformed})
 
 
 def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):

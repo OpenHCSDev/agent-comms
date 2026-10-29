@@ -239,9 +239,19 @@ class BusReader(RouteCounts, ABC):
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
-                db, where="{seq} < ?", parameters=(before,),
-                order_by=("seq",), descending=True, limit=limit))
+            return tuple(row.kind.read_from(db, row.seq) for row in self._page_rows(db, before, limit))
+
+    def input_page(self, before: int, limit: int) -> tuple[MessageInput, ...]:
+        """The same global sequence window, without attachment/report/answer acquisition."""
+        with self.observing() as db:
+            return tuple(MessageInput.read_from(db, row.seq) for row in self._page_rows(db, before, limit))
+
+    @staticmethod
+    def _page_rows(db: sqlite3.Connection, before: int, limit: int) -> list[BusRow]:
+        return BusRow.select(
+            db, where="{seq} < ?", parameters=(before,),
+            order_by=("seq",), descending=True, limit=limit,
+        )
 
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""

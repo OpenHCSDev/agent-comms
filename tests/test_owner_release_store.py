@@ -26,7 +26,7 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
         OwnerReleaseEvidence.update(db, where='name=?', parameters=('other',), after=0)
     record = releases.read_many(('worker',))['worker']
     assert record.current(comms.registry.snapshot(), originals[0], generation)
-    assert record.incarnation() == originals[0].incarnation
+    assert record.incarnation == originals[0].incarnation
     assert record.process_identity == originals[0].process_identity
     releases.remove_threads((originals[0],))
     assert isinstance(releases.read_many(('worker',))['worker'], NoRelease)

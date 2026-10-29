@@ -41,6 +41,7 @@ from agent_comms.messages import (
     InfoKind,
     MembershipTransition,
     Message,
+    MessageInput,
     MessageKind,
     MessageRoleWire,
     MessageRoutes,
@@ -54,7 +55,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText, TimestampText
+from agent_comms.field_codec import FieldCodec, GitCommitText, MessageId, MessageIdText, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -381,6 +382,24 @@ def test_real_message_record_round_trip(bus, declaration, role):
     assert bus.lookup(stored.seq) == stored == record
     assert Bus(bus.path).lookup(stored.seq) == stored
     assert bus.page(stored.seq + 1, 10) == (stored,)
+    expected_input = FieldCodec.construct(MessageInput, {
+        entry.name: entry.current(stored) for entry in FieldCodec.field_plans(MessageInput)
+    })
+    with bus.reading() as snapshot:
+        with snapshot.observing() as db:
+            allowed = {table.declared_name for table in MessageInput.tables()} | {BusRow.declared_name}
+
+            def input_reads_only(action, table, column, database, trigger):
+                return (sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_READ and table not in allowed
+                        else sqlite3.SQLITE_OK)
+
+            db.set_authorizer(input_reads_only)
+            try:
+                assert snapshot.input_page(stored.seq + 1, 10) == (expected_input,)
+                with pytest.raises(sqlite3.DatabaseError):
+                    snapshot.page(stored.seq + 1, 10)
+            finally:
+                db.set_authorizer(None)
     assert stored.message is stored
     assert stored.publication_snapshot == message.publication_snapshot
     assert type(stored.publication_snapshot) is Message

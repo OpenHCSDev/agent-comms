@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -29,6 +30,7 @@ from .field_codec import (
     WireRequired,
 )
 from .goals import (
+    Goal,
     GoalDeclaration,
     NoGoal,
 )
@@ -53,14 +55,14 @@ from .repo import Checkout
 from .session_file import NoSessionFile, SessionFile
 from .store_files import AtomicFile
 from .task_sources import TaskScope
-from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
+from .thread_creation import GeneratedCreationTime, RequiredCreationTime
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
     ThreadIncarnation,
-    ThreadIncarnationRecord,
+    ThreadBirthRecord,
     ThreadRole,
     TurnFence,
     TurnIdentity,
@@ -192,13 +194,11 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance:
+class ThreadProvenance(ThreadBirthRecord):
     """Recorded thread identity, without permission to own a process or start a turn."""
 
-    name: str = field(kw_only=False)
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
     worktree: Checkout = field(kw_only=False)
-    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()]
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
     )
@@ -223,16 +223,8 @@ class ThreadProvenance:
     def display_title(self) -> str:
         return self.title.otherwise(self.name)
 
-    @staticmethod
-    def require_name(name: str) -> None:
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not name or not set(name) <= allowed:
-            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
-
     def __post_init__(self) -> None:
-        object.__setattr__(self, "created_at", FieldCodec.decode(
-            Annotated[CreationTime, CreationSeconds], self.created_at))
-        self.require_name(self.incarnation.name)
+        super().__post_init__()
         for tag in self.tags:
             Tag.validate(tag)
 
@@ -247,11 +239,6 @@ class ThreadProvenance:
             }
         )
 
-    @cached_property
-    def incarnation(self) -> ThreadIncarnation:
-        """The declaration's birth member, created once and shared by its readers."""
-        return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
-
 
 class ThreadCatalog(DurableFile, PatternFile):
     """The tool catalog a native launch reads from its thread's session directory."""
@@ -260,8 +247,21 @@ class ThreadCatalog(DurableFile, PatternFile):
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
 
 
+@dataclass(frozen=True, kw_only=True)
+class GoalOwner(ThreadBirthRecord):
+    """The declared goal and executor membership, shared by full and captured rows."""
+
+    goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
+        field(default_factory=NoGoal)
+    )
+    role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = AgentThreadRole
+
+    def active_goals(self) -> Iterator[Goal]:
+        return (goal for owner in self.role.executor(self) for goal in owner.goal.active())
+
+
 @dataclass(frozen=True, slots=True)
-class Thread(ThreadProvenance, CatalogSelection):
+class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
     parent: ThreadParent = field(default_factory=NoParent)
@@ -281,10 +281,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
         field(default=ServiceTier.PRIORITY, kw_only=True)
     )
-    goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
-        field(default_factory=NoGoal)
-    )
-    created_at: Annotated[CreationTime, CreationSeconds, WireRequired()] = field(
+    created_at: RequiredCreationTime = field(
         default_factory=GeneratedCreationTime.now, kw_only=True
     )
     storage_roots: Annotated[
@@ -305,9 +302,6 @@ class Thread(ThreadProvenance, CatalogSelection):
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
-    role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
-        AgentThreadRole
-    )
     execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(
         default=NativeThreadExecution, kw_only=True
     )

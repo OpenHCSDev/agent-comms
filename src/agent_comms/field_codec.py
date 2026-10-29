@@ -2397,10 +2397,10 @@ class FieldCodec(MroDispatch, Sealed):
         return RecordTag.of(value)
 
     @classmethod
-    def encode_fields(cls, value: object) -> dict[str, object]:
+    def encode_fields(cls, value: object) -> dict[str, JsonValue]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        return _member_decoder(type(value)).encode(value)
+        return cast(dict[str, JsonValue], _member_decoder(type(value)).encode(value))
 
     @classmethod
     def decode_bound(cls, target: TypeForm[T], data: object, **context: object) -> T:
@@ -2410,15 +2410,31 @@ class FieldCodec(MroDispatch, Sealed):
     def decode_record(
         cls, target: type[T], data: object, *,
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
-        """Decode declared fields, with nominal narrowing supplied by their contextual owner."""
+        """Continue a boundary's record decode, retaining fields it already decoded."""
         decoder = _RecordDecoder(target)
         for name, narrowed in field_types.items():
             annotation, _ = cls.representation(cls.field_plan(target, name).annotation)
             if not issubclass(narrowed, annotation):
                 raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
         return cast(T, decoder.decode_selected(
-            data, {}, field_types=field_types))
+            data, {}, field_types=field_types, decoded_fields=decoded_fields))
+
+    @classmethod
+    def project_record(
+        cls, target: type[T], data: object, *, source: type,
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
+    ) -> T:
+        """Acquire a declared record projection without decoding unrelated source fields."""
+        raw = _RecordDecoder(source).checked(data)
+        projected: dict[str, object] = {}
+        for entry in cls._record_plan(target).bindings:
+            original = cls.field_plan(source, entry.name)
+            captured = original.captured(raw)
+            if entry.name in captured:
+                projected[entry.key] = captured[entry.name]
+        return cls.decode_record(target, projected, decoded_fields=decoded_fields)
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
@@ -3487,23 +3503,30 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         self, data: object, selections: Mapping[tuple[type, str], object], *,
         context: Mapping[str, object] = {},
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
-        return self.decode_entries(data, self.plan.bindings, selections, context, field_types)
+        return self.decode_entries(
+            data, self.plan.bindings, selections, context, field_types, decoded_fields,
+        )
 
     def decode_entries(
         self, data: object, entries: tuple[FieldPlan, ...],
         selections: Mapping[tuple[type, str], object], context: Mapping[str, object],
         field_types: Mapping[str, type[object]],
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
-        problems = self.missing_fields(data)
+        supplied = {key for entry in entries if entry.name in decoded_fields for key in entry.wire_keys}
+        problems = {key: issue for key, issue in self.missing_fields(data).items() if key not in supplied}
         unknown = list(self.unknown_fields(data))
         target = self.target
-        values = {}
+        values = dict(decoded_fields)
         for entry in entries:
             key = (target, entry.name)
             try:
+                if entry.name in decoded_fields:
+                    continue
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(

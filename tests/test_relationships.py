@@ -7,14 +7,19 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.registry_document import RosterVisibility
+from agent_comms.registry_document import InvalidRegistryDocument, RosterVisibility, ThreadRows
 from agent_comms.relationships import (
     ChildrenRelationshipGroup, CollaboratingRelationshipGroup, InboundRelationshipGroup,
-    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipEdit,
+    OutboundRelationshipGroup, ParentRelationshipGroup, RelationshipContext, RelationshipEdit,
+    RelationshipGroup, SortableRelationshipGroup,
 )
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.display_order import LastActivityThreadSort
+from agent_comms.display_order import LastActivityThreadSort, ThreadSort
+from agent_comms.field_codec import FieldCodec
+from agent_comms.bus import PublicRecord
+from agent_comms.messages import InfoKind, Message, NoticeRole
+from agent_comms.routing import DeliveryScope
 from agent_comms.thread_text import ForkedParent, NoParent
 from agent_comms.tools import invoke_tool
 from agent_comms.threads import Thread
@@ -118,6 +123,64 @@ def test_alias_and_persisted_thread_sort(tmp_path):
     children = snapshot.groups_by_type[ChildrenRelationshipGroup]
     assert children.order is LastActivityThreadSort
     assert collaboration_rows(comms, "reviewer")[0].target == "renamed"
+
+
+def test_recent_relationships_keep_the_global_cut_and_exact_preview(tmp_path):
+    comms = setup_wire(tmp_path)
+    bus = comms.bus.bus
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("peer", "owner", "evicted relevant input", InfoKind, seq=seq),
+    ))
+    for _ in range(comms.relationships.RECENT_MESSAGES):
+        bus.append(lambda seq, db: PublicRecord.from_message(
+            Message("peer", "peer", "unrelated global row", InfoKind, seq=seq),
+        ))
+    snapshot = comms.relationships.snapshot("owner")
+    assert snapshot.history_limited and snapshot.history_messages == comms.relationships.RECENT_MESSAGES
+    assert not snapshot.groups_by_type[InboundRelationshipGroup].entries
+
+    body = "preview " * 50
+    latest = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("peer", "owner", body, InfoKind, seq=seq),
+    ))
+    bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("peer", "owner", "not a conversation", InfoKind, seq=seq, role=NoticeRole()),
+    ))
+    snapshot = comms.relationships.snapshot("owner")
+    entry = snapshot.groups_by_type[InboundRelationshipGroup].entries["peer"]
+    assert entry.sequence == latest.seq and entry.timestamp == latest.timestamp
+    assert entry.detail == f"peer → owner\n{body[:240]}"
+    assert snapshot.history_limited and snapshot.history_messages == comms.relationships.RECENT_MESSAGES
+
+
+@pytest.mark.parametrize("order", ThreadSort.members_with(ThreadSort))
+def test_group_selection_hydrates_only_selected_threads_on_its_captured_cut(tmp_path, order):
+    comms = setup_wire(tmp_path)
+    comms.registry.declare(Thread("unselected", frozenset(), Checkout(tmp_path)))
+    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "Real contact")
+    captured = comms.registry.snapshot()
+    raw = captured.threads.to_wire()
+    raw["unselected"][FieldCodec.field_plan(Thread, "model").key] = 123
+    registry = replace(captured, threads=ThreadRows.from_wire(raw))
+    thread = registry.require("owner")
+    contacts, _ = comms.relationships._goal_contacts(registry, thread)
+    context = RelationshipContext(
+        registry, thread, {}, (),
+        DeliveryScope.capture(thread.name, registry, comms.views.channels.catalog.read()),
+        comms.relationships.store.read().resolved(registry).collaborations, contacts,
+        {group: order for group in SortableRelationshipGroup.members_with(SortableRelationshipGroup)},
+        order.sent_timestamps(comms.views, registry=registry),
+    )
+    groups = {type(group): group for group in RelationshipGroup.capture(context, comms.views)}
+    for group_type, target in ((ParentRelationshipGroup, "origin"),
+                               (ChildrenRelationshipGroup, "child"),
+                               (CollaboratingRelationshipGroup, "peer")):
+        entry = groups[group_type].entries[target]
+        assert entry.available and entry.person.thread is registry.require(target)
+    assert set(context.people) == {"origin", "child", "peer"}
+    assert all(selected.order is order for group in groups.values() for selected in group.selectable())
+    with pytest.raises(InvalidRegistryDocument):
+        registry.require("unselected")
 
 
 def test_concurrent_declaring_agents_do_not_lose_updates(tmp_path):

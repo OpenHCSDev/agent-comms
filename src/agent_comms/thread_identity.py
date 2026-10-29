@@ -7,6 +7,7 @@ does not create a new historical thread; a new turn does not change its owner.
 from __future__ import annotations
 
 from .class_fact import ClassFact
+from .thread_creation import CreationSeconds, CreationTime, RequiredCreationTime
 import hashlib
 import math
 from abc import ABC, abstractmethod
@@ -190,7 +191,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
     @classmethod
     def from_wire(cls, data: dict) -> ThreadIncarnation:
-        return FieldCodec.decode(ThreadIncarnationRecord, data).incarnation()
+        return FieldCodec.decode(ThreadIncarnationRecord, data).incarnation
 
     @classmethod
     def deleted(cls, name: str) -> DeletedThreadIncarnation:
@@ -403,14 +404,25 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return cls.watcher()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ThreadIncarnationRecord:
     """The single exact external name/birth record; members own its meaning."""
 
     name: str
     created_at: float
 
+    @staticmethod
+    def require_name(name: str) -> None:
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        if not name or not set(name) <= allowed:
+            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
+
+    def __post_init__(self) -> None:
+        self.require_name(self.name)
+
+    @cached_property
     def incarnation(self) -> ThreadIncarnation:
+        """One birth derivation, shared by full declarations and captured narrow rows."""
         try:
             member = BirthlessIncarnation.member_selected(self.created_at)
         except UnknownFamilyMember:
@@ -419,9 +431,21 @@ class ThreadIncarnationRecord:
 
     @classmethod
     def decode(cls, name: str, birth: float) -> ThreadIncarnation:
-        return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
+        return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation
 
 
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadBirthRecord(ThreadIncarnationRecord):
+    """A registered declaration retains its recorded/generated creation-clock capability."""
+
+    created_at: RequiredCreationTime
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", FieldCodec.decode(
+            Annotated[CreationTime, CreationSeconds], self.created_at,
+        ))
+        super().__post_init__()
 
 
 @dataclass(frozen=True, slots=True)

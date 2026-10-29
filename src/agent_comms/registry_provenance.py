@@ -169,12 +169,14 @@ class RegistryNames(Generic[Member]):
             return DeletedThread(canonical)
         raise UnregisteredThreadError(f"Thread {canonical!r} was never registered.")
 
-    def require(self, name: str) -> Member:
+    def require_canonical(self, name: str) -> str:
         canonical = self.canonical_name(name)
-        try:
-            return self.threads[canonical]
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+        if canonical not in self.threads:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.")
+        return canonical
+
+    def require(self, name: str) -> Member:
+        return self.threads[self.require_canonical(name)]
 
 
 @dataclass(frozen=True, slots=True)

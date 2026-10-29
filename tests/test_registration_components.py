@@ -158,11 +158,16 @@ def test_lifecycle_document_survives_fresh_process_restart(tmp_path):
 
 
 def test_thread_rows_compare_unread_rows_as_stored_and_decode_only_what_changed(tmp_path):
-    from agent_comms.registry_document import ThreadRows
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.registry_document import InvalidRegistryDocument, ThreadRows
     from agent_comms.thread_execution import ExternalThreadExecution
 
-    # A row that cannot decode proves an unread, unchanged row is never decoded to compare.
-    stored = {'unread': {'name': 'unread', 'not': 'a thread'}}
+    # A real declaration with malformed non-determining data stays lazy until a full read.
+    row = FieldCodec.encode_fields(Thread('unread', frozenset(), Checkout(tmp_path)))
+    row[FieldCodec.field_plan(Thread, 'model').key] = 123
+    stored = {'unread': row}
+    with pytest.raises(InvalidRegistryDocument):
+        ThreadRows.from_wire(stored)['unread']
     assert ThreadRows.from_wire(stored) == ThreadRows.from_wire(stored)
     written = ThreadRows.from_wire(stored)
     written['unread'] = Thread(

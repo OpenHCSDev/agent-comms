@@ -191,7 +191,7 @@ class VerifiedOwnerLoss(ABC):
         if not self.issued_for(self._store):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
         session_dir = (
-            self._store.session.path.parent / "native-sessions" / self.release.incarnation().lookup
+            self._store.session.path.parent / "native-sessions" / self.release.incarnation.lookup
         )
         proc = Path("/proc")
         if not proc.is_dir():
