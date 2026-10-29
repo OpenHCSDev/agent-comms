@@ -94,7 +94,7 @@ class DeckReader(ABC):
 
     @classmethod
     def tells(cls) -> tuple[str, ...]:
-        return tuple(rule.drift for rule in cls.rules())
+        return tuple(rule.reminder for rule in cls.rules())
 
     @classmethod
     def failures(cls) -> tuple[str, ...]:
