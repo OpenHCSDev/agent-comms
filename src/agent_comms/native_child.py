@@ -21,12 +21,12 @@ from .pending_requests import PendingRequest
 from .pi_events import PiEvent
 from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
+from .publication_measurements import PublicationMeasurements
 from .session_revision import SessionRevision
 
 if TYPE_CHECKING:
     from typing import Self
 
-    from .diagnostics import PublicationMeasurements
     from .native_package import VerifiedNativePackage
     from .participant_identity import ParticipantIdentity
     from .pi_commands import ExtensionUiResponse, PiCommand

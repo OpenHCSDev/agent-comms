@@ -19,7 +19,7 @@ from .agent_events import AgentEvent
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .external_transcript import DraftRow
+from .external_transcript import DraftPublication, DraftRow
 from .field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
@@ -31,6 +31,7 @@ from .native_input_proof import NativeContextProof
 from .native_pi import (
     NativeEmptyAnswer,
     NativePiPromptRejected,
+    NativePiRpcLaunch,
     NativeTurnResult,
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
@@ -264,18 +265,21 @@ class TrackedTurnSession(TurnSession):
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and
         # child permissions remain fresh. Finish construction before acquiring the child.
+        def select_launch() -> NativePiRpcLaunch:
+            with measurements.operation("native_launch_selection_worker"):
+                return execution.tracked_launch(
+                    package,
+                    root=startup.root,
+                    worktree=worktree,
+                    session=session,
+                    model=model,
+                    thinking_level=thinking_level,
+                    environment=environment,
+                    selected_tool_mode=selected_tool_mode,
+                )
+
         with measurements.operation("native_launch_selection"):
-            launch = await Coordination.run_worker(partial(
-                execution.tracked_launch,
-                package,
-                root=startup.root,
-                worktree=worktree,
-                session=session,
-                model=model,
-                thinking_level=thinking_level,
-                environment=environment,
-                selected_tool_mode=selected_tool_mode,
-            ))
+            launch = await Coordination.run_worker(select_launch)
         turn = cls(
             launch,
             partial(commands.Prompt,
@@ -311,9 +315,13 @@ class TrackedTurnSession(TurnSession):
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
-                    self.draft_publication = await Coordination.run_worker(partial(
-                        drafts.enter_context, DraftRow.publication(
-                            self.startup.root, self.command.input_id)))
+                    def acquire_draft() -> DraftPublication:
+                        with self.startup.measurements.operation("draft_publication_worker"):
+                            return drafts.enter_context(DraftRow.publication(
+                                self.startup.root, self.command.input_id))
+
+                    with self.startup.measurements.operation("draft_publication_acquisition"):
+                        self.draft_publication = await Coordination.run_worker(acquire_draft)
                     await ownership.enter_async_context(self.native.failures())
                     self.watchdog.reading()
                     try:

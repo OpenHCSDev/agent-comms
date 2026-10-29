@@ -1,7 +1,7 @@
 """One-use fenced raw prompt writes, independent of the owner's asyncio loop.
 
 Each successful os.write into the native pipe sends bytes irreversibly
-while the input locks are held. No StreamWriter prompt buffer
+after the original one-use grant. No StreamWriter prompt buffer
 exists to flush after that scope. Partial/failed/timed-out/cancelled sends grant
 no acceptance and are never retried. The reserved input remains unreplayable.
 """
@@ -18,7 +18,7 @@ import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
-from .diagnostics import PublicationMeasurements
+from .publication_measurements import PublicationMeasurements
 from .field_codec import AcpSessionId
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
@@ -108,25 +108,28 @@ def _write_fenced(
         with authorized:
             deadline = time.monotonic() + timeout
             remaining = memoryview(payload)
-            while remaining:
-                budget = deadline - time.monotonic()
-                if cancelled.is_set() or budget <= 0:
-                    raise PromptSendUnknown(
-                        "Native prompt send is UNKNOWN after cancellation/deadline"
-                    )
-                try:
-                    with measurements.operation("raw_pipe_write"):
-                        count = os.write(fd, remaining)
-                except BlockingIOError:
-                    # Bounded readiness wait, not input replay or provider retry.
-                    select.select([], [fd], [], min(budget, 0.05))
-                    continue
-                except OSError as error:
-                    raise PromptSendUnknown("Native prompt write is UNKNOWN; no retry") from error
-                if count <= 0:
-                    raise PromptSendUnknown("Native prompt short write is UNKNOWN; no retry")
-                written += count
-                remaining = remaining[count:]
+            # One writer-thread interval includes partial writes and readiness
+            # waits. Exceptional exit still records time, never successful delivery.
+            with measurements.operation("prompt_write_loop"):
+                while remaining:
+                    budget = deadline - time.monotonic()
+                    if cancelled.is_set() or budget <= 0:
+                        raise PromptSendUnknown(
+                            "Native prompt send is UNKNOWN after cancellation/deadline"
+                        )
+                    try:
+                        with measurements.operation("raw_pipe_write"):
+                            count = os.write(fd, remaining)
+                    except BlockingIOError:
+                        # Bounded readiness wait, not input replay or provider retry.
+                        select.select([], [fd], [], min(budget, 0.05))
+                        continue
+                    except OSError as error:
+                        raise PromptSendUnknown("Native prompt write is UNKNOWN; no retry") from error
+                    if count <= 0:
+                        raise PromptSendUnknown("Native prompt short write is UNKNOWN; no retry")
+                    written += count
+                    remaining = remaining[count:]
     except (OSError, sqlite3.Error, CoordinationError) as error:
         if written:
             raise PromptSendUnknown(

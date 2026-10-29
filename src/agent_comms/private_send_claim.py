@@ -38,6 +38,8 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .owned_send import OwnedSend
+from .publication_measurements import PublicationMeasurements
+from .registry_document import RegistrySnapshot
 from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,
@@ -64,6 +66,7 @@ class PrivateSendClaim(PromptBoundary):
     token_digest: str
     prompt: RenderedInput
     session: SelectedSession
+    measurements: PublicationMeasurements = field(repr=False, compare=False)
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
@@ -120,20 +123,23 @@ class PrivateSendClaim(PromptBoundary):
         A failed binding leaves the durable reservation intact; construction must
         never roll it back or make another input eligible for automatic replay.
         """
+        measurements = PublicationMeasurements()
         digest = TextDigest.of(token).value
         def reserve(store):
-            input_id = stage.reserve(store, selected.identity, digest)
-            bind_expected_prompt(
-                store,
-                input_id=input_id,
-                stage=stage,
-                owner=selected.owner.thread,
-                generation=selected.identity.generation,
-                prompt=prompt.text,
-            )
-            return input_id
+            with measurements.operation("input_reservation_binding_worker"):
+                input_id = stage.reserve(store, selected.identity, digest)
+                bind_expected_prompt(
+                    store,
+                    input_id=input_id,
+                    stage=stage,
+                    owner=selected.owner.thread,
+                    generation=selected.identity.generation,
+                    prompt=prompt.text,
+                )
+                return input_id
 
-        input_id = await Coordination.run_async(selected.store.session.path, reserve)
+        with measurements.operation("input_reservation_binding"):
+            input_id = await Coordination.run_async(selected.store.session.path, reserve)
         return cls(
             selected=selected,
             stage=stage,
@@ -141,6 +147,7 @@ class PrivateSendClaim(PromptBoundary):
             token_digest=digest,
             prompt=prompt,
             session=session,
+            measurements=measurements,
         )
 
     def verify(
@@ -175,8 +182,14 @@ class PrivateSendClaim(PromptBoundary):
         The raw writer keeps the single-use send token after the input is recorded.
         """
         lease = self.owner.thread.require_turn_lease()
-        registry = await Coordination.run_worker(self.bus._registry.snapshot)
+        startup = NativeStartup(self.bus.bus.path.parent, measurements=self.measurements)
+        def snapshot_registry() -> RegistrySnapshot:
+            with self.measurements.operation("selected_registry_snapshot_worker"):
+                return self.bus._registry.snapshot()
+
         try:
+            with self.measurements.operation("selected_registry_snapshot"):
+                registry = await Coordination.run_worker(snapshot_registry)
             result = await TrackedTurnSession.execute(
                 execution.native_package,
                 input_id=self.input_id,
@@ -190,10 +203,7 @@ class PrivateSendClaim(PromptBoundary):
                     self.bus.bus.path.parent, registry,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
-                startup=NativeStartup(
-                    self.bus.bus.path.parent,
-                    measurements=self.selected.cursor_delivery.measurements,
-                ),
+                startup=startup,
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
@@ -221,7 +231,7 @@ class PrivateSendClaim(PromptBoundary):
         finally:
             await Coordination.run_worker(partial(
                 record_acquisition_progress, self.bus.bus.path.parent, lease,
-                self.input_id, self.selected.cursor_delivery.measurements,
+                self.input_id, self.measurements, startup.native_process,
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
             await Coordination.run_read_async(
@@ -259,29 +269,29 @@ class PrivateSendClaim(PromptBoundary):
         subsequent owner loss permits replay.
         """
         with ExitStack() as authority:
-            with self.selected.cursor_delivery.measurements.operation("coordinator_open"):
+            with self.measurements.operation("coordinator_open"):
                 store = authority.enter_context(Coordination(str(self.store_path)))
-            with self.selected.cursor_delivery.measurements.operation("maintenance_ingress"):
+            with self.measurements.operation("maintenance_ingress"):
                 authority.enter_context(MaintenanceBarrier(
                     self.bus._registry.store.path
                 ).allow_input())
-            with self.selected.cursor_delivery.measurements.operation("registry_exclusion"):
+            with self.measurements.operation("registry_exclusion"):
                 cut = authority.enter_context(self.bus._registry.store.current_snapshot())
                 registry = cut.snapshot
-            with self.selected.cursor_delivery.measurements.operation("prompt_binding"):
+            with self.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
                     store, self.input_id, self.participant, self.wire_root_id,
                     self.prompt.text,
                 ))
-            with self.selected.cursor_delivery.measurements.operation("coordinator_exclusive"):
+            with self.measurements.operation("coordinator_exclusive"):
                 db = authority.enter_context(store.session.writing())
-            with self.selected.cursor_delivery.measurements.operation("selected_source_check"):
+            with self.measurements.operation("selected_source_check"):
                 self.session.verify_start(identity)
             # From token consumption through COMMIT/fsync, every failure
             # remains uncertain and propagates without another send attempt.
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
-            with self.selected.cursor_delivery.measurements.operation("claim_checks"):
+            with self.measurements.operation("claim_checks"):
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
                 )
@@ -291,7 +301,7 @@ class PrivateSendClaim(PromptBoundary):
                     db, self.input_id, self.participant, self.token_digest
                 )
                 self.stage.require_claim(store)
-            with self.selected.cursor_delivery.measurements.operation("native_claim_record"):
+            with self.measurements.operation("native_claim_record"):
                 reserved.sent_owner_claimed_generation.record(
                     reserved, db, self.owner.claimed_generation, identity
                 )
