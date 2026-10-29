@@ -49,7 +49,7 @@ from .transcript_sources import (
     TranscriptSource,
     WireFrontier,
 )
-from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
+from .turn_digests import InputAnswerRead, ThreadTurns, TurnBound, TurnDigestRead
 from .turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
@@ -519,8 +519,7 @@ class Transcripts:
         self, thread: Thread, references: tuple[MessageReference, ...], privacy: RegistryPrivacy,
     ) -> frozenset[MessageReference]:
         """The same source family owns bounded answer evidence for native and external turns."""
-        source = thread.runtime.history_source(self.root, thread.incarnation)
-        return source.answered_inputs(self.root, thread.incarnation, references, privacy)
+        return InputAnswerRead(self.root, thread, references, privacy).read()
 
     def bind_page_read(
         self,

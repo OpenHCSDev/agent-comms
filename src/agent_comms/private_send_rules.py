@@ -13,9 +13,9 @@ from .coordination_tables.participants import OwnerGenerations
 from .reservation_rules import ReservationRule, RuleCheck
 from .text_digest import TextDigest
 from .turn_goal_permission import GoalPermission
+from .threads import Thread
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .native_input_record import NativeInputRecord
     from .native_prompt_binding import PromptBinding
     from .native_runtime_input import NativeRuntimeInput

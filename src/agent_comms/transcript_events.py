@@ -44,7 +44,6 @@ from .ui_model.message_category import (
 
 if TYPE_CHECKING:
     from .importing import ImportBuffer, ImportLimits
-    from .external_transcript import ReplyWindow
     from .transcript_sources import TranscriptSource
 
 
@@ -136,13 +135,14 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
 
-    def reply_window(self, window: ReplyWindow) -> ReplyWindow:
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
         """Input and system evidence do not start an assistant answer."""
         return window
 
-    def answered_references(self, opening: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
+    @property
+    def answers_turn(self) -> bool:
         """Non-answer events do not clear a turn's opening questions."""
-        return ()
+        return False
 
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
@@ -359,13 +359,14 @@ class UserTranscript(NativeTextTranscript):
 class ModelOutput:
     """Assistant text, thinking and tool output close the window for new automatic reply routes."""
 
-    def reply_window(self, window: ReplyWindow) -> ReplyWindow:
-        return window.answering()
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
+        return answering()
 
 
 class AssistantTranscript(ModelOutput, AgentTextTranscript):
-    def answered_references(self, opening: tuple[MessageReference, ...]) -> tuple[MessageReference, ...]:
-        return opening if self.text else ()
+    @property
+    def answers_turn(self) -> bool:
+        return bool(self.text)
 
     def append_to(self, events: list[TranscriptEvent]) -> None:
         if events and (merged := events[-1].followed_by_assistant(self)) is not None:

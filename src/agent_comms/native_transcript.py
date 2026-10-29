@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import closing, contextmanager, nullcontext
 from itertools import takewhile
 from dataclasses import dataclass
@@ -13,27 +13,19 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
 from .errors import RelationViolationError
-from .native_pi import NativeContextJournal
-from .coordinator import Coordination
-from .coordination_database import CoordinationStore
-from .coordination_session import ReadNativeCoordinationSession
-from .historical_native_inputs import read_historical_native_inputs
+from .native_pi import NativeContextJournal, NativeContextProof
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
     from .native_output import NativeRecordLocation
     from .read_ledger import ReadLedger
-    from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-    from .message_reference import MessageReference
-    from .private_registry_guard import RegistryPrivacy
+    from .thread_identity import RecordedThreadIncarnation
 
 from agent_comms.native_session_files import NativeSessionFiles
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import MalformedRecord
 from .native_entries import (
     NativeEntry,
-    NativeEvidenceScope,
     NoEntryId,
     RecordedEntry,
     RootEntry,
@@ -219,35 +211,12 @@ class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
 
-    def answered_inputs(
-        self, root: Path, owner: ThreadIncarnation, references: tuple[MessageReference, ...],
-        privacy: RegistryPrivacy,
-    ) -> frozenset[MessageReference]:
-        """Reuse retained source proofs, then read only each proved input's own turn."""
-        with Coordination(str(CoordinationStore.path_in(root)),
-                          session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as source_reads:
-            sources = {reference: read_historical_native_inputs(
-                store, wire_root_id=privacy.namespace,
-                recipient_lookup=owner.require_recorded().lookup,
-                source_seq=reference.seq, source_reads=source_reads) for reference in references}
-            for reference, proofs in sources.items():
-                if any(proof.source_message_id != reference.message_id for proof in proofs):
-                    raise RelationViolationError("Native answer refers to another original message")
-            contexts = dict.fromkeys(proof.context for proofs in sources.values() for proof in proofs
-                                     if proof.execution.proves_full_source(proof))
-            completed = frozenset(context for context in contexts
-                if NativeTranscript(context.session_file).completed_input(context))
-        return frozenset(reference for reference, proofs in sources.items()
-                         if any(proof.context in completed for proof in proofs
-                                if proof.execution.proves_full_source(proof)))
-
     def completed_input(self, context: NativeContextProof) -> bool:
         """Start at the proved input byte offset; never borrow the following input's final."""
         cut = self.cut()
         with closing(self.forward(context.session_entry_start, cut.offset)) as records:
             anchor = next(records)
-            entry_id = FieldCodec.decode(FreshNativeId, context.session_entry_id)
-            if not anchor.project(lambda original: original.entry.require_entry_id() == entry_id):
+            if not anchor.project(lambda original: original.entry.require_entry_id() == context.session_entry_id):
                 raise TranscriptChanged("Native answer input changed after its proof was read")
             own_turn = takewhile(
                 lambda record: not record.project(lambda original: original.entry.input_boundary), records)
@@ -403,7 +372,7 @@ class NativeTranscript(TranscriptSource):
                 self.path.absolute(), header, user, session_entry_start=session_entry_start,
             )
 
-    def inputs_for(self, records, *, floor: int = 0) -> tuple:
+    def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord | None, ...]:
         """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
@@ -411,7 +380,7 @@ class NativeTranscript(TranscriptSource):
         chain reaches a user boundary or a root. Tool rounds and branches cannot
         lend another input's publication proof.
         """
-        found = [None] * len(records)
+        found: list[NativeRecord | None] = [None] * len(records)
         waiting: dict[str | RootEntry, list[int]] = defaultdict(list)
         latest = 0
         for position, record in enumerate(records):
@@ -483,6 +452,6 @@ class NativeTranscript(TranscriptSource):
                     return
                 yield NativeRecord.read(start, stream.tell(), raw)
 
-    def reverse(self, before: int, *, floor: int = 0):
+    def reverse(self, before: int, *, floor: int = 0) -> Generator[NativeRecord]:
         for start, end, raw in reverse_records(self.path, before, floor=floor):
             yield NativeRecord.read(start, end, raw)

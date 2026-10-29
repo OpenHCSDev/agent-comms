@@ -24,9 +24,9 @@ from .private_send_rules import (
 )
 from .reservation_rules import ReservationViolationError
 from .turn_goal_permission import GoalPermission, OwnerGoalPermission
+from .threads import Thread
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .goals import Goal
     from .registration import Registration
     from .registry_document import RegistrySnapshot

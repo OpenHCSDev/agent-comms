@@ -26,7 +26,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId
+from agent_comms.turn_item import FreshNativeId, NativeItemId
 from conftest import transcript_records
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
@@ -172,7 +172,7 @@ def test_native_final_stays_inside_its_proved_input_and_ancestry(
     path.write_bytes(prefix + opening + (following if next_input else b'') +
                      (final if complete else final.removesuffix(b'\n')))
     context = NativeContextProof(input_id=input_id, session_id=session_id,
-        session_entry_id='opening-input', request_generation=1, llm_context_digest='a' * 64,
+        session_entry_id=FreshNativeId('opening-input'), request_generation=1, llm_context_digest='a' * 64,
         committed_at_ms=1761699600000, session_file=path, session_entry_start=len(prefix))
     assert NativeTranscript(path).completed_input(context) is answered
 

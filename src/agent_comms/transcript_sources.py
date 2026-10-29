@@ -20,7 +20,6 @@ if TYPE_CHECKING:
     from .context_store import ContextStore
     from .external_transcript import ExternalPageRow
     from .message_reference import MessageReference
-    from .private_registry_guard import RegistryPrivacy
     from .native_entries import TranscriptProjection
     from .native_output import NativeRecordLocation
     from .native_transcript import NativeRecord, NativeTranscript, SessionCut
@@ -397,10 +396,7 @@ class TranscriptSource:
     async def watch_requests(self, emit: Callable[[ExternalPageRow], None]) -> None:
         """Sources without a harness continuation have no bridge requests."""
 
-    def answered_inputs(
-        self, root: Path, owner: ThreadIncarnation, references: tuple[MessageReference, ...],
-        privacy: RegistryPrivacy,
-    ) -> frozenset[MessageReference]:
+    def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Sources without retained input/answer links cannot prove an answer."""
         return frozenset()
 

@@ -13,9 +13,7 @@ from .activity import ObservedActivity
 from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeCapture
-from .bus_tables import MessageIdentitySource
 from .errors import RelationViolationError
-from .external_transcript import ExternalTranscript
 from .field_codec import (
     NullMember,
     RecordMember,
@@ -390,11 +388,7 @@ class NoTurnLease(NullMember, TurnLease):
     def answered_inputs(
         self, messaging: Messaging, owner: Thread, target: str,
     ) -> tuple[MessageReference, ...]:
-        references = ExternalTranscript(messaging.root, owner.incarnation).answering()
-        with NativeCapture(messaging.bus) as boundary, messaging.bus.bus.reading() as source:
-            with source.observing() as db:
-                return MessageIdentitySource.answering(
-                    db, references, CommandTarget.named(target), boundary.registry)
+        return ()
 
     def attests(self, claim_scope: int, turn_id: TurnId) -> bool:
         return False

@@ -58,7 +58,6 @@ from .watched import FileSource, Watched
 
 if TYPE_CHECKING:
     from .turn_digests import TurnBound
-    from .private_registry_guard import RegistryPrivacy
 
 
 class ReplyWindow(DeclaredFamily, affix="Replies"):
@@ -80,7 +79,7 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
     def observed(self, events: tuple[TranscriptEvent, ...]) -> ReplyWindow:
         window = self
         for event in events:
-            window = event.reply_window(window)
+            window = event.reply_window(window, window.answering)
         return window
 
     def finished(self) -> ReplyWindow:
@@ -123,11 +122,10 @@ class StoppedReplies(AnsweringReplies):
 class FinishedReplies(StoppedReplies):
     def answered(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
         opening = turn.opening_references(connection)
-        return tuple(dict.fromkeys(reference
+        return opening if any(event.answers_turn
             for item in ExternalItemRow.select(connection, thread=turn.thread, turn_id=turn.turn_id,
                                                 order_by=("seq",), descending=True, limit=1)
-            for event in item.events_in(connection)
-            for reference in event.answered_references(opening)))
+            for event in item.events_in(connection)) else ()
 
 
 class ExternalPage(DeclaredFamily):
@@ -591,11 +589,10 @@ class ExternalTranscript(TranscriptSource, DurableStore):
                                         order_by=("seq",), descending=True, limit=1)
             return next((turn.replies.references_in(connection, turn) for turn in turns), ())
 
-    def answered_inputs(
-        self, root: Path, owner: ThreadIncarnation, references: tuple[MessageReference, ...],
-        privacy: RegistryPrivacy,
-    ) -> frozenset[MessageReference]:
+    def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
         """Probe only named originals and the final items of the turns they opened."""
+        if not references:
+            return frozenset()
         with self.snapshot() as connection:
             inputs = ExternalTurnInput.select_keys(connection, tuple(
                 dict(thread=self.lookup, reference=reference) for reference in references))

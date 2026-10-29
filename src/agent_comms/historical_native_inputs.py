@@ -11,12 +11,21 @@ from __future__ import annotations
 from agent_comms.native_session_files import NativeSessionFiles
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
+from .coordination_database import CoordinationStore
+from .coordination_session import ReadNativeCoordinationSession
+from .message_reference import MessageReference
+from .native_entries import NativeEvidenceScope
+from .native_transcript import NativeTranscript
+from .private_registry_guard import RegistryPrivacy
+from .thread_identity import ThreadIncarnation
+from .transcript_sources import TranscriptSource
 from agent_comms.native_runtime_input import NativeRuntimeTable
 from .declared_family import DeclaredFamily
 from .field_codec import AssignmentId, InputId, MessageId, WireName, RootId, ThreadLookup
@@ -33,8 +42,6 @@ from .native_runtime_input import NativeRuntimeInput
 from .selected_triage import SelectedTriage
 from .typed_table import TypedRow
 
-if TYPE_CHECKING:
-    from .native_entries import NativeEvidenceScope
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -87,6 +94,31 @@ class FullHistoricalNativeInput(HistoricalNativeInput):
 
     def proves_triage_source(self, evidence) -> bool:
         return False
+
+
+@dataclass(frozen=True)
+class HistoricalNativeAnswers(TranscriptSource):
+    """Join retained input proofs to their own bounded transcript output."""
+
+    root: Path
+    owner: ThreadIncarnation
+    privacy: RegistryPrivacy
+
+    def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
+        if not references:
+            return frozenset()
+        with Coordination(str(CoordinationStore.path_in(self.root)),
+                          session_type=ReadNativeCoordinationSession) as store, NativeEvidenceScope() as reads:
+            sources = {reference: tuple(proof for proof in read_historical_native_inputs(
+                store, wire_root_id=self.privacy.namespace,
+                recipient_lookup=self.owner.require_recorded().lookup,
+                source_seq=reference.seq, source_reads=reads)
+                if proof.execution.proves_full_source(proof)) for reference in references}
+            contexts = dict.fromkeys(proof.context for proofs in sources.values() for proof in proofs)
+            completed = frozenset(context for context in contexts
+                                  if NativeTranscript(context.session_file).completed_input(context))
+        return frozenset(reference for reference, proofs in sources.items()
+                         if any(proof.context in completed for proof in proofs))
 
 
 @dataclass(frozen=True)
