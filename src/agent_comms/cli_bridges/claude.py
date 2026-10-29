@@ -14,13 +14,14 @@ from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource
-from agent_comms_hooks.session import SessionHook
-from agent_comms_hooks.watch import WatchClaim
 
 from .history import ClaudeHistory
 from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import ClaudeJsonLines, RunningClaude
+from .hook_session import SessionHook
+from .session_watch import WatchClaim
 from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
+from . import hook_requests  # Register the resident event declarations before serving the socket.
 
 if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate

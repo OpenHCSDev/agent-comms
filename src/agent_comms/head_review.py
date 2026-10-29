@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Annotated, ClassVar
 from collections.abc import Sequence
 
+from agent_comms_hooks import ToolRefusedError
+
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .repo import Repo
 from .repository_name import RepositoryName

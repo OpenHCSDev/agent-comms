@@ -14,8 +14,14 @@ from dataclasses import dataclass, replace
 from itertools import dropwhile, takewhile
 from typing import ClassVar
 
-from agent_comms.shell_commands import ShellCommand, shell_commands
 from agent_comms_hooks import Bash, BashRefusal
+
+from .shell_commands import (
+    ShellCommand,
+    shell_commands,
+)
+from .watch import SessionHookProgram
+
 
 Words = tuple[str, ...]
 
@@ -139,7 +145,11 @@ class WaitCommand(Bash):
         return tuple(reasons)
 
 
-class BoundedWaits(BashRefusal):
+class BoundedWaits(SessionHookProgram, BashRefusal):
+    @classmethod
+    def command(cls) -> str:
+        return cls.console_script(f"{__spec__.name}:main")
+
     headline = "Unbounded wait refused"
 
     @classmethod

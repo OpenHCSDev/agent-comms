@@ -21,10 +21,6 @@ from .native_pi import (
     PrivateEvidenceRead,
 )
 from .native_session_files import BusTranscriptFile, NativeSessionFiles
-from .pi_payload import (
-    Opaque,
-    PiPayload,
-)
 from .store_files import AtomicFile
 
 if TYPE_CHECKING:
@@ -46,9 +42,11 @@ from .field_codec import (
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
 from .pi_payloads import (
+    Opaque,
     PiField,
     PiMessage,
     PiOmitted,
+    PiPayload,
     ReportedText,
 )
 from .pi_vocabulary import PendingStopReason, ThinkingLevel

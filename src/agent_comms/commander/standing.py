@@ -65,7 +65,9 @@ from agent_comms.todos import (
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms_hooks.watch import DeafWatch
+
+from ..cli_bridges.session_watch import DeafWatch
+
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import CommanderVerb

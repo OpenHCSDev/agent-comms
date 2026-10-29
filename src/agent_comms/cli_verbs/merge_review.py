@@ -7,14 +7,15 @@ from typing import Annotated
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import MergeReviewResult
 from agent_comms.comms import Comms
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import Argument
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
-from agent_comms.shell_commands import ShellCommand
 from agent_comms.todos import StoredHeadReview
+from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.queue_bypass import QueueBypass
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.shell_commands import ShellCommand
+
+from ..cli_bridges.session_watch import WatchClaim
 
 
 @dataclass(frozen=True, kw_only=True)

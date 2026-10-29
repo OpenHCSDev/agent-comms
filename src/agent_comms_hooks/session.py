@@ -1,54 +1,10 @@
-"""Claude session hooks start/stop the configured bridge, never a Monitor reader."""
+"""SessionStart bootstraps Core; later lifecycle events use its resident owner."""
+import subprocess
+import sys
 
-from __future__ import annotations
-
-import os
-from dataclasses import dataclass
-from pathlib import Path
-
-from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import EndSession
-from agent_comms.cli_bridges.shared import Serve
 from agent_comms_hooks import ClaudeHookProgram
-from agent_comms_hooks.forks import SessionSubagents
-from agent_comms_hooks.watch import WatchClaim
 
-
-@dataclass(frozen=True)
-class SessionHook(SessionSubagents):
-    @staticmethod
-    def environment_session() -> str:
-        """Claude exports the identity shared by its hook and bare Monitor command."""
-        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
-        if not session:
-            raise ValueError("Claude did not export CLAUDE_CODE_SESSION_ID")
-        return session
-
-    @classmethod
-    def current(cls, session: str, transcript: str) -> SessionHook:
-        return cls(session_id=session, hook_event_name="SessionStart", transcript_path=transcript)
-
-    def owner(self) -> ProcessIdentity:
-        if self.environment_session() != self.session_id:
-            raise ValueError("Claude hook session and CLAUDE_CODE_SESSION_ID disagree")
-        pid = os.environ.get("CLAUDE_PID", "")
-        if not pid:
-            raise ValueError("Claude hook has no exported CLAUDE_PID")
-        owner = ProcessIdentity.capture(int(pid))
-        owner.require_ancestor_of(os.getpid())
-        return owner
-
-    def start(self) -> None:
-        Serve.launch(WatchClaim(self.session_id), self.owner, Path(self.transcript_path))
-
-    def end(self) -> None:
-        """The subagents end first, while the claim still names this session's role; a
-        refusal still lets the bridge stop, then fails the hook with Core's reason."""
-        refused = self.end_subagents()
-        claim = WatchClaim(self.session_id)
-        claim.state().end(lambda: EndSession(owner=self.owner()))
-        for refusal in refused:
-            raise SystemExit(refusal)
+from .watch import SessionHookProgram
 
 
 class SessionStarted(ClaudeHookProgram):
@@ -56,20 +12,20 @@ class SessionStarted(ClaudeHookProgram):
 
     @classmethod
     def command(cls) -> str:
-        return cls.console_script(f"{started.__module__}:{started.__name__}")
+        return cls.console_script(f"{__spec__.name}:started")
 
 
-class SessionEnded(ClaudeHookProgram):
+class SessionEnded(SessionHookProgram):
     events = ("SessionEnd",)
 
     @classmethod
     def command(cls) -> str:
-        return cls.console_script(f"{ended.__module__}:{ended.__name__}")
+        return cls.console_script(f"{__spec__.name}:ended")
 
 
 def started() -> None:
-    SessionHook.read().start()
+    """This one startup process is allowed to load the Core that starts the bridge."""
+    raise SystemExit(subprocess.call((sys.executable, "-m", "agent_comms.cli_bridges.hook_session")))
 
 
-def ended() -> None:
-    SessionHook.read().end()
+ended = SessionEnded.main

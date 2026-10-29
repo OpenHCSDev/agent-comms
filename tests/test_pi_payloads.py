@@ -11,11 +11,11 @@ from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_payload import PiPayload
 from agent_comms.pi_payloads import (
     AssistantMessage,
     MissingData,
     MissingToolResult,
+    PiPayload,
     ProvidedToolResult,
     ReportedModel,
     StateData,

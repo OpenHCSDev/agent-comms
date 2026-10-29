@@ -20,10 +20,11 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
 from .locked_store import DocumentBytes, LockedStore, RegistryFile
 from .maintenance_barrier import CarriedDocument
+from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .private_runtime_schema import PrivateCoordinatorTable
-from .registration_change import InitialRegistration
+from .registration_change import InitialRegistration, NativeSourcePublication
 from .registry_document import (
     HistoricalRootPurpose,
     RegistryDocument,
@@ -31,6 +32,7 @@ from .registry_document import (
     RegistrySnapshot,
 )
 from .routing import Routing
+from .session_file import RegistrySessionLocation
 from .store_files import RegistryLocking
 from .thread_identity import TurnIdentity
 from .threads import Thread
@@ -196,6 +198,15 @@ class RegistryEdit:
     original: RegistryRevision
     superseded: list[StoredTurnRecord] = field(default_factory=list)
     """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
+
+    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        current = owner.require_source_snapshot(self.original.snapshot)
+        status = self.document.status(current.name)
+        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
+        return NativeSourcePublication(
+            thread=replace(current, session_file=location), status=status,
+            previous=current, previous_status=status,
+        )
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         restored = self.document.restore_stopped(source, names)

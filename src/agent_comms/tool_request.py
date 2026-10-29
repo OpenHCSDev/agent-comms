@@ -9,12 +9,12 @@ from contextvars import copy_context
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, NoReturn
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .child_process import DroppableRead, join_retirement
 from .comms import Comms
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
 from .field_codec import (
     ContextSource,
     DefaultNonNull,

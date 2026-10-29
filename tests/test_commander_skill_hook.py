@@ -1,6 +1,31 @@
 """The real SessionStart command works before a commander connects to the bus."""
 
 
+from agent_comms.cli_bridges.hook_deferral import StopHook
+from agent_comms.cli_bridges.hook_forks import SubagentHook
+from agent_comms.cli_bridges.hook_read_gate import (
+    AuditDue,
+    GatedCall,
+    OwnerWordsAnswer,
+    RuleAudit,
+    SessionAudit,
+)
+from agent_comms.cli_bridges.hook_reread import (
+    BoardReminder,
+    DeafReminder,
+    SliceReminder,
+)
+from agent_comms.cli_bridges.hook_skill import (
+    CommanderReader,
+    DeckReader,
+    DeckStart,
+    FleetReader,
+)
+from agent_comms.cli_bridges.session_watch import (
+    DeafWatch,
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import inspect
 import io
@@ -42,12 +67,6 @@ from agent_comms.threads import Thread
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
 from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
-from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
-from agent_comms_hooks.deferral import StopHook
-from agent_comms_hooks.forks import SubagentHook
-from agent_comms_hooks.read_gate import AuditDue, GatedCall, OwnerWordsAnswer, RuleAudit, SessionAudit
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
-from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
 

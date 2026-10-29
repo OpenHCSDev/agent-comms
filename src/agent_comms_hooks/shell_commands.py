@@ -1,17 +1,18 @@
-"""The shell's words and commands, decoded once for Core's storage rules and for the hooks.
-
-Standard library only, because every hook imports it on every tool call.
-"""
-
 from __future__ import annotations
 
 import io
 import shlex
-from collections.abc import Iterable, Iterator
+from collections.abc import (
+    Iterable,
+    Iterator,
+)
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import (
+    ClassVar,
+    Self,
+)
 
 
 def without_here_documents(command: str) -> str:

@@ -5,9 +5,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
+from agent_comms_hooks import ToolRefusedError
+
 from .bus_publication import AgentOrigin
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .launch_runtime import CallingThreadUnavailable

@@ -13,7 +13,10 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
-from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
+from agent_comms.errors import (
+    TodoConflict,
+    TodoError,
+)
 from agent_comms.field_codec import (
     FieldCodec,
     GoalId,
@@ -60,6 +63,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
+from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 

@@ -1,4 +1,5 @@
 
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.repo import Checkout
 """An enrolled address becomes a registered reader without changing its journal."""
 from dataclasses import replace
@@ -16,7 +17,6 @@ from agent_comms.cli_bridges.shared import (
     Watch,
 )
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms_hooks.watch import WatchClaim
 from agent_comms.threads import Thread
 
 

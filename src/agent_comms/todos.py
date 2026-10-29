@@ -71,7 +71,6 @@ from agent_comms.errors import (
     RejectedEnforcementError,
     TodoConflict,
     TodoError,
-    ToolRefusedError,
 )
 from agent_comms.field_codec import (
     DefaultNonNull,
@@ -169,6 +168,7 @@ from agent_comms.work_branches import (
     WorkBranchError,
     WorkBranches,
 )
+from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 

@@ -25,6 +25,7 @@ from pydantic import JsonValue
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
+    ExternalField,
     ExternalNull,
     ExternalNullMember,
     FieldCodec,
@@ -32,6 +33,7 @@ from .field_codec import (
     MalformedRecord,
     NullMember,
     PresentMember,
+    RecordProblems,
     SingleExternalMember,
     SingleFieldValue,
     TextRepresentation,
@@ -51,13 +53,6 @@ from .native_file_artifact import NativeFileArtifact
 from .native_output import AssistantOutput, NativeOutputScope, ToolOutput
 from .native_session_reopen import NativeSessionIdentity, PiSessionId
 from .pi_counts import NonnegativePiCount, PiCount, TotalPiCount, UnreportedCount
-from .pi_payload import (
-    Opaque,
-    OpenPayload,
-    PiPayload,
-    StrictFields,
-    UnknownPayload,
-)
 from .pi_vocabulary import (
     NoThinkingOverride,
     PiStopReason,
@@ -65,7 +60,6 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnreportedStopReason,
 )
-from .provider_diagnostic import ProviderDiagnosticError
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
@@ -86,6 +80,141 @@ from .turn_failure import (
     ProviderTransportFailed,
 )
 from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, UsageChargeId
+
+
+class PiPayload(ExternalField):
+    wire_tag: ClassVar[str | None] = None
+
+    @classmethod
+    def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
+        if not isinstance(value, dict):
+            raise MalformedRecord(f"Expected {cls.__name__} object")
+        member = cls.wire_member(value)
+        return FieldCodec.construct(member, member.decode_fields(value, {}))
+
+    @classmethod
+    def wire_member(cls, value: dict[str, JsonValue]) -> type[Self]:
+        return cls
+
+    @classmethod
+    @boundary_decoder
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
+    ) -> dict[str, object]:
+        hints = FieldCodec._types(cls)
+        problems: dict[str, str] = {}
+        for f, key in FieldCodec.record_fields(cls):
+            if f.name in decoded:
+                decoded[f.name] = FieldCodec.decode_resolved(hints[f.name], decoded[f.name])
+                continue
+            plan = FieldCodec.field_plan(cls, f.name)
+            try:
+                captured = plan.decoded_external(value)
+                if f.name not in captured and (plan.constructor_required or plan.required):
+                    raise MalformedRecord(f"Missing required field {key}")
+                decoded.update(captured)
+            except MalformedRecord as refused:
+                plan.locate(problems, refused)
+        if problems:
+            raise RecordProblems(problems)
+        return decoded
+
+    @classmethod
+    def from_wire(cls, value):
+        return FieldCodec.decode_external(cls, value, {})
+
+    def to_wire(self):
+        data = FieldCodec.encode_fields(self)
+        if self.wire_tag is not None and DeclaredFamily.record_tag(self):
+            data[self.wire_tag] = self.wire_discriminator()
+        return data
+
+    def wire_discriminator(self):
+        """Refined internal members borrow their original external declaration."""
+        return FieldCodec.encode(type(self))
+
+
+@dataclass(frozen=True)
+class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
+    message: str
+    name: str | None = None
+
+    @classmethod
+    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
+        return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
+
+    @property
+    def description(self) -> str:
+        return self.name or "Provider transport error"
+
+
+@dataclass(frozen=True)
+class CodelessProviderDiagnosticError(ProviderDiagnosticError):
+    """Pi reported a provider error without a code."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CodedProviderDiagnosticError(ProviderDiagnosticError):
+    code: int | str
+
+    @property
+    def description(self) -> str:
+        return f"{super().description} (code {self.code})"
+
+
+@dataclass(frozen=True, kw_only=True)
+class Opaque(PiPayload):
+    """Own the original external JSON value and its normalization."""
+
+    payload: JsonValue
+
+    @classmethod
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
+    ) -> dict[str, object]:
+        return super().decode_fields(value, dict(
+            decoded, payload=FieldCodec.decode(JsonValue, value),
+        ))
+
+    def to_wire(self) -> JsonValue:
+        return self.payload
+
+
+class UnknownPayload(Opaque):
+    """The declaration an open family selects for an unknown external tag."""
+
+
+class StrictFields(PiPayload):
+    """A closed native record rejects every undeclared external field."""
+
+    @classmethod
+    def decode_fields(
+        cls, value: dict[str, JsonValue], decoded: dict[str, object],
+    ) -> dict[str, object]:
+        names = {key for _, key in FieldCodec.record_fields(cls)}
+        if set(value) - names - {cls.wire_tag}:
+            raise MalformedRecord(f"Unexpected {cls.__name__} fields")
+        return super().decode_fields(value, decoded)
+
+
+class OpenPayload(PiPayload, DeclaredFamily):
+    """An external tag selects its member or the family's declared unknown payload."""
+
+    wire_tag = "type"
+
+    @classmethod
+    def wire_member(cls, value: dict[str, JsonValue]) -> type[Self]:
+        try:
+            member = cls.member_named(FieldCodec.decode(str, value.get(cls.wire_tag)))
+            return member.wire_case(value)
+        except (UnknownFamilyMember, MalformedRecord):
+            member, = cls.members_with(UnknownPayload)
+            return member
+
+    @classmethod
+    def wire_case(cls, value: dict[str, JsonValue]) -> type[Self]:
+        return cls
+
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent

@@ -9,6 +9,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from agent_comms_hooks import ToolRefusedError
 from aiohttp import ClientError
 from pydantic import JsonValue
 
@@ -19,7 +20,6 @@ from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import DisclosureIdentity, OrderId, WireTransient, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument

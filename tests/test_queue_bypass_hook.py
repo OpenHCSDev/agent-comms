@@ -7,10 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.todos import ReviewedHeadVerdict, RejectedHeadVerdict
-from agent_comms.shell_commands import ShellCommand
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.shell_commands import ShellCommand
 from test_head_review import ACCEPTED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)

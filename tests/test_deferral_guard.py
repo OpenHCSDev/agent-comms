@@ -8,8 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
-from agent_comms_hooks.deferral import FutureOrder, Later, NextTick
+from agent_comms.cli_bridges.hook_deferral import (
+    FutureOrder,
+    Later,
+    NextTick,
+)
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 
 
 def assistant(*blocks):

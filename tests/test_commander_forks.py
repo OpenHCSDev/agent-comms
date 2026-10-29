@@ -1,5 +1,9 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import io
 import json
@@ -14,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.commander.order import CommanderContext, OrderFile
