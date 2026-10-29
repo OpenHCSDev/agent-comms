@@ -118,7 +118,7 @@ class CommandBinding(ABC):
 class CommandContext(CatalogSelection):
     """A partial command's supplied fields, with native edits decoded by their plans."""
 
-    def edited(self, arguments: Mapping[str, object]) -> Self:
+    def with_editor_values(self, arguments: Mapping[str, object]) -> Self:
         changes = {name: value
                    for entry in FieldCodec.argument_fields(type(self)) if entry.key in arguments
                    for name, value in entry.decoded({
@@ -151,7 +151,7 @@ class PendingCommandBinding(CommandBinding):
                      if not entry.setting(TargetBound, False))
 
     def for_fields(self, arguments: Mapping[str, object]) -> PendingCommandBinding:
-        return replace(self, context=self.context.edited(arguments))
+        return replace(self, context=self.context.with_editor_values(arguments))
 
     def edited(self, arguments: Mapping[str, object]) -> CliCommand:
         self.authorize_edits(arguments)
