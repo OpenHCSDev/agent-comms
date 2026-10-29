@@ -68,7 +68,7 @@ from .read_basis import (
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import AssignmentResponse, UnansweredResponse, NotificationAssignmentRead, NotificationReadMark, NotificationWindow, RecipientSelection
+from .notification_evidence import AssignmentResponse, NotificationAssignmentRead, NotificationReadMark, NotificationWindow, RecipientSelection
 from .read_basis import FirstRecipient, OutcomeViewer, RecipientCursor
 from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
@@ -128,8 +128,11 @@ class MessageNotification:
     state: DeliveryProgress
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
-    answer: AssignmentResponse = field(default_factory=UnansweredResponse)
     changed: bool = False
+
+    @property
+    def answer(self) -> AssignmentResponse:
+        return self.state.answer
 
     @property
     def recipient(self) -> str:
@@ -146,7 +149,7 @@ class MessageNotification:
         if not self.changed or self.message is None:
             return None
         return SentMessageOutcome(self.recipient_identity, self.sender_lookup, self.state,
-                                  message=self.message, answer=self.answer)
+                                  message=self.message)
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:

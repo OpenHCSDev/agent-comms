@@ -20,14 +20,14 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
-from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, UnpromotedHeadReview
+from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, SourceCheckout, UnpromotedHeadReview
 from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
 from .repo import Checkout, DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease
-from .todos import PullRequests, StoredHeadReview
+from .todos import CarriedHeadVerdict, PullRequests, StoredHeadReview, VerdictReason
 from .work_branches import WorkBranches
 
 class IntegrationFailed(ToolRefusedError):
@@ -123,7 +123,7 @@ class ExcludeAfterFailure(FailureAction):
         return remaining
 
 
-class IntegrationCheckout(Checkout):
+class IntegrationCheckout(SourceCheckout):
     """The existing checkout owner owns combination and its changed-file selection."""
 
     def require_editable(self) -> None:
@@ -151,6 +151,12 @@ class IntegrationCheckout(Checkout):
         created = cls.add(repository.checkout, path, DetachedStart(commit))
         created.require_editable()
         return created
+
+    @classmethod
+    def materialize(cls, source: IntegrationSource, repository: Repo, path: Path) -> IntegrationCheckout:
+        checkout = cls.create(repository, path, source.candidate_commit)
+        source.prepare_candidate(checkout)
+        return checkout
 
     def include(self, head: PullRequestHead) -> None:
         """Fetch exactly the captured member; Git, not a patch heuristic, combines it."""
@@ -405,7 +411,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             if source.repository == self.repository.github:
                 IntegrationCheckout.create(repository, HeadSide.checkout(directory, source.repository), self.tested)
             else:
-                source.materialize(repository, HeadSide.checkout(directory, source.repository))
+                IntegrationCheckout.materialize(source, repository, HeadSide.checkout(directory, source.repository))
             for side in Side.sides():
                 side.require_materialized(directory, source)
                 checkout = side.checkout(directory, source.repository)
@@ -482,7 +488,6 @@ class MergeGroupSources(TestedSources, declared_name="merge_group"):
         Carry those decisions through the existing nominal status owners; no new verdict
         is saved, and an ordinary PR never publishes a merge-group result.
         """
-        from .todos import CarriedHeadVerdict, VerdictReason
         CarriedHeadVerdict(VerdictReason(
             "The validated merge group preserves this promoted carrier and its exact reviewed sources"),
             self.carrier).post(self.carrier.repo, self.tested, "merge-group proof", f"#{self.carrier.pr}")
@@ -672,7 +677,7 @@ class IntegrationRun:
                 tree = Repo.git(repo.checkout, "rev-parse", f"{companion.head}^{{tree}}").strip()
                 source = ResolvedIntegrationSource(
                     RepositoryCommit(name, baseline), heads[name], tree, companion)
-                source.materialize(repo, HeadSide.checkout(self.output, name))
+                IntegrationCheckout.materialize(source, repo, HeadSide.checkout(self.output, name))
             else:
                 candidate = IntegrationCheckout.create(repo, HeadSide.checkout(self.output, name), baseline)
                 tree = candidate.combine_sources(baseline, heads[name])

@@ -143,15 +143,6 @@ class UnrecordedMonitor(MonitorEvidence):
     pass
 
 
-class BoardWake:
-    """The board notice's text, shared by its publisher and its transport evidence."""
-
-    board_wake: ClassVar[str] = (
-        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
-        "tool call; later calls print one unchanged count."
-    )
-
-
 class PendingMonitor(MonitorEvidence, declared_name=None):
     """The emission owns whether its later observation can prove the original body."""
 
@@ -165,9 +156,13 @@ class PendingMonitor(MonitorEvidence, declared_name=None):
 
 
 @dataclass(frozen=True)
-class WakeOnlyMonitor(BoardWake, PendingMonitor):
+class WakeOnlyMonitor(PendingMonitor):
     """A board wake is not the original packet, even if its bytes happen to match."""
 
+    board_wake: ClassVar[str] = (
+        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
+        "tool call; later calls print one unchanged count."
+    )
     @classmethod
     def displayed_body(cls, body: str) -> str:
         return cls.board_wake

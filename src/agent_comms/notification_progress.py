@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredOrder
-from .notification_evidence import AssignmentResponse
+from .notification_evidence import AnsweredResponse, AssignmentResponse, UnansweredResponse
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 
 if TYPE_CHECKING:
@@ -37,6 +37,10 @@ class DeliveryProgress(ThreadPresentationStatus):
     detail: ClassVar[str] = ""
     ignored_label: ClassVar[str] = "Not answering"
     consumed: ClassVar[bool] = False
+
+    @property
+    def answer(self) -> AssignmentResponse:
+        return UnansweredResponse()
 
     def rank(self) -> int:
         return DeliveryRank.position_of(type(self))
@@ -73,9 +77,9 @@ class DeliveryProgress(ThreadPresentationStatus):
         return (notification.label,)
 
     def answered_notification(self, notification: MessageNotification,
-                              response: AssignmentResponse) -> MessageNotification:
+                              response: AnsweredResponse) -> MessageNotification:
         """An independent answer preserves this state's actual context proof."""
-        return replace(notification, state=AnsweredProgress(self), answer=response, changed=True)
+        return replace(notification, state=AnsweredProgress(self, response), changed=True)
 
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         """The first proof that the message entered the model's context, at its own time."""
@@ -120,6 +124,10 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     @property
     def consumed(self) -> bool:
         return self.proof.consumed
+
+    @property
+    def answer(self) -> AssignmentResponse:
+        return self.proof.answer
 
     def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
         return replace(self, proof=self.proof.model_consumed(proof))
@@ -183,23 +191,29 @@ class FailedProgress(ContextualProgress):
     label = "Failed"
 
 
+@dataclass(frozen=True)
 class AnsweredProgress(SettledDelivery, ContextualProgress):
+    response: AnsweredResponse
     label = "Answered"
 
+    @property
+    def answer(self) -> AnsweredResponse:
+        return self.response
+
     def answered_notification(self, notification: MessageNotification,
-                              response: AssignmentResponse) -> MessageNotification:
+                              response: AnsweredResponse) -> MessageNotification:
         """A later independent response cannot replace an already recorded answer."""
         return notification
 
     def notification_label(self, notification: MessageNotification) -> str:
-        return notification.answer.notification_label(notification, self.label)
+        return notification.timed_state(self.label, self.response.received_at_ms)
 
 
-class CompletedProgress(AnsweredProgress):
+class CompletedProgress(SettledDelivery, ContextualProgress):
+    """Workflow completion is not evidence of an independent reply."""
+
+    label = "Completed"
     detail = "The response workflow completed."
-
-    def notification_label(self, notification: MessageNotification) -> str:
-        return self.label
 
 class AssignmentProgress(DeliveryProgress):
     @property

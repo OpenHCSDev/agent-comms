@@ -123,7 +123,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
 
 
 @pytest.fixture
-def historical_source(recorded):
+def native_source(recorded):
     return dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id=MessageId.mint("original-message"),
         assignment_id="d" * 32, input_id=recorded.input_id,
@@ -143,7 +143,7 @@ def historical_source(recorded):
     (partial(CommittedCursorOwner, input_id=InputId("d" * 32)), False),
 ])
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
-    tmp_path, recorded, historical_source, make_owner, permitted,
+    tmp_path, recorded, native_source, make_owner, permitted,
 ):
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
     original = replace(
@@ -151,7 +151,7 @@ def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),
     )
     owner = make_owner(thread=thread, claimed_generation=2, generation=1, wire_root_id="a" * 32)
-    source = {**historical_source, "owner_lookup": original.owner_lookup}
+    source = {**native_source, "owner_lookup": original.owner_lookup}
     with sqlite3.connect(":memory:") as db:
         NativeRuntimeInput.create(db)
         original.insert(db)
@@ -161,8 +161,8 @@ def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
         assert InjectedInput(proof).allows(owner, db, UnstartedCursor()) is permitted
 
 
-def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded, historical_source):
-    source = historical_source
+def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded, native_source):
+    source = native_source
     with sqlite3.connect(":memory:") as db:
         NativeRuntimeInput.create(db)
         recorded.insert(db)
@@ -207,7 +207,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
 
 
 def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
-    tmp_path, recorded, historical_source,
+    tmp_path, recorded, native_source,
 ):
     """Every install mints a new claim; the thread's cursor and its inputs stay its own."""
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
@@ -220,7 +220,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         CurrentNativeCursor.create(db)
         sent.insert(db)
         proof = sent.execution.historical_proof(
-            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+            sent, lifecycle=TriagePendingAssignment(), **{**native_source, "owner_lookup": lookup},
         )
         assert restarted.matches_prefix(db, (proof,))
         assert InjectedInput(proof).allows(restarted, db, UnstartedCursor())
@@ -243,8 +243,8 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         newer = replace(sent, input_id=FieldCodec.decode(InputId, "9" * 32), sent_owner_claimed_generation=RecordedNativeClaim(6))
         newer.insert(db)
         newer_proof = newer.execution.historical_proof(newer, lifecycle=TriagePendingAssignment(), **{
-            **historical_source, "owner_lookup": lookup, "input_id": newer.input_id,
-            "context": replace(historical_source["context"], input_id=newer.input_id),
+            **native_source, "owner_lookup": lookup, "input_id": newer.input_id,
+            "context": replace(native_source["context"], input_id=newer.input_id),
             "native_reference": newer.reference,
         })
         assert restarted.matches_prefix(db, (proof,))
@@ -252,7 +252,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
 
 
 def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_attempt_sent(
-    tmp_path, recorded, historical_source,
+    tmp_path, recorded, native_source,
 ):
     """A retry advances the participant generation (selected_participant.py prepare_attempt); same participant."""
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
@@ -266,7 +266,7 @@ def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_a
         CurrentNativeCursor.create(db)
         sent.insert(db)
         proof = sent.execution.historical_proof(
-            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+            sent, lifecycle=TriagePendingAssignment(), **{**native_source, "owner_lookup": lookup},
         )
         assert retried.matches_prefix(db, (proof,))
         assert InjectedInput(proof).allows(retried, db, UnstartedCursor())

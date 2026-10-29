@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -18,13 +18,12 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import StackSources
-from .repo import GitCommandError, Repo
+from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from .goal_management import Goals
-    from .integration import IntegrationCheckout
     from .thread_identity import ThreadIncarnation
     from .todos import HeadReviewRecord, HeadVerdict, Todo
 
@@ -121,6 +120,15 @@ class PullRequestHead:
         return current
 
 
+class SourceCheckout(Checkout, ABC):
+    """The nominal checkout capability a captured source needs to build its tree."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def combine_sources(self, base: str, heads: tuple[PullRequestHead, ...]) -> str: ...
+
+
 @dataclass(frozen=True)
 class IntegrationSource(DeclaredFamily, affix="Source"):
     """One repository's captured main, exact PR overlays and resulting Git tree."""
@@ -163,13 +171,7 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
     def candidate_commit(self) -> str:
         return self.baseline.commit
 
-    def materialize(self, repository: Repo, path: Path) -> IntegrationCheckout:
-        from .integration import IntegrationCheckout
-        checkout = IntegrationCheckout.create(repository, path, self.candidate_commit)
-        self.prepare_candidate(checkout)
-        return checkout
-
-    def prepare_candidate(self, checkout: IntegrationCheckout) -> None:
+    def prepare_candidate(self, checkout: SourceCheckout) -> None:
         checkout.combine_sources(self.baseline.commit, self.heads)
 
     def require_origin(self, repository: Repo) -> None:
@@ -249,7 +251,7 @@ class ResolvedIntegrationSource(IntegrationSource):
     def candidate_commit(self) -> str:
         return self.carrier.head
 
-    def prepare_candidate(self, checkout: IntegrationCheckout) -> None:
+    def prepare_candidate(self, checkout: SourceCheckout) -> None:
         self.require_ancestry(Repo.of(checkout.path), self.carrier.head)
 
     def require_tree(self, repository: Repo) -> None:

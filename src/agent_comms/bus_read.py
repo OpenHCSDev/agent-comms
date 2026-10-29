@@ -23,7 +23,7 @@ class OperatorReader(ReadAuthority):
     display: DisplayCut = field(default_factory=NoDisplaySelection)
 
     def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
-        return self.display.outcome_viewer()
+        return self.display.outcome_viewer(registry)
 
 
 class BusRead[Result](ToolDeclaration, ABC):

@@ -22,6 +22,7 @@ from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextJournal
 from .process_claim import ProcessSingleton
 from agent_comms.typed_table import ReconciledFile, TableSchema
 
@@ -256,8 +257,6 @@ class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
 
     @classmethod
     def table_schema(cls) -> type[TableSchema]:
-        from .native_input_proof import NativeContextJournal
-
         return NativeContextJournal
 
 

@@ -69,7 +69,7 @@ def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdat
     all three carry the same page, draft and witness as the domain capture."""
     expected = TranscriptSnapshotUpdate.from_read(comms.transcripts.capture_page_read(
         operation.thread, position=operation.position, limit=operation.limit,
-        page_source=RecordedPageSource(operation.historical_source)))
+        page_source=operation.page_source))
     direct = operation.read(comms)
     assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
     assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),

@@ -24,7 +24,7 @@ def test_notification_request_retains_viewer_source_and_full_operator_access(arc
     assert len(frozenset((request, another_viewer))) == 2
     scoped = request.read(fixture.live)
     raw = fixture.notifications(AllOutcomes())
-    assert scoped.outcomes == fixture.notifications(identity.outcome_viewer()).outcomes
+    assert scoped.outcomes == fixture.notifications(identity.outcome_viewer(fixture.live.registry)).outcomes
     assert scoped.read_marks == raw.read_marks
     assert {row.recipient_identity for rows in scoped.outcomes.values() for row in rows} == {
         row.recipient_identity for rows in raw.outcomes.values() for row in rows}

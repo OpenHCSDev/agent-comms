@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import aclosing
-from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, AsyncIterator, BinaryIO
 
 from agent_comms.bus import Bus
-from agent_comms.harness_delivery_states import BoardWake, Outcome, WakeOnlyMonitor
+from agent_comms.harness_delivery_states import Outcome, WakeOnlyMonitor
 from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
@@ -26,7 +25,7 @@ if TYPE_CHECKING:
     from agent_comms.task_attachments.commander_pings import CommanderUpdate
 
 
-class ClaudeBridge(BoardWake, ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
+class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input.
 
     Heartbeat packets reach the session through the board its tool-call hook prints, which

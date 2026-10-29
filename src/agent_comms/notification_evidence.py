@@ -58,9 +58,6 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
     def detail_texts(self) -> tuple[str, ...]:
         return ()
 
-    def notification_label(self, notification: MessageNotification, label: str) -> str:
-        raise ValueError("An unanswered source has no answer timestamp")
-
     @abstractmethod
     def completed_notification(
         self, progress: AssignmentProgress, notification: MessageNotification
@@ -97,9 +94,6 @@ class AnsweredResponse(AssignmentResponse):
 
     def detail_texts(self) -> tuple[str, ...]:
         return (f"Answer #{self.reference.seq} · {self.reference.message_id}",)
-
-    def notification_label(self, notification: MessageNotification, label: str) -> str:
-        return notification.timed_state(label, self.received_at_ms)
 
 
 @dataclass(frozen=True)

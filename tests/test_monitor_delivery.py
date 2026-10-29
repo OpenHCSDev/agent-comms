@@ -544,7 +544,7 @@ async def test_a_body_that_fits_one_event_goes_inline_and_exports_nothing(bridge
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('original_body', ('Original board packet', ClaudeBridge.board_wake))
+@pytest.mark.parametrize('original_body', ('Original board packet', WakeOnlyMonitor.board_wake))
 async def test_board_wake_observation_cannot_confirm_original_packet(bridge, original_body):
     """Exercise the actual wake transport, including an accidental exact-body collision."""
     message = bridge.comms.messaging.send('peer', 'viewer', original_body).message
@@ -554,7 +554,7 @@ async def test_board_wake_observation_cannot_confirm_original_packet(bridge, ori
     async with attached_monitor(bridge) as reader:
         outcome = await bridge.wake(message)
         line = await only_event(reader)
-        assert ClaudeMonitorFrame.decode_line(line).body == ClaudeBridge.board_wake
+        assert ClaudeMonitorFrame.decode_line(line).body == WakeOnlyMonitor.board_wake
         await bridge.finish(bridge.attempt(message, outcome), partial(replace, outcome=outcome))
         # Re-reading the wake cannot manufacture a proof of the original body.
         for _ in range(2):

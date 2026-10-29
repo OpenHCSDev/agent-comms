@@ -270,12 +270,16 @@ class ReadAuthority(ABC):
 class OperatorOutcomes:
     """An unscoped operator reader sees every recipient outcome."""
 
-    def outcome_viewer(self, *_context: object) -> OutcomeViewer:
+    __slots__ = ()
+
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
         return AllOutcomes()
 
 
 class DisplayCut(OperatorOutcomes, ABC):
     """The selected display cut, including the absence of a painted display."""
+
+    __slots__ = ()
 
     @property
     @abstractmethod
@@ -296,7 +300,7 @@ class DisplayIdentity(DisplayCut):
         return DisplayIdentity(viewer=self.viewer, history_revision=self.history_revision,
                                bus_identity=self.bus_identity)
 
-    def outcome_viewer(self, *_context: object) -> OutcomeViewer:
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
         return DisplayOutcomes(self.viewer, self.bus_identity)
 
 

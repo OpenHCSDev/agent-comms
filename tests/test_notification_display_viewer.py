@@ -81,7 +81,7 @@ def test_display_subtraction_preserves_raw_other_reads_and_real_audience(
     raw_document = fixture.reads.read()
     live_document = fixture.live.bus.reads.read()
     raw = fixture.notifications(AllOutcomes())
-    shown = fixture.notifications(identity.outcome_viewer())
+    shown = fixture.notifications(identity.outcome_viewer(fixture.live.registry))
     agent = fixture.notifications(OwnerOutcomes.of(fixture.source.provenance.require('sender')))
     key = (fixture.message.seq, fixture.message.message_id)
     before = {item.recipient_identity: item for item in raw.outcomes[key]}
@@ -115,19 +115,19 @@ def test_archive_display_requires_its_own_bus_even_for_the_same_viewer(archived_
     assert not foreign.bus_identity.matches(captured.bus_identity)
     raw = fixture.notifications(AllOutcomes())
     assert any(mark.displayed_to for mark in raw.read_marks)
-    assert fixture.notifications(foreign.outcome_viewer()).outcomes == raw.outcomes
+    assert fixture.notifications(foreign.outcome_viewer(fixture.live.registry)).outcomes == raw.outcomes
 
 
 def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(archived_readers: ArchivedReaders) -> None:
     fixture = archived_readers
     fixture.paint('self')
     captured = fixture.selection('self').notification_identity
-    before = fixture.notifications(captured.outcome_viewer())
+    before = fixture.notifications(captured.outcome_viewer(fixture.live.registry))
     raw = fixture.reads.read()
     fixture.live.registry.rename('self', 'renamed')
     renamed = fixture.selection('renamed').notification_identity
     assert renamed.viewer == captured.viewer
-    assert fixture.notifications(renamed.outcome_viewer()).outcomes == before.outcomes
+    assert fixture.notifications(renamed.outcome_viewer(fixture.live.registry)).outcomes == before.outcomes
     previous = fixture.live.registry.require('renamed')
     fixture.live.registry.unregister('renamed')
     fixture.live.registry.remove('renamed')
@@ -136,7 +136,7 @@ def test_archive_viewer_rename_and_recreation_use_incarnation_not_current_name(a
     ))
     recreated = fixture.selection('self').notification_identity
     assert recreated.viewer != captured.viewer
-    other = fixture.notifications(recreated.outcome_viewer())
+    other = fixture.notifications(recreated.outcome_viewer(fixture.live.registry))
     assert other.outcomes == fixture.notifications(AllOutcomes()).outcomes
     assert any(mark.displayed_to for mark in other.read_marks)
     assert fixture.reads.read() == raw
@@ -154,7 +154,7 @@ def test_direct_human_self_row_disappears_without_read_or_unread_mutation(comms:
     document = comms.bus.reads.read()
     unread = comms.views.viewer_snapshot(worktree).unread
     full = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,))
-    shown = comms.views.message_notifications_for_references(identity.outcome_viewer(), (message.reference,))
+    shown = comms.views.message_notifications_for_references(identity.outcome_viewer(comms.registry), (message.reference,))
     key = (message.seq, message.message_id)
     assert full.outcomes[key] and full.outcomes[key][0].displayed_to == (human.incarnation,)
     assert shown.outcomes[key] == ()
