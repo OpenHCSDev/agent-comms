@@ -847,7 +847,9 @@ class SendTool(PublishingTool[ThreadCaller]):
     description = (
         "Send a message to another thread or channel. Address specific threads with "
         "@thread-name in the body: the named threads are told they are the intended "
-        "readers, and others dismiss quietly. Unknown names stay plain text."
+        "readers, and others dismiss quietly. Unknown names stay plain text. "
+        "External sends must supply source_turn or answers to link an answer; "
+        "an unnamed external turn contributes no inferred answer links."
     )
     target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: Annotated[str, *tool_field("Message text")]

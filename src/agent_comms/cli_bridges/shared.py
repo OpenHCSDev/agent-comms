@@ -68,7 +68,7 @@ from agent_comms.message_reference import (
 )
 from agent_comms.registration import Registration
 from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
-from agent_comms.turn_item import NativeTurnId, NoSourceTurn, SourceTurn
+from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import ThreadIncarnation
