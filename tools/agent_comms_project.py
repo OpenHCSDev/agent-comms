@@ -85,7 +85,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         return frozenset(function.__name__
                          for function in (store_files._store_lock, store_files._async_store_lock))
 
-    def absence_decoders(self) -> tuple[Callable[..., object], ...]:
+    def absence_boundaries(self) -> tuple[Callable[..., object], ...]:
         return (boundary_decoder,)
 
     def mechanism_modules(self) -> frozenset[Path]:
@@ -142,7 +142,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         for path, source in self.sources(head, set(added)):
             tree = ast.parse(source, path)
             bindings = [
-                audit.source_measures.DecoratorBinding.of(family, tree, path) for family in families
+                audit.lexical.DecoratorBinding.of(family, tree, path) for family in families
             ]
             if any(binding.marks(base) for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
                    for base in node.bases for binding in bindings):
