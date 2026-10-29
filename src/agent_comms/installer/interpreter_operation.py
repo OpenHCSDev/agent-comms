@@ -501,11 +501,14 @@ class ProbeRequest:
 def serve() -> None:
     """Answer declared operations from stdin, one encoded answer per request line, until it
     closes. An operation that raises ends the worker: its traceback goes to stderr, and the
-    caller reads the exit in place of an answer. The answers own stdout's descriptor; every
-    other write, an operation's exit handlers included, lands on stderr."""
-    with os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers:
+    caller reads the exit in place of an answer. The transport owns its descriptors:
+    operations read EOF on stdin, and their stdout lands on stderr."""
+    with (os.fdopen(os.dup(sys.stdin.fileno())) as requests,
+          os.fdopen(os.dup(sys.stdout.fileno()), "w") as answers,
+          open(os.devnull) as empty_input):
+        os.dup2(empty_input.fileno(), sys.stdin.fileno())
         os.dup2(sys.stderr.fileno(), sys.stdout.fileno())
-        for line in sys.stdin:
+        for line in requests:
             print(
                 FieldCodec.compact(
                     FieldCodec.encode(FieldCodec.decode(ProbeRequest, FieldCodec.parse(line)).answer())
