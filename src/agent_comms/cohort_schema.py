@@ -33,6 +33,7 @@ from .typed_table import (
     InitialOneWayColumn,
     NoDelete,
     SharedFileTables,
+    SQLiteJournalMode,
     TextStorage,
     TypedTable,
     WithoutRowid,
@@ -41,6 +42,7 @@ from .wake_candidate_index import ProjectionUnavailableError
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
+    from .coordinator import Coordination
     from .private_registry_guard import RegistryPrivacy
 
 class CohortTable(PrivateCoordinatorTable):
@@ -389,3 +391,18 @@ class PrivateCoordinatorSchema(
 
     Optional row evidence does not veto mandatory N/K acceptance.
     """
+
+    @classmethod
+    def install(cls, store: Coordination) -> None:
+        """Create absent file families; reject existing drift without repairing it."""
+        PrivateCoordinatorTable.declarations()
+        with store.session.writing() as db:
+            rows = cls.schema_rows()
+            for family in cls.schema_families():
+                if not family.stored_schema(db, rows):
+                    family.create_schema(db)
+            cls.require_installed(db)
+            if SQLiteJournalMode.read(db.execute("PRAGMA journal_mode")) != [
+                SQLiteJournalMode("delete")
+            ]:
+                raise SchemaVersionError("private coordinator requires rollback-journal mode")
