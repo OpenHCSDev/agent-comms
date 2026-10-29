@@ -43,18 +43,19 @@ def opening_record(prompt_id: str) -> ClaudeRecord:
 async def confirm_messages(
     bridge: ClaudeBridge, output: ThreadOutput, session: ClaudeSession, messages: tuple[Message, ...],
     *, prompt_id: str = 'reply-turn',
-) -> None:
+) -> tuple[ClaudeRecord, ...]:
     """A real attached monitor and Claude notification feed the ordinary staged output."""
+    observations: list[ClaudeRecord] = []
     async with attached_monitor(bridge) as reader:
         for message in messages:
             await bridge.accept(message)
             line = (await reader.readline()).decode().rstrip('\n')
-            output.publish_batch([
-                await update.observed(bridge) for update in notification(
-                    line, record_id=transcript_record(str(message.seq)), prompt_id=prompt_id).updates(session)
-            ])
+            record = notification(line, record_id=transcript_record(str(message.seq)), prompt_id=prompt_id)
+            observations.append(record)
+            output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
             delivered, = await bridge.attempts(message.message_id)
             assert delivered.outcome is DeliveredOutcome
+    return tuple(observations)
 
 
 def replies_after(bridge: ClaudeBridge, sequence: int) -> tuple[tuple[str, str], ...]:
@@ -92,13 +93,17 @@ async def test_only_opening_deliveries_receive_the_turns_final(
     for record in prefix:
         output.publish_batch(list(record.updates(session)))
     direct = bridge.comms.messaging.send('claude-code', 'viewer', 'a delivered DM').message
-    await confirm_messages(bridge, output, session, (direct,))
+    observations = await confirm_messages(bridge, output, session, (direct,))
     output.publish_batch(list(assistant_record('final', 'Private answer').updates(session)))
     assert replies_after(bridge, direct.seq) == ()
     finish_reply(output, session)
     expected = tuple((target, 'Private answer') for target in targets)
     assert replies_after(bridge, direct.seq) == expected
     finish_reply(output, session)
+    assert replies_after(bridge, direct.seq) == expected
+    # A subscription rereads retained records, not an input or a provider attempt.
+    for record in observations:
+        output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
     assert replies_after(bridge, direct.seq) == expected
 
     # Completion opens a fresh window; another sender can open the next turn.
