@@ -38,6 +38,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .owned_send import OwnedSend
+from .registry_document import RegistrySnapshot
 from .text_digest import TextDigest
 from .tracked_turn import (
     NO_FOLLOWING_INPUTS,
@@ -181,7 +182,7 @@ class PrivateSendClaim(PromptBoundary):
         """
         lease = self.owner.thread.require_turn_lease()
         startup = NativeStartup(self.bus.bus.path.parent, measurements=self.measurements)
-        def snapshot_registry():
+        def snapshot_registry() -> RegistrySnapshot:
             with self.measurements.operation("selected_registry_snapshot_worker"):
                 return self.bus._registry.snapshot()
 
