@@ -559,20 +559,13 @@ class InitialInput(QueuedInput):
                 controller=inputs.runtime.controller.get(), input_id=input_id, origin=origin,
             ) as reservation:
                 item = reservation.item
-                await resources.enter_async_context(item.registered(inputs, session_id))
+                # This original stays available to its source until dispatch has finished.
+                inputs.state(session_id).queued[item.input_id] = item
+                resources.push_async_callback(item.finish, inputs, session_id)
                 reservation.release()
             await inputs.emit_input_delivery_changed(session_id)
             await inputs.emit_queue_state(session_id)
             await item.dispatch(inputs.effects.turns, session_id, thread_name)
-
-    @asynccontextmanager
-    async def registered(self, inputs: InputDrain, session_id: str) -> AsyncIterator[None]:
-        """Keep this original available to its source until dispatch has finished."""
-        inputs.state(session_id).queued[self.input_id] = self
-        try:
-            yield
-        finally:
-            await self.finish(inputs, session_id)
 
     async def finish(self, inputs: InputDrain, session_id: str) -> None:
         """Retire only this captured original after its dispatch resources join."""

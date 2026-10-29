@@ -309,7 +309,8 @@ class ToolTransport(Generic[Call]):
         self.validate_round(round)
         self.calls.announce(round)
 
-    def tool_started(self, event: ToolExecutionStart) -> None:
+    def tool_started(self, event: ToolExecutionStart) -> Call:
+        """Start the declared call this event names, and return it."""
         # The call decoders validate the call's fields as Pi sent them.
         candidate = self.decode_call(
             FieldCodec.encode(event.tool_call_id), FieldCodec.encode(event.tool_name), event.args
@@ -319,8 +320,10 @@ class ToolTransport(Generic[Call]):
         )
         call.correlate(candidate)
         call.start()
+        return call
 
-    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> None:
+    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> Call:
+        """Finish the declared call this event names, and return it."""
         identity, call = self.calls.require_current(
             FieldCodec.encode(event.tool_call_id), "Native tool terminal has no declared call"
         )
@@ -331,6 +334,7 @@ class ToolTransport(Generic[Call]):
             input_id,
             identity.round_number,
         )
+        return call
 
     def assert_complete(self) -> None:
         for call in self.calls.values():

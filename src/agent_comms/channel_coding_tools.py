@@ -220,23 +220,20 @@ class CodingToolSocket(ToolTransport[CodingCall]):
             call.progress.observation.require(Executing, ToolNotExecuting())
             call.progress.room = reservation
 
-    def tool_started(self, event: ToolExecutionStart) -> None:
-        super().tool_started(event)
-        _, call = self.calls.require_current(
-            FieldCodec.encode(event.tool_call_id), 'Missing started tool')
+    def tool_started(self, event: ToolExecutionStart) -> CodingCall:
+        call = super().tool_started(event)
         self.owner.tool_started(call, self.turn.native)
+        return call
 
-    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> None:
-        super().tool_finished(event, input_id)
-        _, call = self.calls.require_current(
-            FieldCodec.encode(event.tool_call_id), 'Missing completed tool'
-        )
+    def tool_finished(self, event: ToolExecutionEnd, input_id: InputId) -> CodingCall:
+        call = super().tool_finished(event, input_id)
         if event.is_error.value_or(False):
             self.owner.tool_failed(call, self.turn.native)
         else:
             self.owner.tool_completed(call, event.result, self.turn.native)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
+        return call
 
     async def _drain_calls(self):
         if self.completions:
