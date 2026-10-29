@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NoReturn
 
 from .launch_runtime import CallingThreadUnavailable
@@ -18,6 +18,7 @@ from .owner_connection import (
     OwnerConnection, OwnerReading, OwnerReplyConnection, ResultRuntimeRequest, RuntimeRequestContext,
 )
 from .presentation import AllOutcomes
+from .read_basis import DisplayIdentity, NoDisplaySelection
 from .tool_declaration import ToolDeclaration
 from .tool_result import ToolResult
 
@@ -53,10 +54,14 @@ class OperatorOutcomes:
         return AllOutcomes()
 
 
+@dataclass(frozen=True, slots=True)
 class OperatorReader(OperatorOutcomes, BusReader):
-    """The owner's UI: it observes the whole bus as the operator."""
+    """Full operator access, with the actual page's optional display scope."""
 
-    __slots__ = ()
+    display: DisplayIdentity | NoDisplaySelection = field(default_factory=NoDisplaySelection)
+
+    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
+        return self.display.outcome_viewer()
 
 
 class BusRead[Result](ToolDeclaration, ABC):
