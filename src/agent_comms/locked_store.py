@@ -14,7 +14,7 @@ from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field
-from functools import cache, cached_property
+from functools import cache, cached_property, partial
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
@@ -752,12 +752,12 @@ class SQLiteRevision:
 class SQLiteReadConnection:
     """A thread's read handle, retired with its store or when the file is replaced."""
 
-    def acquire(self, source: SQLiteStorage, revision: FileObservation) -> OpenSQLiteReadConnection:
+    def acquire(self, source: SQLiteReader, revision: FileObservation) -> OpenSQLiteReadConnection:
         return OpenSQLiteReadConnection(source, revision)
 
 
 class OpenSQLiteReadConnection(SQLiteReadConnection):
-    def __init__(self, source: SQLiteStorage, revision: FileObservation) -> None:
+    def __init__(self, source: SQLiteReader, revision: FileObservation) -> None:
         self.pid = os.getpid()
         self.identity = revision.file_identity()
         # Queries remain thread-local. Finalization may run in the store owner's
@@ -769,7 +769,7 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
             self.retire()
             raise RelationViolationError(f"SQLite file replaced while opening {source.path}")
 
-    def acquire(self, source: SQLiteStorage, revision: FileObservation) -> OpenSQLiteReadConnection:
+    def acquire(self, source: SQLiteReader, revision: FileObservation) -> OpenSQLiteReadConnection:
         if self.pid == os.getpid() and self.identity == revision.file_identity():
             return self
         self.retire()
@@ -783,11 +783,6 @@ class SQLiteReaders(local):
 
 class SQLiteStorage(RootFile, SqliteStore):
     """SQLite connections, transactions and companion membership shared by file policies."""
-
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The physical file whose connection lifetime this instance owns."""
 
     @staticmethod
     def relocated(source: Path, target: Path, member: Path) -> Path:
@@ -844,45 +839,6 @@ class SQLiteStorage(RootFile, SqliteStore):
             contention.reader(path.resolve().as_uri() + "?mode=ro",
                               check_same_thread=check_same_thread)
         )
-
-    @cached_property
-    def readers(self) -> SQLiteReaders:
-        """One lazy resource owner per store, with distinct handles in each thread."""
-        # cached_property permits concurrent first evaluations. Publish into
-        # its own declaration-derived slot atomically, so both return one owner.
-        return self.__dict__.setdefault(SQLiteStorage.readers.func.__name__, SQLiteReaders())
-
-    @contextmanager
-    def reader_snapshot(self) -> Iterator[sqlite3.Connection]:
-        revision = FileRevision.capture(self.path)
-        revision.require(FileNotFoundError(self.path))
-        held = self.readers.connection.acquire(self, revision)
-        self.readers.connection = held
-        db = held.db
-        # Nested reads borrow the original cut; only its outer owner rolls back.
-        if db.in_transaction:
-            yield db
-            return
-        with CoordinationReadUnavailable.checking():
-            try:
-                self.begin_snapshot(db)
-                yield db
-            except sqlite3.OperationalError as error:
-                error.add_note(f"SQLite observation store: {self.path}")
-                raise
-            finally:
-                if db.in_transaction:
-                    db.execute("ROLLBACK")
-
-    def data_revision(self) -> SQLiteRevision:
-        """Absent optional stores have a stable empty revision, not a created database."""
-        return FileRevision.capture(self.path).either(
-            lambda present: self._data_revision(), lambda: SQLiteRevision(MissingFile(), 0))
-
-    def _data_revision(self) -> SQLiteRevision:
-        with self.reader_snapshot() as db:
-            version, = db.execute("PRAGMA data_version").fetchone()
-            return SQLiteRevision(db, version)
 
     @classmethod
     def _acquire_snapshot(cls, db: sqlite3.Connection) -> sqlite3.Connection:
@@ -975,6 +931,66 @@ class SQLiteStorage(RootFile, SqliteStore):
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+
+
+class PublishedProperty[Value](cached_property[Value]):
+    """Publish a resource once into the slot Python binds to its declaration."""
+
+    def __set_name__(self, owner: type[object], name: str) -> None:
+        super().__set_name__(owner, name)
+        self.func = partial(self._published, name, self.func)
+
+    def _published(
+        self, name: str, create: Callable[[object], Value], source: object,
+    ) -> Value:
+        value: Value = source.__dict__.setdefault(name, create(source))
+        return value
+
+
+class SQLiteReader(SQLiteStorage):
+    """A physical instance owns readers; class-only file policies do not."""
+
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The physical file whose connection lifetime this instance owns."""
+
+    @PublishedProperty
+    def readers(self) -> SQLiteReaders:
+        """One lazy resource owner per store, with distinct handles in each thread."""
+        return SQLiteReaders()
+
+    @contextmanager
+    def reader_snapshot(self) -> Iterator[sqlite3.Connection]:
+        revision = FileRevision.capture(self.path)
+        revision.require(FileNotFoundError(self.path))
+        held = self.readers.connection.acquire(self, revision)
+        self.readers.connection = held
+        db = held.db
+        # Nested reads borrow the original cut; only its outer owner rolls back.
+        if db.in_transaction:
+            yield db
+            return
+        with CoordinationReadUnavailable.checking():
+            try:
+                self.begin_snapshot(db)
+                yield db
+            except sqlite3.OperationalError as error:
+                error.add_note(f"SQLite observation store: {self.path}")
+                raise
+            finally:
+                if db.in_transaction:
+                    db.execute("ROLLBACK")
+
+    def data_revision(self) -> SQLiteRevision:
+        """Absent optional stores have a stable empty revision, not a created database."""
+        return FileRevision.capture(self.path).either(
+            lambda present: self._data_revision(), lambda: SQLiteRevision(MissingFile(), 0))
+
+    def _data_revision(self) -> SQLiteRevision:
+        with self.reader_snapshot() as db:
+            version, = db.execute("PRAGMA data_version").fetchone()
+            return SQLiteRevision(db, version)
 
 
 class SQLiteFile(SQLiteStorage):

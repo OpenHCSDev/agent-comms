@@ -551,7 +551,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
         All three physical revisions matter: loss/corruption of a companion
         must still refuse even if the generation marker itself did not move.
-        Admission remains under the registry lock that excludes publication.
+        Checks remain under the registry lock that excludes publication.
         """
         revision = tuple(FileRevision.capture(path, follow_symlinks=False) for path in self.witness_paths)
         if revision not in self.observations:

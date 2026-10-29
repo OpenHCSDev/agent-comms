@@ -71,7 +71,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
         with current.reader_snapshot() as connection:
-            assert Generation.require_in(connection, owner.goal.id).failure_evidence(connection) == observation.evidence
+            assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == observation.evidence
     assert store.path.read_bytes() == before
     assert len(rows(store, "failed_turn_evidence")) == 1
     encoded = json.dumps(rows(store, "failed_turn_evidence"))
@@ -95,7 +95,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=rejected)
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     with store.reader_snapshot() as connection:
-        assert Generation.require_in(connection, owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
+        assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
 
 
 @pytest.mark.parametrize("binding", ["token", "evidence_identity"])
@@ -111,7 +111,7 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
     with store.reader_snapshot() as connection:
-        assert Generation.require_in(connection, owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
+        assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
 
 
 def test_unclaimed_attempt_failure_has_no_backend_incident(bound):

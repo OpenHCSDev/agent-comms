@@ -75,6 +75,7 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
+    SQLiteReader,
     SQLiteStorage,
     StoreCommittedError,
     WrittenFile,
@@ -2909,7 +2910,7 @@ class RuntimeWriter(RuntimeFile, StoreWriter):
     maintenance included."""
 
 
-class WalStore(StoreWriter, StoreLockFile):
+class WalStore(SQLiteReader, StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"

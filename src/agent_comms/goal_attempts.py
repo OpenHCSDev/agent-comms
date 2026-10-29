@@ -25,7 +25,7 @@ from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
 
 from agent_comms.goal_turn_permit import GoalTurnPermit
 
@@ -67,7 +67,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .lifecycle_capability import Failed
-from .locked_store import FileStore, GoalWakeFile, SQLiteStorage
+from .locked_store import FileStore, GoalWakeFile, SQLiteReader
 from .maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import PiUsage
@@ -86,6 +86,7 @@ from .typed_table import (
     Column,
     Generated,
     ReconciledFile,
+    RowNotFoundError,
     SQLiteJournalMode,
     StoreWriter,
     TableReference,
@@ -159,18 +160,18 @@ class Generation(GoalLedgerTable, TypedTable):
             raise ValueError("Generation must be positive.")
 
     @classmethod
-    def read_in(cls, conn: sqlite3.Connection, goal_id: GoalId) -> Generation | None:
+    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
         try:
-            return cls.one(conn, goal_id=goal_id)
+            return super()._keyed(db, key)
         except (sqlite3.Error, MalformedRecord) as error:
             raise StorageUncertainError("Invalid persisted goal generation.") from error
 
     @classmethod
-    def require_in(cls, conn: sqlite3.Connection, goal_id: GoalId) -> Generation:
-        generation = cls.read_in(conn, goal_id)
-        if generation is None:
-            raise MissingGoalGenerationError(goal_id)
-        return generation
+    def require(cls, db: sqlite3.Connection, **key: object) -> Self:
+        try:
+            return super().require(db, **key)
+        except RowNotFoundError as error:
+            raise MissingGoalGenerationError(str(error)) from error
 
     def advance(
         self, conn: sqlite3.Connection, successor: Generation, *, digest: str = ""
@@ -222,7 +223,7 @@ class Reservation:
         """Block even when the model outcome is uncertain; never auto-replay."""
         reservation = self
         def write(conn: sqlite3.Connection) -> Generation:
-            goal = Generation.read_in(conn, reservation.goal_id)
+            goal = Generation.one(conn, goal_id=reservation.goal_id)
             late = errors.StaleAttemptError("Late failure cannot modify this goal generation.")
             attempt = AttemptRecord.read_in(conn, reservation.attempt_id).reserved_by(
                 reservation, late
@@ -253,7 +254,7 @@ class Reservation:
         )
 
     def require_current(self, conn: sqlite3.Connection, phase: GoalAttemptPhase) -> AttemptRecord:
-        goal = Generation.read_in(conn, self.goal_id)
+        goal = Generation.one(conn, goal_id=self.goal_id)
         stale = errors.StaleAttemptError("Attempt is no longer current or is already claimed.")
         attempt = AttemptRecord.read_in(conn, self.attempt_id).reserved_by(self, stale)
         if (
@@ -665,7 +666,7 @@ class ProviderUsageTotal:
 _T = TypeVar("_T")
 
 
-class GoalAttemptFile(FileStore, SQLiteStorage):
+class GoalAttemptFile(FileStore, SQLiteReader):
     """An unopened ledger can observe its counter without creating launch state."""
 
     def open(self) -> GoalAttemptStore:
@@ -813,11 +814,11 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
 
     def snapshot(self, goal_id: GoalId) -> Generation | None:
         with closing(self._connect()) as conn:
-            return Generation.read_in(conn, goal_id)
+            return Generation.one(conn, goal_id=goal_id)
 
     def require_generation(self, goal_id: GoalId) -> Generation:
         with closing(self._connect()) as conn:
-            return Generation.require_in(conn, goal_id)
+            return Generation.require(conn, goal_id=goal_id)
 
     def read_attempt(self, attempt_id: AttemptId) -> LedgerAttempt:
         with closing(self._connect()) as conn:
@@ -886,7 +887,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
         """
 
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
-            current = Generation.read_in(conn, goal_id)
+            current = Generation.one(conn, goal_id=goal_id)
             if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise ReservationConflictError(
                     "Only an unreserved READY generation can be recovered."
@@ -937,7 +938,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
         )
 
         def write(conn: sqlite3.Connection) -> Reservation:
-            current = Generation.read_in(conn, goal_id)
+            current = Generation.one(conn, goal_id=goal_id)
             if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise ReservationConflictError("Goal generation is not ready or already reserved.")
             if not hmac.compare_digest(current.ready_digest, digest):
@@ -1016,7 +1017,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
         is overwritten. Reusing a decision ID cannot mint another grant.
         """
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
-            current = Generation.read_in(conn, goal_id)
+            current = Generation.one(conn, goal_id=goal_id)
             if current != Generation(goal_id, expected_generation, ReadyGeneration(), NoAttemptId()):
                 raise errors.UnresolvedAttemptError(
                     "Goal is not ready; an attempt may already be unresolved."
@@ -1050,7 +1051,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
         same-UID user authentication is not claimed by the ledger.
         """
         def write(conn: sqlite3.Connection, digest: str) -> Generation:
-            current = Generation.read_in(conn, goal_id)
+            current = Generation.one(conn, goal_id=goal_id)
             if current != Generation(goal_id, expected_generation, BlockedGeneration(), attempt_id):
                 raise errors.UnresolvedAttemptError("Blocked attempt changed or is not resolved.")
             unrecorded = errors.UnresolvedAttemptError(
@@ -1081,7 +1082,7 @@ class GoalAttemptStore(GoalAttemptFile, DrainSettledFile, StoreWriter, Reconcile
         """Revoke READY or an unresolved attempt before clearing the registry goal."""
 
         def write(conn: sqlite3.Connection) -> Generation:
-            current = Generation.read_in(conn, goal_id)
+            current = Generation.one(conn, goal_id=goal_id)
             if (
                 current is None
                 or current.number != expected_generation

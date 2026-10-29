@@ -352,7 +352,7 @@ class Goals(GoalWaitRecovery):
             # Generation and its failure evidence come from one cut. Permit
             # attestation keeps GoalAttemptStore's independent fresh readback.
             with store.reader_snapshot() as connection:
-                generation = Generation.require_in(connection, goal.id)
+                generation = Generation.require(connection, goal_id=goal.id)
                 source = GoalExecutionSource(
                     goal, GoalWaits.for_goal(goal, waits), generation,
                     generation.lifecycle.evidence(connection, generation),
