@@ -28,14 +28,14 @@ class GitPreparation:
     def create(cls, source: SourceRepository, path: Path, *options: str) -> GitPreparation:
         # A transport clone cannot hardlink the remote's unadvertised objects.
         source.git(path.parent, "clone", "--no-local", "--single-branch", "--branch", "main",
-                   *options, source.remote.as_uri(), str(path))
+                   *options, source.remote_path.as_uri(), str(path))
         return cls(source, Repo(checkout=path, github=source.github))
 
     def commit_at_remote(self, parent: str, message: str, reference: str) -> str:
-        tree = self.source.git(self.source.remote, "rev-parse", f"{parent}^{{tree}}").strip()
-        commit = self.source.git(self.source.remote, "commit-tree", tree, "-p", parent,
+        tree = self.source.git(self.source.remote_path, "rev-parse", f"{parent}^{{tree}}").strip()
+        commit = self.source.git(self.source.remote_path, "commit-tree", tree, "-p", parent,
                                  "-m", message).strip()
-        self.source.git(self.source.remote, "update-ref", reference, commit)
+        self.source.git(self.source.remote_path, "update-ref", reference, commit)
         return commit
 
     def snapshot(self) -> tuple[tuple[str, str], ...]:
@@ -90,12 +90,12 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     base = case.source.main_commit
     SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Unpublished work")
     head = Repo.git(repo.checkout, "rev-parse", "HEAD").strip()
-    Repo.git(repo.checkout, "remote", "add", "publication", str(case.source.remote))
+    Repo.git(repo.checkout, "remote", "add", "publication", str(case.source.remote_path))
     Repo.git(repo.checkout, "update-ref", "refs/remotes/publication/main", base)
     Repo.git(repo.checkout, "config", "branch.main.remote", "publication")
     Repo.git(repo.checkout, "config", "branch.main.merge", "refs/heads/main")
     if upstream == "deleted":
-        case.source.git(case.source.remote, "update-ref", "-d", "refs/heads/main")
+        case.source.git(case.source.remote_path, "update-ref", "-d", "refs/heads/main")
     elif upstream == "local":
         Repo.git(repo.checkout, "branch", "local-base", base)
         Repo.git(repo.checkout, "config", "branch.main.remote", ".")
@@ -148,7 +148,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
     plans.observe_reading(failed, (evidence,))
-    Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote))
+    Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote_path))
     recovered = plans.prepare_reading(repo, (), (evidence,))
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
@@ -180,8 +180,8 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     (directory / "deleted.py").unlink()
     head = source.publish_change("Content changes", "src")
     source.git(source.checkout, "push", "origin", "HEAD:refs/heads/main")
-    source.git(source.remote, "config", "uploadpack.allowFilter", "true")
-    source.git(source.remote, "config", "uploadpack.allowAnySHA1InWant", "true")
+    source.git(source.remote_path, "config", "uploadpack.allowFilter", "true")
+    source.git(source.remote_path, "config", "uploadpack.allowAnySHA1InWant", "true")
     case = GitPreparation.create(source, tmp_path / "promisor", "--no-checkout", "--filter=blob:none")
     repo = case.repository
     paths = ("src/added.py", "src/deleted.py", "src/promised.py")

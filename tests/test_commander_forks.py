@@ -529,7 +529,7 @@ def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sou
     # The explicit retained source may be a different clone: it will not occur in the
     # registered checkout's worktree list, but its own branch still has to match the PR.
     separate = tmp_path / "explicit-source-clone"
-    source.git(tmp_path, "clone", "-q", str(source.remote), str(separate))
+    source.git(tmp_path, "clone", "-q", str(source.remote_path), str(separate))
     source.git(separate, "checkout", "-q", "-b", "linked-repair")
     independent = SourceRepository.of(separate)
     assert independent.github == source.github

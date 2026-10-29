@@ -5,16 +5,16 @@ import asyncio
 import logging
 import subprocess
 import sys
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass
 from pathlib import Path
+from types import MappingProxyType
 
 from agent_comms.child_process import ReadWork
 from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_bus import Watch, WatchPass
+from agent_comms.message_bus import WatchPass
 from agent_comms.repo import Repo
 from source_revision_fixture import SourceRepository
 from connector_shutdown_fixture import HeldCall
@@ -74,10 +74,10 @@ class WriteShutdownWatch(JoinedShutdownWatch):
 class PreparationShutdownWatch(JoinedShutdownWatch):
     def prepare(self, comms: Comms) -> None:
         source = SourceRepository.create(self.directory / "source")
-        tree = source.git(source.remote, "rev-parse", "main^{tree}").strip()
-        head = source.git(source.remote, "commit-tree", tree, "-p", source.main_commit,
+        tree = source.git(source.remote_path, "rev-parse", "main^{tree}").strip()
+        head = source.git(source.remote_path, "commit-tree", tree, "-p", source.main_commit,
                           "-m", "Preparation must finish acquiring this object").strip()
-        source.git(source.remote, "update-ref", "refs/heads/main", head)
+        source.git(source.remote_path, "update-ref", "refs/heads/main", head)
         # Hold the actual external upload-pack, not our acquisition/reader implementation.
         source.git(source.checkout, "config", "remote.origin.uploadpack",
                    f"{sys.executable} -m watch_shutdown_fixture upload-pack {self.directory}")
@@ -88,7 +88,10 @@ class PreparationShutdownWatch(JoinedShutdownWatch):
 
 @dataclass(frozen=True)
 class WatchConnector(Connector):
-    watches: Mapping[type[Watch], Watch] = field(default_factory=dict)
+    watch: InitVar[ShutdownWatch]
+
+    def __post_init__(self, watch: ShutdownWatch) -> None:
+        object.__setattr__(self, "watches", MappingProxyType({**self.watches, type(watch): watch}))
 
 
 def main() -> int:
@@ -98,7 +101,7 @@ def main() -> int:
     root, auth, port, selected, directory = sys.argv[1:]
     watch = ShutdownWatch.member_named(selected)(directory=Path(directory))
     connector = WatchConnector(ConnectorStore.at(Path(auth)), f"http://127.0.0.1:{port}",
-                               Path(root), watches={type(watch): watch})
+                               Path(root), watch=watch)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     with LaunchRoot.from_path(Path(root)).selected():
         asyncio.run(ServeVerb(root=Path(root), port=int(port)).serve(connector.application(), connector))
