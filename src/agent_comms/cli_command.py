@@ -182,7 +182,7 @@ class PendingCommandBinding(CatalogBinding):
         self.authorize_edits(arguments)
         context_fields = {entry.key for entry in FieldCodec.argument_fields(type(self.context))}
         wire = FieldCodec.editor_arguments(type(self.context), {
-            key: value for key, value in arguments.items() if key in context_fields,
+            key: value for key, value in arguments.items() if key in context_fields
         })
         changes = self.decoded_edits(type(self.context), wire)
         return replace(self, context=replace(self.context, **changes)) if changes else self
