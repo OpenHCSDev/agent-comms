@@ -2,7 +2,7 @@
 
 Claude Code runs this after every tool call. The session start hook orders the sources read
 once and deals them into a deck of short slices beside the transcript: the voice, the
-commander's indictment, the drift tells of the rules the session follows and the recorded
+commander's indictment, each followed rule's wake-up with its tell, and the recorded
 failures, interleaved. Every `every` tool calls one slice goes
 into context inline, the next one each time. Nothing repeats verbatim on every call, nothing
 waits on a read the commander may skip, and the cadence counts tool calls, so no transcript

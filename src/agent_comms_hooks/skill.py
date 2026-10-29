@@ -46,8 +46,10 @@ class DeckReader(ABC):
     deck_suffix: ClassVar[str]
     """Where this reader's deck sits beside the transcript: a session whose role changes finds
     no deck of its new kind and is dealt again."""
-    slice_chars: ClassVar[int] = 2_000
-    """The most characters one inline slice carries; a longer paragraph splits at its lines."""
+    slice_chars: ClassVar[int] = 2_500
+    """The most characters one inline slice carries; a longer paragraph splits at its lines. A
+    rule's wake-up is never split, since a greentext cut before its punchline teaches nothing,
+    so the cap sits above the longest one and the deck test fails when one outgrows it."""
 
     def __init_subclass__(cls, audience: type[RuleAudience], **options: object) -> None:
         super().__init_subclass__(**options)
@@ -94,7 +96,7 @@ class DeckReader(ABC):
 
     @classmethod
     def tells(cls) -> tuple[str, ...]:
-        return tuple(rule.drift for rule in cls.rules())
+        return tuple(rule.reminder for rule in cls.rules())
 
     @classmethod
     def failures(cls) -> tuple[str, ...]:
