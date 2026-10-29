@@ -111,11 +111,11 @@ class SuppliedTargetField(TargetField):
 
     @property
     def editor_initial(self) -> object:
-        return self.plan.editor_initial(self.value)
+        return self.plan.value.editor_initial(self.value)
 
     @property
     def editor_default(self) -> str:
-        return self.plan.editor_default(self.value)
+        return self.plan.value.encode_editor(self.value)
 
     def default_schema(self) -> dict[str, JsonValue]:
         return {'editor_default': self.editor_default}

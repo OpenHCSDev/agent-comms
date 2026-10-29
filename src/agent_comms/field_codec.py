@@ -621,12 +621,6 @@ class FieldPlan:
     def editor_payload(self, value: object) -> object:
         return self.editor_normalizer(value)
 
-    def editor_default(self, value: object) -> str:
-        return self.value.encode_editor(value)
-
-    def editor_initial(self, value: object) -> object:
-        return self.value.editor_initial(value)
-
     def require_constructor_input(self, values: Mapping[str, object]) -> None:
         if self.constructor_required and self.name not in values:
             raise MalformedRecord(f'Missing required field {self.key}')
