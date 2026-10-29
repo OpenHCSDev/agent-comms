@@ -262,8 +262,9 @@ class BranchUpstream(DeclaredFamily):
             return LocalUpstream(branch, tracking)
         return PublishedUpstream(branch, tracking, remote, reference)
 
-    def prepare(self, reader: WorkBranches) -> None:
-        """No configured publication means no remote acquisition."""
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        """Only published upstreams supply remote/reference acquisition requirements."""
+        return ()
 
     def require_prepared(self, reader: WorkBranches) -> None:
         """An absent or local upstream requires no published remote head."""
@@ -302,9 +303,8 @@ class PublishedUpstream(TrackedUpstream):
     remote: str
     reference: str
 
-    def prepare(self, reader: WorkBranches) -> None:
-        Repo.require_commits(reader.checkout, self.remote,
-                             *reader.remote_heads(self.remote, self.reference))
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.remote, self.reference),)
 
     def require_prepared(self, reader: WorkBranches) -> None:
         Repo.require_local_commits(reader.checkout,
@@ -324,7 +324,7 @@ class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
     checkout: Path
-    _remote_heads: dict[tuple[str, str], tuple[str, ...]] = field(
+    _remote_heads: dict[str, dict[str, str]] = field(
         default_factory=dict,
         init=False,
         repr=False,
@@ -404,25 +404,23 @@ query($owner: String!, $name: String!, $after: String) {
         )
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
-        key = remote, reference
-        if key not in self._remote_heads:
-            self._remote_heads[key] = tuple(
-                line.split()[0]
-                for line in self._git(
-                    "ls-remote",
-                    "--refs",
-                    remote,
-                    reference,
-                ).splitlines()
-            )
-        return self._remote_heads[key]
+        """One complete published-ref cut per remote for this reader, not one call per branch."""
+        if remote not in self._remote_heads:
+            self._remote_heads[remote] = {
+                reference: head
+                for head, reference in (line.split() for line in self._git(
+                    "ls-remote", "--refs", remote,
+                ).splitlines())
+            }
+        return self.selected_heads(remote, reference)
 
     def selected_heads(self, remote: str, reference: str) -> tuple[str, ...]:
-        """Consume the prepared remote cut; an unexpected comparison never opens another cut."""
-        if (remote, reference) not in self._remote_heads:
+        """Select locally; absence in the captured remote cut is a deleted publication."""
+        if remote not in self._remote_heads:
             raise WorkBranchError(
                 f"Unprepared remote head {remote}:{reference} in {self.checkout}")
-        return self._remote_heads[remote, reference]
+        heads = self._remote_heads[remote]
+        return (heads[reference],) if reference in heads else ()
 
     def _pull_request_base(self, base: str) -> str:
         published = self.selected_heads(Repo.remote, f"refs/heads/{base}")
@@ -450,14 +448,16 @@ query($owner: String!, $name: String!, $after: String) {
             ).splitlines()
         )}
 
-    def require_prepared(self) -> None:
-        """Object loss after acquisition is unreadable input, never a new fetch."""
-        Repo.require_local_commits(self.checkout,
-                                  *(head for heads in self._remote_heads.values() for head in heads))
-
     def prepare_upstreams(self) -> None:
+        """Acquire all declared publications in one remote cut and one object batch per remote."""
+        references: dict[str, set[str]] = {}
         for upstream in self.upstreams.values():
-            upstream.prepare(self)
+            for remote, reference in upstream.publication_inputs():
+                references.setdefault(remote, set()).add(reference)
+        for remote, refs in references.items():
+            heads = tuple(dict.fromkeys(
+                head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
+            Repo.require_commits(self.checkout, remote, *heads)
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)

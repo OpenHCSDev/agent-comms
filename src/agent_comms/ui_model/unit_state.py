@@ -160,7 +160,6 @@ class UnitObservation:
             progress.require_read()
         for todo in self.todos:
             reader = self.pulls.checkout(todo.order.checked().check.directory).branches
-            reader.require_prepared()
             for pull in self.pulls.open_for(todo):
                 pull.require_comparison(reader)
         if self.todos:
