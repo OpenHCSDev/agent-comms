@@ -9,7 +9,8 @@ from agent_comms import field_codec
 from .coordinator import Coordination
 
 from .native_session_reopen import NativeSessionIdentity
-from .pi_payloads import PiResponseData, StrictFields
+from .pi_payload import StrictFields
+from .pi_payloads import PiResponseData
 from .tool_result import DeclaredReply
 from .thread_identity import OfferedTools
 from .turn_context import (

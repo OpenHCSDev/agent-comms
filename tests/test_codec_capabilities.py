@@ -4,6 +4,12 @@ from dataclasses import dataclass, field
 from typing import Annotated
 
 import pytest
+from agent_comms.pi_payload import (
+    Opaque,
+    PiPayload,
+    StrictFields,
+    UnknownPayload,
+)
 from pydantic import TypeAdapter
 
 from agent_comms.cli_bridges.claude_protocol import AssistantBlock, ResultPart, UserBlock
@@ -26,20 +32,16 @@ from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate
 from agent_comms.pi_payloads import (
     ContentDelta,
     NativeToolDetails,
-    Opaque,
     PiContent,
     PiDelta,
     PiDiagnostic,
     PiMessage,
-    PiPayload,
     PiResponseData,
     SessionSwitchData,
     StateData,
-    StrictFields,
     TextContent,
     UnknownContent,
     UnknownData,
-    UnknownPayload,
 )
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
@@ -166,7 +168,6 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
         MissingToolResult,
         NoToolDetails,
         PiModel,
-        PiPayload,
         PiToolResult,
         UnreportedModel,
     )

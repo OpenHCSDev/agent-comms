@@ -1,5 +1,6 @@
 """New status text is bounded by activity; saved text is never repaired on read."""
 
+from agent_comms.provider_diagnostic import CodelessProviderDiagnosticError
 from agent_comms.repo import Checkout
 import os
 from dataclasses import replace
@@ -16,7 +17,7 @@ from agent_comms.field_codec import (
     TurnId,
 )
 from agent_comms.pi_events import ToolExecutionStart
-from agent_comms.pi_payloads import CodelessProviderDiagnosticError, ReportedText
+from agent_comms.pi_payloads import ReportedText
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread

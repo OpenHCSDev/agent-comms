@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.cli_commands import RegisteredResult
+from agent_comms.cli_result import RegisteredResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile

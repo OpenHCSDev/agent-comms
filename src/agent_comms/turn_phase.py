@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
 from .declared_family import DeclaredFamily
 from .field_codec import ToolCallId
-from .pi_payloads import ProviderDiagnosticError
+from .provider_diagnostic import ProviderDiagnosticError
+
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity

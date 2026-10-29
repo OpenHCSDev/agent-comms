@@ -15,10 +15,11 @@ from .field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
-from .registration_change import RegistrationChange
+from .registration_change import NativeSourcePublication, RegistrationChange
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
+from .session_file import RegistrySessionLocation
 from .storage_rules import StorageRule
 from .thread_execution import ExternalThreadExecution, SubagentExecution
 from .thread_identity import GenerationCounter, UserThreadRole
@@ -257,7 +258,13 @@ class Registration:
     def _attach_native_session(
         self, edit: RegistryEdit, original: RegistryOwner, session_file: str,
     ) -> RegistryOwner:
-        change = edit.prepare_native_source(original, session_file)
+        current = original.require_source_snapshot(edit.original.snapshot)
+        status = edit.document.status(current.name)
+        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
+        change = NativeSourcePublication(
+            thread=replace(current, session_file=location), status=status,
+            previous=current, previous_status=status,
+        )
         change = self._commit_registration(edit, change)
         # The document owns the next turn's selection. Publishing an
         # observed source must not rewrite this authorized turn's settings.

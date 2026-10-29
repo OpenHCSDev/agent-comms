@@ -27,6 +27,11 @@ from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
+from .pi_payload import (
+    Opaque,
+    OpenPayload,
+    UnknownPayload,
+)
 from .pi_payloads import (
     AbsentMessage,
     AnonymousRequest,
@@ -34,8 +39,6 @@ from .pi_payloads import (
     MissingData,
     MissingToolResult,
     NoDelta,
-    Opaque,
-    OpenPayload,
     PiDelta,
     PiMessage,
     PiOmitted,
@@ -47,7 +50,6 @@ from .pi_payloads import (
     ReportedCompaction,
     ReportedFlag,
     ReportedText,
-    UnknownPayload,
     UnreportedUsage,
 )
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
