@@ -221,13 +221,6 @@ class JsonLines:
                 break
         return tuple(reversed(found[:count]))
 
-    def owner_present(self, stream: BinaryIO, boundary: int) -> bool:
-        """Whether the newest prompt in the session is one the person typed."""
-        for offset, raw in self.reverse_lines(stream, boundary):
-            for origin in self.decode_line(raw, offset).prompt_origins():
-                return origin.owner_present()
-        return False
-
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
             record = self.decode_line(raw, offset)

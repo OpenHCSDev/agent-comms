@@ -1,13 +1,14 @@
 """After a start or compaction deals a bound session its sources, refuse every tool but Read
-until each dealt part has been read in full.
+until each dealt file has been read in full.
 
-The deal's order to read the parts is text, and text loses to a compaction summary: the model
+The deal's order to read the rule files is text, and text loses to a compaction summary: the model
 holds its own paraphrase of the rules and treats the order as optional. This gate makes the
-order the only path forward. PreToolUse only judges: it refuses any tool but Read while a part
+order the only path forward. PreToolUse only judges: it refuses any tool but Read while a dealt file
 is unread. PostToolUse, which Claude Code sends only after a tool completes, records a Read that
-covered a whole dealt part; a failed or partial Read leaves the gate closed. Parent calls read
-only the dealt-part files. A subagent runs on its parent's transcript and is never gated: the
-parent reads the parts, while the subagent reports tool activity through its existing seat.
+covered a whole dealt file; a failed or partial Read leaves the gate closed. The deal names
+the packaged rule files themselves, never a copy: a copy is a paraphrase the session would read
+instead of the rule. A subagent runs on its parent's transcript and is never gated: the
+parent reads the rules, while the subagent reports tool activity through its existing seat.
 """
 
 from __future__ import annotations
@@ -35,9 +36,9 @@ class ReadInput(HookRecord):
     offset: int = 1
     limit: int = 2_000
 
-    def covers(self, part: Path) -> bool:
-        """Whether this read returned every line of the part."""
-        return self.offset <= 1 and self.limit >= len(part.read_text(encoding="utf-8").splitlines())
+    def covers(self, source: Path) -> bool:
+        """Whether this read returned every line of the file."""
+        return self.offset <= 1 and self.limit >= len(source.read_text(encoding="utf-8").splitlines())
 
 
 @dataclass(frozen=True)
@@ -114,13 +115,13 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
         """PostToolUse: what this completed call records; most record nothing."""
 
     def gate(self) -> None:
-        """Refuse this call while a dealt part is unread or the audit does not answer the deal."""
+        """Refuse this call while a dealt file is unread or the audit does not answer the deal."""
         if unread := self.unread():
             self.respond(
                 permissionDecision="deny",
                 permissionDecisionReason=(
                     "Read the rules you were dealt first, each in full with the Read tool (no"
-                    " offset or limit): " + ", ".join(str(part) for part in unread)
+                    " offset or limit): " + ", ".join(str(source) for source in unread)
                     + ". Your summary is a paraphrase of them, not a reading."),
             )
         elif refusal := self.unaudited():
@@ -148,17 +149,24 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
         return due.refusal(audit)
 
     def unread(self) -> tuple[Path, ...]:
-        """The dealt parts not yet read in full since the last deal. A deal writes the read
+        """The dealt files not yet read in full since the last deal. A deal writes the read
         record, so a session with no record was dealt nothing to read."""
-        if not self.parts_read.exists():
+        if not self.dealt_read.exists():
             return ()
-        read = set(self.parts_read.read_text(encoding="utf-8").split())
-        return tuple(part for part in sorted(self.parts.iterdir()) if part.name not in read)
+        read = set(self.dealt_read.read_text(encoding="utf-8").splitlines())
+        return tuple(Path(source) for source in self.sources() if source not in read)
+
+    def sources(self) -> tuple[str, ...]:
+        """The resolved paths of the packaged files the last deal named; a session never dealt
+        names none."""
+        if not self.dealt_files.exists():
+            return ()
+        return tuple(self.dealt_files.read_text(encoding="utf-8").splitlines())
 
 
 @dataclass(frozen=True)
 class ReadCall(GatedCall, declared_name="Read"):
-    """A Read always runs; once it completes, a read covering a whole dealt part counts it."""
+    """A Read always runs; once it completes, a read covering a whole dealt file counts it."""
 
     def judge(self) -> None:
         return
@@ -166,15 +174,15 @@ class ReadCall(GatedCall, declared_name="Read"):
     def completed(self) -> None:
         read = ReadInput.decode(self.tool_input)
         path = read.file_path
-        if path.parent.resolve() != self.parts.resolve() or not read.covers(path):
+        if str(path.resolve()) not in self.sources() or not read.covers(path):
             return
-        with self.parts_read.open("a", encoding="utf-8") as record:
-            record.write(path.name + "\n")
+        with self.dealt_read.open("a", encoding="utf-8") as record:
+            record.write(f"{path.resolve()}\n")
 
 
 @dataclass(frozen=True)
 class OtherCall(GatedCall, DefaultGate):
-    """Any other tool waits for every dealt part to be read and the audit to answer the deal."""
+    """Any other tool waits for every dealt file to be read and the audit to answer the deal."""
 
     def judge(self) -> None:
         self.gate()

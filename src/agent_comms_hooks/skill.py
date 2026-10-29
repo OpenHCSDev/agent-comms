@@ -12,6 +12,7 @@ until each part is read. The reminder hook then puts one short slice inline ever
 
 from __future__ import annotations
 
+import inspect
 import json
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
@@ -67,8 +68,9 @@ class DeckReader(ABC):
 
     @classmethod
     @abstractmethod
-    def sources(cls, notice: str) -> str:
-        """Everything this reader is ordered to read in full after a start or compaction."""
+    def sources(cls) -> tuple[Path, ...]:
+        """The packaged files this reader is ordered to read in full after a start or
+        compaction: the rules themselves, never a copy of them."""
 
     @abstractmethod
     def header(self, start: DeckStart) -> str:
@@ -140,13 +142,12 @@ class FleetReader(DeckReader, audience=FleetAudience):
         return (cls.voice(), cls.tells(), cls.failures())
 
     @classmethod
-    def sources(cls, notice: str) -> str:
-        return "\n\n".join((
-            notice,
-            CommanderPackage.voice().read_text(encoding="utf-8", newline=""),
-            "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-            *(rule.render() for rule in cls.rules()),
-        ))
+    def sources(cls) -> tuple[Path, ...]:
+        return (
+            CommanderPackage.voice(),
+            Path(inspect.getfile(PostmortemFailure)),
+            *(rule.path for rule in cls.rules()),
+        )
 
     def header(self, start: DeckStart) -> str:
         return ("FUCK YOUR COMPACTION. Your summary is a paraphrase of these rules, and a"
@@ -166,16 +167,15 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         return (cls.voice(), indictment, cls.tells(), cls.failures())
 
     @classmethod
-    def sources(cls, notice: str) -> str:
-        return "\n\n".join((
-            notice,
-            CommanderPackage.voice().read_text(encoding="utf-8", newline=""),
-            CommanderPackage.indictment().read_text(encoding="utf-8", newline=""),
-            "# Recorded failures\n\n" + PostmortemFailure.catalog(),
-            RuleFile.document(CommanderPackage.skill())[1],
-            *(rule.render() for rule in cls.rules()),
-            (Slop.catalog() / "README.md").read_text(encoding="utf-8", newline=""),
-        ))
+    def sources(cls) -> tuple[Path, ...]:
+        return (
+            CommanderPackage.voice(),
+            CommanderPackage.indictment(),
+            Path(inspect.getfile(PostmortemFailure)),
+            CommanderPackage.skill(),
+            *(rule.path for rule in cls.rules()),
+            Slop.catalog() / "README.md",
+        )
 
     def header(self, start: DeckStart) -> str:
         return start.held()
@@ -203,8 +203,6 @@ class DealtDeck(ClaudeTranscriptHook):
 
 @dataclass(frozen=True)
 class DeckStart(DealtDeck):
-    part_chars: ClassVar[int] = 60_000
-    """The most characters one Read of a part returns in full."""
     owner_prompts: ClassVar[int] = 6
     """How many of the person's own last prompts the deal puts back in front of the session."""
 
@@ -220,11 +218,11 @@ class DeckStart(DealtDeck):
         return self.dealt(reader)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
-        """The order to read every part, once; the deck carries the sources after it."""
+        """The order to read every dealt file, once, by its packaged path."""
         self.prepare(reader)
-        parts = sorted(self.parts.iterdir())
+        sources = reader.sources()
         return (
-            f"Read each of these {len(parts)} files in full with the Read tool before any other"
+            self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Then, before your next action, check what you did since"
@@ -238,7 +236,7 @@ class DeckStart(DealtDeck):
             ' dealt], "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are'
             " doing about it right now}]}. This order is given once per session start or"
             " compaction; a short slice of them comes back inline every few tool calls.\n"
-            + "\n".join(str(part) for part in parts),
+            + "\n".join(str(source) for source in sources),
             self.owner_words(),
             reader.header(self),
         )
@@ -255,7 +253,10 @@ class DeckStart(DealtDeck):
         ))
 
     def prompts(self) -> tuple[str, ...]:
+        """A new session starts before Claude Code writes its transcript: nobody has spoken."""
         transcript = Path(self.transcript_path)
+        if not transcript.exists():
+            return ()
         with transcript.open("rb") as stream:
             return ClaudeJsonLines().owner_words(
                 stream, transcript.stat().st_size, self.owner_prompts)
@@ -279,28 +280,17 @@ class DeckStart(DealtDeck):
 
     def prepare(self, reader: DeckReader) -> None:
         """A start or compaction drops what was read: the deck is dealt again from its start,
-        and no part counts as read until it is read again."""
+        and no file counts as read until it is read again."""
         self.calls.unlink(missing_ok=True)
-        self.parts_read.write_text("", encoding="utf-8")
+        self.dealt_read.write_text("", encoding="utf-8")
         self.audit.unlink(missing_ok=True)
         self.audit_due.write_text(json.dumps({
             "rules": [rule.name for rule in reader.rules()],
             "owner_words": len(self.prompts()),
         }), encoding="utf-8")
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
-        self.parts.mkdir(exist_ok=True)
-        for old in self.parts.iterdir():
-            old.unlink()
-        chunks: list[list[str]] = [[]]
-        size = 0
-        for line in reader.sources(self.notice()).splitlines(keepends=True):
-            if size + len(line) > self.part_chars and chunks[-1]:
-                chunks.append([])
-                size = 0
-            chunks[-1].append(line)
-            size += len(line)
-        for number, chunk in enumerate(chunks, 1):
-            (self.parts / f"{number:02}.md").write_text("".join(chunk), encoding="utf-8")
+        self.dealt_files.write_text(
+            "".join(f"{source.resolve()}\n" for source in reader.sources()), encoding="utf-8")
 
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]
