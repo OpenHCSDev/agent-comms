@@ -131,16 +131,27 @@ class DisplayUnread:
         through = source.revision()
         if through == self.through and tuple(self.counted) == queries:
             return self
-        kept = tuple(query for query in queries if query in self.counted)
+        earlier = {query.counting: query for query in self.counted}
+        kept = {query: query for query in queries if query in self.counted}
+        moved = {query: (earlier[query.counting], parts) for query in queries
+                 if query not in kept and query.counting in earlier
+                 and (parts := query.moved(earlier[query.counting])) is not None}
+        progressed = (*kept, *(previous for previous, _ in moved.values()))
         appended = source.count_unread(
-            kept if through != self.through else (), through=through, after=self.through)
+            progressed if through != self.through else (), through=through, after=self.through)
+        corrections = source.count_unread(
+            tuple(part for _, parts in moved.values() for part in parts), through=through)
         fresh = source.count_unread(
-            tuple(query for query in queries if query not in self.counted), through=through)
-        return DisplayUnread(through, {
-            query: self.counted[query] + appended.get(query, 0) if query in self.counted
-            else fresh[query]
-            for query in queries
-        })
+            tuple(query for query in queries if query not in kept and query not in moved),
+            through=through)
+        counted = {
+            **fresh,
+            **{query: self.counted[query] + appended.get(query, 0) for query in kept},
+            **{query: self.counted[previous] + appended.get(previous, 0)
+               - corrections[before] + corrections[after]
+               for query, (previous, (before, after)) in moved.items()},
+        }
+        return DisplayUnread(through, {query: counted[query] for query in queries})
 
 
 class BusReader(RouteCounts, ABC):

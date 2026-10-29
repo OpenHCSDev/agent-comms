@@ -1143,7 +1143,9 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
 class UnreadQuery:
     """Every value one channel's unread count reads. Equal queries count the same rows, so
     only the rows appended since an earlier count of an equal query need counting; the
-    registry revision they were resolved from is not one of them."""
+    registry revision they were resolved from is not one of them. A query whose read cursor
+    moved for some conversations differs from its earlier count only in those
+    conversations' rows above the lower of their two high waters."""
 
     channel: str
     cursors: tuple[str, ...]
@@ -1151,6 +1153,38 @@ class UnreadQuery:
     predicate: str
     parameters: tuple
     viewer_names: str
+
+    @property
+    def counting(self) -> UnreadQuery:
+        """The same rows and rule with no read cursor: what stays fixed while reading. The
+        lower bound is the cursor's own floor over the scope's targets, so it moves with it."""
+        return replace(self, cursors=(), lower_bound=0)
+
+    @property
+    def entries(self) -> dict[tuple[str, str, str], tuple[int, tuple[int, ...]]]:
+        """Each read-cursor row by its (actor, target, sender) key."""
+        return {(actor, target, sender): (high_water, tuple(exceptions))
+                for bound in self.cursors
+                for actor, target, sender, high_water, exceptions in json.loads(bound)}
+
+    def moved(self, earlier: UnreadQuery) -> tuple[UnreadQuery, UnreadQuery] | None:
+        """The earlier and current counts over only the conversations whose cursor moved,
+        or None when a whole-bus read moved and every row may have changed."""
+        before, after = earlier.entries, self.entries
+        changed = {key for key in before.keys() | after.keys() if before.get(key) != after.get(key)}
+        if any(target == "" for _, target, _ in changed):
+            return None
+        floor = min((min(before.get(key, (0, ()))[0], after.get(key, (0, ()))[0])
+                     for key in changed), default=0)
+        targets = tuple(sorted({target for _, target, _ in changed}))
+        return earlier.within(targets, floor), self.within(targets, floor)
+
+    def within(self, targets: tuple[str, ...], floor: int) -> UnreadQuery:
+        """This query over only these targets' rows above floor; every row at or below a
+        moved conversation's lower high water is read under both cursors."""
+        return replace(self, lower_bound=max(self.lower_bound, floor),
+                       predicate=f"({self.predicate}) AND target IN ({', '.join('?' * len(targets))})",
+                       parameters=(*self.parameters, *targets))
 
 
 @dataclass(frozen=True, slots=True)
