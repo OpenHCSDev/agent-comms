@@ -20,6 +20,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.selected_actions import CodingSelectedAction
 from agent_comms.selected_participant import SelectedParticipant
@@ -139,8 +140,6 @@ async def prepared_native_input(
                     worktree=Path(participant.owner.thread.worktree),
                     owner=participant.owner.thread.incarnation.require_recorded(),
                 )
-                from agent_comms.pi_native_backend import PersistentPiSession
-
                 request, _action = await attempt.prepare(
                     session, CodingSelectedAction(), NoSelectedWritePlans(), pi_session=PersistentPiSession())
                 yield request.claim_scope

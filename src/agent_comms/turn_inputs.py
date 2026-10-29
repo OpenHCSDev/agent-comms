@@ -123,7 +123,7 @@ class InputForwarding(MroDispatch):
 
     @handles(PreparedSession)
     async def prepare_session(self, item: PreparedSession, session: NativeSession) -> bool:
-        session.native.forget_context()
+        await session.native.forget_context()
         state = session.native.attestation.require_state()
         identity = session.native.attestation.require_identity()
         session.launch.session.attest(identity)

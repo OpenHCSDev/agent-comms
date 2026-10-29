@@ -271,6 +271,9 @@ class NativeToolCall(ABC):
 
 @dataclass(frozen=True)
 class CodingCall(NativeToolCall):
+    def started_instruction_read(self, child: PiSessionChild) -> None:
+        pass
+
     def require_instructions(self, child: PiSessionChild) -> None:
         child.require_rule_reads()
 

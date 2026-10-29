@@ -9,7 +9,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.held_orders import HeldOrders
-from agent_comms.instruction_deck import CommanderReader, DeckParts, DeckReader, FleetReader
+from agent_comms.instruction_deck import (
+    CommanderReader as CoreCommanderReader, DeckParts, DeckReader,
+    FleetReader as CoreFleetReader,
+)
 from agent_comms.registry_store import RegistryStore
 from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
@@ -18,6 +21,28 @@ from agent_comms_hooks.watch import WatchClaim
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.threads import Thread
+
+
+class HookReader(DeckReader):
+    """Hook-only reminders belong beside the bridge, not in Core's source reader."""
+
+    def deaf(self, session: str) -> tuple[str, ...]:
+        return ()
+
+    def board(self, session: str) -> tuple[str, ...]:
+        return ()
+
+
+class FleetReader(HookReader, CoreFleetReader):
+    pass
+
+
+class CommanderReader(CoreCommanderReader, FleetReader):
+    def deaf(self, session: str) -> tuple[str, ...]:
+        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
+
+    def board(self, session: str) -> tuple[str, ...]:
+        return WatchClaim(session).state().board()
 
 
 @dataclass(frozen=True)
@@ -39,21 +64,15 @@ class DeckStart(DealtDeck):
             unbound=tuple, fleet=lambda record: self.taken(FleetReader()),
             commander=lambda record: self.taken(CommanderReader()))
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
+    def taken(self, reader: HookReader) -> tuple[str, ...]:
         return self.dealt(reader)
 
-    def dealt(self, reader: DeckReader) -> tuple[str, ...]:
-        self.prepare(reader)
-        parts = tuple(sorted(self.parts.iterdir()))
-        return DeckParts.order(parts), reader.header(self.held)
+    def dealt(self, reader: HookReader) -> tuple[str, ...]:
+        return DeckParts.order(self.prepare(reader)), reader.header(self.held)
 
-    def held(self) -> str:
-        return "\n".join((
-            "FUCK YOUR COMPACTION. Your summary is a paraphrase. What your units actually hold:",
-            *(hold.recalled()
-              for root, snapshot, commander in self.commanders()
-              for hold in HeldOrders.of(TodoStore(root), snapshot, commander.name).live),
-        ))
+    def held(self) -> Iterator[HeldOrders]:
+        for root, snapshot, commander in self.commanders():
+            yield HeldOrders.of(TodoStore(root), snapshot, commander.name)
 
     def commanders(self) -> Iterator[tuple[Path, RegistrySnapshot, Thread]]:
         for record in WatchClaim(self.session_id).state().bindings():
@@ -62,11 +81,11 @@ class DeckStart(DealtDeck):
             for thread in snapshot.commander_project.commanders(snapshot):
                 yield root, snapshot, thread
 
-    def prepare(self, reader: DeckReader) -> None:
+    def prepare(self, reader: HookReader) -> tuple[Path, ...]:
         self.calls.unlink(missing_ok=True)
         self.parts_read.write_text("", encoding="utf-8")
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
-        DeckParts(self.parts).prepare(reader, self.notice())
+        return DeckParts(self.parts).prepare(reader, self.notice())
 
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]

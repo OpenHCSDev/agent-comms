@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, ClassVar, NoReturn
 from .child_process import AttachedChild, ChildOutcome, join_retirement
 from .declared_family import DeclaredFamily
 from .field_codec import ToolCallId
-from .instruction_deck import DeckParts, NotPartRead, PartRead, PartReadCompletion
+from .instruction_deck import DeckParts, DeckReader, NotPartRead, PartRead, PartReadCompletion
+from .turn_context import RuleReadingSegment
 from .tool_denial import SelectedToolDenied
 from .launch_runtime import INHERITED_ENVIRONMENT
 from .native_attestation import NativeAttestation, PendingAttestation
@@ -33,6 +34,8 @@ if TYPE_CHECKING:
     from .native_package import VerifiedNativePackage
     from .participant_identity import ParticipantIdentity
     from .registry_store import RegistryStore
+    from .registry_document import RegistrySnapshot
+    from .held_orders import HeldOrders
     from .pi_commands import ExtensionUiResponse, PiCommand
     from .pi_native_backend import PiNativeBackend
     from .pi_payloads import PiResponseData, PiToolResult, StateData
@@ -294,7 +297,8 @@ class PiSessionChild(PiChild):
     attestation: NativeAttestation
     sensitive_diagnostics: bool = False
     registry: RegistryStore = field(kw_only=True)
-    rule_parts: tuple[Path, ...] = field(kw_only=True)
+    held_orders: Callable[[RegistrySnapshot, str], HeldOrders] = field(kw_only=True)
+    rule_reading: RuleReadingSegment = field(kw_only=True)
     received_context: dict[type[ContextSegment], tuple[Provenance, ...]] = field(default_factory=dict)
     parts_read: set[Path] = field(default_factory=set)
     pending_part_reads: dict[ToolCallId, PartReadCompletion] = field(default_factory=dict)
@@ -302,45 +306,57 @@ class PiSessionChild(PiChild):
     def remember_context(self, kind: type[ContextSegment], provenance: tuple[Provenance, ...]) -> None:
         self.received_context[kind] = provenance
 
-    def forget_context(self) -> None:
+    @staticmethod
+    def prepare_rules(
+        launch: NativePiRpcLaunch, registry: RegistryStore,
+        held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
+    ) -> RuleReadingSegment:
+        snapshot = registry.snapshot()
+        owner = snapshot.by_lookup[launch.session.files(launch.root).owner.lookup]
+        reader = DeckReader.for_owner(snapshot, owner.incarnation.require_recorded())
+        parts = DeckParts.beside_session(launch.session.directory).prepare(reader)
+        header = reader.header(lambda: (held_orders(snapshot, owner.name),))
+        return RuleReadingSegment.for_parts(owner.incarnation, parts, header)
+
+    async def forget_context(self) -> None:
         self.received_context.clear()
         self.parts_read.clear()
-        self.pending_part_reads.clear()
-        launch = self.key[0]
-        self.rule_parts = self.registry.instruction_parts(
-            launch.session.directory, launch.session.files(launch.root).owner)
+        self.pending_part_reads = {call_id: NotPartRead() for call_id in self.pending_part_reads}
+        self.rule_reading = await asyncio.to_thread(
+            self.prepare_rules, self.key[0], self.registry, self.held_orders)
 
     def require_rule_reads(self) -> None:
-        if not self.rule_parts:
-            raise SelectedToolDenied("Rule parts were not prepared for this context")
-        unread = tuple(path for path in self.rule_parts if path not in self.parts_read)
+        unread = tuple(path for path in self.rule_reading.parts if path not in self.parts_read)
         if unread:
             raise SelectedToolDenied(DeckParts.order(unread))
 
     def begin_part_read(self, call_id: ToolCallId, path: str, *, full_read: bool) -> None:
         selected = (self.key[0].cwd / path).resolve()
-        self.pending_part_reads[call_id] = (
-            PartRead(selected) if full_read and selected in self.rule_parts else NotPartRead())
+        completion = PartRead(selected) if full_read and selected in self.rule_reading.parts else NotPartRead()
+        self.pending_part_reads[call_id] = completion
+
+    def require_part_read(self, call_id: ToolCallId) -> None:
+        self.pending_part_reads[call_id].require(self)
 
     def completed_part_read(self, call_id: ToolCallId, result: PiToolResult) -> None:
-        # Every successful Read must have its admission; a missing record fails closed.
+        # Every finished Read must have its checked call; a missing record fails closed.
         self.pending_part_reads.pop(call_id).complete(result, self.parts_read)
 
     @classmethod
     async def start(
         cls, key: tuple[NativePiRpcLaunch, tuple[int, int]], attestation: NativeAttestation,
-        *, registry: RegistryStore,
+        *, registry: RegistryStore, held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
     ) -> Self:
         launch, _ = key
-        parts = await asyncio.to_thread(
-            registry.instruction_parts, launch.session.directory, launch.session.files(launch.root).owner)
+        reading = await asyncio.to_thread(cls.prepare_rules, launch, registry, held_orders)
         with ExitStack() as resources:
             environment = dict(launch.env)
             if "AGENT_COMMS_PROJECT_SOCKET" in environment:
                 address = resources.enter_context(PrivateSocketRole.address(Path(environment["AGENT_COMMS_PROJECT_SOCKET"])))
                 environment["AGENT_COMMS_PROJECT_SOCKET"] = str(address)
             return await cls.start_command(launch.argv, cwd=str(launch.cwd), env=environment,
-                key=key, attestation=attestation, registry=registry, rule_parts=parts, resources=resources.pop_all())
+                key=key, attestation=attestation, registry=registry, held_orders=held_orders,
+                rule_reading=reading, resources=resources.pop_all())
 
 
 class NativeChildState(ABC):
@@ -472,7 +488,7 @@ class RetainedNative(ChildNative):
                 current.revision = SessionRevision.observe(
                     launch.session.files(launch.root)
                 ).require_available()
-                current.child.forget_context()
+                await current.child.forget_context()
             return data
 
     def reuse(self, key: tuple[NativePiRpcLaunch, tuple[int, int]]) -> PiSessionChild | None:
@@ -500,7 +516,8 @@ class RetainedNative(ChildNative):
 
     async def context_for_input(self, thread: Thread, context: TurnContext) -> TurnContext:
         if thread.project_resume_due or self.child.key[0].cwd != thread.worktree.path:
-            self.child.forget_context()
+            await self.child.forget_context()
+        context = context.prepend(self.child.rule_reading)
         if not self.current or self.identity.session_file != thread.runtime.read_key:
             return context
         return context.after_received(self.child.received_context)

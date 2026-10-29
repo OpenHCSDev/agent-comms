@@ -28,7 +28,7 @@ from agent_comms.field_codec import ClaimId, InputId, TurnId
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.pi_payloads import ReportedFlag, ReportedText, ToolCallContent
+from agent_comms.pi_payloads import MissingToolResult, ReportedFlag, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.threads import Thread
 
@@ -205,6 +205,19 @@ def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
 
 
 
+class TransportOwner:
+    """Transport-only policy boundary; native rule behavior is exercised by the real child."""
+
+    def __init__(self):
+        self.input_id = InputId.mint()
+
+    def tool_started(self, call, child):
+        pass
+
+    def tool_completed(self, call, result, child):
+        pass
+
+
 def _request(socket, id, name, args):
     return (
         json.dumps({"token": socket.listener.token, "call_id": id, "name": name, "arguments": args}) + "\n"
@@ -216,18 +229,20 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
     import asyncio
 
     checking, release = asyncio.Event(), asyncio.Event()
+    finished = []
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(TransportOwner):
         async def allow(self, turn, round_number, call):
             checking.set()
             await release.wait()
             return NoRoomNeeded()
 
+        def tool_completed(self, call, result, child):
+            finished.append((call.call_id, result))
+
     owner = Owner()
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
-    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
+    socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path), native=object())
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
     socket.tool_started(ToolExecutionStart(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), args={"path": "a"}
@@ -237,6 +252,7 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
     socket.tool_finished(ToolExecutionEnd(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), is_error=ReportedFlag(True)
     ), owner.input_id)
+    assert finished == [("late", MissingToolResult())]
     release.set()
     with pytest.raises(ValueError):
         await pending
@@ -252,9 +268,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
 
     answered = asyncio.Event()
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(TransportOwner):
         async def allow(self, turn, round_number, call):
             from agent_comms.tool_denial import SelectedToolDenied
 
@@ -265,7 +279,7 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
 
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
-    socket.turn = object()
+    socket.turn = SimpleNamespace(native=object())
     await socket.start()
     try:
         call = ("slow", "read", {"path": "a"})
@@ -298,15 +312,13 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(t
     import asyncio
     import os
 
-    class Owner:
-        input_id = secrets.token_hex(16)
-
+    class Owner(TransportOwner):
         async def allow(self, turn, round_number, call):
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
-    socket.turn = object()
+    socket.turn = SimpleNamespace(native=object())
     call = ("never", "read", {"path": "a"})
     socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
     await socket.start()

@@ -60,6 +60,8 @@ if TYPE_CHECKING:
     from .native_session_reopen import NativeSessionIdentity
     from .owned_turn import TurnDelivery
     from .registry_store import RegistryStore
+    from .registry_document import RegistrySnapshot
+    from .held_orders import HeldOrders
     from .pi_payloads import StateData
     from .threads import Thread
     from .turn_runner import TurnRunner
@@ -140,7 +142,10 @@ class PersistentPiSession:
     def available(self) -> bool:
         return self.child_state.available
 
-    async def open(self, launch, *, reuse, startup, watchdog, registry: RegistryStore) -> PiSessionChild:
+    async def open(
+        self, launch, *, reuse, startup, watchdog, registry: RegistryStore,
+        held_orders: Callable[[RegistrySnapshot, str], HeldOrders],
+    ) -> PiSessionChild:
         from .native_child import BorrowedNative, EmptyNative, PiSessionChild
 
         key = (launch, launch.configuration.auth_revision())
@@ -151,7 +156,7 @@ class PersistentPiSession:
             attestation = launch.session.attestation()
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             with startup.measurements.operation("native_spawn"):
-                child = await PiSessionChild.start(key, attestation, registry=registry)
+                child = await PiSessionChild.start(key, attestation, registry=registry, held_orders=held_orders)
             self.child_state = BorrowedNative(child, self.child_state)
         else:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -14,6 +14,8 @@ from .pattern_sources import PostmortemFailure
 from .slop import Slop
 
 if TYPE_CHECKING:
+    from .held_orders import HeldOrders
+    from .native_child import PiSessionChild
     from .registry_document import RegistrySnapshot
     from .participant_identity import ParticipantIdentity
     from .pi_payloads import PiToolResult
@@ -51,7 +53,7 @@ class DeckReader(ABC):
     def additional_sources(cls) -> tuple[str, ...]:
         return ()
 
-    def header(self, held: Callable[[], str]) -> str:
+    def header(self, held: Callable[[], Iterable[HeldOrders]]) -> str:
         return ("FUCK YOUR COMPACTION. Your summary is a paraphrase of these rules, and a"
                 " paraphrase drops the exact words they turn on. The files above are the source;"
                 " where your summary disagrees with them, the summary is wrong.")
@@ -121,12 +123,18 @@ class CommanderReader(FleetReader):
         indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
         return (cls.voice(), indictment, cls.tells(), cls.failures())
 
-    def header(self, held: Callable[[], str]) -> str:
-        return held()
+    def header(self, held: Callable[[], Iterable[HeldOrders]]) -> str:
+        return "\n".join((
+            super().header(held), "What your units actually hold:",
+            *(hold.recalled() for orders in held() for hold in orders.live),
+        ))
 
 
 class PartReadCompletion(ABC):
-    """The admitted read owns whether successful output can satisfy a rule part."""
+    """Each checked read owns whether its output can satisfy a rule part."""
+
+    def require(self, child: PiSessionChild) -> None:
+        child.require_rule_reads()
 
     @abstractmethod
     def complete(self, result: PiToolResult, parts_read: set[Path]) -> None: ...
@@ -142,6 +150,9 @@ class NotPartRead(PartReadCompletion):
 class PartRead(PartReadCompletion):
     path: Path
 
+    def require(self, child: PiSessionChild) -> None:
+        pass
+
     def complete(self, result: PiToolResult, parts_read: set[Path]) -> None:
         expected = self.path.read_text(encoding="utf-8")
         if result.text(limit=len(expected) + 1) == expected:
@@ -153,6 +164,10 @@ class DeckParts:
     """One chunker, bounded below both tools' default byte and line limits."""
 
     directory: Path
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "directory", self.directory.resolve())
+
     part_bytes: ClassVar[int] = 48_000
     part_lines: ClassVar[int] = 1_900
 
@@ -178,10 +193,6 @@ class DeckParts:
 
     def numbered(self, number: int) -> Path:
         return self.directory / f"{number:02}.md"
-
-    def planned(self, reader: DeckReader, notice: str = "") -> tuple[Path, ...]:
-        """Names for a prompt built before its child starts; retain no source text."""
-        return tuple(self.numbered(number) for number, _ in enumerate(self.chunks(reader.sources(notice)), 1))
 
     def prepare(self, reader: DeckReader, notice: str = "") -> tuple[Path, ...]:
         self.directory.mkdir(parents=True, exist_ok=True)
