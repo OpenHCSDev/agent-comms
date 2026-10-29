@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING
 
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
@@ -76,7 +76,10 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
                 ):
-                    update.send(comms, now, ())
+                    update.send(comms, now, (
+                        "HUD unavailable: heartbeat failed",
+                        *CommanderHud.alarm_text((update,), now),
+                    ))
 
     def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
         return tuple(
@@ -87,7 +90,7 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """The committed packet survives connector replacement; local memory owns nothing."""
         self.register(comms.registry)
-        CommanderFrame.replace_all(comms.root, tuple(item.hud for item in observed))
+        published = {item.thread.incarnation: item.hud for item in observed}
         completed = []
         now = time.time()
         try:
@@ -113,9 +116,12 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 ):
-                    update.send(comms, now, item.hud.brief())
+                    hud = replace(item.hud, packets=(update,))
+                    published[item.thread.incarnation] = hud
+                    update.send(comms, now, hud.hud_text(now))
                 completed.append(item.thread.incarnation)
         finally:
+            CommanderFrame.replace_all(comms.root, tuple(published.values()))
             # A later commander's failure does not erase passes already completed.
             ServicePassStore.at(comms.root).heartbeat_passed(
                 completed,

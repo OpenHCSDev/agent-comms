@@ -25,6 +25,7 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ProgressRead
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
@@ -35,7 +36,6 @@ from agent_comms.ui_model.unit_state import (
     AwaitingApplicationRun, NoPendingClock, PendingClock, Spinning, Stuck, UnitState,
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
@@ -76,7 +76,8 @@ def beat(comms, rules=(), *, states=()):
         comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
-    return frame.hud
+    return next(hud for hud in CommanderFrame.read_all(comms.root)
+                if hud.commander == frame.hud.commander)
 
 
 def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
@@ -244,11 +245,15 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
     lead = comms.registry.require("lead").incarnation
     assert CommanderUpdate.latest(comms, lead) == (board.task,)
     assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms, "lead")
-    assert lead_hud(comms).board == board.task.board(comms, "lead")
+    assert tuple(entry.text for entry in lead_hud(comms).board) == tuple(
+        ping.text for ping in board.task.handled)
+
     assert raw.reference in everything_to_lead(comms)
-    # The next pass derives from the typed board, so nothing is restated as new.
+    # The next pass derives from the typed board and passively repeats the open alarm.
     beat(comms, (failing,))
-    assert len(notifications(comms)) == 1
+    _, repeated = notifications(comms)
+    assert isinstance(repeated.task, CommanderNotice)
+    assert repeated.task.handled == board.task.handled
 
 
 def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notification_bus):
@@ -352,7 +357,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
     ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
-    assert hud.frame == (
+    assert (str(hud.load), *(row.line() for row in hud.rows())) == (
         str(hud.load),
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
@@ -373,14 +378,16 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
         awaiting, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
         state=Stuck, clock=PendingClock(now - 3600, now - 3600),
     )
-    board = (
-        BoardEntry("blocked", "BLOCKED waiting-run", now - 120, now + 3600),
-        BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
-    )
+    pings = tuple(replace(RulePing.capture(ServicePassFailing(name, began, text)),
+                          since=RecordedEventTime(began))
+                  for name, began, text in (("blocked", now - 120, "BLOCKED waiting-run"),
+                                            ("judge", now - 240, "JUDGE #1")))
+    board = tuple(ping.board_entry() for ping in pings)
     hud = CommanderHud(
         RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
         OverloadDegradation.from_orders((), 0, 0), (),
-        CodexUsage(UnreadableUsage(reason="not requested")), board,
+        CodexUsage(UnreadableUsage(reason="not requested")),
+        (CommanderNotice(RecordedThreadIncarnation("lead", 3.0), pings),),
     )
 
     CommanderFrame.replace_all(tmp_path, (hud,))
@@ -412,9 +419,9 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
-    # A quiet pass, its line unchanged, still completes after its original notice was committed.
+    # A quiet pass still completes and keeps the original alarm visibly open.
     beat(comms, (failing,))
-    assert len(notifications(comms)) == 1
+    assert len(notifications(comms)) == 2
     # A pass that misses a still-registered commander retires nothing but its frame.
     CommanderHeartbeat().pass_body(comms, ())
     assert CommanderFrame.read_all(comms.root) == ()
@@ -426,9 +433,8 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 
-def test_recreated_watcher_reads_original_committed_unit_observation(notification_bus):
-    """Quiet unit cards are not heartbeat lines; a fresh watcher reads the committed packet
-    and restates nothing it already carries."""
+def test_recreated_watcher_keeps_original_alarm_visible_without_a_new_wake(notification_bus):
+    """A fresh watcher retains the original alarm age and repeats it as a passive notice."""
     comms = notification_bus
     states = state_cards(comms, UnitState)
     assert states and not any(state.attention() for state in states)
@@ -438,13 +444,16 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     assert failing.line() in first.body
     assert not any(state.line() in first.body for state in states)
     hud = lead_hud(comms, states)
-    assert first.body.startswith(CommanderUpdate.header)
-    assert all(line in first.body for line in hud.brief())
+    assert first.body.startswith("LOAD ")
+    assert f"UNJUDGED {hud.load.unjudged}" in first.body
     assert all(card.unit.name in first.body for card in hud.units)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == (first.task,)
     beat(comms, (failing,), states=state_cards(comms, UnitState))
-    unchanged, = notifications(comms)
-    assert unchanged.reference == first.reference
+    _, unchanged = notifications(comms)
+    assert unchanged.reference != first.reference
+    assert isinstance(unchanged.task, CommanderNotice)
+    assert aged(unchanged.task.handled) == aged(first.task.handled)
+    assert failing.line() in unchanged.body.split("STILL OPEN", 1)[1]
 
 
 def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus):
@@ -474,7 +483,7 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
         ServicePassStore.at(comms.root).read().commander_completed)
 
 
-def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
+def test_rule_packets_list_every_new_line_then_repeat_it_without_a_new_wake(notification_bus):
     comms = notification_bus
     rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
                   for index in range(7))
@@ -484,12 +493,17 @@ def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
     assert all(rule.line() in first.body for rule in rules)
-    assert all(line in first.body for line in lead_hud(comms).brief())
+    assert first.body.startswith("LOAD ")
     beat(comms, rules)
-    assert len(notifications(comms)) == 1
-    # Changed diagnostic wording is not another failed occurrence.
+    _, unchanged = notifications(comms)
+    assert isinstance(unchanged.task, CommanderNotice)
+    assert all(rule.line() in unchanged.body.split("STILL OPEN", 1)[1] for rule in rules)
+    # Changed diagnostic wording is visible but not another failed occurrence.
     beat(comms, tuple(replace(rule, error="new diagnostic detail") for rule in rules))
-    assert len(notifications(comms)) == 1
+    _, _, changed = notifications(comms)
+    assert isinstance(changed.task, CommanderNotice)
+    assert aged(changed.task.handled) == aged(first.task.handled)
+    assert "new diagnostic detail" in changed.body
 
 
 def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
@@ -503,14 +517,14 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    assert all(line in quiet.body for line in lead_hud(comms).brief())
+    assert quiet.body.startswith("LOAD ")
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
-    # Nothing new and nothing cleared sends nothing.
+    # Even an empty board publishes the current HUD without waking its commander.
     beat(comms, ServicePassFailing.violations(comms, "lead"))
-    assert len(notifications(comms)) == 2
+    assert len(notifications(comms)) == 3
     # Use the same source occurrence to prove it was retired, not merely hidden.
     beat(comms, rules)
-    _, _, repeated = notifications(comms)
+    _, _, _, repeated = notifications(comms)
     assert repeated.task.decisions == first.task.decisions
 
 
@@ -536,7 +550,9 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert RulePing.capture(first) == RulePing.capture(moved)
     beat(comms, (first,))
     beat(comms, (moved,))
-    assert len(notifications(comms)) == 1
+    original, repeated = notifications(comms)
+    assert isinstance(repeated.task, CommanderNotice)
+    assert aged(repeated.task.handled) == aged(original.task.handled)
 
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
@@ -621,7 +637,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused
 
 
-def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(notification_bus):
+def test_waiting_notification_keeps_every_open_alarm_and_its_original_evidence(notification_bus):
     comms = notification_bus
     from agent_comms.head_review import PullRequestHead
     from agent_comms.repository_name import RepositoryName
@@ -636,9 +652,10 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    message = packet.send(comms, time.time(), lead_hud(comms).brief())
-    assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
-    assert max(map(len, message.body.splitlines())) < 300
+    hud = replace(lead_hud(comms), packets=(packet,))
+    message = packet.send(comms, time.time(), hud.hud_text(time.time()))
+    assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == len(rules)
+    assert all(rule.line() in message.body.split("STILL OPEN", 1)[1] for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12

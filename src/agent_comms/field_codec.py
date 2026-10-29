@@ -44,6 +44,7 @@ from metaclass_registry.mro_dispatch import (
 )
 from pydantic import BaseModel, GetCoreSchemaHandler, JsonValue
 from pydantic_core import core_schema
+from python_introspect import declared_field_label
 from typing_extensions import TypeAliasType, TypeForm
 
 from .declared_family import DeclaredFamily
@@ -527,8 +528,45 @@ class Argument(FieldDirective):
         owner.add_argument(*flags, **options)
 
 
+class ViewColumn:
+    """Stored and computed fields expose one read-only presentation contract."""
+
+    name: str
+    annotation: object
+
+    @property
+    def label(self) -> str:
+        return declared_field_label(self.annotation) or self.name.replace("_", " ").title()
+
+    def current(self, record: object) -> object:
+        raise NotImplementedError
+
+    def minimum_width(self, values: Iterable[str]) -> int:
+        """Keep headers and individual words intact while the viewport can afford them."""
+        return max(len(self.label), max((len(word) for value in values for word in value.split()), default=0))
+
+    @staticmethod
+    def fit_widths(weights: Iterable[int], available: int,
+                   minimums: Iterable[int]) -> tuple[int, ...]:
+        """Allocate measured content proportionally after retaining readable words."""
+        weights = tuple(max(1, weight) for weight in weights)
+        minimums = tuple(minimums)
+        if sum(minimums) > available:
+            minimums = (1,) * len(weights)
+        flexible = max(0, available - sum(minimums))
+        demands = tuple(max(0, weight - minimum) for weight, minimum in zip(weights, minimums))
+        demands = demands if sum(demands) else weights
+        total, used = sum(demands), 0
+        widths = []
+        for demand, minimum in zip(demands, minimums):
+            end = used + demand
+            widths.append(minimum + flexible * end // total - flexible * used // total)
+            used = end
+        return tuple(widths)
+
+
 @dataclass(frozen=True)
-class FieldPlan:
+class FieldPlan(ViewColumn):
     """One field's wire keys, checks and compiled value decoder."""
 
     declared: Field
@@ -2209,7 +2247,7 @@ class GitCommitText(HexDigits):
         return 7
 
 
-class Projected(property):
+class Projected(ViewColumn, property):
     """A computed field declared by its owner for a named read-only view."""
 
     _declared: ClassVar[WeakKeyDictionary[type, dict[str, Projected]]] = WeakKeyDictionary()
@@ -2221,7 +2259,15 @@ class Projected(property):
 
     def __set_name__(self, owner: type, name: str) -> None:
         """Every class body declaring this field records it, a slots rebuild included."""
+        self.name = name
         Projected._declared.setdefault(owner, {})[name] = self
+
+    @cached_property
+    def annotation(self) -> object:
+        return get_type_hints(self.fget, include_extras=True)["return"]
+
+    def current(self, record: object) -> object:
+        return self.__get__(record, type(record))
 
     @staticmethod
     def of(declaration: type) -> Iterator[tuple[str, Projected]]:
@@ -2660,6 +2706,16 @@ class FieldCodec(MroDispatch, Sealed):
         if len(selected) != 1:
             raise TypeError(f"Field {field.name} must have exactly one declared field plan: {selected}")
         return selected.pop()
+
+    @classmethod
+    @cache
+    def view_columns(cls, declaration: type, view: str) -> tuple[ViewColumn, ...]:
+        """One column source for native tables and plain-text views."""
+        return (
+            *(plan for plan in cls.field_plans(declaration)
+              if plan.records and not plan.excluded_in(view)),
+            *cls.projections(declaration, view).values(),
+        )
 
     @staticmethod
     @cache

@@ -56,18 +56,14 @@ class DisclosureText:
         return cls(value)
 
     def summary(self, width: int | None = None) -> str:
-        return str(self.value)[:width].partition("\n")[0]
+        text = str(self.value)[:width]
+        return text if width is None else text.partition("\n")[0]
 
     @classmethod
     def view(cls, value: object, view: str) -> tuple[str, ...]:
         """Read the original values, not their flattened JSON representations."""
-        return (
-            *(cls.of(plan.current(value)).summary()
-              for plan in FieldCodec.field_plans(type(value))
-              if plan.records and not plan.excluded_in(view)),
-            *(cls.of(getattr(value, name)).summary()
-              for name in FieldCodec.projections(type(value), view)),
-        )
+        return tuple(cls.of(column.current(value)).summary()
+                     for column in FieldCodec.view_columns(type(value), view))
 
 
 class RecordText(DisclosureText):

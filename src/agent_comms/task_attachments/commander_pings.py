@@ -1,7 +1,7 @@
-"""Committed commander notifications own what the heartbeat has already handled.
+"""Committed commander notifications own the heartbeat's retained observations.
 
-A packet carries only lines that need the commander. New lines wake it; unchanged lines are
-never restated; lines still undisposed past the answer window follow the new ones and refuse
+A packet carries only lines that need the commander. New lines wake it; unchanged lines stay
+visible in passive heartbeat notices; lines still undisposed past the answer window refuse
 the commander's writing verbs until a recorded action on their subject disposes of them. No
 process-local cache owns any of it.
 """
@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from textwrap import shorten
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.bus_publication import AgentOrigin
@@ -66,11 +64,6 @@ class Ping(DeclaredFamily, affix="Ping"):
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
     @property
-    @abstractmethod
-    def group(self) -> str:
-        """Presentation grouping derived from the original rule or unit declaration."""
-
-    @property
     def urgent(self) -> bool:
         return False
 
@@ -114,19 +107,11 @@ class Ping(DeclaredFamily, affix="Ping"):
     def render(self, now: float) -> str:
         return self.board_entry().aged(now)
 
-    def preview(self, now: float) -> str:
-        """A bounded text view; the board and packet retain the complete original."""
-        return replace(self.board_entry(), text=shorten(self.text, width=180, placeholder="…")).aged(now)
-
 
 @dataclass(frozen=True)
 class RulePing(Ping):
     rule: type[StandingRule]
     observation: TextDigest
-
-    @property
-    def group(self) -> str:
-        return self.rule.declared_name
 
     @property
     def urgent(self) -> bool:
@@ -155,10 +140,6 @@ class UnitPing(Ping):
     observation: TextDigest
 
     @property
-    def group(self) -> str:
-        return self.unit.name
-
-    @property
     def key(self) -> ThreadIncarnation:
         return self.unit
 
@@ -183,7 +164,6 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
     role: ClassVar[MessageRole]
-    header: ClassVar[str] = "COMMANDER"
 
     writes: ClassVar[tuple[type[ProducedRow], ...]] = (CommanderUpdatePosition,)
 
@@ -194,21 +174,14 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
 
-    def changed_from(self, handled: tuple[Ping, ...], not_applied: tuple[str, ...]) -> bool:
-        """A complete read that differs from this packet clears what it no longer holds."""
-        return (self.handled, self.not_applied) != (handled, not_applied)
+    def new_pings(self) -> tuple[Ping, ...]:
+        return ()
 
-    @abstractmethod
-    def lines(self, now: float) -> tuple[str, ...]:
-        """What this packet asks of the commander."""
-
-    def body(self, now: float, brief: tuple[str, ...]) -> str:
-        """Scan first; original evidence remains in the same packet and expandable HUD."""
-        stamp = datetime.fromtimestamp(now, timezone.utc).strftime("%H:%M:%S UTC")
+    def body(self, hud: tuple[str, ...]) -> str:
+        """The existing HUD owns presentation; this packet owns publication and history."""
         return "\n".join((
-            f"{self.header} · {self.commander.name} · {stamp} · {len(self.handled)} current",
-            *brief, "", *self.lines(now), "",
-            "Expand in Toad: F2 or /commander · units: original orders, story, commits, activity · board: every alert",
+            *hud, "",
+            "Expand in Toad: F2 or /commander · original orders, story, commits, activity and every alert",
         ))
 
     def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
@@ -268,9 +241,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
                previous: tuple[CommanderUpdate, ...], *, now: float,
                undisposed: tuple[Ping, ...] = (),
                not_applied: tuple[str, ...] = ()) -> tuple[CommanderUpdate, ...]:
-        """New lines wake the commander and unchanged lines are never restated. With nothing new,
-        cleared lines are committed by a passive notice so a recurrence is new again; with
-        nothing cleared either, nothing is sent."""
+        """New observations wake the commander. Every beat also publishes unchanged alarms
+        through a passive notice; publication never counts as disposing of an alarm."""
         known = {ping.key: ping for packet in previous for ping in packet.handled}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
@@ -287,8 +259,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
                 commander, handled, new,
                 tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
             ),)
-        return tuple(CommanderNotice(commander, handled, not_applied=not_applied)
-                     for packet in previous if packet.changed_from(handled, not_applied))
+        return (CommanderNotice(commander, handled, not_applied=not_applied),)
 
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
@@ -307,12 +278,12 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
-    def send(self, comms: Comms, now: float, brief: tuple[str, ...]) -> Message:
+    def send(self, comms: Comms, now: float, hud: tuple[str, ...]) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, brief),
+            body=self.body(hud),
             type=InfoKind, role=self.role, task=self,
         )
         return comms.bus.publisher.publish_ordinary(
@@ -322,14 +293,13 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
 @dataclass(frozen=True)
 class CommanderNotice(CommanderUpdate):
+    """The current HUD without new requests: publish it, never wake for it."""
+
     role = NoticeRole()
 
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
-        """Cleared lines leave the board; nothing new needs the session."""
+        """Unchanged alarms remain visible; nothing new needs the session."""
         return DeliveredOutcome
-
-    def lines(self, now: float) -> tuple[str, ...]:
-        return (f"Cleared · {len(self.handled)} requests remain on the board.", *self.not_applied)
 
 
 @dataclass(frozen=True)
@@ -343,17 +313,5 @@ class CommanderDecisions(CommanderUpdate):
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
         return await bridge.wake(message)
 
-    def lines(self, now: float) -> tuple[str, ...]:
-        waiting = sorted(self.waiting, key=lambda ping: ping.since.chronology())
-        groups: dict[str, list[Ping]] = {}
-        for ping in waiting:
-            groups.setdefault(ping.group, []).append(ping)
-        return (
-            f"New · {len(self.decisions)}",
-            *(f"• {ping.preview(now)}" for ping in self.decisions), *self.not_applied,
-            *(line for name, pings in groups.items() for line in (
-                f"Waiting · {name} · {len(pings)}",
-                *(f"• {ping.preview(now)}" for ping in pings[:2]),
-                *((f"  +{len(pings) - 2} in the expandable board",) if len(pings) > 2 else ()),
-            )),
-        )
+    def new_pings(self) -> tuple[Ping, ...]:
+        return self.decisions

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import time
+from itertools import zip_longest
+from shutil import get_terminal_size
+from textwrap import wrap
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -22,7 +25,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.disclosure_text import DisclosureText
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
-    DisclosureIdentity, HudExclude, OrderId, WireTransient, projected,
+    DisclosureIdentity, FieldCodec, HudExclude, OrderId, ViewColumn, WireTransient, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
@@ -34,7 +37,7 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead
-from agent_comms.ui_model.unit_state import UnitClock, UnitState
+from agent_comms.ui_model.unit_state import HudGroup, UnitClock, UnitState
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms_hooks.board import BoardEntry
 
@@ -107,10 +110,6 @@ class CommanderUnit(HudRow):
     def next(self) -> str:
         return self.state.action
 
-    def brief(self) -> str:
-        """The same declared HUD view supplies the heartbeat's text scan line."""
-        return " | ".join(DisclosureText.view(self, "hud"))
-
     def needs_hand(self) -> bool:
         """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
         return (self.state.attention() and self.state.commander_disposes) or any(
@@ -140,6 +139,14 @@ class CommanderUnit(HudRow):
         if turns.thread != self.unit or not self.unit.current(snapshot) or not commander.current(snapshot):
             raise ToolRefusedError("The selected incarnation changed while its details were read")
         return CommanderUnitDetail(self, details, turns.to_wire())
+
+
+@dataclass(frozen=True)
+class CommanderGroup:
+    """A stable partition of the current units, not another unit-state owner."""
+
+    group: type[HudGroup]
+    units: tuple[CommanderUnit, ...]
 
 
 @dataclass(frozen=True)
@@ -277,7 +284,7 @@ class CommanderHud(ToolResult):
     load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
-    board: tuple[BoardEntry, ...] = ()
+    packets: tuple[CommanderUpdate, ...] = ()
     heartbeat: Annotated[EventTime, WireTransient()] = field(
         default_factory=UnrecordedEventTime, compare=False, kw_only=True,
     )
@@ -331,11 +338,10 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
-                      for entry in packet.board(comms, commander))
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), board)
+                   forks, CodexUsage.read(), CommanderUpdate.latest(comms, owner),
+                   heartbeat=ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner))
 
     def rows(self) -> tuple[HudRow, ...]:
         """Committed board order, actionable cards, live phases, then folded quiet units."""
@@ -355,29 +361,73 @@ class CommanderHud(ToolResult):
               if phases),
         )
 
-    def brief(self) -> tuple[str, ...]:
-        """Routine heartbeat telemetry; the full board retains completed plans."""
-        plans = "; ".join(
-            f"{plan.declared_name} {sum(phase.finished for phase in phases)}/{len(phases)}"
-            for plan in Plan.members_with(Plan)
-            for phases in (tuple(phase for phase in self.phases if phase.phase.plan is plan),)
-            if any(not phase.finished for phase in phases)
-        )
-        visible = tuple(unit for unit in self.units if unit.orders or unit.needs_hand())
-        quiet = tuple(unit for unit in self.units if unit not in visible)
+    @property
+    def board(self) -> tuple[BoardEntry, ...]:
+        """The current packet's original alarms; the frame keeps no second alert state."""
+        return tuple(ping.board_entry() for packet in self.packets for ping in packet.handled)
+
+    def groups(self) -> tuple[CommanderGroup, ...]:
+        """Stable partition by the state family's declared groups, never a UI sort."""
+        grouped: dict[type[HudGroup], list[CommanderUnit]] = {}
+        for unit in self.units:
+            grouped.setdefault(unit.state.hud_group, []).append(unit)
+        return tuple(CommanderGroup(group, tuple(grouped.get(group, ())))
+                     for group in HudGroup.members_with(HudGroup)
+                     if grouped.get(group) or group.show_empty)
+
+    def status_strip(self, now: float) -> str:
         return (
-            f"{self.load} | {len(visible)} active units | {len(self.forks)} forks",
-            self.usage.line(),
-            *(unit.brief() for unit in visible),
-            *((QuietUnits(quiet).line(),) if quiet else ()),
-            *((f"Plans · {plans}",) if plans else ()),
+            f"LOAD {self.load.total:.0f} · REVIEW UP {self.load.timers_up} · "
+            f"UNJUDGED {self.load.unjudged} · FORKS {len(self.forks)} · "
+            f"{self.usage.line()} · heartbeat {self.heartbeat.age(now)}"
         )
+
+    @staticmethod
+    def alarm_text(packets: tuple[CommanderUpdate, ...], now: float) -> tuple[str, ...]:
+        """New membership belongs to the recorded packet, age to the original BoardEntry."""
+        new = tuple(ping for packet in packets for ping in packet.new_pings())
+        return (
+            "NEW",
+            *(f"  {ping.render(now)}" for ping in new),
+            "STILL OPEN",
+            *(f"  {ping.render(now)}" for packet in packets
+              for ping in packet.handled if ping not in new),
+            *(line for packet in packets for line in packet.not_applied),
+        )
+
+    def hud_text(self, now: float, *, width: int | None = None,
+                 colour: bool = False) -> tuple[str, ...]:
+        """The heartbeat and the native page borrow the same columns, groups and strip."""
+        columns = FieldCodec.view_columns(CommanderUnit, "hud")
+        headings = tuple(column.label for column in columns)
+        groups = self.groups()
+        cells = {unit.unit: DisclosureText.view(unit, "hud") for unit in self.units}
+        weights = tuple(max(len(label), max(
+            (len(line) for row in cells.values() for line in row[index].splitlines()), default=0,
+        )) for index, label in enumerate(headings))
+        available = get_terminal_size().columns if width is None else width
+        minimums = tuple(column.minimum_width(row[index] for row in cells.values())
+                         for index, column in enumerate(columns))
+        widths = ViewColumn.fit_widths(weights, available - len("  ") * (len(columns) - 1), minimums)
+
+        def lines(row: tuple[str, ...]) -> tuple[str, ...]:
+            wrapped = tuple(tuple(part for line in text.splitlines() or ("",)
+                                  for part in wrap(line, cell_width, replace_whitespace=False) or ("",))
+                            for text, cell_width in zip(row, widths))
+            return tuple("  ".join(value.ljust(cell_width) for value, cell_width in zip(parts, widths)).rstrip()
+                         for parts in zip_longest(*wrapped, fillvalue=""))
+
+        result = [self.status_strip(now)]
+        for section in groups:
+            result.extend(("", section.group.paint(section.group.heading(), colour), *lines(headings)))
+            for unit in section.units:
+                result.extend(section.group.paint(line, colour) for line in lines(cells[unit.unit]))
+        result.extend(("", *self.alarm_text(self.packets, now)))
+        return tuple(result)
 
     @projected(view="wire")
     def frame(self) -> tuple[str, ...]:
-        """The load line, then one line per row in the order rows() declares."""
-        return (str(self.load), *self.heartbeat.aged_line("heartbeat", time.time()),
-                *(row.line() for row in self.rows()))
+        return self.hud_text(time.time())
 
 
 

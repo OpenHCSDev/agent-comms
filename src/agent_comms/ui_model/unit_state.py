@@ -174,8 +174,42 @@ class UnitObservation:
                 for origin in self.sources}
 
 
+class HudGroup(DeclaredFamily, affix="Group"):
+    """The declared order and headings shared by heartbeat and native table views."""
+
+    terminal_colour: ClassVar[int]
+    show_empty: ClassVar[bool] = True
+
+    @classmethod
+    def heading(cls) -> str:
+        return cls.declared_name.replace("_", " ").upper()
+
+    @classmethod
+    def paint(cls, text: str, colour: bool) -> str:
+        return f"\x1b[{cls.terminal_colour}m{text}\x1b[0m" if colour else text
+
+
+class UrgentGroup(HudGroup):
+    terminal_colour = 33
+
+
+class InProgressGroup(HudGroup):
+    terminal_colour = 32
+
+
+class ReadyToTestGroup(HudGroup):
+    terminal_colour = 36
+
+
+class IdleGroup(HudGroup):
+    terminal_colour = 90
+    show_empty = False
+
+
 class NeedsCommanderAttention:
     """Urgent siblings share their ping behavior without claiming each other's state."""
+
+    hud_group: ClassVar[type[HudGroup]] = UrgentGroup
 
     @classmethod
     def attention(cls) -> bool:
@@ -189,6 +223,7 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
     action: ClassVar[str]
+    hud_group: ClassVar[type[HudGroup]] = IdleGroup
     # What the owner would ask on reading this card; the action answers it.
     question: ClassVar[str]
 
@@ -458,6 +493,7 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
 
 
 class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+    hud_group = ReadyToTestGroup
     question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
@@ -476,6 +512,7 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
 
+    hud_group = ReadyToTestGroup
     question = "installed. did its holder actually run it yet?"
     action = "its holder runs the application proof on the installed build; close it on its evidence"
     commander_disposes = False
@@ -491,6 +528,7 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
 
 
 class Moving(ConditionalState, UnitState):
+    hud_group = InProgressGroup
     question = "it's moving. toward the order, or somewhere else?"
     action = "let it continue"
 
