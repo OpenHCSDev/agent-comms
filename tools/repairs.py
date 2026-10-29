@@ -25,10 +25,8 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.pinned_audit import audit
-from audit import agent_comms_project
+from agent_comms_project import AgentCommsProject
 from audit.ratchet import LocatedSource, compare
-from audit.repository import Repository
 from audit.source_measures import FunctionLocalImport
 from module_layers import Package, TopLevelNames
 from nominal_refactor_advisor.codemod import (
@@ -149,7 +147,7 @@ class ImportHoist(Repair):
 
     def file_operations(self, path: str, source: str) -> list[Operation]:
         if path not in self.modules:
-            self.left[OutsidePackage] += FunctionLocalImport.count(source.encode(), path)
+            self.left[OutsidePackage] += FunctionLocalImport.count(AgentCommsProject(self.repo), source.encode(), path)
             return []
         hoisted = HoistedFile(self, path, self.modules[path], source)
         for local in hoisted.local_imports(hoisted.tree, []):
@@ -425,14 +423,14 @@ def main() -> int:
     if args.all:
         files = {
             measure: sorted(
-                path for path in Repository(repo).production_paths("HEAD")
+                path for path in AgentCommsProject(repo).production_paths("HEAD")
                 if path.startswith(root)
             )
             for measure in (repair.repairs for repair in Repair.members_with(Repair))
         }
     else:
         found = compare(
-            Repository(repo),
+            AgentCommsProject(repo),
             args.base,
             args.head,
             args.root,

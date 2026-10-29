@@ -678,7 +678,7 @@ class NoGodFunction(MainEvidence):
         )
 
     def describe(self) -> str:
-        return f"{self.name} in {self.path} at most {GodFunction.threshold} lines on main"
+        return f"{self.name} in {self.path} at most {GodFunction.threshold()} lines on main"
 
 
 @dataclass(frozen=True)

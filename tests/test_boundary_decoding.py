@@ -1,10 +1,11 @@
 """Boundary declarations reject malformed records without inventing another shape."""
 from dataclasses import replace
 import hashlib
+from pathlib import Path
 
 import pytest
 
-from agent_comms.pinned_audit import audit
+from agent_comms_project import AgentCommsProject
 from audit.source_measures import RawRecordShapes
 
 from agent_comms.channel_coding_tools import CodingToolRequest
@@ -81,8 +82,9 @@ def test_native_source_receipt_checks_bytes_without_installing(tmp_path):
 
 
 def test_raw_shape_guard_reuses_the_existing_overlay_detector():
+    project = AgentCommsProject(Path(__file__).resolve().parents[1])
     raw = b'def read(row):\n return row["a"], row["b"], row.get("c")\n'
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
-    assert RawRecordShapes.count(raw, 'src/example.py') == 1
-    assert RawRecordShapes.count(typed, 'src/example.py') == 0
-    assert RawRecordShapes.count(raw, 'src/agent_comms/field_codec.py') == 1
+    assert RawRecordShapes.count(project, raw, 'src/example.py') == 1
+    assert RawRecordShapes.count(project, typed, 'src/example.py') == 0
+    assert RawRecordShapes.count(project, raw, 'src/agent_comms/field_codec.py') == 1

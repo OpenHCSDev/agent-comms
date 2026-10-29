@@ -19,11 +19,10 @@ import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pinned_audit import audit
-from audit.agent_comms_project import AgentCommsProject
+from agent_comms_project import AgentCommsProject
+from audit.project import AUDIT_SCRIPTS
 from audit.project_measures import DonePhaseBroken, UncarriedRecordFormat
-from audit.ratchet import AUDIT_SCRIPTS, Compared, ContentCache, compare
-from audit.repository import Repository
+from audit.ratchet import Compared, compare
 from audit.source_measures import BroadSwallow, FamilyFlattened, NoneAbsence, StoreLockCalls
 from fixture_git import IDENTITY
 from process_tree_fixture import TREE, identities, ready
@@ -31,6 +30,8 @@ from process_tree_fixture import TREE, identities, ready
 pytestmark = pytest.mark.refactor_guard
 
 SOURCE = Path(__file__).resolve().parents[2]
+# This checkout, as the ratchet measures it.
+PROJECT = AgentCommsProject(SOURCE)
 
 
 def search_path(*first: Path) -> str:
@@ -86,7 +87,7 @@ class Checkout:
     def compare(self, base: str, head: str, *measured: type[Compared]) -> tuple[int, dict]:
         """The comparison's exit status and report, taking only the named measures'
         measurements. The command line itself is proven by the tests that launch it."""
-        result = compare(Repository(self.path), base, head, self.root, 2, measured)
+        result = compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
         return int(result.failed), json.loads(json.dumps(result.report()))
 
 
@@ -99,7 +100,7 @@ def repo(tmp_path: Path, request) -> Checkout:
 
 def test_agent_comms_broad_swallows_stay_within_their_budget():
     root = SOURCE / "src/agent_comms"
-    assert sum(BroadSwallow.count(path.read_bytes(), str(path)) for path in root.rglob("*.py")) <= 29
+    assert sum(BroadSwallow.count(PROJECT, path.read_bytes(), str(path)) for path in root.rglob("*.py")) <= 29
 
 
 @pytest.mark.parametrize(
@@ -115,15 +116,15 @@ def test_agent_comms_broad_swallows_stay_within_their_budget():
     ],
 )
 def test_store_lock_calls_count_calls_not_spellings(source, expected):
-    assert StoreLockCalls.count(source.encode(), "src/agent_comms/example.py") == expected
+    assert StoreLockCalls.count(PROJECT, source.encode(), "src/agent_comms/example.py") == expected
 
 
 def test_store_lock_calls_skip_the_store_owners():
     """Locking is store_files' and locked_store's own mechanism, never a hand-placed copy."""
     source = b"with _store_lock(path):\n    pass"
-    owners = AgentCommsProject.lock_owners()
+    owners = PROJECT.lock_owners()
     assert all((SOURCE / "src" / owner).is_file() for owner in owners)
-    assert [StoreLockCalls.count(source, f"src/{owner}") for owner in owners] == [0] * len(owners)
+    assert [StoreLockCalls.count(PROJECT, source, f"src/{owner}") for owner in owners] == [0] * len(owners)
 
 
 def test_a_new_store_lock_call_fails_on_its_own_file_with_its_line(repo):
@@ -212,7 +213,7 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         "raise RuntimeError('not archived')\n"
     )
     forms = UncarriedRecordFormat.formats(
-        Repository(tmp_path), revision, repo.root, {"src/agent_comms/probe_record.py"}
+        AgentCommsProject(tmp_path), revision, repo.root, {"src/agent_comms/probe_record.py"}
     )
     assert forms["agent_comms.probe_record.Record"].version == 7
     # The archive holds no Git checkout: the protocol's commit is the revision the stamp
@@ -262,18 +263,18 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
     assert status == 1
     assert report["delta"][FamilyFlattened.at(f"{repo.root}/first.py").text] == -2
     assert report["delta"][FamilyFlattened.at(f"{repo.root}/second.py").text] == 1
-    assert FamilyFlattened.count(original.encode(), "consumer.py") == (
+    assert FamilyFlattened.count(PROJECT, original.encode(), "consumer.py") == (
         FamilyFlattened.occurrences(ast.parse(original))
     )
     original_modules = tuple(
-        module for module in AgentCommsProject.mechanism_modules() if module.parent == Path(repo.root)
+        module for module in PROJECT.mechanism_modules() if module.parent == Path(repo.root)
     )
     facades = {
         f"{directory}/{module.parent.name}/{module.name}"
-        for module in AgentCommsProject.mechanism_modules()
+        for module in PROJECT.mechanism_modules()
         for directory in ("nested", "vendor")
     }
-    facades.update(f"nested/{module.name}" for module in AgentCommsProject.mechanism_modules())
+    facades.update(f"nested/{module.name}" for module in PROJECT.mechanism_modules())
     moved = repo.commit(
         {
             "second.py": "def carry(value):\n    return value\n",
@@ -335,6 +336,6 @@ def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
     through its own imports. Its source is still one of the ratchet's measuring code, so a
     change to it is a different cache key."""
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
-    assert indirect in ContentCache.sources()
-    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in ContentCache.sources()
+    assert indirect in PROJECT.sources()
+    assert (AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")

@@ -12,9 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.pinned_audit import audit
-from audit import agent_comms_project
-from audit import repository as audit_git
+from agent_comms_project import AgentCommsProject
 from audit.project_measures import UncarriedRecordFormat
 
 from agent_comms.locked_store import LiveFilesRequest
@@ -122,15 +120,14 @@ SPELLED = "    root: Annotated[str, Id128Text]\n"
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, before, version, fields, step, uncarried):
     repo = Repository(tmp_path)
-    package = audit_git.Repository(REPO).read("archive", "HEAD", "--", "src/agent_comms")
-    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=package, check=True, timeout=60)
+    AgentCommsProject(REPO).extract("HEAD", tmp_path, "src/agent_comms")
     record = tmp_path / "src" / "agent_comms" / "record.py"
     record.write_text(record_source(1, before))
     base = repo.commit({})
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
-    assert UncarriedRecordFormat.compare(audit_git.Repository(tmp_path), base, head, changed,
+    assert UncarriedRecordFormat.counted(AgentCommsProject(tmp_path), base, head, changed,
                                          "src/agent_comms") == (
         {UncarriedRecordFormat.total(): 0}, {UncarriedRecordFormat.total(): uncarried})
 
