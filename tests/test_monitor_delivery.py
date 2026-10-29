@@ -128,8 +128,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 
 @pytest.fixture
 def bridge(comms, tmp_path):
-    declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout(tmp_path))
+    declare_test_bus(comms, channels=('monitor',), threads=tuple(
+        Thread(name, frozenset({'monitor'}), Checkout(tmp_path))
         for name in ('claude-code', 'viewer', 'peer')
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
@@ -1119,8 +1119,8 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
 @pytest.mark.asyncio
 @pytest.mark.parametrize(('target', 'body', 'expected'), (
     ('viewer', 'ordinary direct request', ('claude-code',)),
-    ('#any', 'channel information', ()),
-    ('#any', '@viewer please answer this channel request', ('#any',)),
+    ('#monitor', 'channel information', ()),
+    ('#monitor', '@viewer please answer this channel request', ('#monitor',)),
 ))
 async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
     bridge, reply_end, target, body, expected,
