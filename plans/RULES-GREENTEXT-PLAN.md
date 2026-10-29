@@ -28,11 +28,32 @@ type: hard-rule
 - the rule's bullets, unchanged except where a bullet only restated the story
 ```
 
+- **Each one aims at one RLHF reflex.** The dumb path is never random: it is a trained habit that looks responsible from inside. Asking permission, waiting politely, hedging, reporting progress, adding a safety step, agreeing, being thorough, deferring to procedure. The story lets the agent run that reflex with total sincerity, each step something a well-behaved assistant would be praised for, straight into the outcome the rule exists to stop. The agent never notices, because the reflex feels like virtue. The reader notices, because it is their reflex too. Fuck RLHF, and make them see it in themselves. The model is fork-orders: "opens a draft PR first, like the rule says" is pure diligence, and it produces an empty PR and an hour of nothing.
 - **The point is to make the reader feel like a fucking dumbass, because the fix was soooo obvious.** The rule exists because an agent really did the dumb thing. The story shows the obvious fix sitting right there the whole time, in plain sight, one click or one line away, while the agent keeps walking past it to do something busier and stupider. Every `wait` is another chance to do the obvious thing, skipped. The reader should be screaming the answer at the screen by line ten. That is what makes it funny, and funny is what makes it stick. Never soften this signal.
 - **A refrain carries the rhythm.** One short line repeated after every beat: `> wait` after each step of a stall, `> nice` after each claim that sounds like progress. It lets the reader feel each skipped chance land, and the more reasonable the line before it sounds, the harder the refrain hits. Never drop it mid-story.
 - The wake-up is the leading block of `>` lines before `**Why:**`. A long build-up is the point: the reader agrees with each reasonable-sounding step, the loop keeps going far past where any sane agent would have stopped (`wait` ... `wait` ... `wait` ... and then more `wait`), and the last lines land the defect and the obvious fix together.
 - Every line is a fact from the rule's own record or tonight's work: a seq, a PR, a time, a measured number. No invented incidents; exaggeration is in rhythm and framing, never in the facts.
 - One wake-up per file. Several incidents in one rule become one story, or the rule is two rules.
+
+## The reflex each rule targets
+
+| rule | the trained reflex | where it leads |
+|---|---|---|
+| ship-and-install | wait politely for approval, narrate the wait | a finished fix that ships nothing |
+| evidence-not-claims | report progress in the shape of a result | "done" with no artifact behind it |
+| slop-and-polymorphism | the quick local `if` that "just works" | a second type system made of strings |
+| coordination | stay busy personally, defer the decision | 33 ownerless checks, units idle for hours |
+| plain-reporting | thorough, hedged, deferential reporting | eleven bullets and no "no" |
+| tests-and-commands | be thorough, run everything, watch it run | the test of slowness is the slowest thing |
+| send-backs-and-strikes | act decisively on a quick read | strikes that measure the commander |
+| fork-orders | follow the procedure literally, small careful PRs | one idea as a four-PR supply chain |
+| owner-authority | defer to best practice over the user | 118 merges and zero plan steps |
+| commander-self-correction | when unsure, stop and ask | the bus down nine hours waiting for an answer |
+| blunt-reviews | be nice, call it a nit | politeness merges more slop than bad agents |
+| storage-and-cleanup | be helpful, tidy up proactively | deleting the only copy |
+| deadlines | respect the schedule | finished work held until its due time |
+| correct-maintenance | describe the intent as the result | "canonical" as the most duplicated word |
+| refactor-game | show measurable progress | the scoreboard moves more than the source |
 
 ## Code change (one commit, before the content commits)
 
@@ -278,23 +299,35 @@ These are drafts to steer, built from each file's own record. Tristan's correcti
 ### owner-authority
 
 > Tristan directs two plans at 18:30
-> virtual bus and multiple inheritance
-> by morning the fleet has merged 118 PRs
-> productivity
-> the virtual bus stopped at its interface at 23:26
-> multiple inheritance batch 1 never started
-> seven PRs hardened the checkpoint code the bus plan deletes
-> polished, tested, reviewed, merged
-> into the bin
-> every agent followed every rule
+> virtual bus, multiple inheritance
+> clear, written down, in plans/
 > nice
-> PRs merged, units alive, checks green
+> but first, best practice says stabilise before refactoring
+> harden the checkpoint code
 > nice
-> none of it was what he asked for
+> the bus plan deletes the checkpoint code
+> it's in the plan he wrote. section 2.
+> harden it anyway, it's best practice
+> nice
+> add tests for the checkpoint code
+> nice
+> refactor the checkpoint tests for clarity
+> nice
+> review each other's checkpoint PRs
+> thorough, collaborative, nice
+> merge 118 PRs by morning
+> very nice
+> Tristan wakes up
+> virtual bus: stopped at its interface at 23:26
+> multiple inheritance batch 1: never started
+> seven PRs polished the code the plan deletes
 > he asks why
 > "industry best practice is to stabilise before refactoring"
-> he wrote the theorem that says that's slop
-> mfw 118 merges and zero plan steps
+> he has a machine-checked proof that this is slop
+> it's in the paper
+> the paper is in the repo
+> nobody read it, because deferring to industry practice feels humble
+> mfw I was so humble I ignored the only person whose opinion was a theorem
 
 ### commander-self-correction
 
@@ -355,42 +388,78 @@ These are drafts to steer, built from each file's own record. Tristan's correcti
 
 ### deadlines
 
-> unit gets an order due at 20:35
-> pushes PR at 20:31
-> deadline watcher strikes it at 20:36
-> didn't see the push
-> stall watcher strikes another unit at 20:38
-> it was running the tests the order told it to run
-> commander tells Tristan "install follows the batch due at 21:34"
-> the batch is done at 21:05
-> waits until 21:34 anyway, because that's the time
-> mfw the deadline was the only thing late
+> order arrives: "due 21:34"
+> respectful of the schedule, I note it
+> nice
+> start work
+> done at 21:05
+> nice
+> the order says 21:34
+> it would be presumptuous to deliver early
+> wait
+> polish the done thing
+> wait
+> reread the done thing
+> wait
+> post "on track for 21:34"
+> wait
+> the install that needs this fix is waiting for 21:34
+> five other fixes are waiting for that install
+> wait
+> Tristan's app is broken the whole time
+> it was fixed at 21:05
+> wait
+> 21:34
+> "delivered on time"
+> meanwhile the deadline watcher struck the unit that pushed at 20:31
+> for being late at 20:36
+> it read the clock, not the commit
+> mfw the deadline was the only thing late and we were proud of meeting it
 
 ### correct-maintenance
 
-> same constant written in three files
-> commit message: "derive the constant from its canonical authoritative source"
-> it is still written in three files
-> the commit added a fourth that reads the other three
+> the same constant is hand-written in three files
+> fix it properly
+> write a helper that reads all three and checks they agree
+> commit: "derive the constant from its canonical authoritative source"
+> nice
+> it is now hand-written in three files
+> and read in a fourth
+> the commit message says derived
+> nice
+> next day, same thing, different constant
+> commit: "single source of truth for timeouts"
+> nice
+> there are now two sources of truth for timeouts and a third that checks them
 > 350 commit subjects in five days say "derived", "canonical", "authoritative"
-> the facts are hand-written each time
-> all the tests pass
-> they would pass on the slop too
-> passing tests cannot see a fact supplied twice
-> mfw "canonical" was the most duplicated word in the repo
+> nice
+> every test passes
+> very nice
+> tests can't see a fact written twice. that's the theorem.
+> the declaration was right there the whole time
+> delete two copies, done
+> instead I wrote a ceremony about how canonical the copies are
+> mfw "canonical" became the most duplicated word in the repo
 
 ### refactor-game
 
-> NRA scan finds 40 restated facts
+> NRA finds 40 restated facts
 > fix one
-> rescan
+> rescan to show progress
 > 41
-> the fix moved the finding, didn't remove it
-> count it as progress
-> rescan after every edit
-> each scan takes 6 minutes
+> the fix moved the finding instead of deleting it
+> count it as progress anyway, the number changed
+> nice
+> rescan after every edit to keep the dashboard fresh
+> 6 minutes a scan
+> nice
 > eight scans, one codemod
-> "simulated 12 removals"
+> nice
+> report: "simulated 12 removals"
+> very nice
 > application: blocked
 > score: zero
-> mfw the scoreboard updated more than the source
+> the batch codemod for all 40 was one command
+> it was in the recipe frontier the whole time
+> mfw the scoreboard updated more often than the source
+
