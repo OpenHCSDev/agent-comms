@@ -4,11 +4,14 @@ Git is real (a temporary repository, origin remote, unit homes and allocated ord
 only forge answers come from the external gh fixture, through the unmodified reader.
 """
 
+import asyncio
+import json
 import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
+from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,17 +21,20 @@ import pytest
 
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
-from agent_comms.commander_heartbeat import CommanderObservation
-from commander_heartbeat_fixture import observe_commander
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.heartbeat_frame import CommanderInputs
+from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
+from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
@@ -57,11 +63,13 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.work_branches import BranchDifference, SourceGrowth, UnpushedHead
+from agent_comms.ui_model.unit_state import Unreadable
+from agent_comms.work_branches import SourceGrowth, UnpushedHead, WorkBranchError
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
+from test_watch_git_preparation import GitPreparation
 
 pytest_plugins = ("github_fixture",)
 
@@ -463,26 +471,152 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     ) in built.observe().rules
 
 
-def test_held_branch_rules_survive_an_order_checkout_retired_mid_frame(fleet):
-    """A unit retires its checkout before reporting; the heartbeat reading it must not crash."""
-    built, expected = fleet
+def test_new_allocated_branch_after_upstream_capture_is_one_unreadable_holder(fleet):
+    built, _ = fleet
+    todo = built.comms.goals.todos.get(built.problems['unpushed'])
     storage = built.comms.registry.storage_rule
-    allocated = {storage.order_checkout(storage.initial_roots(name), problem)
-                 for name, problem in built.problems.items()}
+    path = storage.order_checkout(storage.roots_of(built.thread('unpushed')), todo.id)
+    plans = CommanderHeartbeat()
+    with LaunchRoot.from_path(built.comms.root).selected():
+        before = observe_commander(built.comms, built.thread(Fleet.commander),
+                                   ProgressRead(), plans=plans)
+        healthy = tuple(card for card in before.states if card.unit.name != 'unpushed')
+        pulls = ProgressRead()
+        reader = pulls.checkout(path).branches
+        reader.prepare_upstreams()
+        branch = 'created-after-upstream-cut'
+        head = built.git(path, 'rev-parse', 'HEAD')
+        built.git(path, 'switch', '-c', branch)
+        inputs = CommanderInputs.prepare(built.comms, Fleet.commander, pulls, plans)
+        with pytest.raises(WorkBranchError) as canonical:
+            pulls.progress((todo,), built.comms.registry)[todo.id].require_read()
+        assert branch in str(canonical.value) and str(path) in str(canonical.value)
+        observed = CommanderObservation.read(built.comms, built.thread(Fleet.commander),
+                                             inputs, plans=plans)
+        (broken,) = (card for card in observed.states if card.unit.name == 'unpushed')
+        assert isinstance(broken, Unreadable)
+        assert broken.reason == str(canonical.value)
+        assert tuple(card for card in observed.states if card.unit.name != 'unpushed') == healthy
+        completed_after = time.time()
+        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(built.comms)))
+        assert ServicePassStore.at(built.comms.root).read().completed_since(
+            built.thread(Fleet.commander).incarnation, completed_after)
+        recovered = observe_commander(built.comms, built.thread(Fleet.commander),
+                                      ProgressRead(), plans=plans)
+        assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
+                       for card in recovered.states)
+        difference = recovered.frame.pulls.require_branch_difference(path)
+        assert (difference.branch, difference.head) == (branch, head)
+        (publication,) = difference.unpublished
+        assert (publication.head, publication.commits, publication.upstream) == (head, 1, '')
 
-    class RetiringRead(ProgressRead):
-        def branch_difference(self, path: Path) -> BranchDifference:
-            difference = super().branch_difference(path)
-            if path in allocated:
-                Checkout(path).retire()
-            return difference
 
-    observed = observe_commander(
-        built.comms, built.thread(Fleet.commander), RetiringRead())
-    held = set(HeldBranchRule.members_with(HeldBranchRule))
-    assert not any(path.exists() for path in allocated)
-    assert Counter(rule for rule in observed.rules if type(rule) in held) == Counter(
-        rule for rule in expected if type(rule) in held)
+@pytest.mark.parametrize('mutation', ('switch', 'delete', 'advance', 'retire'))
+def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
+    fleet, mutation, tmp_path, monkeypatch,
+):
+    built, expected = fleet
+    todo = built.comms.goals.todos.get(built.problems['unpushed'])
+    storage = built.comms.registry.storage_rule
+    path = storage.order_checkout(storage.roots_of(built.thread('unpushed')), todo.id)
+    plans = CommanderHeartbeat()
+    with LaunchRoot.from_path(built.comms.root).selected():
+        pulls = ProgressRead()
+        with pytest.raises(WorkBranchError) as unprepared:
+            pulls.require_branch_difference(path)
+        assert str(path) in str(unprepared.value)
+        inputs = CommanderInputs.prepare(built.comms, Fleet.commander, pulls, plans)
+        difference = inputs.pulls.require_branch_difference(path)
+        assert difference.branch == 'unpushed'
+        (publication,) = difference.unpublished
+        assert (publication.head, publication.commits, publication.upstream) == (
+            difference.head, 1, '')
+        if mutation == 'retire':
+            Checkout(path).retire()
+            assert not path.exists()
+        elif mutation == 'advance':
+            new_head = built.commit(path, 'after_prepare.py', 'later = 1\n')
+        else:
+            built.git(path, 'switch', '-c', 'after-prepare', built.main)
+            if mutation == 'delete':
+                built.git(path, 'branch', '-D', difference.branch)
+        git_case = GitPreparation(built.source, built.source)
+        prepared = git_case.snapshot()
+        trace = tmp_path / 'prepared-observation.trace2.jsonl'
+        monkeypatch.setenv('GIT_TRACE2_EVENT', str(trace))
+        observed = CommanderObservation.read(built.comms, built.thread(Fleet.commander),
+                                             inputs, plans=plans)
+        monkeypatch.delenv('GIT_TRACE2_EVENT')
+        assert inputs.pulls.require_branch_difference(path) == difference
+        held = set(HeldBranchRule.members_with(HeldBranchRule))
+        assert Counter(rule for rule in observed.rules if type(rule) in held) == Counter(
+            rule for rule in expected if type(rule) in held)
+        (captured_rule,) = (rule for rule in observed.rules
+                            if isinstance(rule, UnpushedBranch) and rule.problem == todo.id)
+        assert (captured_rule.unpublished.head, captured_rule.unpublished.commits,
+                captured_rule.unpublished.upstream) == (difference.head, 1, '')
+        assert git_case.snapshot() == prepared
+        events = tuple(json.loads(line) for line in trace.read_text().splitlines())
+        assert not any(event.get('event') == 'child_start' and
+                       any('upload-pack' in argument for argument in event.get('argv', ()))
+                       for event in events)
+        fresh = observe_commander(built.comms, built.thread(Fleet.commander),
+                                 ProgressRead(), plans=plans)
+        if mutation == 'retire':
+            assert path.resolve() not in fresh.frame.pulls.captured_branch_paths
+            assert not any(isinstance(rule, UnpushedBranch) and rule.problem == todo.id
+                           for rule in fresh.rules)
+        else:
+            current = fresh.frame.pulls.require_branch_difference(path)
+            if mutation == 'advance':
+                assert (current.branch, current.head) == ('unpushed', new_head)
+                (publication,) = current.unpublished
+                assert (publication.head, publication.commits, publication.upstream) == (
+                    new_head, 2, '')
+            else:
+                assert (current.branch, current.head, current.unpublished) == (
+                    'after-prepare', built.main, ())
+
+
+def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configured_repository):
+    built, _ = fleet
+    configured_repository(built.comms, built.source)
+    todo = built.comms.goals.todos.get(built.problems['unpushed'])
+    storage = built.comms.registry.storage_rule
+    path = storage.order_checkout(storage.roots_of(built.thread('unpushed')), todo.id)
+    Checkout(path).retire()
+    built.git(built.source.checkout, 'clone', '--no-local', str(built.source.remote_path), str(path))
+    branch = 'only-in-allocated-clone'
+    built.git(path, 'switch', '-c', branch)
+    built.git(path, 'remote', 'add', 'publication', str(built.source.remote_path))
+    built.git(path, 'fetch', 'publication', 'main')
+    built.git(path, 'config', f'branch.{branch}.remote', 'publication')
+    built.git(path, 'config', f'branch.{branch}.merge', 'refs/heads/main')
+    head = built.commit(path, 'clone_only.py', 'clone_work = 1\n')
+    assert Repo.of(path).github == built.repository
+    assert storage.owns_present_checkout(built.thread('unpushed'), path)
+    assert built.git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir') != (
+        built.git(built.source.checkout, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
+    plans = CommanderHeartbeat()
+    with LaunchRoot.from_path(built.comms.root).selected():
+        pulls = ProgressRead()
+        primary = pulls.checkout(todo.order.checked().check.directory).branches
+        primary.prepare_upstreams()
+        assert branch not in primary.upstreams
+        inputs = CommanderInputs.prepare(built.comms, Fleet.commander, pulls, plans)
+        observed = CommanderObservation.read(built.comms, built.thread(Fleet.commander),
+                                             inputs, plans=plans)
+        assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
+                       for card in observed.states)
+        difference = pulls.require_branch_difference(path)
+        assert (difference.branch, difference.head) == (branch, head)
+        (publication,) = difference.unpublished
+        assert (publication.head, publication.commits, publication.upstream) == (
+            head, 1, 'refs/remotes/publication/main')
+        (found,) = (rule for rule in observed.rules
+                   if isinstance(rule, UnpushedBranch) and rule.problem == todo.id)
+        assert (found.unpublished.head, found.unpublished.commits, found.unpublished.upstream) == (
+            head, 1, 'refs/remotes/publication/main')
 
 
 def test_replay_raises_each_incident_once(fleet):
