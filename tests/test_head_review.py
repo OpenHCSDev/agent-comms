@@ -22,7 +22,6 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import SourceGrowth, WorkBranches
@@ -33,6 +32,7 @@ from agent_comms.todos import (
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
+from agent_comms_hooks import ToolRefusedError
 from source_revision_fixture import SourceRepository
 
 pytest_plugins = ("test_holder_standing_rules", "github_fixture")

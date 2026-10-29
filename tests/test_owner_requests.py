@@ -13,7 +13,7 @@ from agent_comms.commander.request import main as request_main
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import CALLER
-from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
@@ -32,6 +32,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
 from agent_comms.threads import Thread
+from agent_comms_hooks import ToolRefusedError
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:

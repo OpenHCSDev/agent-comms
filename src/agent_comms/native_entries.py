@@ -41,7 +41,14 @@ from .field_codec import (
 )
 from .importing import ImportedSessionMetadata
 from .native_input_record import NativeInputLocation
-from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
+from .pi_payloads import (
+    Opaque,
+    PiField,
+    PiMessage,
+    PiOmitted,
+    PiPayload,
+    ReportedText,
+)
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing

@@ -4,13 +4,16 @@ import json
 from pathlib import Path
 from typing import ClassVar
 
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.cli_bridges.shared import WatchRecordStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.store_files import ExclusiveAtomicFile
 from agent_comms.typed_table import WriterOwnedResource
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
 class WatchRecordSiblings(Carry):

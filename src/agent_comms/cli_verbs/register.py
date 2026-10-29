@@ -6,7 +6,6 @@ from agent_comms.child_process import ProcessState
 from agent_comms.cli_command import CliCommand
 from agent_comms.repo import Checkout
 from agent_comms.cli_commands import NameArgument
-from agent_comms.cli_commands import RegisteredResult
 from agent_comms.cli_commands import _tags
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
@@ -24,6 +23,8 @@ from agent_comms.threads import Thread
 from dataclasses import dataclass
 from typing import Annotated
 import dataclasses
+
+from ..cli_result import RegisteredResult
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -4,7 +4,7 @@ The owner's admin bypass stays. A commander-session admin or API merge needs
 Core's recorded ok verdict on the explicitly pinned head. Other hook sessions cannot
 bypass the checks. claude-ai's separate owner path is unchanged.
 
-Ordinary Bash calls stay standard-library-only; only a merge invokes Core's reader.
+The stdlib client uses the resident session's reader; unbound calls retain syntactic denial.
 """
 
 from __future__ import annotations
@@ -12,21 +12,22 @@ from __future__ import annotations
 import getopt
 import re
 import subprocess
-import sys
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
-from importlib.metadata import entry_points
 from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
-from agent_comms.errors import ToolRefusedError
-from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
-from agent_comms_hooks.watch import WatchClaim
+
+from .shell_commands import (
+    Program,
+    ShellCommand,
+)
+from .watch import SessionHookProgram
 
 
-class MergeTargetUnreadable(HookRefused, ToolRefusedError):
+class MergeTargetUnreadable(HookRefused):
     """A merge command that does not name exactly one reviewed head."""
 
 
@@ -135,10 +136,6 @@ class QueueBypass(ABC):
                      if tuple(selectors[:len(member.prefix)]) == member.prefix
                      and member.selected(options, tuple(selectors[len(member.prefix):])))
 
-    @classmethod
-    def found(cls, command: ShellCommand) -> tuple[str, ...]:
-        return tuple(member.reason for member in cls.matching(command))
-
 
 class AdminMerge(QueueBypass):
     """GitHub's head precondition and Core's verdict name the same commit."""
@@ -194,37 +191,24 @@ class ApiMerge(QueueBypass):
         return MergeTarget.decode({**endpoints[0].groupdict(), "head": head})
 
 
-class QueueBypassGuard(BashRefusal):
+class QueueBypassGuard(SessionHookProgram, BashRefusal):
+    @classmethod
+    def command(cls) -> str:
+        return cls.console_script(f"{__spec__.name}:main")
+
     headline = "Merge bypass refused"
     advice = (
         ". Use `gh pr merge N --auto --merge` for required checks and the commander's head verdict."
     )
 
     @classmethod
-    def reasons(cls, command: str) -> tuple[str, ...]:
-        return tuple(reason for simple in ShellCommand.split(command)
-                     for reason in QueueBypass.found(simple))
+    def bypasses(cls, command: str) -> tuple[QueueBypass, ...]:
+        return tuple(bypass for simple in ShellCommand.split(command)
+                     for bypass in QueueBypass.matching(simple))
 
     @classmethod
-    def reasons_for(cls, hook: ClaudeToolHook) -> tuple[str, ...]:
-        command = Bash.decode(hook.tool_input).command
-        reasons = cls.reasons(command)
-        state = WatchClaim(hook.session_id).state()
-        if not reasons or not state.commands():
-            return reasons
-        (entry,) = entry_points(group="console_scripts", name="agent-comms")
-        for binding in state.bindings():
-            try:
-                checked = subprocess.run(
-                    (sys.executable, "-m", entry.module, "--root", binding.root,
-                     "merge-review", "--session", hook.session_id, "--bash", command),
-                    capture_output=True, text=True, timeout=60,
-                )
-            except (OSError, subprocess.TimeoutExpired) as error:
-                raise HookRefused(f"Core's merge-verdict reader failed: {error}") from error
-            if checked.returncode:
-                return (checked.stdout.strip(),)
-        return ()
+    def reasons(cls, command: str) -> tuple[str, ...]:
+        return tuple(bypass.reason for bypass in cls.bypasses(command))
 
 
 main = QueueBypassGuard.main

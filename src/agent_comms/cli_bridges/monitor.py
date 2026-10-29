@@ -15,7 +15,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.harness_delivery_states import Outcome
@@ -26,10 +26,16 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from agent_comms_hooks.board import SessionBoard, SessionWire
-from agent_comms_hooks.watch import (
-    HeldClaim, SessionConnectionClosed, SessionRefusedError,
-    SessionRequestTimeout, WatchClaim, WatchRecord,
+
+from .session_watch import (
+    HeldClaim,
+    SessionConnectionClosed,
+    SessionRefusedError,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
 )
+
 
 if TYPE_CHECKING:
     from .shared import LineMonitorBridge, MonitorProbe, Serve
@@ -102,6 +108,24 @@ class ClaimedReplacement(BridgeReplacement):
 class MonitorPeer:
     reader: asyncio.StreamReader
     writer: asyncio.StreamWriter
+
+    async def read(self) -> bytes:
+        """One request line, including tool inputs larger than StreamReader's buffer.
+
+        The stream limit is a buffering threshold, not a hook-payload limit. Letting
+        LimitOverrunError escape would tear down the resident bridge's TaskGroup.
+        """
+        chunks: list[bytes] = []
+        async with asyncio.timeout(SessionRequest.reply_timeout):
+            while True:
+                try:
+                    chunks.append(await self.reader.readuntil(b"\n"))
+                    return b"".join(chunks)
+                except asyncio.LimitOverrunError as partial:
+                    chunks.append(await self.reader.readexactly(partial.consumed))
+                except asyncio.IncompleteReadError as ended:
+                    chunks.append(ended.partial)
+                    return b"".join(chunks)
 
     async def write(self, line: str) -> None:
         try:
@@ -286,12 +310,22 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
 
     def __init_subclass__(cls, **options):
         super().__init_subclass__(**options)
-        cls.reply_class = next(
+        cls.reply_class = cls.declared_argument(SessionRequest)
+
+    @classmethod
+    def declared_argument(cls, family: type) -> type:
+        """A request capability derives its payload from its generic declaration."""
+        return next(
             get_args(base)[0]
             for owner in cls.__mro__
             for base in get_original_bases(owner)
-            if get_origin(base) is SessionRequest
+            if get_origin(base) is family
         )
+
+    @classmethod
+    def from_wire_line(cls, raw: bytes) -> Self:
+        """The request boundary parses and constructs off the session event loop."""
+        return FieldCodec.decode(cls, FieldCodec.parse(raw))
 
     def line(self) -> str:
         return FieldCodec.compact(FieldCodec.encode(self))
@@ -335,7 +369,7 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
     def read_reply(self, stream: BinaryIO) -> Reply:
         """The bridge's one answer line; a socket closed before it is no answer at all."""
         with self._exchange_errors():
-            raw = stream.readline(4096)
+            raw = stream.readline()
         if not raw:
             raise SessionConnectionClosed('Session bridge closed before replying')
         reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
@@ -441,8 +475,8 @@ class MonitorService:
             try:
                 reply: SessionReply
                 try:
-                    request = FieldCodec.decode(SessionRequest, FieldCodec.parse(await reader.readline()))
-                except MalformedRecord as error:
+                    request = await asyncio.to_thread(SessionRequest.from_wire_line, await peer.read())
+                except (MalformedRecord, TimeoutError) as error:
                     reply = SessionRefused(error=str(error))
                 else:
                     reply = await request.handle(self, peer)

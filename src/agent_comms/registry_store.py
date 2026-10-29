@@ -199,6 +199,15 @@ class RegistryEdit:
     superseded: list[StoredTurnRecord] = field(default_factory=list)
     """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
 
+    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        current = owner.require_source_snapshot(self.original.snapshot)
+        status = self.document.status(current.name)
+        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
+        return NativeSourcePublication(
+            thread=replace(current, session_file=location), status=status,
+            previous=current, previous_status=status,
+        )
+
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         restored = self.document.restore_stopped(source, names)
         for name in restored:
@@ -219,15 +228,6 @@ class RegistryEdit:
         )
         self.commit()
         return fenced
-
-    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        current = owner.require_source_snapshot(self.original.snapshot)
-        status = self.document.status(current.name)
-        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
-        return NativeSourcePublication(
-            thread=replace(current, session_file=location), status=status,
-            previous=current, previous_status=status,
-        )
 
     def lease_turn(
         self,

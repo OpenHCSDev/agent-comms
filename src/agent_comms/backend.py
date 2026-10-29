@@ -405,8 +405,10 @@ class NativeSession(MroDispatch, ABC):
         owner = snapshot.by_lookup[launch.session.files(launch.root).owner.lookup]
         reader = snapshot.commander_project.session_output(
             owner.incarnation, commander=CommanderReader(), commanded=FleetReader())
-        return RuleReadingSegment.for_parts(owner.incarnation, reader.prepare(),
-            reader.header(lambda: HeldOrders.recalled(launch.root, snapshot, owner.name)))
+        parts = reader.prepare()
+        return RuleReadingSegment.for_parts(owner.incarnation, parts, "\n\n".join((
+            reader.order(parts),
+            reader.header(lambda: HeldOrders.recalled(launch.root, snapshot, owner.name)))))
 
     async def acquire_native(self, resources: AsyncExitStack) -> PiSessionChild:
         """Acquire leaf transport once in the original turn's resource lifetime."""

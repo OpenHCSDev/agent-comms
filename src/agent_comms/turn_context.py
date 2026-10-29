@@ -31,7 +31,6 @@ from .field_codec import (
 )
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
-from .instruction_deck import DeckReader
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .repo import Checkout
@@ -1126,17 +1125,18 @@ class OncePerContextSegment(InstructionSegment):
 @dataclass(frozen=True, kw_only=True)
 class RuleReadingSegment(OncePerContextSegment):
     parts: Mapping[Path, str]
-    header: str
+    read_order: str
 
     @classmethod
-    def for_parts(cls, owner: ThreadIncarnation, parts: Mapping[Path, str], header: str) -> Self:
+    def for_parts(cls, owner: ThreadIncarnation, parts: Mapping[Path, str], read_order: str) -> Self:
+        """Freeze the source text and its owner's prepared instruction, not a second renderer."""
         parts = MappingProxyType(dict(parts))
         revision = hashlib.sha256(json.dumps(
-            FieldCodec.encode((tuple(parts.items()), header))).encode()).hexdigest()
-        return super().capture((OwnerProvenance(owner, revision),), parts=parts, header=header)
+            FieldCodec.encode((tuple(parts.items()), read_order))).encode()).hexdigest()
+        return super().capture((OwnerProvenance(owner, revision),), parts=parts, read_order=read_order)
 
     def values(self) -> dict[str, object]:
-        return {"read_order": DeckReader.order(self.parts), "header": self.header}
+        return {"read_order": self.read_order}
 
 
 @dataclass(frozen=True, kw_only=True)

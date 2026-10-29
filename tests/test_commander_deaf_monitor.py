@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.task_attachments.commander_pings import CommanderNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
@@ -19,7 +20,6 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Addressed
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ConnectedThreadStatus
-from agent_comms_hooks.watch import WatchClaim
 
 pytest_plugins = ("test_holder_standing_rules",)
 

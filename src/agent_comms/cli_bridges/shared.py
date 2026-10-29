@@ -90,11 +90,17 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import (
-    HeldClaim, NoSessionBridge, SessionCommandError, SessionConnectionClosed,
-    SessionFailure, SessionRequestTimeout, WatchClaim, WatchRecord,
-)
 
+from .session_watch import (
+    HeldClaim,
+    NoSessionBridge,
+    SessionCommandError,
+    SessionConnectionClosed,
+    SessionFailure,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
+)
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (

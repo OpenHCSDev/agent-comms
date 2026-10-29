@@ -1,6 +1,10 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import asyncio
 import fcntl
@@ -53,7 +57,6 @@ from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
 

@@ -2,6 +2,13 @@
 
 
 
+from agent_comms.cli_bridges.session_watch import (
+    LapsedWatch,
+    LiveWatch,
+    NoSessionBridge,
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import json
 import os
@@ -31,7 +38,6 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
 from source_programs import SourcePrograms
 from agent_comms.threads import Thread
 
@@ -114,7 +120,7 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
              'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
              'from agent_comms.cli_bridges.shared import '
              'MonitorBridgeStopped, MonitorBridgeSwapping; '
-             'from agent_comms_hooks.watch import WatchClaim; '
+             'from agent_comms.cli_bridges.session_watch import WatchClaim; '
              'asyncio.run(read_monitor(WatchClaim("copied-session"), '
              'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -264,7 +270,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     (sys.executable, '-c',
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
                      'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
-                     'from agent_comms_hooks.watch import WatchClaim; '
+                     'from agent_comms.cli_bridges.session_watch import WatchClaim; '
                      f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
                      'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,

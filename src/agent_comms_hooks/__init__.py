@@ -14,12 +14,16 @@ import pkgutil
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import ClassVar, Self, get_type_hints
+from typing import ClassVar, NoReturn, Self, get_type_hints
+
+
+class ToolRefusedError(ValueError):
+    """An intentional refusal safe to return as a tool answer, not a transport failure."""
 
 
 @dataclass(frozen=True)
@@ -27,7 +31,7 @@ class HookRecord:
     """A JSON object Claude Code writes to a hook, decoded once by its declared fields."""
 
     @classmethod
-    def decode(cls, record: Mapping[str, object]) -> Self:
+    def decode(cls, record: Mapping[str, object], **context: object) -> Self:
         """A field Claude Code may omit declares its default; a required field it omits is a
         missing argument, refused by the constructor."""
         hints = get_type_hints(cls)
@@ -35,8 +39,9 @@ class HookRecord:
             **{
                 declared.name: HookRecord.field(hints[declared.name], record[declared.name])
                 for declared in fields(cls)
-                if declared.name in record
-            }
+                if declared.init and not declared.kw_only and declared.name in record
+            },
+            **context,
         )
 
     @staticmethod
@@ -57,12 +62,25 @@ class SubagentId(str):
         return f"claude-{self}"
 
 
+class HookOutput:
+    """A hook's explicit output target; the process boundary writes its own stdout."""
+
+    def line(self, text: str) -> None:
+        print(text)
+
+
 @dataclass(frozen=True)
 class ClaudeHook(HookRecord):
     """What Claude Code writes to every hook's stdin."""
 
     session_id: str
     hook_event_name: str
+    output: HookOutput = field(default=HookOutput(), kw_only=True, compare=False, repr=False)
+
+    @classmethod
+    def of(cls, record: Mapping[str, object], **context: object) -> ClaudeHook:
+        """The event's declaration owns any specialized boundary selection."""
+        return cls.decode(record, **context)
 
     @classmethod
     def read(cls) -> Self:
@@ -70,7 +88,7 @@ class ClaudeHook(HookRecord):
 
     def respond(self, **fields: str) -> None:
         """Claude Code's answer to this event: its event name plus the given fields."""
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
+        self.output.line(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
 
     def warn(self, *texts: str) -> None:
         """One event has one JSON answer, however many sources supply its context."""
@@ -85,17 +103,6 @@ class ClaudeTranscriptHook(ClaudeHook):
     transcript_path: str
     window: ClassVar[int] = 1_000_000
     """Transcript bytes read from the end."""
-
-    @property
-    def calls(self) -> Path:
-        """One byte per completed or refused tool call since this deal; atomic append
-        counts parallel calls once without another counter or history scan."""
-        return Path(self.transcript_path).with_suffix(".calls")
-
-    def count_call(self) -> int:
-        with self.calls.open("ab", buffering=0) as calls:
-            calls.write(b".")
-            return calls.tell()
 
     @property
     def dealt_files(self) -> Path:
@@ -148,14 +155,22 @@ class ClaudeHookProgram(ABC):
         for module in pkgutil.iter_modules(__path__):
             import_module(f"{__name__}.{module.name}")
         return tuple(
-            program
+            installed
             for program in ClaudeHookProgram.descendants()
             if not program.__abstractmethods__
+            for installed in program.installation_members()
         )
 
     @classmethod
+    def installation_members(cls) -> tuple[type[ClaudeHookProgram], ...]:
+        """A public program installs itself; a resident handler does not install a copy."""
+        return (cls,)
+
+    @classmethod
     def descendants(cls) -> tuple[type[ClaudeHookProgram], ...]:
-        return (cls, *(member for child in cls.__subclasses__() for member in child.descendants()))
+        # Multiple capabilities reach the same declaration through several paths, not several programs.
+        descendants = (member for child in cls.__subclasses__() for member in child.descendants())
+        return tuple(dict.fromkeys((cls, *descendants)))
 
     @classmethod
     @abstractmethod
@@ -168,6 +183,20 @@ class ClaudeHookProgram(ABC):
         scripts = entry_points(group="console_scripts")
         (name,) = {point.name for point in scripts if point.value == target}
         return name
+
+    @classmethod
+    def failure_status(cls, status: int = 1) -> int:
+        """Notification programs retain the failed operation's exit status."""
+        return status
+
+    @classmethod
+    def failed(cls, error: BaseException) -> NoReturn:
+        sys.stderr.write(f"{error}\n")
+        raise SystemExit(cls.failure_status())
+
+    @classmethod
+    def unbound(cls, record: Mapping[str, object]) -> None:
+        """A session with no bus has no commander or fleet behavior to run."""
 
     @classmethod
     def owns_entry(cls, entry: Mapping[str, object]) -> bool:
@@ -197,6 +226,14 @@ class ClaudeHookProgram(ABC):
         return {"writer": cls.writer, "hooks": [cls.hook()]}
 
 
+class PermissionHookProgram(ClaudeHookProgram, ABC):
+    """Claude Code blocks a permission event only on its blocking exit code."""
+
+    @classmethod
+    def failure_status(cls, status: int = 1) -> int:
+        return 2
+
+
 class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
     """A program Claude Code runs only on calls of the one tool it names."""
 
@@ -214,11 +251,11 @@ class Bash(HookRecord):
     command: str
 
 
-class HookRefused(Exception):
+class HookRefused(ToolRefusedError):
     """An owned hook refusal, rendered as a denial rather than a hook crash."""
 
 
-class BashRefusal(ClaudeToolHookProgram, ABC):
+class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram, ABC):
     """A program that refuses a Bash command before it runs, for every reason it finds;
     each member says only what it refuses and why."""
 
@@ -248,13 +285,25 @@ class BashRefusal(ClaudeToolHookProgram, ABC):
 
     @classmethod
     def main(cls) -> None:
-        hook = ClaudeToolHook.read()
+        cls.judge(ClaudeToolHook.read())
+
+    @classmethod
+    def unbound(cls, record: Mapping[str, object]) -> None:
+        cls.judge(ClaudeToolHook.decode(record))
+
+    @classmethod
+    def judge(cls, hook: ClaudeToolHook) -> None:
         if not cls.binds(hook):
             return
         try:
             reasons = cls.reasons_for(hook)
         except HookRefused as refused:
             reasons = (str(refused),)
+        cls.refuse(hook, reasons)
+
+    @classmethod
+    def refuse(cls, hook: ClaudeToolHook, reasons: tuple[str, ...]) -> None:
+        """Both local syntax and resident authorization use the same permission response."""
         if reasons:
             hook.respond(
                 permissionDecision="deny",
