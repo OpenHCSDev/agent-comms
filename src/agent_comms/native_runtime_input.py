@@ -35,7 +35,6 @@ from .native_input_record import (
     NativeColumn,
     NativeInputContext,
     NativeInputExecution,
-    NativeInputLocation,
     NativeInputPosition,
     NativeInputRecord,
     NativeStageStorage,
@@ -46,7 +45,7 @@ from .native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativePosition,
 )
-from .native_pi import NativeContextRecord
+from .native_input_proof import NativeContextRecord, NativeInputLocation
 from .native_session_reopen import (
     NativeSessionIdentity,
     NoPiSessionId,
@@ -77,7 +76,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .native_session_reopen import NativeSessionIdentity
 
 

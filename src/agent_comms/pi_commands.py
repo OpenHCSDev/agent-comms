@@ -60,7 +60,7 @@ if TYPE_CHECKING:
     from .launch_runtime import RestartEnvironment
     from .tracked_turn import TrackedTurnSession
     from .native_entries import NativeEvidenceScope
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .pi_events import InputCommitted
 
 

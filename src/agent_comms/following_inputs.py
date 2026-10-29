@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
     from .owned_send import OwnedSend
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
 
 
 class FollowingInputs:

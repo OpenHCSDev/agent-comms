@@ -44,7 +44,7 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution, TriageNativeExecution
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .native_prompt_binding import (
     expected_prompt_bindings,
     expected_prompt_matches_journal,

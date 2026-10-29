@@ -30,7 +30,8 @@ from .message_bus import MessageBus
 from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_entries import NativeEvidenceScope
-from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .native_input_proof import NativeContextProof
+from .native_pi import NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary
 from .native_session_reopen import NativeSessionIdentity

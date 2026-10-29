@@ -29,8 +29,8 @@ from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
+from .native_input_proof import NativeContextProof
 from .native_pi import (
-    NativeContextProof,
     NativeEmptyAnswer,
     NativePiPromptRejected,
     NativeTurnResult,

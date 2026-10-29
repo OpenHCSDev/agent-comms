@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 
 from .errors import RelationViolationError
-from .native_pi import NativeContextJournal
+from .native_input_proof import NativeContextJournal
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .native_output import NativeRecordLocation
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation

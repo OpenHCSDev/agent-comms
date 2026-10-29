@@ -20,7 +20,7 @@ from agent_comms.store_files import RegistryLocking
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.turn_watchdog import ModelWait
 from agent_comms.native_arguments import NativeInputProofArgument
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof
+from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_transcript import NativeTranscript
 from bus_history import read_history
 from delivery_owner_fixture import reply_turn_finished

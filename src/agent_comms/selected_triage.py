@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .historical_native_inputs import HistoricalNativeInput, TriageHistoricalNativeInput
     from .native_input_record import TriageNativeExecution
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .native_runtime_input import NativeRuntimeInput
     from .private_send_claim import PrivateSendClaim
     from .private_send_stage import TriageNativeSend

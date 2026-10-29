@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_runtime_input import NativeRuntimeInput
     from .native_entries import NativeEvidenceRead
-    from agent_comms.native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .pi_native_backend import PersistentPiSession
 
 

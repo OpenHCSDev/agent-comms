@@ -29,7 +29,7 @@ from .input_origin import (
 )
 from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .lifecycle_capability import LifecycleCapability, Unresolved
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation

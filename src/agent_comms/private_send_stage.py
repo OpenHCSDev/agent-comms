@@ -29,7 +29,7 @@ from .private_send_rules import (
 )
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .native_entries import NativeEvidenceScope
 from .native_prompt_binding import (
     PromptBinding,

@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from .bus import BusReader
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .threads import Thread
     from .turn_lease import TurnLeaseFence

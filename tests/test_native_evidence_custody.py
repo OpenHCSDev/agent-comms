@@ -13,8 +13,8 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_input_record import NativeInputLocation
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
+from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
+from agent_comms.native_pi import PrivateEvidenceRead
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.store_files import (
     ExclusiveLock,
