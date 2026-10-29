@@ -29,7 +29,7 @@ from agent_comms.cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .comms import Comms
 from .declared_family import DeclaredFamily
-from .field_codec import Argument, PathText, WireForm, WireOmitDefault, boundary_decoder
+from .field_codec import Argument, PathText, WireForm, WireOmitDefault
 from .history_result import HistoryPageResult
 from .goals import Goal
 from .lifecycle_capability import Complete
@@ -74,16 +74,6 @@ def _duration_seconds(value: str) -> float:
 
 def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
-
-
-@boundary_decoder
-def _tag_choice_text(value: str | None) -> str | None:
-    """Command-line and editor text is the given tags' wire; no text inherits."""
-    return value
-
-
-def _tag_text(value: frozenset[str] | None) -> str | None:
-    return None if value is None else ', '.join(sorted(value))
 
 
 def _shell_words(value: str) -> list[str]:

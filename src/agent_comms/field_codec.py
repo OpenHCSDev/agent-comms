@@ -369,8 +369,8 @@ class Normalize(ValueDirective[Callable[[object], object]]):
     pass
 
 
-class EditorFormat(ValueDirective[Callable[[object], JsonValue]]):
-    pass
+class EditsAsText:
+    """This member declares the typed editor of its untagged wire family."""
 
 
 class Editor(ValueDirective[type]):
@@ -619,10 +619,6 @@ class FieldPlan:
     def editor_normalizer(self) -> Callable[[object], object]:
         return self.setting(Normalize, self.value.decode_editor)
 
-    @cached_property
-    def editor_formatter(self) -> Callable[[object], JsonValue]:
-        return self.setting(EditorFormat, self.value.encode_editor)
-
     def argument_payload(self, value: object) -> object:
         return self.argument_normalizer(value)
 
@@ -630,7 +626,7 @@ class FieldPlan:
         return self.editor_normalizer(value)
 
     def editor_default(self, value: object) -> JsonValue:
-        return self.editor_formatter(value)
+        return self.value.encode_editor(value)
 
     @property
     def description(self) -> str:
@@ -957,6 +953,17 @@ class DecoderPlan(ABC):
 
     target: object
 
+    @property
+    def editor_annotation(self) -> object:
+        return str
+
+    def format_editor(self, wire: object) -> JsonValue:
+        return json.dumps(wire)
+
+    @boundary_decoder
+    def parse_editor(self, text: object) -> object:
+        return None if text is None else json.loads(text)
+
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         """Stored-value predicates; the SQL owner quotes its column and constants."""
         return ()
@@ -1053,10 +1060,14 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     @classmethod
     @cache
     def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
-        return UnionDecoder(
-            reduce(or_, members),
-            tuple(compile_decoder(member) for member in members),
-        )
+        target = reduce(or_, members)
+        alternatives = tuple(compile_decoder(member) for member in members)
+        editors = tuple(member for member in members if EditsAsText in member.__mro__)
+        if len(editors) > 1:
+            raise TypeError(f'{target} declares more than one typed-text editor: {editors}')
+        if editors:
+            return _TextEditedUnionDecoder(target, alternatives, compile_decoder(editors[0]).editor_wire)
+        return UnionDecoder(target, alternatives)
 
     @abstractmethod
     def decode(self, data: object) -> T:
@@ -1123,15 +1134,15 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     def decode_keys(self, data, keys, selections):
         raise TypeError("Selected keys require a mapping field")
 
-    editor_annotation = str
+    @property
+    def editor_wire(self) -> DecoderPlan:
+        return self
 
-    def encode_editor(self, value: T) -> str:
-        encoded = FieldCodec.encode(value, self.target)
-        return json.dumps(encoded)
+    def encode_editor(self, value: T) -> JsonValue:
+        return self.format_editor(self.encode(value))
 
-    @boundary_decoder
-    def decode_editor(self, value):
-        return None if value is None else json.loads(value)
+    def decode_editor(self, value: object) -> object:
+        return self.parse_editor(value)
 
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
@@ -1165,6 +1176,20 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
+
+    @property
+    def editor_wire(self) -> DecoderPlan:
+        return self.wire_structure
+
+    @property
+    def editor_annotation(self) -> object:
+        return self.wire_structure.editor_annotation
+
+    def format_editor(self, wire: object) -> JsonValue:
+        return self.wire_structure.format_editor(wire)
+
+    def parse_editor(self, text: object) -> object:
+        return self.wire_structure.parse_editor(text)
 
     @property
     def accepts_null(self) -> bool:
@@ -2793,11 +2818,11 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     def encode(self, value: str) -> str:
         return str(super().encode(value))
 
-    def encode_editor(self, value: str) -> str:
-        return value
+    def format_editor(self, wire: object) -> JsonValue:
+        return cast(JsonValue, wire)
 
-    def decode_editor(self, value):
-        return value
+    def parse_editor(self, text: object) -> object:
+        return text
 
 
 class _FlagDecoder(_ExactScalarDecoder[bool]):
@@ -3086,6 +3111,24 @@ class UnionDecoder[T](_ContextDecoder[T]):
             # loan even on success, rather than leaving a cyclic payload
             # graph for a later UI-thread garbage collection.
             first_error = None
+
+
+@dataclass(frozen=True, slots=True)
+class _TextEditedUnionDecoder[T](UnionDecoder[T]):
+    """One member's declaration owns typed text; other members remain wire choices."""
+
+    editor: DecoderPlan
+
+    @property
+    def editor_annotation(self) -> object:
+        annotation = self.editor.editor_annotation
+        return Union[tuple((annotation, type(None)))] if self.accepts_null else annotation
+
+    def format_editor(self, wire: object) -> JsonValue:
+        return self.editor.format_editor(wire)
+
+    def parse_editor(self, text: object) -> object:
+        return self.editor.parse_editor(text)
 
 
 @dataclass(frozen=True, slots=True)

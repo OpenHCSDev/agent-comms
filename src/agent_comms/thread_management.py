@@ -38,6 +38,7 @@ from .config_options import RunningSelection
 from .errors import RelationViolationError
 from .field_codec import (
     DeclaredWireType,
+    EditsAsText,
     FieldCodec,
     NullMember,
     RecordMember,
@@ -77,7 +78,7 @@ class TagChoice(SubclassUnion, affix="Tags"):
 
 
 @dataclass(frozen=True, slots=True)
-class GivenTags(DeclaredWireType, TagChoice):
+class GivenTags(EditsAsText, DeclaredWireType, TagChoice):
     """Tags spelled as comma-separated text on the command line, in the editor and in tools."""
 
     wire_type = str

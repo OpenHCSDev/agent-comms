@@ -7,21 +7,16 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Annotated
 
-from agent_comms.cli_command import CliCommand, CommandContext
-from agent_comms.cli_commands import NameArgument, ThreadCreatedResult, _tag_choice_text
+from agent_comms.cli_command import CatalogBinding, CliCommand, CommandContext
+from agent_comms.cli_commands import NameArgument, ThreadCreatedResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
-from agent_comms.field_codec import Argument, Catalog, EditorFormat, FieldCodec, Multiline, Normalize
+from agent_comms.field_codec import Argument, Catalog, Multiline
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.repo import Checkout, LaunchCheckout
 from agent_comms.thread_management import ThreadCreationSpec
-from agent_comms.thread_model import ThreadModel
-
-
-TAG_ARGUMENT = (
-    EditorFormat(FieldCodec.encode), Normalize(_tag_choice_text), Argument(flags=("--tags",)),
-)
+from agent_comms.thread_model import CatalogSelection, ThreadModel
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -42,10 +37,16 @@ class ThreadCreationFields(NameArgument, CommandContext):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadCreationCliCommand(ThreadCreationFields, CliCommand, declared_name=None):
+class ThreadCreationCliCommand(
+    ThreadCreationFields, CatalogBinding, CliCommand[ThreadCreatedResult], declared_name=None,
+):
     @property
     @abstractmethod
     def spec_type(self) -> type[ThreadCreationSpec]: ...
+
+    @property
+    def catalog_context(self) -> CatalogSelection:
+        return self
 
     def specification(self) -> ThreadCreationSpec:
         return self.spec_type.from_task(**{

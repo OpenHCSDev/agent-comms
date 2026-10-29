@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import PendingCommandBinding
-from agent_comms.cli_support.thread_creation import TAG_ARGUMENT, ThreadCreationCliCommand, ThreadCreationFields
+from agent_comms.cli_support.thread_creation import ThreadCreationCliCommand, ThreadCreationFields
 from agent_comms.comms import Comms
+from agent_comms.field_codec import Argument
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.repo import Checkout
 from agent_comms.thread_management import GivenTags
@@ -15,7 +16,7 @@ from typing import Annotated, ClassVar
 class NewThreadCliCommand(ThreadCreationCliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
-    tags: Annotated[GivenTags, *TAG_ARGUMENT]
+    tags: Annotated[GivenTags, Argument()]
 
     @classmethod
     def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[PendingCommandBinding, ...]:

@@ -28,7 +28,7 @@ from agent_comms.declared_family import ModuleMembers
 from agent_comms.field_codec import FieldPlan, TargetBound
 from agent_comms.launch_root import LaunchRoot
 from inspect import iscoroutinefunction, signature
-from types import get_original_bases
+from types import MappingProxyType, get_original_bases
 from typing import TYPE_CHECKING, TextIO, cast, get_args, get_origin
 
 if TYPE_CHECKING:
@@ -72,23 +72,33 @@ class CommandBinding(ABC):
     def declaration(self) -> type[CliCommand]: ...
 
     @property
+    def editable_fields(self) -> tuple[TargetField, ...]:
+        return tuple(self.field_value(entry)
+                     for entry in FieldCodec.argument_fields(self.declaration)
+                     if not entry.setting(TargetBound, False))
+
     @abstractmethod
-    def editable_fields(self) -> tuple[TargetField, ...]: ...
+    def field_value(self, entry: FieldPlan) -> TargetField: ...
+
+    @abstractmethod
+    def retained_payload(self) -> dict[str, object]:
+        """Already decoded constructor values, never serialized for editing."""
 
     def for_editor(self, comms: Comms, target: str, project: Checkout) -> Self:
-        return self
-
-    @property
-    def catalog_context(self) -> object:
         return self
 
     def for_fields(self, arguments: Mapping[str, object]) -> CommandBinding:
         return self.edited(self.declaration.editor_arguments(arguments)) if arguments else self
 
-    async def prepare_fields(self, arguments: Mapping[str, object] = {}) -> tuple[TargetField, ...]:
+    async def prepare_field(self, item: TargetField, catalogs: ConfigOptions) -> TargetField:
+        return await item.prepare(catalogs)
+
+    async def prepare_fields(
+        self, arguments: Mapping[str, object] = MappingProxyType({}),
+    ) -> tuple[TargetField, ...]:
         binding = self.for_fields(arguments)
         catalogs = ConfigOptions.configured()
-        return tuple([await item.prepare(catalogs, binding.catalog_context)
+        return tuple([await binding.prepare_field(item, catalogs)
                       for item in binding.editable_fields])
 
     def authorize_edits(self, arguments: Mapping[str, object]) -> frozenset[str]:
@@ -100,8 +110,12 @@ class CommandBinding(ABC):
             raise ValueError("Parameters not offered by this target command cannot be overridden")
         return bound
 
-    @abstractmethod
-    def edited(self, arguments: Mapping[str, object]) -> CliCommand: ...
+    def edited(self, arguments: Mapping[str, object]) -> CliCommand:
+        self.authorize_edits(arguments)
+        decoded = {name: value
+                   for entry in FieldCodec.argument_fields(self.declaration) if entry.key in arguments
+                   for name, value in entry.decoded(arguments).items()}
+        return FieldCodec.construct(self.declaration, {**self.retained_payload(), **decoded})
 
     @abstractmethod
     def confirmation(self) -> str: ...
@@ -114,25 +128,32 @@ class CommandBinding(ABC):
     def with_confirmation(self, confirmed: bool) -> CommandBinding: ...
 
 
+class CatalogBinding(CommandBinding):
+    """Only a binding declaring catalog inputs has a catalog question to answer."""
+
+    @property
+    @abstractmethod
+    def catalog_context(self) -> CatalogSelection: ...
+
+    async def prepare_field(self, item: TargetField, catalogs: ConfigOptions) -> TargetField:
+        return await item.prepare_catalog(catalogs, self.catalog_context)
+
+
 @dataclass(frozen=True)
 class CommandContext(CatalogSelection):
-    """A partial command's supplied fields, with native edits decoded by their plans."""
-
-    def with_editor_values(self, arguments: Mapping[str, object]) -> Self:
-        changes = {name: value
-                   for entry in FieldCodec.argument_fields(type(self)) if entry.key in arguments
-                   for name, value in entry.decoded({
-                       entry.key: entry.editor_payload(arguments[entry.key]),
-                   }).items()}
-        return replace(self, **changes) if changes else self
+    """A declaration of supplied fields, not an alternate command editor."""
 
 
 @dataclass(frozen=True)
-class PendingCommandBinding(CommandBinding):
+class PendingCommandBinding(CatalogBinding):
     """Only supplied context, borrowing the concrete command's declared fields."""
 
     command: type[CliCommand]
     context: CommandContext
+
+    def __post_init__(self) -> None:
+        if not issubclass(self.command, type(self.context)):
+            raise TypeError('A pending context must be a declared parent of its command')
 
     @property
     def declaration(self) -> type[CliCommand]:
@@ -142,24 +163,24 @@ class PendingCommandBinding(CommandBinding):
     def catalog_context(self) -> CatalogSelection:
         return self.context
 
-    @property
-    def editable_fields(self) -> tuple[TargetField, ...]:
-        supplied = {entry.name: entry.current(self.context)
-                    for entry in FieldCodec.argument_fields(type(self.context))}
-        return tuple(TargetField.of(entry, supplied[entry.name] if entry.name in supplied else entry.default())
-                     for entry in FieldCodec.argument_fields(self.declaration)
-                     if not entry.setting(TargetBound, False))
+    def retained_payload(self) -> dict[str, object]:
+        return {entry.name: entry.current(self.context)
+                for entry in FieldCodec.field_plans(type(self.context))}
+
+    def field_value(self, entry: FieldPlan) -> TargetField:
+        for supplied in FieldCodec.field_plans(type(self.context)):
+            if supplied.declared is entry.declared:
+                return TargetField.of(entry, supplied.current(self.context))
+        return TargetField.omitted(entry)
 
     def for_fields(self, arguments: Mapping[str, object]) -> PendingCommandBinding:
-        return replace(self, context=self.context.with_editor_values(arguments))
-
-    def edited(self, arguments: Mapping[str, object]) -> CliCommand:
         self.authorize_edits(arguments)
-        return self.declaration.from_payload({
-            **FieldCodec.encode(self.context),
-            self.declaration.family_discriminator: FieldCodec.encode(self.declaration),
-            **arguments,
-        })
+        changes = {name: value
+                   for entry in FieldCodec.argument_fields(type(self.context)) if entry.key in arguments
+                   for name, value in entry.decoded({
+                       entry.key: entry.editor_payload(arguments[entry.key]),
+                   }).items()}
+        return replace(self, context=replace(self.context, **changes)) if changes else self
 
     def confirmation(self) -> str:
         return ''
@@ -290,15 +311,13 @@ class CliCommand(
                                   channel if declaration.channel_fields() else NoChannel())
                      for declaration, commands in grouped.items())
 
-    @property
-    def editable_fields(self) -> tuple[TargetField, ...]:
-        """The command owns the parameters offered by its target action."""
+    def field_value(self, entry: FieldPlan) -> TargetField:
+        return TargetField.of(entry, entry.current(self))
 
-        return tuple(
-            TargetField.of(entry, entry.current(self))
-            for entry in FieldCodec.argument_fields(type(self))
-            if not entry.setting(TargetBound, False)
-        )
+    def retained_payload(self) -> dict[str, object]:
+        return {entry.name: entry.current(self)
+                for entry in FieldCodec.argument_fields(type(self))
+                if entry.setting(TargetBound, False)}
 
     def describe(self, comms: Comms, target: CommandTarget, project: Checkout) -> TargetAction:
 
@@ -341,15 +360,6 @@ class CliCommand(
             raise ValueError(self.confirmation())
         return self
 
-    def edited(self, arguments: Mapping[str, object]) -> Self:
-        bound = self.authorize_edits(arguments)
-        encoded = FieldCodec.encode(self)
-        return type(self).from_payload({
-            **{key: encoded[key] for key in bound & encoded.keys()},
-            type(self).family_discriminator: FieldCodec.encode(type(self)),
-            **arguments,
-        })
-
     @classmethod
     def execute_target(cls, comms: Comms, target: TargetSelection, arguments: Mapping[str, object],
                        *, confirmed: bool = False,
@@ -378,7 +388,9 @@ class TargetAction:
     def editable_fields(self) -> tuple[TargetField, ...]:
         return self.bound[0].editable_fields
 
-    async def prepare_fields(self, arguments: Mapping[str, object] = {}) -> tuple[TargetField, ...]:
+    async def prepare_fields(
+        self, arguments: Mapping[str, object] = MappingProxyType({}),
+    ) -> tuple[TargetField, ...]:
         return await self.bound[0].prepare_fields(arguments)
 
     @property

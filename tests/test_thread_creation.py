@@ -44,8 +44,11 @@ def test_pending_new_binding_offers_missing_tags_without_constructing_the_comman
     binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
     assert type(binding) is PendingCommandBinding
     tags = next(item for item in binding.editable_fields if item.name == 'tags')
-    assert tags.required and not tags.supplied
+    assert tags.required
     assert tags.editor_default is None
+    assert 'editor_default' not in tags.json_schema()
+    assert tags.argument(None) == {}
+    assert tags.argument('') == {'tags': ''}
     with pytest.raises(MalformedRecord):
         binding.edited(NewThreadCliCommand.editor_arguments({'name': 'child'}))
 
@@ -65,7 +68,9 @@ def test_pending_catalog_context_can_change_before_tags_are_supplied(comms, sour
     binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
     prepared = binding.for_fields({'name': 'child'})
     assert prepared.context.name == 'child'
-    assert not next(item for item in prepared.editable_fields if item.name == 'tags').supplied
+    tags = next(item for item in prepared.editable_fields if item.name == 'tags')
+    assert tags.argument(None) == {}
+    assert tags.argument('') == {'tags': ''}
 
 
 @pytest.mark.parametrize('creation_arguments,forbidden', (
