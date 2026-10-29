@@ -450,6 +450,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
 def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notification_bus):
     comms = notification_bus
     enforced = []
+    refusal = UnitOccupied("another order already holds the selected unit")
 
     class FollowingRule(ServicePassFailing):
         def enforce(self, _comms, _commander):
@@ -458,7 +459,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
     class OccupiedRule(FollowingRule):
         def enforce(self, _comms, _commander):
             super().enforce(_comms, _commander)
-            raise UnitOccupied("another order already holds the selected unit")
+            raise refusal
 
     rules = (OccupiedRule("occupied-unit", 1.0, "unit already holds work"),
              FollowingRule("following-rule", 1.0, "another rule"))
@@ -467,6 +468,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
     assert enforced == ["occupied-unit", "following-rule"]
     message, = notifications(comms)
     assert len(message.task.not_applied) == 1
+    assert refusal.explanation() in message.body
     assert rules[0].line() in message.body
     assert RulePing.capture(rules[0]) not in message.task.handled
     assert RulePing.capture(rules[1]) in message.task.handled

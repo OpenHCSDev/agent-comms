@@ -291,6 +291,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
         comms.goals, "lead", ProgressRead(held_orders))] == [request]
     comms.goals.update_goal("outsider", replace(action, problem="P4"))
+    assert comms.goals.todos.get("P4").held().owner == "outsider"
 
 
 @pytest.mark.parametrize("has_head", (False, True))
