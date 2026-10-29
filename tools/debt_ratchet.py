@@ -100,7 +100,7 @@ class ContentCache:
         too. Computed once, at the first key, after the measures' imports, so the set is the one
         that ran."""
         digest = hashlib.sha256(f"{sys.version}\0{__name__}".encode())
-        for installed in sorted(f"{dist.metadata['Name']}={dist.version}\0{dist.read_text('direct_url.json')}"
+        for installed in sorted(f"{dist.name}={dist.version}\0{dist.read_text('direct_url.json')}"
                                 for dist in importlib.metadata.distributions()):
             digest.update(b"\0" + installed.encode())
         for path in ContentCache.sources():
