@@ -54,7 +54,6 @@ def test_bus_input_encodes_its_text_with_the_codex_tag():
 def test_client_id_boundary_retains_its_member_through_item_use(wire, decoded):
     item = UserItem.model_validate(dict(id='input', content=[dict(type='text', text='body')], clientId=wire))
     assert item.clientId == decoded
-    assert item.model_dump(mode='json')['clientId'] == wire
     member = item.clientId
     item.completed(NativeTurnId('source-turn'), item.events(1.0))
     assert item.clientId is member

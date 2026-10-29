@@ -85,11 +85,6 @@ def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
     return decoder
 
 
-def boundary_encoder[E: Callable[..., object]](encoder: E) -> E:
-    """Declares a nominal value's encoder that emits absence at a foreign boundary."""
-    return encoder
-
-
 @dataclass(frozen=True, slots=True)
 class RefusalBoundary[Suppressed: bool]:
     """Shared exception handling; each boundary declares whether it can suppress a refusal."""

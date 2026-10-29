@@ -28,7 +28,6 @@ from agent_comms.field_codec import (
     MessageId,
     ToolCallId,
     boundary_decoder,
-    boundary_encoder,
 )
 from agent_comms.native_tools import FilePatchTool
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
@@ -202,11 +201,6 @@ class ClientId(DeclaredFamily, ABC):
             return BusClientId(FieldCodec.decode(MessageId, value[len(BusClientId.prefix):]))
         return ForeignClientId(value)
 
-    @property
-    @boundary_encoder
-    @abstractmethod
-    def external(self) -> str | None: ...
-
     def completed(self, item: UserItem, turn_id: NativeTurnId,
                   events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
         return CompletedItem(turn_id, item.id, events)
@@ -214,9 +208,7 @@ class ClientId(DeclaredFamily, ABC):
 
 @dataclass(frozen=True)
 class NoClientId(ClientId):
-    @property
-    def external(self) -> None:
-        return None
+    pass
 
 
 @dataclass(frozen=True)
@@ -480,7 +472,6 @@ class UserItem(Item):
     content: list[Declared[UserInput]]
     clientId: Annotated[
         ClientId, ValidateAs(str | None, ClientId.decode),
-        PlainSerializer(lambda identity: identity.external),
     ] = Field(default_factory=NoClientId)
 
     @property

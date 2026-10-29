@@ -18,7 +18,6 @@ from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
 from .field_codec import (
     FieldCodec,
     InputId,
@@ -65,8 +64,7 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
     def delivered(self, connection: Connection, turn: ExternalTurn,
                   references: tuple[MessageReference, ...]) -> None:
-        raise RelationViolationError(
-            f"Stopped source turn {turn.turn_id} cannot accept opening references {references!r}")
+        """Context cannot reopen a retired turn's input window."""
 
     def answering(self) -> ReplyWindow:
         return self
@@ -92,10 +90,6 @@ class ReplyWindow(DeclaredFamily, affix="Replies"):
 
 class ActiveReplies(ReplyWindow, declared_name=None):
     """Only active windows receive context or transition on turn retirement."""
-
-    def delivered(self, connection: Connection, turn: ExternalTurn,
-                  references: tuple[MessageReference, ...]) -> None:
-        """Later context is observed, but cannot reopen the answer's input window."""
 
     def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
         return turn.opening_references(connection)
@@ -125,7 +119,7 @@ class AnsweringReplies(ActiveReplies):
 
 @dataclass(frozen=True)
 class StoppedReplies(ReplyWindow):
-    """A retired window inherits refusal and cannot be reopened by output."""
+    """A retired window cannot be reopened by input or output."""
 
 
 class FinishedReplies(StoppedReplies):

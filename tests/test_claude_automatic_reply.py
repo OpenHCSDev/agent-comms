@@ -21,8 +21,7 @@ from agent_comms.channel_targets import ThreadTarget
 from agent_comms.repo import Checkout
 from agent_comms.turn_digests import LastTurns
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.errors import RelationViolationError
-from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, FinishedTurn, RuntimeUpdate, ThreadOutput
+from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
 from transcript_record_fixture import transcript_record
 from test_monitor_delivery import attached_monitor, bridge, decoded_record, notification
@@ -59,6 +58,15 @@ async def confirm_messages(
             delivered, = await bridge.attempts(message.message_id)
             assert delivered.outcome is DeliveredOutcome
     return tuple(observations)
+
+
+async def replay_records(
+    bridge: ClaudeBridge, output: ThreadOutput, records: tuple[ClaudeRecord, ...],
+) -> None:
+    """A reader restart replays ordered history with a fresh parser, not a rewound live session."""
+    session = ClaudeSession()
+    for record in records:
+        output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
 
 
 def replies_after(bridge: ClaudeBridge, sequence: int) -> tuple[tuple[str, str], ...]:
@@ -105,8 +113,10 @@ async def test_only_opening_deliveries_receive_the_turns_final(
     finish_reply(output, session)
     assert replies_after(bridge, direct.seq) == expected
     # A subscription rereads retained records, not an input or a provider attempt.
-    for record in observations:
-        output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
+    await replay_records(bridge, output, (
+        opening_record('reply-turn'), *prefix, *observations,
+        assistant_record('final', 'Private answer'), TURN_FINISHED,
+    ))
     assert replies_after(bridge, direct.seq) == expected
 
     # Completion opens a fresh window; another sender can open the next turn.
@@ -142,11 +152,11 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
     assert replies_after(bridge, channel.seq)[-1] == ('#comms', 'explicit channel update')
 
 
-def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id: str) -> None:
+def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id: NativeTurnId) -> None:
     unbound = comms.messaging.send('viewer', opening.sender, 'No source identity was supplied').message
     assert unbound.answers == ()
     answered = comms.messaging.send('viewer', opening.sender, 'The opening question is answered',
-                                   source_turn=NamedSourceTurn(NativeTurnId(turn_id))).message
+                                   source_turn=NamedSourceTurn(turn_id)).message
     assert answered.answers == (opening.reference,)
     unrelated = comms.messaging.send('viewer', later.sender, 'A separate status update').message
     assert unrelated.answers == ()
@@ -166,7 +176,7 @@ async def test_commander_send_answers_only_the_question_that_opened_its_turn(bri
     output.publish_batch(list(assistant_record('commander-output', 'Investigating').updates(session)))
     later = comms.messaging.send('claude-code', 'viewer', 'Another question', QuestionKind).message
     await confirm_messages(bridge, output, session, (later,), prompt_id='commander-turn')
-    assert_opening_send(comms, opening, later, 'commander-turn')
+    assert_opening_send(comms, opening, later, session.turn.source.require_id())
     finish_reply(output, session)
     outside = comms.messaging.send('viewer', 'claude-code', 'Outside that completed turn').message
     assert outside.answers == ()
@@ -231,12 +241,17 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
             await receive(dict(type='agentMessage', id='working', text='Investigating'))
             later = comms.messaging.send('claude-code', 'viewer', 'Another question', QuestionKind).message
             await deliver(later)
-            assert_opening_send(comms, opening, later, 'codex-turn')
+            assert_opening_send(comms, opening, later, NativeTurnId('codex-turn'))
     finally:
         await runner.cleanup()
 
 
 TURN_FINISHED = decoded_record(dict(type='system', subtype='turn_duration'))
+TURN_INTERRUPTED = decoded_record(dict(
+    type='user', uuid=transcript_record('interrupted'), timestamp='2026-10-29T01:00:00Z',
+    sessionId='session', promptId='directive-turn',
+    message=dict(content='[Request interrupted by user]'),
+))
 
 
 @pytest.mark.asyncio
@@ -249,11 +264,7 @@ TURN_FINISHED = decoded_record(dict(type='system', subtype='turn_duration'))
     ((), (assistant_record('not-finished', 'An unfinished answer'),), False),
     ((opening_record('directive-turn'), assistant_record('before-directives', 'Already answering something else')),
      (assistant_record('following-directives', 'Finishing that older answer'), TURN_FINISHED), False),
-    ((), (assistant_record('interrupted-output', 'A partial answer'), decoded_record(dict(
-        type='user', uuid=transcript_record('interrupted'), timestamp='2026-10-29T01:00:00Z',
-        sessionId='session', promptId='directive-turn',
-        message=dict(content='[Request interrupted by user]'),
-    ))), False),
+    ((), (assistant_record('interrupted-output', 'A partial answer'), TURN_INTERRUPTED), False),
     ((), (assistant_record('empty-final', ''), TURN_FINISHED), False),
 ), ids=('committed-final', 'thinking-only', 'still-open', 'mid-output', 'interrupted', 'empty-final'))
 async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
@@ -287,9 +298,10 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     expected = set() if cleared else {message.reference for message in originals}
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
     assert comms.bus.bus.revision() == before
-    for record in (opening_record('later-source'), assistant_record('later-final', 'A different turn answers')):
+    for record in (TURN_INTERRUPTED, opening_record('later-source'),
+                   assistant_record('later-final', 'A different turn answers')):
         output.publish_batch(list(record.updates(session)))
-    output.publish_batch([FinishedTurn(NativeTurnId('later-source'))])
+    finish_reply(output, session)
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
     assert comms.bus.bus.unanswered_references(
         tuple(message.seq for message in originals), frozenset({'viewer'})) == tuple(
@@ -302,35 +314,53 @@ async def test_retirement_visits_all_live_windows_not_the_newest_row(
     bridge: ClaudeBridge, ending: RuntimeUpdate,
 ) -> None:
     output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
-    session = ClaudeSession()
+    turns = []
     for prompt_id in ('older-open', 'newer-open'):
+        session = ClaudeSession()
         question = bridge.comms.messaging.send('peer', 'viewer', prompt_id, QuestionKind).message
         await confirm_messages(bridge, output, session, (question,), prompt_id=prompt_id)
-        assert output.transcript.opening_for(NativeTurnId(prompt_id)) == (question.reference,)
+        turn_id = session.turn.source.require_id()
+        turns.append(turn_id)
+        assert output.transcript.opening_for(turn_id) == (question.reference,)
     output.publish_batch([ending])
-    assert output.transcript.opening_for(NativeTurnId('older-open')) == ()
-    assert output.transcript.opening_for(NativeTurnId('newer-open')) == ()
+    assert all(output.transcript.opening_for(turn_id) == () for turn_id in turns)
 
 
 @pytest.mark.asyncio
-async def test_same_prompt_id_wake_after_retirement_refuses_instead_of_dropping(
-    bridge: ClaudeBridge,
+@pytest.mark.parametrize('retirement', (TURN_FINISHED, TURN_INTERRUPTED), ids=('finished', 'interrupted'))
+async def test_same_prompt_id_wake_after_retirement_opens_a_new_turn(
+    bridge: ClaudeBridge, retirement: ClaudeRecord,
 ) -> None:
-    output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
+    comms = bridge.comms
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
-    first = bridge.comms.messaging.send('peer', 'viewer', 'First source turn', QuestionKind).message
+    first = comms.messaging.send('peer', 'viewer', 'First source turn', QuestionKind).message
     await confirm_messages(bridge, output, session, (first,), prompt_id='reused-prompt')
+    first_id = session.turn.source.require_id()
+    assert first_id == NativeTurnId(transcript_record(str(first.seq)))
+    output.publish_batch(list(retirement.updates(session)))
+    later = comms.messaging.send('peer', 'viewer', 'New wake with reused prompt', QuestionKind).message
+    await confirm_messages(bridge, output, session, (later,), prompt_id='reused-prompt')
+    later_id = session.turn.source.require_id()
+    assert later_id == NativeTurnId(transcript_record(str(later.seq)))
+    assert later_id != first_id
+    assert output.transcript.opening_for(first_id) == ()
+    assert output.transcript.opening_for(later_id) == (later.reference,)
+    output.publish_batch(list(assistant_record('reused-final', 'Answer to the new wake').updates(session)))
     finish_reply(output, session)
-    later = bridge.comms.messaging.send('peer', 'viewer', 'New wake with reused prompt', QuestionKind).message
-    with pytest.raises(RelationViolationError, match='reused-prompt'):
-        await confirm_messages(bridge, output, session, (later,), prompt_id='reused-prompt')
-    assert output.transcript.opening_for(NativeTurnId('reused-prompt')) == ()
-    assert bridge.comms.bus.bus.unanswered_references((later.seq,), frozenset({'viewer'})) == (later.reference,)
+    final, = (message for message in comms.bus.bus.message_history()
+              if message.sender == 'viewer' and message.seq > later.seq)
+    assert final.answers == (later.reference,)
+    assert replies_after(bridge, later.seq) == (('peer', 'Answer to the new wake'),)
+    assert comms.bus.bus.unanswered_references(
+        (first.seq, later.seq), frozenset({'viewer'})) == (first.reference,)
+    finish_reply(output, session)
+    assert replies_after(bridge, later.seq) == (('peer', 'Answer to the new wake'),)
 
 
-def assert_retained_final(output: ThreadOutput, turn_id: str, text: str) -> None:
+def assert_retained_final(output: ThreadOutput, turn_id: NativeTurnId, text: str) -> None:
     turn, = output.transcript.turns(LastTurns(count=1))
-    assert turn.turn_id == NativeTurnId(turn_id)
+    assert turn.turn_id == turn_id
     assert tuple(part for event in turn.events for part in event.assistant_parts()) == (text,)
 
 
@@ -348,19 +378,21 @@ async def test_original_kind_owns_automatic_answer_without_suppressing_the_turn(
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     observations = await confirm_messages(bridge, output, session, (original,), prompt_id='kind-turn')
-    assert output.transcript.opening_for(NativeTurnId('kind-turn')) == (original.reference,)
+    turn_id = session.turn.source.require_id()
+    assert output.transcript.opening_for(turn_id) == (original.reference,)
     output.publish_batch(list(assistant_record('kind-final', 'Holding').updates(session)))
     assert replies_after(bridge, original.seq) == ()
     finish_reply(output, session)
     expected = tuple((target, 'Holding') for target in targets)
     assert replies_after(bridge, original.seq) == expected
-    assert_retained_final(output, 'kind-turn', 'Holding')
+    assert_retained_final(output, turn_id, 'Holding')
     sent = tuple(message for message in comms.bus.bus.message_history()
                  if message.sender == 'viewer' and message.seq > original.seq)
     assert tuple(message.answers for message in sent) == tuple((original.reference,) for _ in targets)
     finish_reply(output, session)
-    for record in observations:
-        output.publish_batch([await update.observed(bridge) for update in record.updates(session)])
+    await replay_records(bridge, output, (
+        *observations, assistant_record('kind-final', 'Holding'), TURN_FINISHED,
+    ))
     assert replies_after(bridge, original.seq) == expected
 
 
@@ -373,11 +405,12 @@ async def test_human_info_keeps_its_direct_answer(bridge: ClaudeBridge) -> None:
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (original,), prompt_id='human-turn')
-    assert output.transcript.opening_for(NativeTurnId('human-turn')) == (original.reference,)
+    turn_id = session.turn.source.require_id()
+    assert output.transcript.opening_for(turn_id) == (original.reference,)
     output.publish_batch(list(assistant_record('human-final', 'Human answer').updates(session)))
     finish_reply(output, session)
     assert replies_after(bridge, original.seq) == ((original.sender, 'Human answer'),)
-    assert_retained_final(output, 'human-turn', 'Human answer')
+    assert_retained_final(output, turn_id, 'Human answer')
 
 
 @pytest.mark.asyncio
@@ -388,11 +421,12 @@ async def test_notice_question_is_confirmed_without_opening_a_reply(bridge: Clau
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (original,), prompt_id='notice-turn')
-    assert output.transcript.opening_for(NativeTurnId('notice-turn')) == ()
+    turn_id = session.turn.source.require_id()
+    assert output.transcript.opening_for(turn_id) == ()
     output.publish_batch(list(assistant_record('notice-final', 'Holding').updates(session)))
     finish_reply(output, session)
     assert replies_after(bridge, original.seq) == ()
-    assert_retained_final(output, 'notice-turn', 'Holding')
+    assert_retained_final(output, turn_id, 'Holding')
 
 
 @pytest.mark.asyncio
@@ -406,7 +440,8 @@ async def test_mixed_info_and_question_answer_only_the_asked_sender(
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (information, question), prompt_id='mixed-turn')
-    assert output.transcript.opening_for(NativeTurnId('mixed-turn')) == (
+    turn_id = session.turn.source.require_id()
+    assert output.transcript.opening_for(turn_id) == (
         information.reference, question.reference)
     output.publish_batch(list(assistant_record('mixed-final', 'One asked answer').updates(session)))
     finish_reply(output, session)
@@ -414,7 +449,7 @@ async def test_mixed_info_and_question_answer_only_the_asked_sender(
     final, = (message for message in comms.bus.bus.message_history()
               if message.sender == 'viewer' and message.seq > question.seq)
     assert final.answers == (question.reference,)
-    assert_retained_final(output, 'mixed-turn', 'One asked answer')
+    assert_retained_final(output, turn_id, 'One asked answer')
 
 
 @pytest.mark.asyncio
@@ -424,17 +459,18 @@ async def test_explicit_answers_and_named_source_sends_can_still_answer_info(bri
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (information,), prompt_id='explicit-turn')
+    turn_id = session.turn.source.require_id()
     explicit = comms.messaging.send('viewer', 'claude-code', 'Explicit acknowledgement',
                                     answers=(information.reference,)).message
     assert explicit.answers == (information.reference,)
     inferred = comms.messaging.send('viewer', 'claude-code', 'Explicit source acknowledgement',
-                                    source_turn=NamedSourceTurn(NativeTurnId('explicit-turn'))).message
+                                    source_turn=NamedSourceTurn(turn_id)).message
     assert inferred.answers == (information.reference,)
-    assert output.transcript.opening_for(NativeTurnId('explicit-turn')) == (information.reference,)
+    assert output.transcript.opening_for(turn_id) == (information.reference,)
     output.publish_batch(list(assistant_record('explicit-final', 'Holding').updates(session)))
     finish_reply(output, session)
     assert replies_after(bridge, inferred.seq) == ()
-    assert_retained_final(output, 'explicit-turn', 'Holding')
+    assert_retained_final(output, turn_id, 'Holding')
 
 
 @pytest.mark.asyncio
@@ -446,13 +482,14 @@ async def test_two_real_bridges_stop_after_the_question_receives_one_info_final(
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
     await confirm_messages(bridge, output, session, (question,), prompt_id='asked-turn')
-    assert output.transcript.opening_for(NativeTurnId('asked-turn')) == (question.reference,)
+    turn_id = session.turn.source.require_id()
+    assert output.transcript.opening_for(turn_id) == (question.reference,)
     output.publish_batch(list(assistant_record('asked-final', 'The requested answer').updates(session)))
     finish_reply(output, session)
     final, = (message for message in comms.bus.bus.message_history()
               if message.sender == 'viewer' and message.seq > question.seq)
     assert (final.target, final.type, final.answers) == ('claude-code', InfoKind, (question.reference,))
-    assert_retained_final(output, 'asked-turn', 'The requested answer')
+    assert_retained_final(output, turn_id, 'The requested answer')
 
     state = tmp_path / 'answer-recipient-bridge'
     binding = Binding(root=str(comms.root), owner=comms.registry.require('claude-code').incarnation,
@@ -465,14 +502,15 @@ async def test_two_real_bridges_stop_after_the_question_receives_one_info_final(
         recipient_session = ClaudeSession()
         observations = await confirm_messages(recipient, recipient_output, recipient_session,
                                               (final,), prompt_id='info-turn')
-        assert recipient_output.transcript.opening_for(NativeTurnId('info-turn')) == (final.reference,)
+        recipient_turn_id = recipient_session.turn.source.require_id()
+        assert recipient_output.transcript.opening_for(recipient_turn_id) == (final.reference,)
         recipient_output.publish_batch(list(assistant_record('info-final', 'Holding').updates(recipient_session)))
         finish_reply(recipient_output, recipient_session)
         assert replies_after(recipient, final.seq) == ()
         assert comms.bus.bus.revision() == final.seq
-        assert_retained_final(recipient_output, 'info-turn', 'Holding')
+        assert_retained_final(recipient_output, recipient_turn_id, 'Holding')
         finish_reply(recipient_output, recipient_session)
-        for record in observations:
-            recipient_output.publish_batch([await update.observed(recipient)
-                                            for update in record.updates(recipient_session)])
+        await replay_records(recipient, recipient_output, (
+            *observations, assistant_record('info-final', 'Holding'), TURN_FINISHED,
+        ))
         assert comms.bus.bus.revision() == final.seq

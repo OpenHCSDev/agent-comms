@@ -51,6 +51,7 @@ from agent_comms.runtime_updates import (
     StatusUpdate,
     Summarized,
     ToolDraft,
+    TurnEnded,
     TurnStarted,
 )
 from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
@@ -256,6 +257,10 @@ class ClaudeToolDraft(ToolDraft):
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
 
+    def opened(self, record: TimedRecord) -> ClaudeTurn:
+        """Further prompt records belong to the turn already running."""
+        return self
+
     @property
     def source(self) -> SourceTurn:
         return NoSourceTurn()
@@ -274,6 +279,9 @@ class ClaudeTurn(ABC):
 
 
 class UnknownTurn(ClaudeTurn):
+    def opened(self, record: TimedRecord) -> ClaudeTurn:
+        return KnownTurn(NativeTurnId(record.uuid))
+
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
@@ -363,6 +371,10 @@ class ClaudeSession:
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
+
+    def retired(self, ending: TurnEnded) -> tuple[RuntimeUpdate, ...]:
+        self.turn = UnknownTurn()
+        return (ending,)
 
 
 class TimedRecord(TimestampedWire):
@@ -640,7 +652,7 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
-            return (AllTurnsCancelled(),)
+            return session.retired(AllTurnsCancelled())
         return record.origin.prompt(record, self.text, session)
 
 
@@ -784,12 +796,12 @@ class UserMessage(ContentBlocks):
 
 
 class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
-    """Every prompt shape opens its own source turn at the wire boundary."""
+    """The first prompt after retirement owns the turn; promptId may be reused."""
 
     promptId: NativeTurnId
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(self.promptId)
+        session.turn = session.turn.opened(self)
         return self.opened_updates(session)
 
     @abstractmethod
@@ -851,7 +863,7 @@ class BridgeStatus(SystemEvent, declared_name='bridge_status'):
 class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (AllTurnsEnded(),)
+        return session.retired(AllTurnsEnded())
 
 
 class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'):

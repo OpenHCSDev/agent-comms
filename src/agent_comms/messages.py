@@ -504,7 +504,7 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
     @classmethod
     def allows_automatic_reply(cls, message: Message) -> bool:
         """Human inputs need a reply even when their committed kind is informational."""
-        return bool(message.sender_role.human(message))
+        return message.sender_role.allows_automatic_reply()
 
 
 class SendableMessageKind(MessageKind, declared_name=None):
