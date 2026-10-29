@@ -244,9 +244,7 @@ class GoalMentionDiagnostic:
 class RelationshipEntry:
     target: str
     kind: str
-    person: presentation.ThreadView | presentation.NoThreadView = field(
-        default_factory=presentation.NoThreadView,
-    )
+    person: presentation.ThreadView | presentation.NoThreadView
     sequence: int = 0
     timestamp: float = 0
     detail: str = ""
