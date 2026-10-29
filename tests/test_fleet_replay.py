@@ -22,7 +22,7 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_commander
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
@@ -706,7 +706,7 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningUnit for rule in observed.rules)
-    hud = CommanderHud.of(built.comms, Fleet.commander, observed.frame, observed.states)
+    hud = current_hud(built.comms, Fleet.commander, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
 

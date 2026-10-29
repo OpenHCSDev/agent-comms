@@ -26,10 +26,9 @@ from agent_comms.disclosure_text import (
 )
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
-    DisclosureIdentity, HudExclude, MalformedRecord, OrderId, PublicationExclude, WireTransient, projected,
+    DisclosureIdentity, HudExclude, OrderId, PublicationExclude, WireTransient, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.order_story import OrderStory
@@ -41,7 +40,7 @@ from agent_comms.tool_result import ToolResult
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead
 from agent_comms.ui_model.unit_state import ExpandedHudGroup, HudGroup, UnitClock, UnitState, UrgentGroup
 from agent_comms.task_attachments.commander_pings import (
-    AlarmGroup, AlarmSection, CommanderUpdate, Ping,
+    AlarmGroup, AlarmSection, CommanderDelivery, CommanderUpdate, Ping,
 )
 from agent_comms_hooks.board import BoardEntry
 
@@ -303,7 +302,8 @@ class CommanderHud(ToolResult):
 
     @classmethod
     def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
-           states: tuple[UnitState, ...]) -> CommanderHud:
+           states: tuple[UnitState, ...], *, delivery: CommanderDelivery,
+           usage: CodexUsage) -> CommanderHud:
         """Cards follow ``states``, already in the UnitState family's declared order."""
         snapshot = comms.registry.snapshot()
         owner = snapshot.require(commander).incarnation.require_recorded()
@@ -344,12 +344,9 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        packets = CommanderUpdate.latest(comms, owner)
-        history = CommanderHistory.read(comms, CommanderService.actors(snapshot, commander))
-        opened = tuple(ping for packet in packets for ping in packet.open_pings(history))
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, CodexUsage.read(), packets, open_pings=opened,
+                   forks, usage, (delivery.packet,), open_pings=delivery.open_pings,
                    heartbeat=ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner))
 
     @property
@@ -357,10 +354,11 @@ class CommanderHud(ToolResult):
         """The one action-filtered set captured from Ping.on_board for this publication."""
         return tuple(ping.board_entry() for ping in self.open_pings)
 
-    @property
+    @cached_property
     def alarms(self) -> tuple[AlarmSection, ...]:
         return AlarmGroup.sections(self.packets, self.open_pings)
 
+    @cached_property
     def groups(self) -> tuple[HudSection, ...]:
         finished = tuple(phase.phase for phase in self.phases if phase.finished)
         folded = tuple(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
@@ -378,14 +376,14 @@ class CommanderHud(ToolResult):
     def status_strip(self, now: float) -> str:
         return "\n".join(self.status_table(now).labelled_lines())
 
-    @property
+    @cached_property
     def display_facts(self) -> HudDisplayFacts:
         """Compare declared displayed cells, not excluded tool clocks or paint-time ages."""
         alarms = self.alarms
         return HudDisplayFacts(
             self.commander, self.status_table(0).facts,
             tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables))
-                  for section in self.groups()),
+                  for section in self.groups),
             tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables(0)))
                   for section in alarms),
             alarms,  # Original ping equality retains hidden overflow membership, not paint-time age/text.
@@ -408,7 +406,7 @@ class CommanderHud(ToolResult):
     def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
         """The heartbeat has no viewport; native readers own their concrete geometry."""
         result = list(self.status_strip(now).splitlines())
-        for section in self.groups():
+        for section in self.groups:
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
@@ -429,8 +427,8 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     """The newest CommanderHud of each beating commander, for views that only show it.
 
     One writer, the heartbeat, replaces every commander's file each beat from the same
-    CommanderHud the heartbeat reads, and keeps no history. A previous frame is only a
-    quiet-publication baseline: an older shape is replaced, never treated as current evidence.
+    CommanderHud the heartbeat reads, and keeps no history. It is a current view, never
+    proof that a packet was successfully published.
     """
 
     path: Path
@@ -443,14 +441,6 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
 
     def empty(self) -> CommanderHud:
         raise ToolRefusedError(f"Tristan frame missing: {self.path}")
-
-    def changed(self, hud: CommanderHud) -> bool:
-        """Only the disposable frame is compared; a prior schema cannot block its replacement."""
-        try:
-            previous = self.read()
-        except (MalformedRecord, ToolRefusedError):
-            return True
-        return previous.display_facts != hud.display_facts
 
     @classmethod
     def current(cls, comms: Comms, commander: str) -> CommanderHud:

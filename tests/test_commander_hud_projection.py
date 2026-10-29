@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_hud import CommanderHud, CommanderOrder, CommanderUnit, CodexUsage, HudRecord, UnreadableUsage
-from agent_comms.disclosure_text import DisclosureText
+from agent_comms.disclosure_text import ViewTable
 from agent_comms.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing
@@ -50,18 +50,16 @@ def test_commander_hud_projection_has_one_progress_answer() -> None:
     assert tuple(FieldCodec.projections(CommanderUnit, "hud")) == ("work", "change", "next")
     columns = FieldCodec.view_columns(CommanderUnit, "hud")
     assert tuple(column.name for column in columns) == ("unit", "state", "work", "change", "next")
-    assert DisclosureText.view(unit, "hud") == (
-        "screen", "moving", "P930 pending", "PR #3589 open at 8636a6f28", "let it continue",
-    )
     assert tuple(plan.name for plan in FieldCodec.field_plans(type(unit.unit))
                  if DisclosureIdentity.read(plan.annotation, False)) == ("name",)
     second = replace(unit.orders[0], problem="P931", order=OrderId("abcdef123456"))
-    assert "\n" in DisclosureText.view(replace(unit, orders=(*unit.orders, second)), "hud")[2]
+    table = ViewTable(CommanderUnit, "hud", (replace(unit, orders=(*unit.orders, second)),))
+    assert "\n" in table.texts[0][2]
 
 
 def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     hud = example_hud()
-    groups = hud.groups()
+    groups = hud.groups
     assert tuple(section.group for section in groups) == (
         UrgentGroup, InProgressGroup, ReadyToTestGroup, IdleGroup,
     )

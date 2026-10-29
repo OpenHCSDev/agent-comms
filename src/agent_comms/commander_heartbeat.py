@@ -5,12 +5,14 @@ from __future__ import annotations
 import time
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.commander_hud import CommanderFrame, CommanderHud, HudUnavailableGroup
+from agent_comms.commander_hud import CodexUsage, CommanderFrame, CommanderHud, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
-from agent_comms.task_attachments.commander_pings import AlarmGroup, CommanderUpdate, RulePing, UnitPing
+from agent_comms.task_attachments.commander_pings import (
+    AlarmGroup, CommanderUpdate, PublishedFacts, RulePing, UnitPing,
+)
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
@@ -20,7 +22,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
-from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
+from agent_comms.ui_model.unit_state import UnitState
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -110,26 +112,23 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
-                hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states)
-                published[item.thread.incarnation] = hud
+                usage = CodexUsage.read()
                 # Include acknowledgements committed during forge/provider reads and enforcement.
                 actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot(), item.thread.name))
-                for delivery in CommanderUpdate.derive(
+                delivery = CommanderUpdate.derive(
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
                     tuple(rule for rule in item.rules if rule not in rejected), previous,
                     now=now, history=actions,
-                    undisposed=tuple(
-                        ping for packet in previous
-                        for ping in packet.undisposed(actions, now - AwaitingCommander.seconds)),
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
-                ):
-                    hud = replace(hud, packets=(delivery.packet,), open_pings=delivery.open_pings)
-                    published[item.thread.incarnation] = hud
-                    changed = CommanderFrame.at(comms.root, hud.commander).changed(hud)
-                    if delivery.packet.should_publish(changed):
-                        delivery.packet.send(comms, now, hud.hud_text(now))
+                )
+                hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states,
+                                      delivery=delivery, usage=usage)
+                published[item.thread.incarnation] = hud
+                facts = PublishedFacts.of(hud.display_facts)
+                if delivery.packet.should_publish(facts, previous):
+                    delivery.packet.send(comms, now, hud.hud_text(now), publication=facts)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase frames/passes already completed.

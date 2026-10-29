@@ -342,10 +342,10 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
-    assert not subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    assert not CommanderHistory.read(comms, frozenset()).action_at(subject).since(since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert owed() == []
-    assert subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    assert CommanderHistory.read(comms, frozenset()).action_at(subject).since(since)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
 

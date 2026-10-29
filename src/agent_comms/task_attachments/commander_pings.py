@@ -78,7 +78,7 @@ class Ping(DeclaredFamily, affix="Ping"):
     def acted(self, history: CommanderHistory) -> bool:
         """Whether a subject has a recorded action since this line began."""
         began = self.since.recorded_at("A line")
-        return any(subject.disposed(history, began) for subject in self.subjects)
+        return any(history.action_at(subject).since(began) for subject in self.subjects)
 
     def undisposed(self, history: CommanderHistory, cut: float) -> bool:
         """Waiting on the commander, and not acted on since it began. Only such a line is
@@ -192,11 +192,30 @@ class CommanderDelivery:
     open_pings: tuple[Ping, ...]
 
 
+class PublicationFacts(DeclaredFamily, affix="Facts"):
+    """The display evidence carried by an actual committed packet."""
+
+
+@dataclass(frozen=True)
+class UnpublishedFacts(PublicationFacts):
+    """Historical and failure packets never claim display data they did not publish."""
+
+
+@dataclass(frozen=True)
+class PublishedFacts(PublicationFacts):
+    digest: TextDigest
+
+    @classmethod
+    def of(cls, facts: object) -> Self:
+        return cls(TextDigest(FieldCodec.comparison_digest(facts)))
+
+
 @dataclass(frozen=True)
 class CommanderUpdate(TaskAttachment, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
+    publication: PublicationFacts = field(default_factory=UnpublishedFacts, compare=False, kw_only=True)
     role: ClassVar[MessageRole]
 
     writes: ClassVar[tuple[type[ProducedRow], ...]] = (CommanderUpdatePosition,)
@@ -208,7 +227,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
 
-    def should_publish(self, frame_changed: bool) -> bool:
+    def should_publish(self, facts: PublishedFacts, previous: tuple[CommanderUpdate, ...]) -> bool:
         return True
 
     def new_pings(self) -> tuple[Ping, ...]:
@@ -277,8 +296,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
                previous: tuple[CommanderUpdate, ...], *, now: float,
-               history: CommanderHistory, undisposed: tuple[Ping, ...] = (),
-               not_applied: tuple[str, ...] = ()) -> tuple[CommanderDelivery, ...]:
+               history: CommanderHistory,
+               not_applied: tuple[str, ...] = ()) -> CommanderDelivery:
         """New observations or any open request wake on every beat. Publication never disposes
         of a ping; only a beat without unresolved work may be passive."""
         known = {ping.key: ping for packet in previous for ping in packet.handled}
@@ -294,11 +313,14 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         new = tuple(ping for ping in handled if known.get(ping.key) != ping)
         notice = CommanderNotice(commander, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
+        open_members = frozenset(opened)
         packet = CommanderDecisions(
             commander, handled, new,
-            tuple(ping for ping in undisposed if ping in handled), not_applied=not_applied,
+            tuple(ping for old in previous for ping in old.handled
+                  if ping in open_members and ping.waits_on_commander(now - AwaitingCommander.seconds)),
+            not_applied=not_applied,
         ) if new or opened or not_applied else notice
-        return (CommanderDelivery(packet, opened),)
+        return CommanderDelivery(packet, opened)
 
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
@@ -317,13 +339,14 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
-    def send(self, comms: Comms, now: float, hud: tuple[str, ...]) -> Message:
+    def send(self, comms: Comms, now: float, hud: tuple[str, ...], *,
+             publication: PublicationFacts = UnpublishedFacts()) -> Message:
         from agent_comms.commander_heartbeat import CommanderHeartbeat
 
         message = Message(
             sender=CommanderHeartbeat.sender, target=self.commander.name,
             body=self.body(hud),
-            type=InfoKind, role=self.role, task=self,
+            type=InfoKind, role=self.role, task=replace(self, publication=publication),
         )
         return comms.bus.publisher.publish_ordinary(
             message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
@@ -336,8 +359,8 @@ class CommanderNotice(CommanderUpdate):
 
     role = NoticeRole()
 
-    def should_publish(self, frame_changed: bool) -> bool:
-        return frame_changed
+    def should_publish(self, facts: PublishedFacts, previous: tuple[CommanderUpdate, ...]) -> bool:
+        return not any(packet.publication == facts for packet in previous)
 
     async def wake(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """The current display has no unresolved request that needs model input."""
@@ -365,7 +388,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
     @classmethod
     @abstractmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
-                opened: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
+                opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
 
     @classmethod
     def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
@@ -374,9 +397,11 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
     @classmethod
     def sections(cls, packets: tuple[CommanderUpdate, ...],
                  opened: tuple[Ping, ...]) -> tuple[AlarmSection, ...]:
+        new = tuple(line for packet in packets for ping in packet.new_pings()
+                    for line in ping.alarm_pings())
         return tuple(AlarmSection(group, members)
                      for group in cls.members_with(cls)
-                     for members in (group.members(packets, opened),) if members)
+                     for members in (group.members(packets, opened, new),) if members)
 
 
 class CompactAlarms:
@@ -394,9 +419,8 @@ class NewAlarms(CompactAlarms, AlarmGroup):
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
-                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return tuple(line for packet in packets for ping in packet.new_pings()
-                     for line in ping.alarm_pings())
+                opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        return new
 
 
 class StillOpenAlarms(CompactAlarms, AlarmGroup):
@@ -404,9 +428,9 @@ class StillOpenAlarms(CompactAlarms, AlarmGroup):
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
-                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        new = frozenset(NewAlarms.members(packets, opened))
-        return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new)
+                opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        new_members = frozenset(new)
+        return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new_members)
 
 
 class WatchingAlarms(CompactAlarms, AlarmGroup):
@@ -414,10 +438,10 @@ class WatchingAlarms(CompactAlarms, AlarmGroup):
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
-                opened: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        new = frozenset(NewAlarms.members(packets, opened))
+                opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]:
+        new_members = frozenset(new)
         return tuple(line for packet in packets for ping in packet.handled
-                     if not ping.commander_disposes for line in ping.alarm_pings() if line not in new)
+                     if not ping.commander_disposes for line in ping.alarm_pings() if line not in new_members)
 
 
 @dataclass(frozen=True)

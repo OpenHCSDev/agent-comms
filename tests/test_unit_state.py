@@ -14,7 +14,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_commander
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import OrderId, ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -386,8 +386,8 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
             assert worker.reason == str(source_failure.value)
         else:
             assert not isinstance(worker, Unreadable)
-        expected = CommanderHud.of(held_bus, lead.name, observed.frame, cards)
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
+        expected = current_hud(held_bus, lead.name, observed.frame, cards)
         published, = CommanderFrame.read_all(held_bus.root)
         assert published == expected
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)

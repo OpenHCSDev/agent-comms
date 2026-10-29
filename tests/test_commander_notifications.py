@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import pickle
+import sqlite3
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
@@ -16,7 +17,7 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import Comms
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.commander_hud import (
     CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
@@ -83,7 +84,7 @@ def notifications(comms):
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
+    return current_hud(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
 
 
 def assert_status_fields(message, hud):
@@ -420,10 +421,10 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
     ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')),
         open_pings=())
-    urgent = next(section for section in hud.groups() if section.group is UrgentGroup)
+    urgent = next(section for section in hud.groups if section.group is UrgentGroup)
     assert tuple(row.phase for row in urgent.records) == (RecordPlanePhase, ReviewQueuePhase)
     assert urgent.tables[0].record is type(hud.phases[0])
-    folded, = next(section.records for section in hud.groups()
+    folded, = next(section.records for section in hud.groups
                     if section.group is FinishedPlansGroup)
     assert folded.phases == (RetainedStorePhase, OneOrderOwnerPhase)
     assert folded.done == 2
@@ -476,7 +477,7 @@ def test_recreated_watcher_retains_non_disposable_observation_without_nagging(no
     assert not any(state.line() in first.body for state in states)
     hud = lead_hud(comms, states)
     assert_status_fields(first, hud)
-    assert all(section.heading() in first.body for section in hud.groups())
+    assert all(section.heading() in first.body for section in hud.groups)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == (first.task,)
     beat(comms, (failing,), states=state_cards(comms, UnitState))
     _, unchanged = notifications(comms)
@@ -718,6 +719,110 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     changed = replace(hud, packets=(replacement,), open_pings=swapped)
     assert hud.alarm_text(hud.alarms, 1000) == changed.alarm_text(changed.alarms, 1000)
     assert hud.display_facts != changed.display_facts
+
+
+def test_failed_quiet_publication_retries_identical_display_until_committed(notification_bus):
+    """A real SQLite refusal rolls back publication, not the disposable frame write."""
+    from agent_comms.task_attachments.commander_pings import PublishedFacts
+
+    comms = notification_bus
+    first_hud = beat(comms)
+    first, = notifications(comms)
+    assert isinstance(first.task, CommanderNotice)
+    assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
+    comms.registry.register_child("quiet-fork", "lead", CommanderForkExecution, comms.goals)
+    bus = comms.bus.bus
+    with bus.writing() as db:
+        db.execute(
+            f'CREATE TRIGGER refuse_quiet BEFORE INSERT ON "{Message.table.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'quiet publication refused'); END"
+        )
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="quiet publication refused"):
+            beat(comms)
+    finally:
+        with bus.writing() as db:
+            db.execute("DROP TRIGGER refuse_quiet")
+    owner = comms.registry.require("lead").incarnation
+    unsent = CommanderFrame.at(comms.root, owner).read()
+    assert first_hud.display_facts != unsent.display_facts
+    assert CommanderUpdate.latest(comms, owner) == (first.task,)
+    assert len(notifications(comms)) == 1
+
+    retried = beat(comms)
+    assert retried.display_facts == unsent.display_facts
+    _, committed = notifications(comms)
+    assert committed.task.publication == PublishedFacts.of(retried.display_facts)
+    assert committed.reference != first.reference
+    beat(comms)
+    assert tuple(message.reference for message in notifications(comms)) == (
+        first.reference, committed.reference,
+    )
+
+
+def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus, request):
+    from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject, UnitSubject
+    from agent_comms.task_attachments.commander_pings import CommanderDelivery
+    from test_holder_standing_rules import publish
+
+    queries = []
+
+    class CountedUnitSubject(UnitSubject):
+        def action_at(self, history):
+            queries.append(self)
+            return super().action_at(history)  # Real addressed-message evidence, not a policy fake.
+
+    request.addfinalizer(lambda: HeartbeatSubject.__registry__.pop(CountedUnitSubject.declared_name))
+    comms = notification_bus
+    owner = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    now = time.time()
+    action = publish(comms, "lead", "worker", now - 300)
+    subject = CountedUnitSubject(worker)
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(problem=todo.id, holder=worker, order=todo.order.checked().id,
+                         since=RecordedEventTime(now - 600))
+    old = replace(RulePing.capture(rule), subjects=(subject,), since=RecordedEventTime(now - 600))
+    new = replace(old, since=RecordedEventTime(now - 200))
+    packet = CommanderDecisions(owner, (old, new), (), ())
+    history = CommanderHistory.read(comms, frozenset({"lead"}))
+    assert history.action_at(subject) == RecordedEventTime(action.timestamp)
+    assert old.acted(history) and not new.acted(history)
+    opened = packet.open_pings(history)
+    assert opened == (new,) and opened[0].since == new.since
+    waiting = packet.undisposed(history, now)
+    assert tuple(ping.since for ping in waiting) == (new.since,)
+    hud = CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), (),
+                          delivery=CommanderDelivery(packet, opened), usage=CodexUsage.read())
+    assert hud.open_pings is opened
+    assert hud.board == (new.board_entry(),)
+    assert queries == [subject]
+    # A later original action changes a fresh beat, never the already captured evidence.
+    publish(comms, "lead", "worker", now)
+    assert not new.acted(history)
+    assert new.acted(CommanderHistory.read(comms, frozenset({"lead"})))
+    assert queries == [subject, subject]
+
+
+def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.task_attachments.commander_pings import PublishedFacts, UnpublishedFacts
+
+    comms = notification_bus
+    hud = beat(comms)
+    message, = notifications(comms)
+    encoded = FieldCodec.encode(message)
+    # The original retained packet has no evidence for display facts; the default says so.
+    del encoded["task"]["publication"]
+    retained = FieldCodec.decode(Message, encoded)
+    assert retained.message_id == message.message_id
+    assert retained.reference == message.reference
+    assert retained.body == message.body
+    assert retained.task.publication == UnpublishedFacts()
+    facts = PublishedFacts.of(hud.display_facts)
+    assert retained.task.should_publish(facts, (retained.task,))
+    assert not message.task.should_publish(facts, (message.task,))
+    assert FieldCodec.decode(Message, FieldCodec.encode(retained)).message_id == message.message_id
 
 
 def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(notification_bus):

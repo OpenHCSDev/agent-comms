@@ -70,7 +70,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
                    text="IDLE housekeeping", since=RecordedEventTime(now - 600))
     previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
     history = CommanderHistory.read(comms, frozenset({thread.name}))
-    delivery, = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,),
+    delivery = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,),
                                        now=now, history=history)
     update = delivery.packet
     assert update.handled[0].urgent
@@ -80,7 +80,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
         comms.registry.status("paper"),
     )
     assert GoalBlocked.violations(comms, "paper") == ()
-    cleared, = CommanderUpdate.derive(thread.incarnation, (), (), (update,),
+    cleared = CommanderUpdate.derive(thread.incarnation, (), (), (update,),
                                      now=now + 60, history=history)
     assert cleared.packet.handled == ()
 

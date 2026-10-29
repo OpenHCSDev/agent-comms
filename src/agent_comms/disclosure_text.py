@@ -14,21 +14,43 @@ from agent_comms.field_codec import FieldCodec, FieldPlan, ValueDescription, Vie
 
 
 @dataclass(frozen=True)
-class DisclosureText:
+class DisclosureText(ValueDescription["DisclosureText"]):
     value: object
 
     @classmethod
     def of(cls, value: object) -> DisclosureText:
-        return FieldCodec.shape(value).describe(DisclosureShapes)
+        return FieldCodec.describe(value, DisclosureText)
 
     def summary(self) -> str:
         return str(self.value)
 
     @classmethod
-    def view(cls, value: object, view: str) -> tuple[str, ...]:
-        """Read the original values, not their flattened JSON representations."""
-        return tuple(cls.of(column.current(value)).summary()
-                     for column in FieldCodec.view_columns(type(value), view))
+    def scalar(cls, value: object) -> DisclosureText:
+        return DisclosureText(value)
+
+    @classmethod
+    def record(cls, value: object) -> DisclosureText:
+        return RecordText(value)
+
+    @classmethod
+    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
+        return IdentifiedRecordText(value, identity)
+
+    @classmethod
+    def class_value(cls, value: type) -> DisclosureText:
+        return ClassText(value)
+
+    @classmethod
+    def family_value(cls, value: type[DeclaredFamily]) -> DisclosureText:
+        return FamilyText(value)
+
+    @classmethod
+    def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
+        return MappingText(value)
+
+    @classmethod
+    def sequence(cls, value: Sequence[object]) -> DisclosureText:
+        return SequenceText(value)
 
 
 @dataclass(frozen=True)
@@ -250,33 +272,3 @@ class SequenceText(CollectionText):
 class MappingText(CollectionText):
     value: Mapping[Hashable, object]
     noun = "field"
-
-
-class DisclosureShapes(ValueDescription[DisclosureText]):
-    @classmethod
-    def scalar(cls, value: object) -> DisclosureText:
-        return DisclosureText(value)
-
-    @classmethod
-    def record(cls, value: object) -> DisclosureText:
-        return RecordText(value)
-
-    @classmethod
-    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
-        return IdentifiedRecordText(value, identity)
-
-    @classmethod
-    def class_value(cls, value: type) -> DisclosureText:
-        return ClassText(value)
-
-    @classmethod
-    def family_value(cls, value: type[DeclaredFamily]) -> DisclosureText:
-        return FamilyText(value)
-
-    @classmethod
-    def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
-        return MappingText(value)
-
-    @classmethod
-    def sequence(cls, value: Sequence[object]) -> DisclosureText:
-        return SequenceText(value)

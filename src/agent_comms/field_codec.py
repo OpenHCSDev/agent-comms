@@ -16,7 +16,7 @@ from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Seq
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
-from functools import cache, cached_property, lru_cache, partial, reduce, singledispatchmethod
+from functools import cache, cached_property, lru_cache, partial, reduce
 from operator import or_
 from pathlib import Path
 from typing import (
@@ -2290,66 +2290,6 @@ class ValueDescription[Product](ABC):
     def sequence(cls, value: Sequence[object]) -> Product: ...
 
 
-@dataclass(frozen=True)
-class ValueShape(ABC):
-    """A Python value recovered once by the canonical foreign-shape boundary."""
-
-    value: object
-
-    @abstractmethod
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T: ...
-
-
-class ScalarShape(ValueShape):
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.scalar(self.value)
-
-
-class RecordShape(ValueShape):
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.record(self.value)
-
-
-@dataclass(frozen=True)
-class IdentifiedRecordShape(RecordShape):
-    identity: tuple[FieldPlan, ...]
-
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.identified_record(self.value, self.identity)
-
-
-@dataclass(frozen=True)
-class ClassShape(ValueShape):
-    value: type
-
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.class_value(self.value)
-
-
-@dataclass(frozen=True)
-class FamilyShape(ClassShape):
-    value: type[DeclaredFamily]
-
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.family_value(self.value)
-
-
-@dataclass(frozen=True)
-class MappingShape(ValueShape):
-    value: Mapping[Hashable, object]
-
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.mapping(self.value)
-
-
-@dataclass(frozen=True)
-class SequenceShape(ValueShape):
-    value: Sequence[object]
-
-    def describe[T](self, presentation: type[ValueDescription[T]]) -> T:
-        return presentation.sequence(self.value)
-
-
 class Projected(ViewColumn, property):
     """A computed field declared by its owner for a named read-only view."""
 
@@ -2403,41 +2343,25 @@ class FieldCodec(MroDispatch, Sealed):
     the single record codec and declaration-derived schema.
     """
 
-    @singledispatchmethod
     @classmethod
-    def shape(cls, value: object) -> ValueShape:
-        """Recover foreign presentation shape here, never in either renderer."""
+    def describe[T](cls, value: object, presentation: type[ValueDescription[T]]) -> T:
+        """Decode foreign Python shape once, retaining the capability's concrete product type."""
+        if isinstance(value, type):
+            if issubclass(value, DeclaredFamily):
+                return presentation.family_value(value)
+            return presentation.class_value(value)
+        if isinstance(value, (str, bytes)):
+            return presentation.scalar(value)
+        if isinstance(value, Mapping):
+            return presentation.mapping(value)
+        if isinstance(value, Sequence):
+            return presentation.sequence(value)
         if is_dataclass(value):
             identity = tuple(plan for plan in cls.field_plans(type(value))
                              if DisclosureIdentity.read(plan.annotation, False))
-            return IdentifiedRecordShape(value, identity) if identity else RecordShape(value)
-        return ScalarShape(value)
-
-    @shape.register(type)
-    @classmethod
-    def _shape_class(cls, value: type) -> ValueShape:
-        return ClassShape(value)
-
-    @shape.register(FamilyMeta)
-    @classmethod
-    def _shape_family(cls, value: type[DeclaredFamily]) -> ValueShape:
-        return FamilyShape(value)
-
-    @shape.register(Mapping)
-    @classmethod
-    def _shape_mapping(cls, value: Mapping[Hashable, object]) -> ValueShape:
-        return MappingShape(value)
-
-    @shape.register(Sequence)
-    @classmethod
-    def _shape_sequence(cls, value: Sequence[object]) -> ValueShape:
-        return SequenceShape(value)
-
-    @shape.register(str)
-    @shape.register(bytes)
-    @classmethod
-    def _shape_scalar(cls, value: str | bytes) -> ValueShape:
-        return ScalarShape(value)
+            return (presentation.identified_record(value, identity) if identity
+                    else presentation.record(value))
+        return presentation.scalar(value)
 
     @classmethod
     def decode_external[T](
