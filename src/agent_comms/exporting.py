@@ -6,10 +6,13 @@ import hashlib
 import json
 import math
 import os
+import sqlite3
 from abc import abstractmethod
 from collections import deque
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+from contextlib import contextmanager
+from threading import Event
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
@@ -47,6 +50,9 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
     def stored_row(self, message: StoredWireMessage) -> bytes:
         return self.row(message.decode())
 
+    def oversized_rows(self, source: StoredWireHistory, capacity: int) -> int:
+        return sum(len(self.stored_row(message)) > capacity for message in source.rows())
+
     def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
         first = 0
         used = 0
@@ -65,21 +71,26 @@ class SelectableWireExportFormat(WireExportFormat):
 @dataclass(frozen=True)
 class JsonlFormat(SelectableWireExportFormat):
     importable: ClassVar[bool] = True
+    row_prefix: ClassVar[bytes] = b'{"record":"message","message":'
+    row_suffix: ClassVar[bytes] = b'}\n'
 
     def header(self, metadata: Mapping[str, object]) -> bytes:
         return (self.json_record(metadata) + "\n").encode()
 
     def row(self, message: Message) -> bytes:
-        return (self.json_record({
-            "record": "message", "message": Message.from_message(message).to_wire(),
-        }) + "\n").encode()
+        return self.row_prefix + self.json_record(Message.from_message(message).to_wire()).encode() + self.row_suffix
 
     def stored_row(self, message: StoredWireMessage) -> bytes:
-        return ('{"record":"message","message":' + message.wire + '}\n').encode()
+        return self.row_prefix + message.wire.encode() + self.row_suffix
+
+    def stored_size(self) -> str:
+        return f"length(CAST(wire AS BLOB)) + {len(self.row_prefix) + len(self.row_suffix)}"
+
+    def oversized_rows(self, source: StoredWireHistory, capacity: int) -> int:
+        return source.count_where(f"{self.stored_size()} > ?", (capacity,))
 
     def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
-        overhead = len(b'{"record":"message","message":}\n')
-        return source.newest_suffix(f"length(CAST(wire AS BLOB)) + {overhead}", capacity)
+        return source.newest_suffix(self.stored_size(), capacity)
 
 
 @dataclass(frozen=True)
@@ -317,9 +328,11 @@ class MaxBytesLimit(WireExportLimit):
         header_size: int, started_at: float, stats: ExportSelectionStats,
     ) -> Iterable[WireExportRow]:
         stats.source_messages = source.count()
-        first = format.newest_suffix(source, self.value - header_size)
-        return (WireExportRow(message.seq, message.timestamp, format.stored_row(message))
-                for message in source.rows(after=first))
+        capacity = self.value - header_size
+        first = format.newest_suffix(source, capacity)
+        for message in source.rows(after=first):
+            yield WireExportRow(message.seq, message.timestamp, format.stored_row(message))
+        stats.oversized = format.oversized_rows(source, capacity)
 
     def retain(
         self,
@@ -449,18 +462,75 @@ class WireExportRow:
     data: bytes
 
 
+@dataclass(frozen=True)
+class WireExportProgress:
+    bytes_written: int
+    messages_written: int
+
+
+class WireExportCancelled(InterruptedError):
+    """The owner cancelled this export; staging must unwind without publication."""
+
+
+class WireExportObserver:
+    """Stateless default for CLI and retained-context exports."""
+
+    def advanced(self, progress: WireExportProgress) -> None:
+        pass
+
+    def check(self) -> None:
+        pass
+
+    def cancelled(self) -> bool:
+        return False
+
+    @contextmanager
+    def reading(self, source: StoredWireHistory):
+        self.check()
+        source.db.set_progress_handler(self.cancelled, 1000)
+        try:
+            yield
+        except sqlite3.OperationalError:
+            self.check()
+            raise
+        finally:
+            source.db.set_progress_handler(None, 0)
+
+
+@dataclass
+class CancellableWireExport(WireExportObserver):
+    stop_requested: Event = field(default_factory=Event)
+
+    def cancel(self) -> None:
+        self.stop_requested.set()
+
+    def cancelled(self) -> bool:
+        return self.stop_requested.is_set()
+
+    def check(self) -> None:
+        if self.cancelled():
+            raise WireExportCancelled("Wire export cancelled")
+
+
 class _ArtifactWriter:
     """Hashing byte writer over one private temporary file."""
 
-    def __init__(self, output: BinaryIO) -> None:
+    def __init__(self, output: BinaryIO, observer: WireExportObserver) -> None:
         self.output = output
+        self.observer = observer
         self.digest = hashlib.sha256()
         self.size = 0
+        self.messages = 0
 
     def write(self, data: bytes) -> None:
+        self.observer.check()
         self.output.write(data)
         self.digest.update(data)
         self.size += len(data)
+
+    def report(self) -> None:
+        self.output.flush()
+        self.observer.advanced(WireExportProgress(self.size, self.messages))
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
@@ -481,23 +551,27 @@ class WireTranscriptExporter:
         destination: Path,
         *,
         overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
     ) -> WireExportProvenance:
         """Export authored in-memory context through the same atomic stream writer."""
         return self._export(destination, lambda stats, header: self.limit.select(
             self._rows(messages, stats), header, self.boundary.export_started_at, stats),
-            overwrite=overwrite)
+            overwrite=overwrite, observer=observer)
 
     def export_stored(
         self, source: StoredWireHistory, destination: Path, *, overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
     ) -> WireExportProvenance:
         """Select the stored suffix, then write ascending rows without Message construction."""
-        return self._export(destination, lambda stats, header: self.limit.stored_rows(
-            source, self.format, header, self.boundary.export_started_at, stats), overwrite=overwrite)
+        with observer.reading(source):
+            return self._export(destination, lambda stats, header: self.limit.stored_rows(
+                source, self.format, header, self.boundary.export_started_at, stats),
+                overwrite=overwrite, observer=observer)
 
     def _export(
         self, destination: Path,
         rows: Callable[[ExportSelectionStats, int], Iterable[WireExportRow]],
-        *, overwrite: bool,
+        *, overwrite: bool, observer: WireExportObserver,
     ) -> WireExportProvenance:
         header = self._header()
         self.limit.validate_header(len(header))
@@ -509,21 +583,28 @@ class WireTranscriptExporter:
 
         artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
-        exported = 0
         first_selected: WireExportRow | None = None
         last_selected: WireExportRow | None = None
         with artifact.staged() as output:
-            writer = _ArtifactWriter(output)
+            writer = _ArtifactWriter(output, observer)
             writer.write(header)
+            writer.report()
+            reported = 0
             for row in rows(stats, len(header)):
                 writer.write(row.data)
-                exported += 1
+                writer.messages += 1
+                if writer.size - reported >= 65536:
+                    writer.report()
+                    reported = writer.size
                 if first_selected is None:
                     first_selected = row
                 last_selected = row
+            writer.report()
+            observer.check()
             bytes_written = writer.size
             output_sha256 = writer.digest.hexdigest()
 
+        exported = writer.messages
         omitted = stats.source_messages - exported
         return WireExportProvenance(
             destination=str(destination),

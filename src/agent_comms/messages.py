@@ -1181,7 +1181,11 @@ class StoredWireHistory:
                 yield StoredWireMessage(*row)
 
     def count(self) -> int:
-        return self.db.execute(f"SELECT count(*) FROM ({self.query})", self.parameters).fetchone()[0]
+        return self.count_where("1")
+
+    def count_where(self, predicate: str, parameters: tuple[object, ...] = ()) -> int:
+        return self.db.execute(f"SELECT count(*) FROM ({self.query}) WHERE {predicate}",
+                               (*self.parameters, *parameters)).fetchone()[0]
 
     def newest_suffix(self, size: str, capacity: int) -> int:
         """SQLite sums encoded byte lengths newest-first; Python retains only a sequence."""
