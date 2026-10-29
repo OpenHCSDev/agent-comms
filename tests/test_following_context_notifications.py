@@ -101,9 +101,9 @@ class FollowingContext:
         files = self.claim.session.files(self.claim.selected.comms.root)
         with closing(sqlite3.connect(files.input_proof)) as db, db:
             original = NativeContextJournal.for_input(
-                db, self.input_event.input_id, self.context_event.request_generation,
+                db, self.input_event.input_id,
+                range(self.context_event.request_generation, self.context_event.request_generation + 1),
             )
-            assert original is not None
             later = replace(original, request_generation=generation,
                             committed_at_ms=original.committed_at_ms + 1,
                             llm_context_digest='b' * 64)

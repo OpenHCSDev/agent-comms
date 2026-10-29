@@ -235,7 +235,7 @@ class PrivateSendClaim(PromptBoundary):
         """Publish corroborated entry while the model is still running.
 
         The context journal is borrowed before coordinator locking, as on the
-        terminal path. Neither the RPC event nor model activity is a receipt.
+        terminal path. Neither the RPC event nor model activity proves context inclusion.
         """
         def acknowledge(store: Coordination) -> None:
             self.verify(store, context, source_reads)

@@ -6,7 +6,7 @@ These controls require the matched producer plus the two-file fc311cd64 boundary
 from dataclasses import replace
 
 from agent_comms.notification_reads import RecordedNotificationRead
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.ui_model.observation import ReadNotifications
 from test_notification_display_viewer import ArchivedReaders, archived_readers  # noqa: F401
 

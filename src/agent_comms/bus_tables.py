@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import batched
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
@@ -204,8 +205,6 @@ class AnsweredSource(messages.BusProjectionTables):
         cls, db: sqlite3.Connection, keys: tuple[tuple[ThreadLookup, MessageReference], ...],
     ) -> tuple[AnsweredSource, ...]:
         """At most one reply per selected (original, frozen author), before body decoding."""
-        from itertools import batched
-
         selected = []
         for batch in batched(tuple(dict.fromkeys(keys)), db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 2):
             values = ",".join("(?,?)" for _ in batch)

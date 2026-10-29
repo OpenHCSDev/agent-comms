@@ -33,7 +33,8 @@ from .message_page import (
 )
 from .messages import CarriesEnvelope, Message
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification, OutcomeViewer, FirstRecipient, RecipientCursor
+from .read_basis import OutcomeViewer, FirstRecipient, RecipientCursor
+from .presentation import MessageNotification
 from .notification_evidence import RecipientSelection
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (

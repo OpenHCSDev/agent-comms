@@ -1,6 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 

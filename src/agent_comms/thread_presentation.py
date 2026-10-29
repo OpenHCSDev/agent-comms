@@ -258,15 +258,14 @@ class ThreadPresentation(ThreadStatusDisplay):
 
     def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
         """Incoming and sent outcomes are views of one captured notification window."""
-        from .notification_assignment import NotificationAssignment
-        from .presentation import MessageNotification, OwnerOutcomes
+        from . import notification_assignment, presentation, read_basis
 
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        viewer = OwnerOutcomes.of(window.read.identity.thread)
-        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
-        projected = MessageNotification.delivery_window(
+        viewer = read_basis.OwnerOutcomes.of(window.read.identity.thread)
+        notification_read = notification_assignment.NotificationAssignment.read(transcripts.root, viewer.selection(sources))
+        projected = presentation.MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, notification_read,
         )
         incoming = tuple(

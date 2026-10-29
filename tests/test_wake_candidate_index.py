@@ -14,9 +14,8 @@ from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message, NoticeRole
-from agent_comms.notification_assignment import (
-    AnsweredResponse, AssignmentActivity, NotificationAssignment, UnansweredResponse,
-)
+from agent_comms.notification_assignment import AssignmentActivity, NotificationAssignment
+from agent_comms.notification_evidence import AnsweredResponse, UnansweredResponse
 from agent_comms.notification_progress import ShownToModelProgress
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.read_ledger import ReadLedger

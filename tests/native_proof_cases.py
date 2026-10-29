@@ -7,9 +7,20 @@ from contextlib import closing
 from collections.abc import Iterable
 from pathlib import Path
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.native_entries import NativeEvidenceRead, NativeInputEvidenceRead
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof, NativeContextRecord
 from agent_comms.native_session_files import NativeSessionFiles
+
+
+def read_context_proof(
+    files: NativeSessionFiles, input_id: InputId, *, session_entry_start: int,
+    generations: range = range(1, 2**53), evidence: NativeEvidenceRead | None = None,
+) -> NativeContextProof:
+    """Keep fixture reads inside the same production byte-reader lifetime."""
+    with NativeInputEvidenceRead.borrow(files.session, evidence) as reader:
+        return reader.context_proof(files, input_id, generations=generations,
+                                    session_entry_start=session_entry_start)
 
 
 def _context_fields(row: dict[str, object]) -> dict[str, object]:

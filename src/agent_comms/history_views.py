@@ -57,6 +57,7 @@ from .messages import Message
 from .messaging import Messaging
 from .page_traversal import LiveCursor
 from .notification_evidence import NotificationWindow, RecipientSelection
+from .read_basis import OutcomeViewer, FirstRecipient, RecipientCursor
 from .presentation import (
     BusPresentation,
     ChannelView,
@@ -65,7 +66,6 @@ from .presentation import (
     InboxRead,
     MessageNotification,
     NoRevision,
-    OutcomeViewer, FirstRecipient, RecipientCursor,
     ReadState,
     ThreadRecord,
     ThreadView,

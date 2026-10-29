@@ -10,18 +10,79 @@ from itertools import batched
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
+from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
+from .message_reference import MessageReference
+from .thread_identity import ThreadIncarnation
+
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
+    from .read_basis import OutcomeViewer
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
     from .coordination_tables.harness_deliveries import HarnessDelivery
-    from .field_codec import ThreadLookup
-    from .message_reference import MessageReference
-    from .notification_assignment import AssignmentActivityEvidence, AssignmentResponse
-    from .notification_progress import DeliveryProgress
-    from .presentation import MessageNotification, WireRevision, OutcomeViewer
-    from .thread_identity import ThreadIncarnation
+    from .notification_assignment import AssignmentActivityEvidence
+    from .notification_progress import AssignmentProgress, DeliveryProgress
+    from .presentation import MessageNotification, WireRevision
+
+
+@dataclass(frozen=True)
+class AssignmentResponse(DeclaredFamily, affix="Response"):
+    def recorded(self, message: Delivered) -> AssignmentResponse:
+        return self
+
+    @classmethod
+    @boundary_decoder
+    def from_columns(
+        cls, seq: object, message_id: object, received_at_ms: object
+    ) -> AssignmentResponse:
+        """SQL NULL is the one foreign fact tested; present values decode as their own types."""
+        columns = (seq, message_id, received_at_ms)
+        if all(column is None for column in columns):
+            return UnansweredResponse()
+        if any(column is None for column in columns):
+            raise MalformedRecord("Published response evidence is incomplete")
+        return AnsweredResponse(
+            MessageReference(FieldCodec.decode(int, seq), FieldCodec.decode(MessageId, message_id)),
+            FieldCodec.decode(int, received_at_ms),
+        )
+
+    @abstractmethod
+    def completed_notification(
+        self, progress: AssignmentProgress, notification: MessageNotification
+    ) -> MessageNotification: ...
+
+    @abstractmethod
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        """The notification with this recorded reply attached; consumption stays its proof's."""
+
+
+class UnansweredResponse(AssignmentResponse):
+    def recorded(self, message: Delivered) -> AssignmentResponse:
+        return AnsweredResponse(
+            message.reference, int(message.timestamp * 1000)
+        )
+
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
+        return progress.consumed_notification(notification)
+
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return notification
+
+
+@dataclass(frozen=True)
+class AnsweredResponse(AssignmentResponse):
+    reference: MessageReference
+    received_at_ms: int
+
+    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
+        return progress.answered_notification(
+            notification, self.reference, self.received_at_ms
+        )
+
+    def answered(self, notification: MessageNotification) -> MessageNotification:
+        return notification.state.answered_notification(notification, self.reference, self.received_at_ms)
 
 
 @dataclass(frozen=True)
@@ -34,8 +95,6 @@ class SourceEvidence:
     responses: Mapping[ThreadLookup, AssignmentResponse] = field(default_factory=lambda: MappingProxyType({}))
 
     def answered(self, recipient: ThreadLookup, notification: MessageNotification) -> MessageNotification:
-        from .notification_assignment import UnansweredResponse
-
         return self.responses.get(recipient, UnansweredResponse()).answered(notification)
 
     def consumed_progress(self, recipient: ThreadLookup,

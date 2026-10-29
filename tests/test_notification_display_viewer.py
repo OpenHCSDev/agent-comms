@@ -13,7 +13,8 @@ from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
-from agent_comms.presentation import AllOutcomes, MessageNotification, OutcomeViewer, OwnerOutcomes
+from agent_comms.read_basis import AllOutcomes, OutcomeViewer, OwnerOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.registration import Registration
 from agent_comms.read_basis import HistoricalDisplay, HistoricalSelection, NamedViewer
 from agent_comms.read_ledger import ReadLedger

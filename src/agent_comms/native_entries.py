@@ -24,7 +24,6 @@ from .native_session_files import BusTranscriptFile, NativeSessionFiles
 from .store_files import AtomicFile
 
 if TYPE_CHECKING:
-    from .native_input_proof import NativeContextProof
     from .importing import ImportedConversation
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -40,7 +39,7 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .importing import ImportedSessionMetadata
-from .native_input_proof import NativeInputLocation
+from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
 from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
@@ -405,6 +404,21 @@ class NativeEvidenceRead:
     def read_input(self, location):
         self.observe()
         return self.tracked(location.input_id)
+
+    def context_proof(
+        self, files: NativeSessionFiles, input_id: InputId, *,
+        generations: range = range(1, 2**53), session_entry_start: int,
+    ) -> NativeContextProof:
+        """Corroborate a journal row against this reader's original acquired bytes."""
+        session_file = files.session.absolute()
+        with self.borrow(session_file, self) as evidence:
+            with NativeContextJournal.open_evidence(files) as db:
+                row = NativeContextJournal.for_input(db, input_id, generations)
+            location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
+                                           session_entry_start=session_entry_start)
+            entry = evidence.read_input(location)
+            return row.corroborate(session_file, evidence.header(), entry,
+                                   session_entry_start=session_entry_start)
 
     def stopped_input(self, input_id: InputId):
         """Read only this input's contiguous branch, ending at the next input.

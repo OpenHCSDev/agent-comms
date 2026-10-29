@@ -19,7 +19,7 @@ from .coordination_tables.executions import CurrentExecutions
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, MessageId, ThreadLookup, boundary_decoder
+from .field_codec import FieldCodec, MalformedRecord, ThreadLookup, boundary_decoder
 from .message_reference import MessageReference
 from .notification_progress import (
     AssignmentProgress,
@@ -27,7 +27,8 @@ from .notification_progress import (
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import NotificationAssignmentRead, NotificationWindow, NotificationSelection
+from .notification_evidence import (AssignmentResponse, NotificationAssignmentRead, NotificationWindow,
+                                    NotificationSelection, UnansweredResponse)
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
@@ -72,64 +73,6 @@ class ShownContextEvidence(AssignmentContextEvidence):
 
     def progress(self, *, pending_at_ms: int, queued: bool) -> AssignmentProgress:
         return ShownToModelProgress(self.committed_at_ms)
-
-
-@dataclass(frozen=True)
-class AssignmentResponse(DeclaredFamily, affix="Response"):
-    def recorded(self, message: Delivered) -> AssignmentResponse:
-        return self
-
-    @classmethod
-    @boundary_decoder
-    def from_columns(
-        cls, seq: object, message_id: object, received_at_ms: object
-    ) -> AssignmentResponse:
-        """SQL NULL is the one foreign fact tested; present values decode as their own types."""
-        columns = (seq, message_id, received_at_ms)
-        if all(column is None for column in columns):
-            return UnansweredResponse()
-        if any(column is None for column in columns):
-            raise MalformedRecord("Published response evidence is incomplete")
-        return AnsweredResponse(
-            MessageReference(FieldCodec.decode(int, seq), FieldCodec.decode(MessageId, message_id)),
-            FieldCodec.decode(int, received_at_ms),
-        )
-
-    @abstractmethod
-    def completed_notification(
-        self, progress: AssignmentProgress, notification: MessageNotification
-    ) -> MessageNotification: ...
-
-    @abstractmethod
-    def answered(self, notification: MessageNotification) -> MessageNotification:
-        """The notification with this recorded reply attached; consumption stays its proof's."""
-
-
-class UnansweredResponse(AssignmentResponse):
-    def recorded(self, message: Delivered) -> AssignmentResponse:
-        return AnsweredResponse(
-            message.reference, int(message.timestamp * 1000)
-        )
-
-    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
-        return progress.consumed_notification(notification)
-
-    def answered(self, notification: MessageNotification) -> MessageNotification:
-        return notification
-
-
-@dataclass(frozen=True)
-class AnsweredResponse(AssignmentResponse):
-    reference: MessageReference
-    received_at_ms: int
-
-    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
-        return progress.answered_notification(
-            notification, self.reference, self.received_at_ms
-        )
-
-    def answered(self, notification: MessageNotification) -> MessageNotification:
-        return notification.state.answered_notification(notification, self.reference, self.received_at_ms)
 
 
 @dataclass(frozen=True)
@@ -289,7 +232,7 @@ class NotificationAssignment(NotificationSource):
     ) -> NotificationAssignmentRead:
         """Probe only selected frozen keys before joining any claim/context/proof.
 
-        The existing (recipient_lookup, wire_seq) unique index admits each row;
+        The existing (recipient_lookup, wire_seq) unique index selects each row;
         message_id corroborates the exact original rather than a current name.
         """
         if len(selection.pages) > NotificationWindow.window_limit:

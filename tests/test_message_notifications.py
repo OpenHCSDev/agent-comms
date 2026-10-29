@@ -1,5 +1,5 @@
 """Read real persisted notification assignments without scheduling a model."""
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.repo import Checkout
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401

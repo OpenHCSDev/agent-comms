@@ -66,9 +66,9 @@ class UnconfirmedOutcome(Outcome):
 
 
 class DeliveredOutcome(FilteredOutcome):
-    """An original harness receipt, not evidence that a model took the body.
+    """An original harness response, not evidence that a model took the body.
 
-    Older generic receipts retain this spelling and their actual monitor proof.
+    Older generic responses retain this spelling and their actual monitor proof.
     A producer name alone cannot upgrade their evidence to model context.
     """
 

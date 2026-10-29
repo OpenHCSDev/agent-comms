@@ -13,9 +13,11 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
-from agent_comms.notification_assignment import AnsweredResponse, NotificationAssignment
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_evidence import AnsweredResponse
+from agent_comms.read_basis import AllOutcomes, AfterRecipient, OwnerOutcomes
 from agent_comms.notification_evidence import RecipientSelection
-from agent_comms.presentation import AllOutcomes, AfterRecipient, MessageNotification, OwnerOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, BinaryIO
 
 from .errors import RelationViolationError
 from .native_input_proof import NativeContextJournal
+from .native_failures import NativePiUnavailable
 
 if TYPE_CHECKING:
     from .native_input_proof import NativeContextProof
@@ -346,9 +347,10 @@ class NativeTranscript(TranscriptSource):
         with self.path.open("rb") as stream:
             header = SessionEntry.read(stream.readline())
         with NativeContextJournal.open_evidence(files) as db:
-            proof = NativeContextJournal.for_input(db, user.input_id)
-            if proof is None:
-                raise MalformedRecord("Native publication has no committed context inclusion")
+            try:
+                proof = NativeContextJournal.for_input(db, user.input_id)
+            except NativePiUnavailable as missing:
+                raise MalformedRecord("Native publication has no committed context inclusion") from missing
             return proof.corroborate(
                 self.path.absolute(), header, user, session_entry_start=session_entry_start,
             )

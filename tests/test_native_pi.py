@@ -22,14 +22,15 @@ from agent_comms.native_pi import (
     NativePiTerminalFailure,
 )
 from agent_comms.native_session_files import NativeSessionFiles
-from agent_comms.native_session_reopen import NativeSessionIdentity
+from agent_comms.native_session_reopen import NativeSessionIdentity, PiSessionId
+from agent_comms.turn_item import FreshNativeId
 from agent_comms.native_startup import NATIVE_STARTUP_POLICY
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.selected_session import SelectedSession
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.tracked_turn import TrackedTurnSession
-from native_proof_cases import read_proof_rows, write_proof_rows
+from native_proof_cases import read_context_proof, read_proof_rows, write_proof_rows
 
 INPUT_ID = InputId('a' * 32)
 DIGEST = 'b' * 64
@@ -63,11 +64,11 @@ def test_read_only_journal_parser_is_not_recovery_authority(tmp_path):
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
-    first = NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
-    assert first == NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
+    first = read_context_proof(files, INPUT_ID, session_entry_start=record.start)
+    assert first == read_context_proof(files, INPUT_ID, session_entry_start=record.start)
     assert (first.session_id, first.session_entry_id, first.request_generation) == ('sid','entry',1)
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(files, 'd'*32, session_entry_start=record.start)
+        read_context_proof(files, InputId('d'*32), session_entry_start=record.start)
 
 
 class JournalDamage(DeclaredFamily, affix='Damage'):
@@ -152,7 +153,7 @@ def test_corrupt_or_redirected_journal_cannot_assert_context(tmp_path, damage):
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
     damage().alter(files)
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
+        read_context_proof(files, INPUT_ID, session_entry_start=record.start)
 
 
 def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_facts(tmp_path):
@@ -163,7 +164,7 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     row = read_proof_rows(files)[0]
     decoded = FieldCodec.decode(NativeContextJournal, row)
     assert FieldCodec.encode(decoded) == row
-    assert decoded.at(session, session_entry_start=record.start) == NativeContextProof.read_evidence(
+    assert decoded.at(session, session_entry_start=record.start) == read_context_proof(
         files, INPUT_ID, session_entry_start=record.start)
     for changed in (
         {**row,'schema':True}, {**row,'schema':1}, {**row,'committedAtMs':0},
@@ -174,7 +175,7 @@ def test_native_journal_declaration_preserves_current_envelope_and_rejects_bad_f
     ):
         with pytest.raises((ValueError, TypeError)):
             FieldCodec.decode(NativeContextJournal, changed)
-    assert NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start) == decoded.at(
+    assert read_context_proof(files, INPUT_ID, session_entry_start=record.start) == decoded.at(
         session, session_entry_start=record.start)
     assert files.input_proof.read_bytes() == original
 
@@ -187,11 +188,11 @@ def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_pat
     user = json.loads(data.splitlines()[1])
     session.write_text(data+json.dumps({**user,'id':'another'})+'\n')
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
+        read_context_proof(files, INPUT_ID, session_entry_start=record.start)
     session.write_text(data)
     session.parent.chmod(0o777)
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
+        read_context_proof(files, INPUT_ID, session_entry_start=record.start)
 
 
 @pytest.mark.parametrize('provider,model', [('', 'model'),('provider',''),('--bad','model')])
@@ -234,7 +235,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
-    context = NativeContextProof(INPUT_ID,'sid','entry',1,DIGEST,1_791_964_800_001,session,
+    context = NativeContextProof(INPUT_ID,PiSessionId('sid'),FreshNativeId('entry'),1,DIGEST,1_791_964_800_001,session,
                                  session_entry_start=record.start)
     failed = NativePiTerminalFailure('SECRET provider response including prompt data', context,
         SelectedModel('provider','model'), ModelRequestFailed('SECRET provider response including prompt data'))
@@ -253,23 +254,23 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
-    recorded = NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start)
+    recorded = read_context_proof(files, INPUT_ID, session_entry_start=record.start)
     first = read_proof_rows(files)[0]
     later = {**first,'requestGeneration':2,'llmContextDigest':'d'*64}
     with sqlite3.connect(files.input_proof) as db:
         FieldCodec.decode(NativeContextJournal,later).insert(db)
-    assert NativeContextProof.read_evidence(files, INPUT_ID, session_entry_start=record.start).request_generation == 2
-    assert NativeContextProof.read_evidence(files, INPUT_ID, request_generation=1, session_entry_start=record.start) == recorded
+    assert read_context_proof(files, INPUT_ID, session_entry_start=record.start).request_generation == 2
+    assert read_context_proof(files, INPUT_ID, generations=range(1, 2), session_entry_start=record.start) == recorded
     with NativeEntry.open_evidence(session) as evidence:
         assert recorded.corroborates_input(INPUT_ID, files=files, evidence=evidence)
         assert not recorded.corroborates_input('e'*32, files=files, evidence=evidence)
-    input_event = InputCommitted(input_id=INPUT_ID,session_id='sid',session_entry_id='entry',session_entry_start=record.start)
+    input_event = InputCommitted(input_id=INPUT_ID,session_id=PiSessionId('sid'),session_entry_id=FreshNativeId('entry'),session_entry_start=record.start)
     context_event = ContextCommitted.from_wire({key:value for key,value in first.items() if key != 'schema'})
     assert _verify_context(files,INPUT_ID,'sid',input_event,context_event) == recorded
     with pytest.raises(NativePiUnavailable):
         _verify_context(files,INPUT_ID,'sid',input_event,replace(context_event,llm_context_digest='d'*64))
     with pytest.raises(NativePiUnavailable):
-        NativeContextProof.read_evidence(files,INPUT_ID,request_generation=3,session_entry_start=record.start)
+        read_context_proof(files,INPUT_ID,generations=range(3, 4),session_entry_start=record.start)
 
 
 def test_native_proof_database_enforces_generation_and_digest_without_scanning(tmp_path):
@@ -283,7 +284,7 @@ def test_native_proof_database_enforces_generation_and_digest_without_scanning(t
                         {**first,'inputId':'d'*32,'requestGeneration':2,'llmContextDigest':'e'*64}):
             with pytest.raises(sqlite3.IntegrityError):
                 FieldCodec.decode(NativeContextJournal,invalid).insert(db)
-    assert NativeContextProof.read_evidence(files,INPUT_ID,request_generation=1,session_entry_start=record.start).request_generation == 1
+    assert read_context_proof(files,INPUT_ID,generations=range(1, 2),session_entry_start=record.start).request_generation == 1
 
 
 def test_proof_observation_rejects_file_replacement(tmp_path):

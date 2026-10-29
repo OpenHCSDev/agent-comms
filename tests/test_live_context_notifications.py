@@ -12,7 +12,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.presentation import AllOutcomes
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.private_send_claim import PrivateSendClaim
 from agent_comms.private_sidecar import native_request_digest
 from agent_comms.selected_triage import AbsentTriageDecisionRecord, DecidedTriageRecord, IgnoreSelectedTriage
@@ -131,8 +131,8 @@ async def test_later_corroborated_request_preserves_first_context_receipt(tmp_pa
         files = claim.session.files(claim.selected.comms.root)
         # Append through the declared journal owner, preserving its original file identity.
         with closing(sqlite3.connect(files.input_proof)) as db, db:
-            first = NativeContextJournal.for_input(db, claim.input_id, context.request_generation)
-            assert first is not None
+            first = NativeContextJournal.for_input(
+                db, claim.input_id, range(context.request_generation, context.request_generation + 1))
             later = replace(first, request_generation=first.request_generation + 1,
                             llm_context_digest='d' * 64, committed_at_ms=first.committed_at_ms + 1)
             later.insert(db)

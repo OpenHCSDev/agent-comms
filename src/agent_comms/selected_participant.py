@@ -38,7 +38,8 @@ from .notification_assignment import NotificationAssignment
 from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
+from .read_basis import OwnerOutcomes
+from .presentation import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread

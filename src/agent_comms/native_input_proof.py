@@ -25,11 +25,11 @@ from .field_codec import (
     PathText,
     Sha256Text,
     WireName,
-    boundary_decoder,
 )
 from .locked_store import SQLiteFile
 from .native_failures import NativePiUnavailable
 from .native_session_reopen import PiSessionId
+from .turn_item import FreshNativeId
 from .private_path import FileIdentity, PrivateFileRole
 from .typed_table import (
     Column,
@@ -57,7 +57,7 @@ class NativeInputCommit:
         Column(primary_key=True),
     ]
     session_id: Annotated[PiSessionId, WireName("sessionId")]
-    session_entry_id: Annotated[str, WireName("sessionEntryId")]
+    session_entry_id: Annotated[FreshNativeId, WireName("sessionEntryId")]
 
     @property
     def input_commit(self) -> NativeInputCommit:
@@ -120,7 +120,7 @@ class NativeContextRecord(NativeInputCommit):
             raise NativePiUnavailable("Native Pi input/context events disagree")
         return record
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         Sha256Text.decode(self.llm_context_digest)
         if not 0 < self.request_generation <= 2**53 - 1:
             raise ValueError("Native context generation is outside its native range")
@@ -165,7 +165,7 @@ class NativeContextJournal(
         """Generate the native writer's SQLite contract from this declaration."""
         table = cls.declared_name
         return {
-            "objects": cls.schema_objects(),
+            "objects": {name: statement for name, statement in cls.schema_objects().items()},
             "columns": [
                 {"name": plan.name, "wire": plan.key} for plan in FieldCodec.field_plans(cls)
             ],
@@ -212,22 +212,22 @@ class NativeContextJournal(
 
     @classmethod
     def for_input(
-        cls, db: sqlite3.Connection, input_id: InputId, generation: int | None = None
-    ) -> NativeContextJournal | None:
-        """The primary key answers one input without scanning lifetime history."""
-        where = "input_id=?"
-        parameters: tuple[InputId | int, ...] = (input_id,)
-        if generation is not None:
-            where += " AND request_generation=?"
-            parameters += (generation,)
-        rows = cls.read(
-            db.execute(
-                f"SELECT {cls._column_list(tuple(cls.column_projection()))} FROM {cls.declared_name} "
-                f"WHERE {where} ORDER BY request_generation DESC LIMIT 1",
-                parameters,
-            )
-        )
-        return next(iter(rows), None)
+        cls, db: sqlite3.Connection, input_id: InputId,
+        generations: range = range(1, 2**53),
+    ) -> NativeContextJournal:
+        """Require the latest input proof in this indexed generation interval."""
+        if generations.step != 1:
+            raise ValueError("Context proof generations require a contiguous interval")
+        rows = cls.read(db.execute(
+            f"SELECT {cls._column_list(tuple(cls.column_projection()))} FROM {cls.declared_name} "
+            "WHERE input_id=? AND request_generation>=? AND request_generation<? "
+            "ORDER BY request_generation DESC LIMIT 1",
+            (input_id, generations.start, generations.stop),
+        ))
+        try:
+            return next(iter(rows))
+        except StopIteration as missing:
+            raise NativePiUnavailable("The input has no assembled-context proof") from missing
 
     def corroborate(
         self, session_file: Path, header: SessionEntry, entry: NativeEntry, *,
@@ -243,7 +243,7 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Annotated[Path, PathText]
 
     def require_continuation(self, context: NativeContextProof) -> None:
-        """Repeated requests may include this input; its first receipt stays immutable.
+        """Repeated requests may include this input; its first proof stays immutable.
 
         A different native entry or conflicting proof of the same request is not
         another observation of that entry. Callers corroborate later generations
@@ -269,29 +269,8 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
         """
         if self.input_id != input_id or files.session != self.session_file:
             return False
-        return self.read_evidence(
+        return evidence.context_proof(
             files, input_id,
-            request_generation=self.request_generation, evidence=evidence,
+            generations=range(self.request_generation, self.request_generation + 1),
             session_entry_start=self.session_entry_start,
         ) == self
-
-    @classmethod
-    @boundary_decoder
-    def read_evidence(
-        cls, files: NativeSessionFiles, input_id: InputId, *, request_generation: int | None = None,
-        evidence: NativeEvidenceRead | None = None,
-        session_entry_start: int,
-    ) -> NativeContextProof:
-        """Corroborate live recorded events; parsed bytes alone grant no authority."""
-        session_file = files.session.absolute()
-        from .native_entries import NativeInputEvidenceRead
-        with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            with NativeContextJournal.open_evidence(files) as db:
-                row = NativeContextJournal.for_input(db, input_id, request_generation)
-            if row is None:
-                raise NativePiUnavailable("The input has no assembled-context proof")
-            location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
-                                           session_entry_start=session_entry_start)
-            entry = evidence.read_input(location)
-            return row.corroborate(session_file, evidence.header(), entry,
-                                   session_entry_start=session_entry_start)

@@ -1,7 +1,9 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
-from agent_comms.presentation import AllOutcomes, MessageNotification
+from agent_comms.notification_evidence import AssignmentResponse, AnsweredResponse, UnansweredResponse
+from agent_comms.read_basis import AllOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
@@ -145,7 +147,6 @@ def test_native_context_commit_is_consumed():
 
 
 def test_response_evidence_rejects_mixed_sql_columns():
-    from agent_comms.notification_assignment import AssignmentResponse
 
     for values in ((1, None, 2), (None, "message-id", 2), (1, "message-id", None)):
         with pytest.raises(ValueError):
@@ -156,7 +157,6 @@ def test_unshown_assignment_resolves_running_turn_as_timed_queue():
     from agent_comms.notification_assignment import (
         AssignmentActivityEvidence,
         NotShownContextEvidence,
-        UnansweredResponse,
     )
     from agent_comms.notification_progress import QueuedProgress, SentProgress
 
@@ -187,10 +187,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     assignment = EngagedAssignment.build(FullWake(), "authored-execution", "sender")
-    from agent_comms.notification_assignment import (
-        AssignmentActivity,
-        UnansweredResponse,
-    )
+    from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.notification_progress import ShownToModelProgress
 
     activity = AssignmentActivity(
@@ -226,11 +223,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     old, _live, _source, messages, root_id = archived_notification
     recipient, = old.bus.bus.delivery(messages[0].seq).recipients
     from agent_comms.message_reference import MessageReference
-    from agent_comms.notification_assignment import (
-        AnsweredResponse,
-        AssignmentActivity,
-        UnansweredResponse,
-    )
+    from agent_comms.notification_assignment import AssignmentActivity
     from agent_comms.activity import ActivityState, ObservedActivity, ReadyDrainReadiness
     from agent_comms.agent_activity import LiveRecipientActivity
     from agent_comms.notification_progress import (

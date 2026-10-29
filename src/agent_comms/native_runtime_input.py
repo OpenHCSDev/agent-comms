@@ -19,6 +19,7 @@ from .coordination_errors import IdentityConflict, PublicationActivationBlocked,
 from .coordination_tables.participants import OwnerGenerations
 from .coordination_tables.responses import ResponseObligation
 from .class_fact import ClassFact
+from .turn_item import FreshNativeId
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
@@ -133,7 +134,8 @@ class NativeRuntimeInput(
         )
 
     @ClassFact
-    def write_once_columns(cls) -> tuple[str, ...]:
+    @staticmethod
+    def write_once_columns(cls: type[NativeRuntimeInput]) -> tuple[str, ...]:
         # The declared context group is immutable, not the later triage verdict.
         return ('sent_owner_claimed_generation', 'session_id', 'session_file', 'verdict',
                 *(plan.name for plan in FieldCodec.field_plans(cls)
@@ -293,7 +295,7 @@ class NativeRuntimeInput(
     ] = field(default_factory=UnrecordedNativeClaim)
     session_id: PiSessionId | NoPiSessionId = NoPiSessionId()
     session_file: str | None = None
-    session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
+    session_entry_id: Annotated[NativeColumn, NativeContext(FreshNativeId), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[
         NativeInputPosition,
         NativeInputLocation.position_column,

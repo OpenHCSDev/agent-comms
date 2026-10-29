@@ -13,7 +13,8 @@ from agent_comms.audience_manifest import FrozenRecipient
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
+from agent_comms.read_basis import AllOutcomes, OwnerOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.read_basis import ConversationCursor, ReadCursor

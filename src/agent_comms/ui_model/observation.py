@@ -59,9 +59,9 @@ from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference
 from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow, RecipientSelection
+from agent_comms.read_basis import AllOutcomes, OutcomeViewer, FirstRecipient, RecipientCursor
 from agent_comms.presentation import (
-    AllOutcomes, CoordinationSnapshot, MessageNotification, NoRevision, OutcomeViewer, ReadState,
-    FirstRecipient, RecipientCursor,
+    CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
     WireRevision,
 )
 from agent_comms.registry_document import RosterVisibility

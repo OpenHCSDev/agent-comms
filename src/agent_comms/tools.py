@@ -57,7 +57,8 @@ from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import AfterRecipient, ChannelView, FirstRecipient, MessageNotification, RecipientCursor
+from .read_basis import AfterRecipient, FirstRecipient, RecipientCursor
+from .presentation import ChannelView, MessageNotification
 from .notification_evidence import RecipientSelection
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer

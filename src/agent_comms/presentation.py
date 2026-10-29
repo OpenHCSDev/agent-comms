@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from bisect import bisect_left, bisect_right
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -36,10 +35,7 @@ from .field_codec import (
     FieldCodec,
     JsonShapeFamily,
     JsonShapeMember,
-    NullMember,
     PresenceExclude,
-    RecordMember,
-    SubclassUnion,
     ThreadLookup,
     WatchPaths,
     WatchViews,
@@ -72,8 +68,8 @@ from .read_basis import (
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import (NotificationAssignmentRead, NotificationReadMark, NotificationWindow,
-                                    NotificationSelection, RecipientSelection)
+from .notification_evidence import NotificationAssignmentRead, NotificationReadMark, NotificationWindow, NotificationSelection, RecipientSelection
+from .read_basis import FirstRecipient, OutcomeViewer, RecipientCursor
 from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -120,118 +116,7 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import DeletedThread, RegistryProvenance
-    from .threads import ThreadProvenance
     from .ui_model.observation import ThreadsObserved
-
-
-class RecipientCursor(SubclassUnion, affix=""):
-    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
-
-    @abstractmethod
-    def positions(self, source: Delivered) -> range: ...
-
-
-@dataclass(frozen=True)
-class FirstRecipient(NullMember, RecipientCursor):
-    def positions(self, source: Delivered) -> range:
-        return range(len(source.recipients))
-
-
-@dataclass(frozen=True)
-class AfterRecipient(RecordMember, RecipientCursor):
-    recipient: FrozenRecipient
-
-    def positions(self, source: Delivered) -> range:
-        start = bisect_right(source.recipients, self.recipient.recipient_lookup,
-                             key=lambda item: item.recipient_lookup)
-        return range(start, len(source.recipients))
-
-
-class OutcomeViewer(ABC):
-    """Who reads a delivery window decides which of its outcomes are shown."""
-
-    @abstractmethod
-    def positions(self, source: Delivered) -> range: ...
-
-    def selection(self, sources: Sequence[Delivered], *, after: RecipientCursor = FirstRecipient(),
-                  limit: int = RecipientSelection.max_limit) -> NotificationSelection:
-        RecipientSelection.require_limit(limit)
-        pages = []
-        for source in sources:
-            eligible, following = self.positions(source), after.positions(source)
-            pages.append(RecipientSelection(
-                source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
-        return NotificationSelection(self, tuple(pages))
-
-    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
-                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
-        """Unscoped/operator and agent readers retain every human paint receipt."""
-        return displayed_to
-
-    @abstractmethod
-    def sees_direct_read(self, source: Delivered) -> bool:
-        pass
-
-    @abstractmethod
-    def sees(self, source: Delivered) -> bool:
-        """Whether this reader may read the message at all."""
-
-
-@dataclass(frozen=True, slots=True)
-class AllOutcomes(OutcomeViewer):
-    """An unscoped reader sees every recipient's outcome and every human read."""
-
-    def positions(self, source: Delivered) -> range:
-        return range(len(source.recipients))
-
-    def sees_direct_read(self, source: Delivered) -> bool:
-        return True
-
-    def sees(self, source: Delivered) -> bool:
-        return True
-
-
-@dataclass(frozen=True, slots=True)
-class DisplayOutcomes(AllOutcomes):
-    """Full operator access, minus only this display's source-matching viewer.
-
-    Incarnation equality owns rename/recreation; the captured bus owns namespace.
-    The live registry cannot establish either fact for an archived display.
-    """
-
-    viewer: ThreadIncarnation
-    bus_identity: RecordedBusIdentity
-
-    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
-                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
-        return tuple(reader for reader in displayed_to
-                     if reader != self.viewer or not self.bus_identity.matches(source))
-
-
-@dataclass(frozen=True, slots=True)
-class OwnerOutcomes(OutcomeViewer):
-    """A sender sees all outcomes; a recipient sees only its original outcome."""
-
-    lookup: ThreadLookup
-
-    @classmethod
-    def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
-        return cls(owner.incarnation.require_recorded().lookup)
-
-    def positions(self, source: Delivered) -> range:
-        if source.sender_lookup == self.lookup:
-            return range(len(source.recipients))
-        position = bisect_left(source.recipients, self.lookup, key=lambda item: item.recipient_lookup)
-        if position < len(source.recipients) and source.recipients[position].recipient_lookup == self.lookup:
-            return range(position, position + 1)
-        return range(0)
-
-    def sees_direct_read(self, source: Delivered) -> bool:
-        return source.sender_lookup == self.lookup
-
-    def sees(self, source: Delivered) -> bool:
-        """The message's sender and its original recipients may read it."""
-        return self.lookup == source.sender_lookup or bool(self.positions(source))
 
 
 @dataclass(frozen=True, slots=True)
