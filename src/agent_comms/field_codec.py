@@ -1025,8 +1025,45 @@ class DecoderPlan(ABC):
         return ()
 
 
+class MemberDraftFactory[Draft](ABC):
+    """An integration constructs drafts; selections own which construction applies."""
+
+    @abstractmethod
+    def unchosen(self, member: UnchosenMember) -> Draft: ...
+
+    @abstractmethod
+    def member(self, member: EditorMember, value: object) -> Draft: ...
+
+
+class MemberSelection(ABC):
+    @property
+    @abstractmethod
+    def declaration(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def label(self) -> str: ...
+
+    @abstractmethod
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft: ...
+
+
 @dataclass(frozen=True)
-class EditorMember(ABC):
+class UnchosenMember(MemberSelection):
+    @property
+    def declaration(self) -> object:
+        return type(self)
+
+    @property
+    def label(self) -> str:
+        return 'Choose a member…'
+
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft:
+        return factory.unchosen(self)
+
+
+@dataclass(frozen=True)
+class EditorMember(MemberSelection):
     """Read-only member metadata; only actual inputs enter a form's ObjectState."""
 
     decoder: DecoderPlan
@@ -1038,6 +1075,9 @@ class EditorMember(ABC):
     @property
     def label(self) -> str:
         return str(self.declaration)
+
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft:
+        return factory.member(self, value)
 
     @property
     @abstractmethod
