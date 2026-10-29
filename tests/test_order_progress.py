@@ -3,8 +3,10 @@ The commander's review timer comes back every window until delivery, and the uni
 
 
 from agent_comms.repo import Checkout
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 import subprocess
 import time
 from dataclasses import replace
@@ -12,8 +14,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderFrame
+from agent_comms.commander_heartbeat import CommanderObservation
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from commander_heartbeat_fixture import ObservedHeartbeat
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
@@ -156,7 +159,6 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
     lead = replace(comms.registry.require('lead'),
                    process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.register(lead)
-    heartbeat = CommanderHeartbeat()
 
     class DeletingRead(ProgressRead):
         def progress(self, held, registry):
@@ -166,24 +168,25 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
             return super().progress(held, registry)
 
     with LaunchRoot.from_path(comms.root).selected():
-        before = CommanderObservation.read(comms, lead)
+        before = CommanderObservation.read(comms, lead, ProgressRead())
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
-        interrupted = CommanderObservation.read(comms, lead, DeletingRead)
-        heartbeat.pass_body(comms, (interrupted,))
-        assert CommanderFrame.read_all(comms.root) == (interrupted.hud,)
+        interrupted = CommanderObservation.read(comms, lead, DeletingRead())
+        asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
+        published, = CommanderFrame.read_all(comms.root)
+        assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
         reader = WorkBranches(checkout)
         with pytest.raises(GitCommandError) as git_failure:
             reader.difference(reader.origin_main)
         for _ in range(2):
-            observed = heartbeat.observe(comms)
-            (frame,) = observed
+            frame = CommanderObservation.read(comms, lead, ProgressRead())
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
             assert broken.reason == str(git_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
-            heartbeat.pass_body(comms, observed)
-            assert CommanderFrame.read_all(comms.root) == (frame.hud,)
+            expected = CommanderHud.of(comms, lead.name, frame.frame, frame.states)
+            asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
+            assert CommanderFrame.read_all(comms.root) == (expected,)
         print(broken.line())
 
 

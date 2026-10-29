@@ -1,5 +1,6 @@
 """Publication rules use a real Git repository, shared frame, stores and forge subprocess."""
 
+import asyncio
 import time
 from contextlib import nullcontext
 from dataclasses import replace
@@ -47,7 +48,7 @@ def test_unscanned_repository_is_pending_not_lost(head_bus, reviewed_source):
     assert {rule.repo for rule in pending} == set(repos)
 
     watch = ClosedPullRequestWatch()
-    watch.watch_pass(lambda: nullcontext(comms))
+    asyncio.run(watch.run(lambda: nullcontext(comms)))
     lost, pending = rules(HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans))
     assert {rule.request.pr for rule in lost} == {7}
     assert source.github not in {rule.repo for rule in pending}
@@ -65,7 +66,7 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
             number, f'closed/{number}', head, updated=stamp, closed_at=stamp,
             base='main', reviewable_times=(stamp,)))
     watch = ClosedPullRequestWatch()
-    watch.watch_pass(lambda: nullcontext(comms))
+    asyncio.run(watch.run(lambda: nullcontext(comms)))
     frame = HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
     rules = {rule.request.pr: rule for rule in
              ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
@@ -116,7 +117,7 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     plans = CommanderHeartbeat()
 
     def capture():
-        watch.watch_pass(lambda: nullcontext(comms))
+        asyncio.run(watch.run(lambda: nullcontext(comms)))
         return HeartbeatFrame.capture(comms, 'lead', ProgressRead(()), plans)
 
     frame = capture()

@@ -315,11 +315,14 @@ async def test_request_log_names_the_route_and_never_its_values(client, store, r
 
 
 @dataclass
-class PublishingWatch(WatchPass[None], declared_name=None):
+class PublishingWatch(WatchPass[None, None], declared_name=None):
     calls: int = 0
     completed: threading.Event = field(default_factory=threading.Event)
 
-    def observe(self, comms: Comms) -> None:
+    def prepare(self, comms: Comms) -> None:
+        pass
+
+    def observe(self, comms: Comms, prepared: None) -> None:
         pass
 
     def pass_body(self, comms: Comms, observed: None) -> None:
@@ -414,9 +417,7 @@ def test_publishing_tool_held_mid_call_refuses_at_once(comms):
     assert comms.bus.bus.revision() == before
 
 
-class FailingWatch(WatchPass[None], declared_name=None):
-    def observe(self, comms: Comms) -> None:
-        pass
+class FailingWatch(PublishingWatch, declared_name=None):
 
     def pass_body(self, comms: Comms, observed: None) -> None:
         raise RuntimeError("A real watch failure")

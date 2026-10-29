@@ -4,8 +4,10 @@
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 import subprocess
 import time
 from dataclasses import dataclass, replace
@@ -22,8 +24,7 @@ from agent_comms.commander_heartbeat import (
     CommanderObservation,
 )
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
-from agent_comms.commander_hud import CommanderHud, CodexUsage, UnreadableUsage
-from agent_comms.commander.vibe_check import OverloadDegradation
+from commander_heartbeat_fixture import ObservedHeartbeat
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -185,9 +186,9 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
-    hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), (),
-                       CodexUsage(UnreadableUsage(reason='not requested')))
-    CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
+    frame = HeartbeatFrame.capture(c, lead.name, ProgressRead())
+    observed = CommanderObservation(lead, frame, rules, ())
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(c)))
 
 
 def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):
@@ -307,8 +308,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         c.goals.todos.apply('P1', ReleaseTodo(
             row.revision, CoreWatcherIncarnation.watcher(), row.held(),
             StrikeReason('The commander closed this order after the heartbeat frame was read.')))
-        c.goals.todos.record_merges(
-            CommanderObservation.read(c, c.registry.require('lead'), ProgressRead).merged)
+        asyncio.run(CommanderHeartbeat().run(lambda: nullcontext(c)))
         assert c.goals.todos.get('P1').holder is None
 
 

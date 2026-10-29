@@ -126,17 +126,25 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
         return cls.due(comms, frame.pulls)
 
+    @staticmethod
+    def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+        return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
+                     if any(repo.github == record.repository for record in installed.commits))
+
+    @classmethod
+    def prepare(cls, comms: Comms) -> None:
+        """Fetching changes Git state, so the heartbeat joins it before observation."""
+        for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
+            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
+
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        runtime_repos = tuple(repo for repo in repos
-                              if any(repo.github == record.repository for record in installed.commits))
+        runtime_repos = cls.repositories(comms, installed)
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
-        for repo in runtime_repos:
-            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
         target = core.git(core.checkout, "rev-parse", "origin/main").strip()
         for repo in runtime_repos:
@@ -615,10 +623,13 @@ class UnownedObservation:
     rule: UnownedWheelSpin
 
 
-class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
-    """Observe released work and its checkouts before entering the bus to assign it."""
+class UnownedOrderWatch(WatchPass[None, tuple[UnownedObservation, ...]]):
+    """Keep dispatch preparation joined; only individually audited readers can be dropped."""
 
-    def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
+    def prepare(self, comms: Comms) -> None:
+        pass
+
+    def observe(self, comms: Comms, prepared: None) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
         observed: list[UnownedObservation] = []
         pulls = PullRequests(available)

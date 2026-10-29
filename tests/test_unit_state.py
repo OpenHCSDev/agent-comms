@@ -1,7 +1,9 @@
 """Unit cards from real records, with unread failures isolated to their unit."""
 
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 import time
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -10,8 +12,9 @@ import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.commander_hud import CommanderFrame
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander_hud import CommanderFrame, CommanderHud
+from commander_heartbeat_fixture import ObservedHeartbeat
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import ToolCallId
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -319,12 +322,13 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
     heartbeat = CommanderHeartbeat()
     with LaunchRoot.from_path(held_bus.root).selected():
-        observed = heartbeat.observe(held_bus)
-        cards = observed[0].states
+        observed = CommanderObservation.read(held_bus, lead, ProgressRead())
+        cards = observed.states
         assert isinstance(cards[0], Unreadable)
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
-        heartbeat.pass_body(held_bus, observed)
-        assert CommanderFrame.read_all(held_bus.root) == (observed[0].hud,)
+        expected = CommanderHud.of(held_bus, lead.name, observed.frame, cards)
+        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
+        assert CommanderFrame.read_all(held_bus.root) == (expected,)
         page = MessagePageRequest(
             DMDisplayScope.capture(
                 heartbeat.sender,

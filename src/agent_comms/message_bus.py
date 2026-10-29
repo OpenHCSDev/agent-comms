@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
+from agent_comms.child_process import AsyncWork
 from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
@@ -56,7 +57,7 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-class Watch(DeclaredFamily, ABC):
+class Watch(AsyncWork, DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -72,20 +73,25 @@ class Watch(DeclaredFamily, ABC):
                error: Exception) -> None:
         """A service may report its failed pass; ordinary watches need no extra action."""
 
-    @abstractmethod
-    def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
-
-
-class WatchPass[Observed](Watch):
-    """The pass owns its observed value; the scheduler only needs Watch.run."""
-
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+        """Whole joined watches implement this; phased watches enter through their run."""
+        raise NotImplementedError(type(self).__name__)
+
+
+class WatchPass[Prepared, Observed](Watch):
+    """One pass joins its effects; only an admitted read capability can drop observation."""
+
+    async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            observed = self.observe(comms)
-            self.pass_body(comms, observed)
+            prepared = await comms.bus.when_open(partial(self.prepare, comms))
+            observed = await self.run_async(partial(self.observe, comms, prepared))
+            await comms.bus.when_open(partial(self.pass_body, comms, observed))
 
     @abstractmethod
-    def observe(self, comms: Comms) -> Observed: ...
+    def prepare(self, comms: Comms) -> Prepared: ...
+
+    @abstractmethod
+    def observe(self, comms: Comms, prepared: Prepared) -> Observed: ...
 
     @abstractmethod
     def pass_body(self, comms: Comms, observed: Observed) -> None: ...

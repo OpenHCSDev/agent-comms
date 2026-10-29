@@ -1,5 +1,6 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
+import asyncio
 import json
 import os
 import pickle
@@ -14,6 +15,7 @@ from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from commander_heartbeat_fixture import ObservedHeartbeat
 from agent_comms.commander_hud import (
     BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
 )
@@ -72,11 +74,12 @@ def lead_hud(comms, states=()):
 
 
 def beat(comms, rules=(), *, states=()):
-    frame = CommanderObservation(
-        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
+    observed = CommanderObservation(
+        comms.registry.require("lead"), HeartbeatFrame.capture(comms, "lead", ProgressRead()),
+        rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
-    CommanderHeartbeat().pass_body(comms, (frame,))
-    return frame.hud
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
+    return CommanderFrame.current(comms, "lead")
 
 
 def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
@@ -121,7 +124,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
 
 
 class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
-    def observe(self, comms):
+    def observe(self, comms, prepared):
         raise RuntimeError("forced heartbeat pass failure")
 
 
@@ -130,7 +133,7 @@ def failed_pass(comms, error):
     watcher's callback runs; the original exception still escapes the pass."""
     heartbeat = BrokenHeartbeat()
     with pytest.raises(RuntimeError) as raised:
-        heartbeat.watch_pass(lambda: nullcontext(comms))
+        asyncio.run(heartbeat.run(lambda: nullcontext(comms)))
     ServicePassStore.at(comms.root).failed(BrokenHeartbeat.__name__, error)
     heartbeat.failed(lambda: nullcontext(comms), error)
     return raised.value
@@ -405,10 +408,11 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing("following-rule", time.time(), "independent source")
-    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms))
+    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
-        CommanderHeartbeat().pass_body(comms, frames)
+        asyncio.run(ObservedHeartbeat(frames).run(lambda: nullcontext(comms)))
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
@@ -416,13 +420,13 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     beat(comms, (failing,))
     assert len(notifications(comms)) == 1
     # A pass that misses a still-registered commander retires nothing but its frame.
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert CommanderFrame.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("lead")
     comms.registry.remove("lead")
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 

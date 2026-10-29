@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-import asyncio
 from abc import abstractmethod
-from collections.abc import Callable, Mapping
-from contextvars import copy_context
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Annotated, ClassVar, NoReturn
 
 from pydantic import JsonValue
 
-from .child_process import DroppableRead, join_retirement
+from .child_process import AsyncWork, ReadWork
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -100,7 +98,7 @@ class ToolCall:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
-    ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
+    AsyncWork, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     @classmethod
     def create_call(
@@ -116,15 +114,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     )
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
-
-    @classmethod
-    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
-        """A bus-changing call retires its work even when its transport goes away."""
-        return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
-
-    @classmethod
-    def cancel_on_shutdown(cls, pending: asyncio.Future) -> None:
-        """An accepted mutation must finish, even if its worker has not started yet."""
 
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
@@ -218,22 +207,12 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool:
+class ReadTool(ReadWork):
     """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
     read_only_hint: ClassVar[bool] = True
-
-    @classmethod
-    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
-        """No bus mutation is abandoned when this reader leaves with the transport."""
-        context = copy_context()
-        return await DroppableRead(lambda: context.run(operation)).answer()
-
-    @classmethod
-    def cancel_on_shutdown(cls, pending: asyncio.Future) -> None:
-        pending.cancel()
 
 
 @dataclass(frozen=True, kw_only=True)

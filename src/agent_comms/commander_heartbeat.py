@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from agent_comms.commander.standing import InstallDue
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
@@ -27,39 +28,37 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class CommanderObservation:
     thread: Thread
-    merged: tuple[Todo, ...]
+    frame: HeartbeatFrame
     rules: tuple[StandingRule, ...]
     states: tuple[UnitState, ...]
-    hud: CommanderHud
 
     @classmethod
     def read(cls, comms: Comms, thread: Thread,
-             reading: type[ProgressRead] = ProgressRead, *,
+             reading: ProgressRead, *,
              plans: PlanReadings = PlanReadings()) -> CommanderObservation:
         """One frame's progress facts come from ``reading``; Core reads the live forge and Git."""
-        frame = HeartbeatFrame.capture(comms, thread.name, reading(), plans)
-        pulls = frame.pulls
-        for repo in comms.registry.snapshot().commander_project.repository_names():
-            pulls.carry_reviews(comms.goals, repo)
+        frame = HeartbeatFrame.capture(comms, thread.name, reading, plans)
         states = UnitState.current(comms, thread.name, frame)
         rules = StandingRule.broken(comms, thread.name, observed=states, frame=frame)
+        return cls(thread, frame, rules, states)
+
+    def merges(self, comms: Comms) -> tuple[Todo, ...]:
+        """Merge checks may fetch, prepare checkouts and run commands; never a read phase."""
         # An unreadable holder's checkout already has its card; its checks cannot run there.
-        unreadable = ({state.unit for state in states}
-                      - {unit for state in states for unit in state.readable_units()})
-        merged = tuple(
+        unreadable = ({state.unit for state in self.states}
+                      - {unit for state in self.states for unit in state.readable_units()})
+        return tuple(
             closed
-            for todo in comms.goals.todos.for_commander(thread.incarnation)
+            for todo in comms.goals.todos.for_commander(self.thread.incarnation)
             if not any(held.owner_identity in unreadable
                        for held in todo.current_holder.current_assignments())
             for closed in todo.order.closed_by_merge(
-                todo, pulls, comms.registry.storage_rule.checkout_base)
+                todo, self.frame.pulls, comms.registry.storage_rule.checkout_base)
         )
-        hud = CommanderHud.of(comms, thread.name, frame, states)
-        return cls(thread, merged, rules, states, hud)
 
 
 class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
-                         WatchPass[tuple[CommanderObservation, ...]]):
+                         WatchPass[Mapping[Thread, ProgressRead], tuple[CommanderObservation, ...]]):
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -78,21 +77,31 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                 ):
                     update.send(comms, now, ())
 
-    def observe(self, comms: Comms) -> tuple[CommanderObservation, ...]:
+    def prepare(self, comms: Comms) -> Mapping[Thread, ProgressRead]:
+        prepared: dict[Thread, ProgressRead] = {}
+        for thread in self.commanders(comms.registry, comms.goals):
+            pulls = ProgressRead(comms.goals.todos.for_commander(thread.incarnation))
+            for repo in comms.registry.snapshot().commander_project.repository_names():
+                pulls.carry_reviews(comms.goals, repo)
+            InstallDue.prepare(comms)
+            prepared[thread] = pulls
+        return prepared
+
+    def observe(self, comms: Comms, prepared: Mapping[Thread, ProgressRead]) -> tuple[CommanderObservation, ...]:
         return tuple(
-            CommanderObservation.read(comms, thread, plans=self)
-            for thread in self.commanders(comms.registry, comms.goals)
+            CommanderObservation.read(comms, thread, pulls, plans=self)
+            for thread, pulls in prepared.items()
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """The committed packet survives connector replacement; local memory owns nothing."""
         self.register(comms.registry)
-        CommanderFrame.replace_all(comms.root, tuple(item.hud for item in observed))
         completed = []
+        huds = []
         now = time.time()
         try:
             for item in observed:
-                comms.goals.todos.record_merges(item.merged)
+                comms.goals.todos.record_merges(item.merges(comms))
                 previous = CommanderUpdate.latest(comms, item.thread.incarnation)
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
@@ -101,6 +110,8 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                      *(state for state in item.states
                        if state.attention() and UnitPing.capture(state) not in known)),
                 )
+                # Board disposition reads CommanderHistory after enforcement.
+                hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states)
                 for update in CommanderUpdate.derive(
                     item.thread.incarnation,
                     tuple(state for state in item.states if state not in rejected),
@@ -113,10 +124,12 @@ class CommanderHeartbeat(RetainedPlanReadings, CommanderService,
                     not_applied=tuple(
                         rule.rejected_line(error) for rule, error in rejected.items()),
                 ):
-                    update.send(comms, now, item.hud.brief())
+                    update.send(comms, now, hud.brief())
+                huds.append(hud)
                 completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.
+            CommanderFrame.replace_all(comms.root, tuple(huds))
             ServicePassStore.at(comms.root).heartbeat_passed(
                 completed,
                 (thread.incarnation for thread in comms.registry.all_threads().values()),

@@ -5,6 +5,7 @@ from pathlib import Path
 from agent_comms.repo import Checkout
 import asyncio
 import json
+from contextlib import nullcontext
 import os
 import re
 import time
@@ -29,6 +30,7 @@ from agent_comms.commander.standing import (
     UnitAskUnanswered,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_hud import CommanderFrame
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -788,7 +790,7 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     heartbeat = CommanderHeartbeat()
     commander = held_bus.registry.require("lead")
     held_bus.registry.register(replace(commander, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     saved, = CommanderUpdate.latest(held_bus, commander.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
@@ -836,12 +838,12 @@ def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus, inst
     alive = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
     heartbeat = CommanderHeartbeat()
     held_bus.registry.register(alive)
-    heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
     passes = ServicePassStore.at(held_bus.root)
     completed = passes.read().commander_completed[commander.incarnation]
     held_bus.registry.register(commander)
-    assert heartbeat.observe(held_bus) == ()
-    heartbeat.pass_body(held_bus, ())
+    asyncio.run(heartbeat.run(lambda: nullcontext(held_bus)))
+    assert CommanderFrame.read_all(held_bus.root) == ()
     held_bus.registry.register(alive)
     assert passes.read().commander_completed[commander.incarnation] == completed
     assert HeartbeatSilent.violations(held_bus, "lead") == ()

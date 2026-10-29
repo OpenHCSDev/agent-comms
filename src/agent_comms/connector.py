@@ -510,6 +510,18 @@ class Connector:
         default_factory=dict, init=False, repr=False, compare=False,
     )
     closing: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False, compare=False)
+    watch_tasks: set[asyncio.Task[None]] = field(
+        default_factory=set, init=False, repr=False, compare=False,
+    )
+
+    def log_pending(self) -> None:
+        """The existing task owners name pending work; idle watches may also be listed."""
+        self.closing.set()
+        logging.info("Connector stopping; pending tools: %s; pending watches: %s",
+                     ", ".join(tool.declared_name for task, tool in self.calls.items()
+                               if not task.done()) or "none",
+                     ", ".join(sorted(task.get_name() for task in self.watch_tasks
+                                      if not task.done())) or "none")
 
     async def call(
         self, tool: type[ToolRequest] | type[ConnectorTool],
@@ -616,19 +628,20 @@ class Connector:
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         passes = ServicePassStore.at(self.root)
-        tasks = tuple(
+        self.watch_tasks.update(
             asyncio.create_task(Coordination.watch_worker(
-                watch, self.service_wire, passes))
+                watch, self.service_wire, passes), name=type(watch).__name__)
             for watch in self.watches.values()
         )
         try:
             yield
         finally:
-            for task in tasks:
+            for task in self.watch_tasks:
                 task.cancel()
-            for task in tasks:
+            for task in self.watch_tasks:
                 with suppress(asyncio.CancelledError):
                     await task
+            self.watch_tasks.clear()
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(FieldCodec.encode(
@@ -870,10 +883,10 @@ class ServeVerb(ConnectorOptions):
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-        asyncio.run(self.serve(app))
+        asyncio.run(self.serve(app, connector))
         return 0
 
-    async def serve(self, app: web.Application) -> None:
+    async def serve(self, app: web.Application, connector: Connector) -> None:
         """Bind, then report ready, so a restart returns only once the port answers."""
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
@@ -884,6 +897,7 @@ class ServeVerb(ConnectorOptions):
         try:
             await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
+            connector.log_pending()
         finally:
             await runner.cleanup()
 
