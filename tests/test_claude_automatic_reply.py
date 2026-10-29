@@ -9,7 +9,7 @@ from aiohttp import web
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_protocol import ClaudeRecord, ClaudeSession
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
-from agent_comms.cli_bridges.codex_protocol import ItemStream
+from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
@@ -207,7 +207,7 @@ async def test_codex_send_answers_only_the_question_that_opened_its_turn(
             stream = ItemStream('codex-session')
 
             async def receive(item: dict) -> None:
-                updates = stream.receive(dict(method='item/completed', params=dict(
+                updates = stream.receive(RpcNotification(method='item/completed', params=dict(
                     threadId='codex-session', turnId='codex-turn', item=item,
                     completedAtMs=1761699600000)))
                 output.publish_batch([await update.observed(codex) for update in updates])
