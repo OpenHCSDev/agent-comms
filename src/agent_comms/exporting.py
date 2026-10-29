@@ -464,20 +464,9 @@ class WireExportObserver:
     def check(self) -> None:
         pass
 
-    def cancelled(self) -> bool:
-        return False
-
     @contextmanager
     def reading(self, source: StoredWireHistory) -> Iterator[None]:
-        self.check()
-        source.db.set_progress_handler(self.cancelled, 1000)
-        try:
-            yield
-        except sqlite3.OperationalError:
-            self.check()
-            raise
-        finally:
-            source.db.set_progress_handler(None, 0)
+        yield
 
 
 class CancellableWireExport(WireExportObserver):
@@ -494,6 +483,18 @@ class CancellableWireExport(WireExportObserver):
     def check(self) -> None:
         if self.cancelled():
             raise WireExportCancelled("Wire export cancelled")
+
+    @contextmanager
+    def reading(self, source: StoredWireHistory) -> Iterator[None]:
+        self.check()
+        source.db.set_progress_handler(self.cancelled, 1000)
+        try:
+            yield
+        except sqlite3.OperationalError:
+            self.check()
+            raise
+        finally:
+            source.db.set_progress_handler(None, 0)
 
 
 class _ArtifactWriter:
