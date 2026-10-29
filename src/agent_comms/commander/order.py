@@ -826,17 +826,18 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
-    peer: Annotated[
+    acting_as: Annotated[
         CommanderPeerCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
-        Argument(options={"type": CommanderPeerCaller,
-                          "help": "another commander in #commanders acting under its own name"}),
+        Argument(flags=("--as",), options={
+            "type": CommanderPeerCaller,
+            "help": "another commander in #commanders acting under its own name"}),
     ] = NoThreadCaller()
 
     @property
     def actor(self) -> CommanderForkCaller | CommanderPeerCaller | NoThreadCaller:
         """A fork acts for the commander; a peer commander acts as itself."""
-        return self.fork.acting_caller(self.peer)
+        return self.fork.acting_caller(self.acting_as)
 
     def __post_init__(self) -> None:
         if problems := self.argument_problems():
