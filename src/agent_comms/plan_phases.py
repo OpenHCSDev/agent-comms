@@ -918,7 +918,7 @@ class DriftOverlapRulesPhase(FleetAwarenessPhase):
     evidence = AllEvidence(
         (
             ClassDeclared("BranchBehindMain", ("src/agent_comms",)),
-            ClassDeclared("SharedFileBranches", ("src/agent_comms",)),
+            ClassDeclared("ConflictingBranches", ("src/agent_comms",)),
         )
     )
 
