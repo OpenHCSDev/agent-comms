@@ -1003,24 +1003,25 @@ class Message(MessageInput, TurnOrigin):
         return {}
 
     @classmethod
-    def stored_wire_query(cls, identity: str) -> str:
+    def stored_wire_query(cls, identity: type[TypedTable]) -> str:
         """Project the public envelope from its declared stored fields, not domain objects."""
         tables = cls.tables()
         stored = {item.name: (table, item) for table in tables for item in table._fields}
         pieces = [item.wire_record(plan, table.declared_name)
                   for plan in FieldCodec.field_plans(cls) if plan.records
                   for table, item in (stored[plan.name],)]
-        identity_key = FieldCodec._projections(cls, "wire")["message_id"].wire_name
-        pieces.append("json_object('" + identity_key + "', " + identity + ")")
+        identity_key = cls.message_id.wire_name
+        pieces.append("json_object('" + identity_key + "', " + identity.qualified("message_id") + ")")
         fragments = " UNION ALL ".join(f"SELECT substr(({piece}), 2, length(({piece})) - 2) AS body"
                                        for piece in pieces)
         wire = "'{' || COALESCE((SELECT group_concat(NULLIF(body, ''), ',') FROM (" + fragments + ")), '') || '}'"
         columns = ", ".join(f'{item.reference(table.declared_name)} AS "{name}"'
                             for name, (table, item) in stored.items())
-        sequence = BusRow.qualified("seq")
-        joins = " ".join(f'JOIN "{table.declared_name}" ON {table.qualified("seq")} = {sequence}'
-                         for table in tables)
-        return f'SELECT {columns}, {wire} AS wire FROM "{BusRow.declared_name}" {joins}'
+        joins = " ".join(table.join_to(BusRow) for table in (*tables, identity))
+        extra = tuple(name for name in identity.column_projection() if name not in stored)
+        identity_columns = ', '.join(f'{identity.qualified(name)} AS "{name}"' for name in extra)
+        return (f'SELECT {columns}, {identity_columns}, {wire} AS wire '
+                f'FROM "{BusRow.declared_name}" {joins}')
 
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
@@ -1159,8 +1160,12 @@ class StoredWireMessage:
     timestamp: float
     wire: str
 
+    @staticmethod
+    def decode_wire(wire: str) -> Message:
+        return Message.from_wire(FieldCodec.parse(wire))
+
     def decode(self) -> Message:
-        return Message.from_wire(FieldCodec.parse(self.wire))
+        return self.decode_wire(self.wire)
 
 
 @dataclass(frozen=True)

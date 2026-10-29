@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import math
 import os
 import sqlite3
 from abc import abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass, field
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass
 from contextlib import contextmanager
 from threading import Event
 from datetime import UTC, datetime
@@ -23,6 +22,8 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
 from .messages import Message, StoredWireHistory, StoredWireMessage
+from .bus_tables import MessageIdentitySource
+from .read_basis import DMDisplayScope
 from .registration import Registration
 from .store_files import AtomicFile, ExclusiveAtomicFile
 
@@ -45,23 +46,18 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
 
     @staticmethod
     def json_record(record: Mapping[str, object]) -> str:
-        return json.dumps(record, ensure_ascii=False, separators=(",", ":"))
+        return FieldCodec.compact(record, ensure_ascii=False)
 
     def stored_row(self, message: StoredWireMessage) -> bytes:
         return self.row(message.decode())
 
-    def oversized_rows(self, source: StoredWireHistory, capacity: int) -> int:
-        return sum(len(self.stored_row(message)) > capacity for message in source.rows())
+    def encoded_size(self, wire: str) -> int:
+        return len(self.row(StoredWireMessage.decode_wire(wire)))
 
-    def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
-        first = 0
-        used = 0
-        for message in source.rows(descending=True):
-            used += len(self.stored_row(message))
-            if used > capacity:
-                return first or message.seq + 1
-            first = message.seq
-        return first
+    def stored_size(self, source: StoredWireHistory) -> str:
+        function = self.declared_name + "_wire_export_size"
+        source.db.create_function(function, 1, self.encoded_size, deterministic=True)
+        return f'"{function}"(wire)'
 
 
 class SelectableWireExportFormat(WireExportFormat):
@@ -83,14 +79,8 @@ class JsonlFormat(SelectableWireExportFormat):
     def stored_row(self, message: StoredWireMessage) -> bytes:
         return self.row_prefix + message.wire.encode() + self.row_suffix
 
-    def stored_size(self) -> str:
+    def stored_size(self, source: StoredWireHistory) -> str:
         return f"length(CAST(wire AS BLOB)) + {len(self.row_prefix) + len(self.row_suffix)}"
-
-    def oversized_rows(self, source: StoredWireHistory, capacity: int) -> int:
-        return source.count_where(f"{self.stored_size()} > ?", (capacity,))
-
-    def newest_suffix(self, source: StoredWireHistory, capacity: int) -> int:
-        return source.newest_suffix(self.stored_size(), capacity)
 
 
 @dataclass(frozen=True)
@@ -125,12 +115,11 @@ class TextFormat(SelectableWireExportFormat):
 
 @dataclass(frozen=True)
 class ResolvedExportScope:
-    """One canonical scope and its alias/catalog-resolved predicate snapshot."""
+    """One canonical scope and its required alias/catalog-resolved SQL predicate."""
 
     scope: WireExportScope
-    matches: Callable[[Message], bool]
-    predicate: str = "1"
-    parameters: tuple[object, ...] = ()
+    predicate: str
+    parameters: tuple[object, ...]
 
 
 class WireExportScope(DeclaredFamily, affix="Scope"):
@@ -147,7 +136,7 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
 @dataclass(frozen=True, slots=True)
 class EverythingScope(WireExportScope):
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        return ResolvedExportScope(self, lambda message: True)
+        return ResolvedExportScope(self, "1", ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,9 +146,8 @@ class AuthoredSourceScope(WireExportScope):
     sources: tuple[MessageReference, ...]
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        sequences = tuple(reference.seq for reference in self.sources)
-        return ResolvedExportScope(self, lambda message: message.reference in self.sources,
-                                   'seq IN (' + ','.join('?' for _ in sequences) + ')', sequences)
+        predicate, parameters = MessageIdentitySource.reference_predicate(self.sources)
+        return ResolvedExportScope(self, predicate, parameters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,7 +159,7 @@ class ChannelScope(WireExportScope):
         channel.require_routable()
         history = channel.history_scope()
         predicate, parameters = history.index_predicate
-        return ResolvedExportScope(self, history.includes, predicate, parameters)
+        return ResolvedExportScope(self, predicate, parameters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,20 +176,14 @@ class DmScope(WireExportScope):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        first = registry.entry(self.participants[0]).entry
-        second = registry.entry(self.participants[1]).entry
+        snapshot = registry.snapshot()
+        first = snapshot.entry(self.participants[0])
+        second = snapshot.entry(self.participants[1])
         canonical = DmScope((first.thread.name, second.thread.name))
         first_names, second_names = first.names, second.names
 
-        def matches(message: Message) -> bool:
-            return (message.sender in first_names and message.target in second_names) or (
-                message.sender in second_names and message.target in first_names
-            )
-
-        predicate = '((sender IN ({a}) AND target IN ({b})) OR (sender IN ({b}) AND target IN ({a})))'.format(
-            a=','.join('?' for _ in first_names), b=','.join('?' for _ in second_names))
-        return ResolvedExportScope(canonical, matches, predicate,
-                                   (*first_names, *second_names, *second_names, *first_names))
+        predicate, parameters = DMDisplayScope(first_names, second_names).index_predicate
+        return ResolvedExportScope(canonical, predicate, parameters)
 
 
 class ScopeFlag(SubclassUnion, affix="ScopeFlag"):
@@ -329,10 +311,11 @@ class MaxBytesLimit(WireExportLimit):
     ) -> Iterable[WireExportRow]:
         stats.source_messages = source.count()
         capacity = self.value - header_size
-        first = format.newest_suffix(source, capacity)
+        size = format.stored_size(source)
+        first = source.newest_suffix(size, capacity)
         for message in source.rows(after=first):
             yield WireExportRow(message.seq, message.timestamp, format.stored_row(message))
-        stats.oversized = format.oversized_rows(source, capacity)
+        stats.oversized = source.count_where(f"{size} > ?", (capacity,))
 
     def retain(
         self,
@@ -485,7 +468,7 @@ class WireExportObserver:
         return False
 
     @contextmanager
-    def reading(self, source: StoredWireHistory):
+    def reading(self, source: StoredWireHistory) -> Iterator[None]:
         self.check()
         source.db.set_progress_handler(self.cancelled, 1000)
         try:
@@ -497,9 +480,10 @@ class WireExportObserver:
             source.db.set_progress_handler(None, 0)
 
 
-@dataclass
 class CancellableWireExport(WireExportObserver):
-    stop_requested: Event = field(default_factory=Event)
+    def __init__(self) -> None:
+        self.stop_requested = Event()
+        super().__init__()
 
     def cancel(self) -> None:
         self.stop_requested.set()

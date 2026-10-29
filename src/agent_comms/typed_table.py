@@ -185,6 +185,11 @@ class RealStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         return annotation is float
 
+    @classmethod
+    def json_text(cls, expression: str) -> str:
+        # Alternate-form-2 retains the stored double; json_quote rounds to 15 digits.
+        return f"CASE WHEN {expression} IS NULL THEN 'null' ELSE printf('%0!.26g', {expression}) END"
+
 
 class BooleanStorage(SqlStorage):
     sql_type = "INTEGER"
@@ -2427,6 +2432,15 @@ class TypedTable(
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)
         return ", ".join(f"{table}.{_identifier(item.wire_name)}" for item in cls._fields_named(names))
+
+    @classmethod
+    def join_to(cls, other: type[TypedTable]) -> str:
+        """Join a capability to the other table's declared primary key."""
+        keys = tuple(item.name for item in other._fields if item.column.primary_key)
+        if not keys:
+            raise TypeError(f"{other.__name__} declares no join key")
+        condition = " AND ".join(f"{cls.qualified(name)} = {other.qualified(name)}" for name in keys)
+        return f'JOIN {_identifier(cls.declared_name)} ON {condition}'
 
     @classmethod
     def decode_at(cls, row: tuple[object, ...], offset: int) -> Self:

@@ -250,11 +250,9 @@ class BusReader(RouteCounts, ABC):
         *, through: int,
     ) -> Iterator[StoredWireHistory]:
         """Stream declared public wire fields from one read snapshot, without Messages."""
-        identity = MessageIdentitySource
-        query = Message.stored_wire_query(identity.qualified("message_id"))
-        query += (f' JOIN "{identity.declared_name}" ON '
-                  f'{identity.qualified("seq")} = {BusRow.qualified("seq")}')
-        query = f'SELECT * FROM ({query}) WHERE seq <= ? AND ({predicate})'
+        query = Message.stored_wire_query(MessageIdentitySource)
+        query = (f'SELECT seq, timestamp, wire FROM ({query}) '
+                 f'WHERE seq <= ? AND ({predicate})')
         with self.observing() as db:
             yield StoredWireHistory(db, query, (through, *parameters))
 
