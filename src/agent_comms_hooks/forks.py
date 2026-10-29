@@ -24,8 +24,10 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.cli_commands import RegisteredResult
+from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
+from agent_comms.turn_phase import ModelWaitPhase, TurnPhase
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
 
@@ -59,15 +61,34 @@ class SubagentSeats(CommanderSession):
 
 
 @dataclass(frozen=True)
-class SubagentHook(SubagentSeats):
-    """What Claude Code adds for a subagent event; `transcript_path` stays the parent's."""
+class SeatedSubagent(SubagentSeats):
+    """The existing seat or commander-fork name identifies whose activity a hook reports."""
 
     agent_id: SubagentId
-    agent_type: str
 
     @property
     def seat(self) -> Path:
         return self.seats / self.agent_id
+
+    def enter(self, phase: TurnPhase) -> None:
+        state = WatchClaim(self.session_id).state()
+        state.by_role(
+            lambda: None,
+            lambda: self.record_phase(*state.bindings(), self.seat.read_text(), phase),
+            lambda: self.record_phase(*state.bindings(), self.agent_id.fork, phase),
+        )
+
+    @staticmethod
+    def record_phase(record: WatchRecord, name: str, phase: TurnPhase) -> None:
+        with client_wire(Path(record.root)) as comms:
+            comms.agents.enter_phase(name, phase)
+
+
+@dataclass(frozen=True)
+class SubagentHook(SeatedSubagent):
+    """What Claude Code adds for a subagent event; `transcript_path` stays the parent's."""
+
+    agent_type: str
 
     def commanding(self, verb: str) -> subprocess.CompletedProcess[str]:
         return self.run(*self.command, verb, "--fork", self.agent_id.fork)
@@ -75,6 +96,7 @@ class SubagentHook(SubagentSeats):
     def register(self) -> None:
         state = WatchClaim(self.session_id).state()
         state.by_role(lambda: None, lambda: self.claim(*state.bindings()), self.join)
+        self.enter(ModelWaitPhase())
 
     def join(self) -> None:
         run = self.commanding("join")
