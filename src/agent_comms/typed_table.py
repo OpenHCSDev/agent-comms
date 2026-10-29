@@ -70,7 +70,6 @@ from .locked_store import (
     DeclaredFile,
     DurableFile,
     FilesRequest,
-    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
