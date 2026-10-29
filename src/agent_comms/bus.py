@@ -136,7 +136,7 @@ class DisplayUnread:
         kept = {query: query for query in queries if query in self.counted}
         moved = {query: (earlier[query.counting], parts) for query in queries
                  if query not in kept and query.counting in earlier
-                 and (parts := query.moved(earlier[query.counting])) is not None}
+                 and (parts := query.moved(earlier[query.counting]))}
         progressed = (*kept, *(previous for previous, _ in moved.values()))
         appended = source.count_unread(
             progressed if through != self.through else (), through=through, after=self.through)

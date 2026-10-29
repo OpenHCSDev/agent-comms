@@ -1192,15 +1192,15 @@ class UnreadQuery:
         lower bound is the cursor's own floor over the scope's targets, so it moves with it."""
         return replace(self, cursors=(), lower_bound=0)
 
-    def moved(self, earlier: UnreadQuery) -> tuple[UnreadQuery, UnreadQuery] | None:
-        """The earlier and current counts over only the conversations whose cursor moved,
-        or None when a whole-bus read moved and every row may have changed."""
+    def moved(self, earlier: UnreadQuery) -> tuple[UnreadQuery, ...]:
+        """The earlier and current counts over only the conversations whose cursor moved;
+        none when a whole-bus read moved and every row may have changed."""
         before = {row.key: row for row in earlier.cursors}
         after = {row.key: row for row in self.cursors}
         changed = {key for key in before.keys() | after.keys() if before.get(key) != after.get(key)}
         rows = tuple(side[key] for side in (before, after) for key in changed if key in side)
         if any(row.whole_bus for row in rows):
-            return None
+            return ()
         floor = (0 if any(key not in before or key not in after for key in changed)
                  else min((row.cursor.high_water for row in rows), default=0))
         targets = tuple(sorted({row.target for row in rows}))
