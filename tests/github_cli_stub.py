@@ -31,8 +31,10 @@ def main():
         (directory / "pull_requests.json").write_text(json.dumps(repositories))
         print(f"https://github.com/{repository}/pull/{row['number']}")
     elif arguments[:2] == ["pr", "view"]:
-        data = repositories[arguments[arguments.index("-R") + 1]]
-        request = data["requests"][arguments[2]]
+        repository = arguments[arguments.index("-R") + 1]
+        data = repositories[repository]
+        reference = arguments[2].removeprefix(f"https://github.com/{repository}/pull/")
+        request = data["requests"][reference]
         if refusal := request.get("read_refusal"):
             print(refusal, file=sys.stderr)
             raise SystemExit(1)
@@ -62,7 +64,8 @@ def main():
             fields = dict(arguments[index + 1].split("=", 1)
                           for index, word in enumerate(arguments) if word == "-f")
             if refusal := data.get("status_refusals", {}).get(parts[1], {}).get(fields["context"]):
-                sys.exit(refusal)
+                if not refusal["state"] or refusal["state"] == fields["state"]:
+                    sys.exit(refusal["message"])
             data.setdefault("statuses", {}).setdefault(parts[1], {})[fields["context"]] = fields["state"]
             (directory / "pull_requests.json").write_text(json.dumps(repositories))
             print("{}")

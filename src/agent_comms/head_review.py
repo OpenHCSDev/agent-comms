@@ -586,6 +586,11 @@ class ReadyPullRequestHead(OpenPullRequestHead):
 class HeadReviewRelation(DeclaredFamily):
     """Order relationships share one declaration family and compose their capabilities."""
 
+    def root_sources(self, record: HeadReviewRecord,
+                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+        """Only an orderless relationship supplies authority outside current Todo links."""
+        return ()
+
 
 class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     """The input that authorizes a head review's optional order change."""
@@ -721,7 +726,7 @@ class PromotedHeadReview(MergeHeadReview):
         if reviewer.commanding_identity != project.commander:
             raise ToolRefusedError("Only this root's commander may promote the combined carrier")
         inputs = self.require_combined(request, project.repos)
-        goals.todos.require_input_links(inputs)
+        goals.todos.require_input_sources(inputs)
 
     def enqueue(self, record: HeadReviewRecord, repositories: tuple[Repo, ...]) -> MergeArm:
         request = record.request
