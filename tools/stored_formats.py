@@ -25,7 +25,9 @@ class StoredForm:
 
     version: int
     fields: dict[object, object]
-    required: list[str]
+    required: frozenset[str]
+    """The keys every record carries: a set, because declaring a field in a parent class
+    reorders the schema's list without changing what is written."""
 
     @classmethod
     def of(cls, record: type) -> StoredForm | None:
@@ -34,10 +36,17 @@ class StoredForm:
         declared = vars(record).get("version")
         match FieldCodec.record_schema(record):
             case {"properties": {"version": {"enum": [stamped]}, **stored}, "required": required}:
-                return cls(stamped, stored, [key for key in required if key in stored])
+                return cls(stamped, stored, frozenset(key for key in required if key in stored))
             case {"properties": properties, "required": required} if isinstance(declared, int):
-                return cls(declared, properties, required)
+                return cls(declared, properties, frozenset(required))
         return None
+
+    @classmethod
+    def from_wire(cls, form: dict) -> StoredForm:
+        return cls(form["version"], form["fields"], frozenset(form["required"]))
+
+    def wire(self) -> dict[str, object]:
+        return {"version": self.version, "fields": self.fields, "required": sorted(self.required)}
 
 
 def stored_formats(module_name: str) -> dict[str, StoredForm]:
@@ -59,7 +68,7 @@ def main(modules: list[str]) -> None:
     print(
         json.dumps(
             {
-                name: dataclasses.asdict(form)
+                name: form.wire()
                 for module in modules
                 for name, form in stored_formats(module).items()
             }
