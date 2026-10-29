@@ -350,13 +350,12 @@ class CommanderHud(ToolResult):
         )
 
     def brief(self) -> tuple[str, ...]:
-        """Heartbeat telemetry from this same frame, with completed plans folded together."""
-        finished = tuple(phase for phase in self.phases if phase.finished)
+        """Routine heartbeat telemetry; the full board retains completed plans."""
         plans = "; ".join(
-            f"{plan.declared_name} {sum(phase.phase.plan is plan for phase in finished)}/"
-            f"{sum(phase.phase.plan is plan for phase in self.phases)}"
+            f"{plan.declared_name} {sum(phase.finished for phase in phases)}/{len(phases)}"
             for plan in Plan.members_with(Plan)
-            if any(phase.phase.plan is plan for phase in self.phases)
+            for phases in (tuple(phase for phase in self.phases if phase.phase.plan is plan),)
+            if any(not phase.finished for phase in phases)
         )
         visible = tuple(unit for unit in self.units if unit.orders or unit.needs_hand())
         quiet = tuple(unit for unit in self.units if unit not in visible)
