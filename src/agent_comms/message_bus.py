@@ -68,6 +68,11 @@ class Watch(AsyncWork, DeclaredFamily, ABC):
     @abstractmethod
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
 
+    def enter_phase[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
+        """Refuse a new watch phase before its effects, without borrowing a store lock."""
+        MaintenanceBarrier(comms.registry.store.path).assert_open_unlocked()
+        return operation()
+
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
         """A service may report its failed pass; ordinary watches need no extra action."""
@@ -78,7 +83,8 @@ class JoinedWatch(Watch):
 
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            await comms.bus.when_open(partial(self.watch_pass, opened_wire))
+            await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.watch_pass, opened_wire)))
 
     @abstractmethod
     def watch_pass(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None: ...
@@ -89,9 +95,11 @@ class PreparedWatchPass[Prepared, Observed](Watch):
 
     async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         with opened_wire() as comms:
-            prepared = await comms.bus.when_open(partial(self.prepare, comms))
+            prepared = await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.prepare, comms)))
             observed = await self.run_async(partial(self.observe, comms, prepared))
-            await comms.bus.when_open(partial(self.pass_body, comms, observed))
+            await comms.bus.when_open(partial(
+                self.enter_phase, comms, partial(self.pass_body, comms, observed)))
 
     @abstractmethod
     def prepare(self, comms: Comms) -> Prepared: ...
@@ -177,15 +185,10 @@ class MessageBus[Writes: Publisher]:
         ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, self.bus)
         return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
-    def _run_open[Result](self, operation: Callable[[], Result]) -> Result:
-        """Check a new phase at its joined worker entry; do not hold a lock over its work."""
-        MaintenanceBarrier(self._registry.store.path).assert_open_unlocked()
-        return operation()
-
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         while True:
             try:
-                result = await Coordination.run_worker(partial(self._run_open, operation))
+                result = await Coordination.run_worker(operation)
                 return await result if inspect.isawaitable(result) else result
             except MaintenanceHeldError:
                 await self.resumed()

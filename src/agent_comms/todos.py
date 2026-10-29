@@ -1539,7 +1539,7 @@ class ProgressRead(PullRequests, CheckoutReads):
 
     def unread(self, todo: Todo, error: Exception) -> None:
         directory = todo.order.checked().check.directory
-        self._progress[todo.id] = UnreadProgress(f"Comparison preparation in {directory}: {error}")
+        self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
@@ -1672,6 +1672,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def require_read(self) -> None:
         """A normal progress answer has no acquisition failure."""
 
+    def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        """These source roots may still qualify edit ownership in this progress cut."""
+        return paths
+
     @property
     @abstractmethod
     def state(self) -> str: ...
@@ -1738,6 +1742,9 @@ class UnreadProgress(OrderProgress):
 
     def require_read(self) -> None:
         raise WorkBranchError(self.reason)
+
+    def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
+        return ()
 
     @property
     def state(self) -> str:

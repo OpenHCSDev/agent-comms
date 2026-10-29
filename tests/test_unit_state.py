@@ -16,18 +16,18 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObserva
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, observe_commander
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
+from agent_comms.field_codec import OrderId, ToolCallId
+from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
-from agent_comms.message_page import MessagePageRequest
 from agent_comms.order_runs import ApplicationOrderRun
-from agent_comms.read_basis import DMDisplayScope
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.thread_text import ForkedParent
+from agent_comms.task_attachments.commander_pings import CommanderUpdate, UnitPing
 from agent_comms.todos import DeliverTodo, OperationDelivery, ProgressRead, UnreadProgress
 from agent_comms.heartbeat_frame import CommanderInputs
 from agent_comms.transcript_events import ToolStartTranscript
@@ -46,6 +46,8 @@ from agent_comms.ui_model.unit_state import (
     UnitState,
     Unreadable,
 )
+from agent_comms.work_branches import WorkBranchError
+from source_revision_fixture import SourceRepository
 from test_holder_standing_rules import blocked_holder, publish, state_cards
 from agent_comms.thread_execution import CommanderForkExecution
 
@@ -337,33 +339,51 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
 def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
-    if primary:
-        checkout = held_bus.goals.todos.get("P1").order.checked().check.directory
-        (checkout / ".git").rename(checkout / "saved-git")
-        (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
-    else:
-        unread_checkout(held_bus, tmp_path)
-    if not broken_metadata:
-        (held_bus.registry.require("worker").project_path / ".git").unlink()
-    lead = held_bus.registry.require("lead")
-    held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-    heartbeat = CommanderHeartbeat()
+    lead = replace(held_bus.registry.require("lead"),
+                   process_identity=ProcessIdentity.capture(os.getpid()))
+    held_bus.registry.register(lead)
+    primary_order = held_bus.goals.todos.get("P1")
+    healthy_source = SourceRepository.create(tmp_path / "healthy-source", primary_order.repo)
+    outsider = replace(held_bus.registry.require("outsider"), worktree=Checkout(healthy_source.checkout))
+    held_bus.registry.register(outsider)
+    checked = primary_order.order.checked()
+    held_bus.goals.update_goal("outsider", CreateProblemGoalAction(
+        problem="P3", commander=lead.name, request=primary_order.request,
+        assigner=lead.incarnation, repo=primary_order.repo, text="Independent healthy work",
+        review_at=RecordedEventTime(time.time() + 3600),
+        order=replace(checked, id=OrderId.mint(),
+                      check=replace(checked.check, directory=outsider.project_path)),
+    ))
     with LaunchRoot.from_path(held_bus.root).selected():
+        baseline = observe_commander(held_bus, lead, ProgressRead())
+        healthy, = (card for card in baseline.states if card.unit == outsider.incarnation)
+        if primary:
+            checkout = checked.check.directory
+            (checkout / ".git").rename(checkout / "saved-git")
+            (checkout / ".git").write_text("gitdir: ./removed-git-directory\n")
+        else:
+            unread_checkout(held_bus, tmp_path)
+        if not broken_metadata:
+            (held_bus.registry.require("worker").project_path / ".git").unlink()
         observed = observe_commander(held_bus, lead, ProgressRead())
         cards = observed.states
-        assert isinstance(cards[0], Unreadable)
+        worker, = (card for card in cards if card.unit.name == "worker")
         assert {card.unit.name for card in cards} >= {"worker", "outsider"}
+        assert next(card for card in cards if card.unit == outsider.incarnation) == healthy
+        assert healthy.orders == ("P3",)
+        if broken_metadata:
+            assert isinstance(worker, Unreadable)
+            with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
+                worker.source.require_read()
+            assert worker.reason == str(source_failure.value)
+        else:
+            assert not isinstance(worker, Unreadable)
         expected = CommanderHud.of(held_bus, lead.name, observed.frame, cards)
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
-        assert CommanderFrame.read_all(held_bus.root) == (expected,)
-        page = MessagePageRequest(
-            DMDisplayScope.capture(
-                heartbeat.sender,
-                "lead",
-                held_bus.registry.snapshot(),
-            )
-        ).read_opened(held_bus.bus.bus)
-        message = next(row for row in page.messages if row.sender == heartbeat.sender)
-        assert all(card.line() in message.body for card in cards)
-        assert message.body.index(cards[0].line()) < message.body.index(cards[-1].line())
-        print(message.body)
+        published, = CommanderFrame.read_all(held_bus.root)
+        assert published == expected
+        assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)
+        packets = CommanderUpdate.latest(held_bus, lead.incarnation)
+        assert tuple(ping for packet in packets for ping in packet.handled
+                     if isinstance(ping, UnitPing)) == tuple(
+            UnitPing.capture(card) for card in cards if card.attention())

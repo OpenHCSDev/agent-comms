@@ -35,7 +35,7 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.ui_model.unit_state import Unreadable
-from agent_comms.work_branches import WorkBranches
+from agent_comms.work_branches import WorkBranchError, WorkBranches
 from fixture_git import IDENTITY
 from source_revision_fixture import SourceRepository
 from test_todos import order
@@ -159,30 +159,22 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
                    process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.register(lead)
 
-    class DeletingRead(ProgressRead):
-        def progress(self, held, registry):
-            # Retire the ref after progress capture, before the remaining source reads.
-            # No production code is patched; the card must retain this Git failure.
-            progress = super().progress(held, registry)
-            git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
-            return progress
-
     with LaunchRoot.from_path(comms.root).selected():
         before = observe_commander(comms, lead, ProgressRead())
         healthy = tuple(card for card in before.states if card.unit.name != 'worker')
-        interrupted = observe_commander(comms, lead, DeletingRead())
+        git(checkout, 'update-ref', '-d', f'refs/heads/{branch}')
+        interrupted = observe_commander(comms, lead, ProgressRead())
         asyncio.run(ObservedHeartbeat((interrupted,)).run(lambda: nullcontext(comms)))
         published, = CommanderFrame.read_all(comms.root)
         assert tuple(card.unit for card in published.units) == tuple(card.unit for card in interrupted.states)
         assert branch not in WorkBranches(checkout).worktrees()
-        reader = WorkBranches(checkout)
-        with pytest.raises(GitCommandError) as git_failure:
-            reader.difference(reader.origin_main)
         for _ in range(2):
             frame = observe_commander(comms, lead, ProgressRead())
             (broken,) = (card for card in frame.states if card.unit.name == 'worker')
             assert isinstance(broken, Unreadable)
-            assert broken.reason == str(git_failure.value)
+            with pytest.raises((GitCommandError, WorkBranchError)) as source_failure:
+                broken.source.require_read()
+            assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
             expected = CommanderHud.of(comms, lead.name, frame.frame, frame.states)
             asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))

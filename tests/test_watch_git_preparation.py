@@ -170,6 +170,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     source_repository: SourceRepository, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     source = source_repository
+    source.git(source.checkout, "switch", "feature")
     directory = source.checkout / "src"
     directory.mkdir()
     (directory / "promised.py").write_text("value = 1\n")

@@ -129,6 +129,7 @@ async def test_sigterm_drops_observe_but_joins_and_names_pass_body(comms, tmp_pa
         elapsed = time.monotonic() - started
         holders = [line for line in output.splitlines() if "Connector stopping;" in line]
         assert len(holders) == 1, output
-        assert f"pending watches: {watch.__name__}" in holders[0]
+        pending = holders[0].split("pending watches: ", 1)[1]
+        assert watch.__name__ in tuple(name.strip() for name in pending.split(","))
         watch.check_exit(comms, server.directory, elapsed)
         print(f"{watch.__name__}: SIGTERM to process exit {elapsed:.3f}s; {holders[0]}")

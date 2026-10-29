@@ -77,7 +77,7 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
     assert FieldCodec.decode(RulePing, FieldCodec.encode(RulePing.capture(rules[10]))) == RulePing.capture(rules[10])
 
 
-def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_source):
+def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_source, installed_runtime):
     comms, github, _ = head_bus
     source = reviewed_source
     stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')

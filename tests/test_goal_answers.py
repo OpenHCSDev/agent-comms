@@ -1,10 +1,12 @@
 """Goal absence is dispatched before work; a clear never revives a turn's goal."""
 
 from agent_comms.repo import Checkout
+import asyncio
 import os
 import pickle
 from contextlib import ExitStack, contextmanager
 from dataclasses import replace
+from functools import partial
 
 import pytest
 
@@ -18,7 +20,7 @@ from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_attempt_phase import FailedAttempt
 from agent_comms.goal_generation import ReadyGeneration
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.goal_turn_permit import NoLaunchPermit
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import PiUsage
@@ -93,7 +95,7 @@ def test_provider_usage_follows_the_declared_goal(copied_goal_bus, original_goal
 
 
 @pytest.mark.parametrize("retargeted", [False, True])
-def test_entered_attempt_settles_during_drain_but_retains_retarget_refusal(
+async def test_entered_attempt_settles_during_drain_but_retains_retarget_refusal(
     copied_goal_bus, tmp_path, retargeted,
 ):
     """A real claimed turn settles its ledger, not a new bus publication."""
@@ -108,14 +110,29 @@ def test_entered_attempt_settles_during_drain_but_retains_retarget_refusal(
             if retargeted:
                 held = gate.retarget(held, LaunchRuntime(tmp_path / "target/bin/python"))
                 before = ledger.path.read_bytes()
-                with pytest.raises(MaintenanceHeldError):
-                    account.finish(OperatorStopped())
+                pending = asyncio.create_task(comms.bus.when_open(
+                    partial(account.finish, OperatorStopped())))
+                try:
+                    with pytest.raises(TimeoutError):
+                        await asyncio.wait_for(asyncio.shield(pending), .1)
+                    assert ledger.path.read_bytes() == before
+                    assert permit.is_claimed(ledger)
+                    assert gate.read() == held
+                finally:
+                    pending.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await pending
                 assert ledger.path.read_bytes() == before
                 assert permit.is_claimed(ledger)
                 with held.holding():
-                    account.finish(OperatorStopped())
+                    await asyncio.wait_for(comms.bus.when_open(
+                        partial(account.finish, OperatorStopped())), 3)
             else:
-                account.finish(OperatorStopped())
+                await asyncio.wait_for(comms.bus.when_open(
+                    partial(account.finish, OperatorStopped())), 3)
+            reader = await asyncio.wait_for(comms.bus.when_open(
+                partial(comms.registry.require, "worker")), 3)
+            assert reader.incarnation == account.owner.incarnation
             assert ledger.read_attempt(permit.reservation.attempt_id).holds(
                 permit.reservation, FailedAttempt())
             generation = ledger.require_generation(permit.reservation.goal_id)

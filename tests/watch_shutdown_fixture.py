@@ -5,7 +5,8 @@ import asyncio
 import logging
 import subprocess
 import sys
-from dataclasses import InitVar, dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import MappingProxyType
 
@@ -14,7 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import Connector, ServeVerb
 from agent_comms.connector_store import ConnectorStore
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.message_bus import WatchPass
+from agent_comms.message_bus import Watch, WatchPass
 from agent_comms.repo import Repo
 from source_revision_fixture import SourceRepository
 from connector_shutdown_fixture import HeldCall
@@ -88,10 +89,7 @@ class PreparationShutdownWatch(JoinedShutdownWatch):
 
 @dataclass(frozen=True)
 class WatchConnector(Connector):
-    watch: InitVar[ShutdownWatch]
-
-    def __post_init__(self, watch: ShutdownWatch) -> None:
-        object.__setattr__(self, "watches", MappingProxyType({**self.watches, type(watch): watch}))
+    watches: Mapping[type[Watch], Watch] = field(kw_only=True, repr=False, compare=False)
 
 
 def main() -> int:
@@ -100,8 +98,9 @@ def main() -> int:
         return subprocess.run(("git-upload-pack", *sys.argv[3:]), check=False).returncode
     root, auth, port, selected, directory = sys.argv[1:]
     watch = ShutdownWatch.member_named(selected)(directory=Path(directory))
-    connector = WatchConnector(ConnectorStore.at(Path(auth)), f"http://127.0.0.1:{port}",
-                               Path(root), watch=watch)
+    production = Connector(ConnectorStore.at(Path(auth)), f"http://127.0.0.1:{port}", Path(root))
+    connector = WatchConnector(production.store, production.issuer, production.root,
+        watches=MappingProxyType({**production.watches, type(watch): watch}))
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
     with LaunchRoot.from_path(Path(root)).selected():
         asyncio.run(ServeVerb(root=Path(root), port=int(port)).serve(connector.application(), connector))

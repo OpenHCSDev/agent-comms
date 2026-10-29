@@ -114,10 +114,7 @@ def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, regi
         if not registered:
             comms.registry.unregister("claude-ai")
             comms.registry.archive("claude-ai")
-            comms.registry.begin_delete("claude-ai")
-            with comms.registry.store.editing() as edit:
-                edit.document.remove_originals((original,))
-                edit.commit()
+            comms.threads.delete(original.name)
         proof = ConnectorService(
             launch=LaunchRoot.from_path(comms.root),
             store=ConnectorStore(ConnectorStore.path_in(
@@ -411,7 +408,22 @@ def test_fresh_connector_publication_refuses_before_entering_held_stores(connect
             connector.invoke(ConnectorSendTool, {"to": "worker", "body": "Held send"}, CALLER)
     finally:
         barrier.advance(held, ReadyPhase)
-    assert barrier.read().phase is ReadyPhase
+    assert comms.bus.bus.revision() == before
+
+
+def test_publishing_tool_held_mid_call_refuses_at_once(comms):
+    """The native call bypasses fresh connector ingress; its actual store still refuses."""
+    for name in (CALLER.name, "worker"):
+        comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
+    before = comms.bus.bus.revision()
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    held = barrier.advance(barrier.advance(
+        barrier.begin(MaintenanceOperator.current()), PausedPhase), InstallingPhase)
+    try:
+        with pytest.raises(MaintenanceHeldError):
+            invoke_tool(comms, "comms_send", {"to": "worker", "body": "Held send"}, caller=CALLER)
+    finally:
+        barrier.advance(held, ReadyPhase)
     assert comms.bus.bus.revision() == before
 
 

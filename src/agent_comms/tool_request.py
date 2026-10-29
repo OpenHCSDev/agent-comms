@@ -153,7 +153,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     @classmethod
     def require_connector_ingress(cls, root: Path) -> None:
-        """Admit a new external mutation before opening its registry or bus."""
+        """Refuse a fresh external mutation before opening its registry or bus."""
         MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
 
     @classmethod
