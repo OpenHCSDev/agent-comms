@@ -138,12 +138,12 @@ class GatedCall(ClaudeToolHook, DeclaredFamily):
         """Why no tool may run yet for want of the audit, or nothing once it answers the deal."""
         if not self.audit_due.exists():
             return ""
-        due = FieldCodec.decode(AuditDue, json.loads(self.audit_due.read_text(encoding="utf-8")))
+        due = FieldCodec.decode(AuditDue, FieldCodec.parse(self.audit_due.read_bytes()))
         if not self.audit.exists():
             return "no audit is written"
         try:
-            audit = FieldCodec.decode(SessionAudit, json.loads(self.audit.read_text(encoding="utf-8")))
-        except (ValueError, MalformedRecord) as error:
+            audit = FieldCodec.decode(SessionAudit, FieldCodec.parse(self.audit.read_bytes()))
+        except MalformedRecord as error:
             return f"the audit does not decode: {error}"
         return due.refusal(audit)
 

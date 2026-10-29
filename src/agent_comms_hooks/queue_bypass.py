@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.errors import ToolRefusedError
 from agent_comms.shell_commands import Program, ShellCommand
 from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
@@ -235,8 +236,6 @@ class QueueBypassGuard(BashRefusal):
     @staticmethod
     def owner_present(hook: ClaudeToolHook) -> bool:
         """Whether the person typed the newest prompt in this session's transcript."""
-        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
-
         transcript = Path(hook.transcript_path)
         with transcript.open("rb") as stream:
             return ClaudeJsonLines().owner_present(stream, transcript.stat().st_size)
