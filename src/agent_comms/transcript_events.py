@@ -353,7 +353,7 @@ class UserTranscript(NativeTextTranscript):
 
 
 class ModelOutput:
-    """Assistant text, thinking and tool output close admission of automatic reply routes."""
+    """Assistant text, thinking and tool output close the window for new automatic reply routes."""
 
     def reply_window(self, window: OpeningReplies) -> OpeningReplies:
         return window.answering()
