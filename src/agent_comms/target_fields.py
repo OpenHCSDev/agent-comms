@@ -6,7 +6,7 @@ from typing import cast
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import MISSING, dataclass
 from dataclasses import replace
 from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
 from agent_comms.thread_model import CatalogSelection
@@ -45,8 +45,12 @@ class TargetField:
         return self.plan.description
 
     @property
+    def supplied(self) -> bool:
+        return self.value is not MISSING
+
+    @property
     def editor_default(self) -> JsonValue:
-        return self.plan.editor_default(self.value)
+        return self.plan.editor_default(self.value) if self.supplied else None
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
         """An unrestricted field does not declare a finite-choice editor."""

@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage, FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
-    from .cli_command import CliCommand
+    from .cli_command import CliCommand, CommandBinding
     from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
@@ -166,7 +166,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]: ...
+    ) -> tuple[CommandBinding, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
@@ -413,7 +413,7 @@ class ThreadTarget(NamedTarget):
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
     def validate(self, message: Message) -> None:
@@ -562,7 +562,7 @@ class ChannelTarget(NamedTarget):
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender: Message | None = None):
@@ -653,7 +653,7 @@ class ProjectTarget(CommandTarget):
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.project_bindings(comms, resolved)
 
 
