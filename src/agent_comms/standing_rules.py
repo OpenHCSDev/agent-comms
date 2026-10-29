@@ -10,7 +10,7 @@ import argparse
 import time
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from functools import cache
 from itertools import combinations
@@ -416,11 +416,19 @@ class HolderBranch:
     holder: ThreadIncarnation
     difference: BranchDifference
 
-    def parallel_to(self, other: HolderBranch) -> bool:
-        """Different holders writing different branches of one repository with shared files."""
-        left, right = self.difference, other.difference
-        return (self.holder != other.holder and left.repository == right.repository
-                and left.branch != right.branch and bool(left.files & right.files))
+    @staticmethod
+    def touching[Branch: HolderBranch](
+        branches: Sequence[Branch],
+    ) -> Iterator[tuple[Branch, Branch]]:
+        """Each pair of branches writing a common file of one repository, once. Indexing by
+        (repository, file) selects them; any other pair cannot conflict, and a pair on one
+        branch or under one holder that does conflict is still a conflict to resolve."""
+        sharing: dict[tuple[RepositoryName, str], list[int]] = {}
+        for position, branch in enumerate(branches):
+            for path in branch.difference.files:
+                sharing.setdefault((branch.difference.repository, path), []).append(position)
+        pairs = dict.fromkeys(pair for group in sharing.values() for pair in combinations(group, 2))
+        return ((branches[left], branches[right]) for left, right in pairs)
 
 
 @dataclass(frozen=True)
@@ -604,10 +612,8 @@ class ConflictingBranches(HeldBranchRule):
 
     @classmethod
     def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
-        for first, second in combinations(prepared, 2):
-            if first.parallel_to(second):
-                pulls.branch_conflicts(first.repository, first.difference.head,
-                                       second.difference.head)
+        for first, second in HolderBranch.touching(prepared):
+            pulls.branch_conflicts(first.repository, first.difference.head, second.difference.head)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
@@ -616,8 +622,8 @@ class ConflictingBranches(HeldBranchRule):
                 other_problem=second.problem, other_holder=second.holder,
                 other_branch=second.difference.branch, repository=first.difference.repository,
                 paths=conflicts)
-            for first, second in combinations(branches, 2)
-            if first.parallel_to(second) and (conflicts := first.source.pulls.require_branch_conflicts(
+            for first, second in HolderBranch.touching(branches)
+            if (conflicts := first.source.pulls.require_branch_conflicts(
                 first.difference.head, second.difference.head))
         )
 

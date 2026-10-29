@@ -49,16 +49,25 @@ class UnitTalk:
     def messages(self) -> tuple[Delivered, ...]:
         """Its own publications in the window, newest first, through the bus's sent index."""
         return tuple(
-            message for record in self.source.comms.bus.bus.sent(
-                self.unit.require_recorded().lookup, limit=500)
-            for message in record.deliveries() if message.timestamp >= self.since
+            message
+            for record in self.source.comms.bus.bus.sent(
+                self.unit.require_recorded().lookup, limit=500
+            )
+            for message in record.deliveries()
+            if message.timestamp >= self.since
         )
 
     @cached_property
     def commits(self) -> int:
         """Distinct commits its held orders' sources recorded in the window."""
-        return len({point for origin in self.source.sources for point in origin.commits()
-                    if point.at >= self.since})
+        return len(
+            {
+                point
+                for origin in self.source.sources
+                for point in origin.commits()
+                if point.at >= self.since
+            }
+        )
 
     @property
     def characters(self) -> int:
@@ -69,11 +78,16 @@ class UnitTalkRule(HolderLine, FamilyScan, declared_name=None):
     """Rules over one unit's talk share the heartbeat's existing unit observations."""
 
     @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+    def scan_observed(
+        cls, comms: Comms, commander: str, observed: Sequence[UnitState], frame: HeartbeatFrame
+    ) -> tuple[Self, ...]:
         talks = tuple(UnitTalk(state.source) for state in observed)
-        return tuple(rule for member in cls.members_with(cls)
-                     for talk in talks for rule in member.derive(talk))
+        return tuple(
+            rule
+            for member in cls.members_with(cls)
+            for talk in talks
+            for rule in member.derive(talk)
+        )
 
     @classmethod
     @abstractmethod
@@ -92,16 +106,32 @@ class BlockedTalk(UnitTalkRule, DatedStandingRule):
     at: float = field(compare=False)
     quote: str = field(compare=False)
     words: ClassVar[tuple[str, ...]] = (
-        "waiting on", "waiting for", "waits on", "awaiting", "blocked on", "blocked by",
-        "blocked until", "frozen until", "frozen for", "head frozen", "holding until",
-        "holding for", "on hold", "deferred to", "deferring to", "parked until",
-        "until root", "pending root", "pending review",
+        "waiting on",
+        "waiting for",
+        "waits on",
+        "awaiting",
+        "blocked on",
+        "blocked by",
+        "blocked until",
+        "frozen until",
+        "frozen for",
+        "head frozen",
+        "holding until",
+        "holding for",
+        "on hold",
+        "deferred to",
+        "deferring to",
+        "parked until",
+        "until root",
+        "pending root",
+        "pending review",
     )
     """Phrases that announce a stop, not words that merely occur in one: "freeze is
     superseded" or "preserving behaviour" stop nothing."""
     stall: ClassVar[re.Pattern[str]] = re.compile(
         r"(?<!not )(?<!n't )(?<!n’t )\b(" + "|".join(re.escape(word) for word in words) + r")\b",
-        re.IGNORECASE)
+        re.IGNORECASE,
+    )
     """A negated phrase ("not waiting on", "wasn't waiting for") announces the opposite."""
     located: ClassVar[re.Pattern[str]] = re.compile(r"[\w./-]+\.\w+:\d+")
     named_owner: ClassVar[re.Pattern[str]] = re.compile(r"@[\w-]+")
@@ -110,19 +140,28 @@ class BlockedTalk(UnitTalkRule, DatedStandingRule):
     def derive(cls, talk: UnitTalk) -> Iterator[Self]:
         for message in talk.messages:
             said = cls.stall.search(message.body)
-            if said and not (cls.located.search(message.body)
-                             or cls.named_owner.search(message.body) or message.mentions):
+            if said and not (
+                cls.located.search(message.body)
+                or cls.named_owner.search(message.body)
+                or message.mentions
+            ):
                 start = max(0, said.start() - 60)
-                yield cls(talk.unit, message.message_id, message.timestamp,
-                          " ".join(message.body[start:said.end() + 60].split()))
+                yield cls(
+                    talk.unit,
+                    message.message_id,
+                    message.timestamp,
+                    " ".join(message.body[start : said.end() + 60].split()),
+                )
 
     def began(self) -> float:
         return self.at
 
     def line(self) -> str:
-        return (f"BLOCKED-TALK {self.holder.name} said \"…{self.quote}…\" ({self.message_id}) with no"
-                " owner and no file:line. waiting on whom, exactly? -> name the owner and the"
-                " file:line, or do the next step now")
+        return (
+            f'BLOCKED-TALK {self.holder.name} said "…{self.quote}…" ({self.message_id})'
+            " with no owner and no file:line. waiting on whom, exactly? -> name the owner"
+            " and the file:line, or do the next step now"
+        )
 
 
 @dataclass(frozen=True)
@@ -141,7 +180,9 @@ class Ceremony(UnitTalkRule, UndatedStandingRule):
             yield cls(talk.unit, talk.characters, talk.commits)
 
     def line(self) -> str:
-        return (f"CEREMONY {self.holder.name} published {self.characters} characters and"
-                f" {self.commits} commits in the last hour, limit {self.per_commit} per commit."
-                " the receipt printer is louder than the compiler -> commit, diff stat,"
-                " file:line, Assumed:, nothing else")
+        return (
+            f"CEREMONY {self.holder.name} published {self.characters} characters and"
+            f" {self.commits} commits in the last hour, limit {self.per_commit} per commit."
+            " the receipt printer is louder than the compiler -> commit, diff stat,"
+            " file:line, Assumed:, nothing else"
+        )
