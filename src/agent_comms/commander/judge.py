@@ -94,6 +94,13 @@ class Hunk(ReplacementEdit):
         return sum(1 for line in self.new_text.splitlines() if BRANCH.search(line)) - sum(
             1 for line in self.old_text.splitlines() if BRANCH.search(line))
 
+    def applied_to(self, before: str) -> str:
+        if not self.old_text:
+            return self.new_text
+        if before.count(self.old_text) != 1:
+            raise MissingSourceLine('The exact captured original text does not occur once.')
+        return before.replace(self.old_text, self.new_text, 1)
+
     def rendered(self) -> str:
         return (''.join(f'- {line}\n' for line in self.old_text.splitlines())
                 + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
@@ -121,9 +128,6 @@ class Edit(EditCall):
     def added_lines(self) -> tuple[str, ...]:
         return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
 
-    def added(self) -> str:
-        return ''.join('+' + line + '\n' for line in self.added_lines())
-
     def introduced_forwarders(self, ctx: order.Commander, todo: Todo,
                               revision: BranchHeadRevision) -> list[str]:
         """Retained hunk text, or an exact local declared main cut for whole-file writes.
@@ -134,25 +138,34 @@ class Edit(EditCall):
         """
         repo, checkout = EditVerdict.edited(ctx.comms.goals, todo, todo.held(), self.path, self.id)
         path = Path(self.path).absolute().relative_to(checkout).as_posix()
-        commit = revision.commit_at(repo.checkout)
-        try:
-            before = revision.text(repo.checkout, path)
-        except MissingSourceLine:
-            before = ''  # Absence established at the captured commit, not by old_text=''.
-        print(f'edit {self.id} source {repo.github.to_wire()} {commit}:{path}')
-        after = before
-        for hunk in self.hunks:
-            if not hunk.old_text:
-                if len(self.hunks) != 1:
-                    raise MissingSourceLine(f'Edit {self.id} has no established whole-file preimage.')
-                after = hunk.new_text
-            elif after.count(hunk.old_text) == 1:
-                after = after.replace(hunk.old_text, hunk.new_text, 1)
-            else:
-                raise MissingSourceLine(
-                    f'Edit {self.id} source evidence unavailable: {commit}:{path} does not '
-                    'contain its exact original replacement text once.')
-        return order.forwarders_added(order.OverrideNames.introduced(before, after), (after,))
+        whole_file = len(self.hunks) == 1 and not self.hunks[0].old_text
+        if len(self.hunks) > 1 and any(not hunk.old_text for hunk in self.hunks):
+            raise MissingSourceLine(f'Edit {self.id} has no established whole-file preimage.')
+        # An old-text replacement can establish its source on a declared carrier. A whole
+        # write cannot establish a preimage from a carrier that may already include it.
+        candidates = ((revision,) if whole_file else (revision, *(
+            source.local for source in todo.order.checked().cited_revision.repository_candidates(repo.github))))
+        unavailable: list[str] = []
+        for source in candidates:
+            try:
+                commit = source.commit_at(repo.checkout)
+                try:
+                    before = source.text(repo.checkout, path)
+                except MissingSourceLine:
+                    if not whole_file:
+                        raise
+                    before = ''  # The exact commit establishes absence, not old_text=''.
+                after = before
+                for hunk in self.hunks:
+                    after = hunk.applied_to(after)
+            except MissingSourceLine as error:
+                unavailable.append(str(error))
+                continue
+            print(f'edit {self.id} source {repo.github.to_wire()} {commit}:{path}')
+            return order.forwarders_added(order.OverrideNames.introduced(before, after), (after,))
+        raise MissingSourceLine(
+            f'Edit {self.id} source evidence unavailable in {repo.github.to_wire()}: '
+            + '; '.join(unavailable))
 
     def rendered(self) -> str:
         return (f'--- {self.id} {self.at.clock()} {self.path}\n'
@@ -338,7 +351,7 @@ class PullRequestReview(ReviewSubject):
             options.pr, options.head))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
-        options.check_edits([])
+        options.check_edits(ctx, [])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
         reviewed = ctx.call(CommsHeadVerdictTool(request=self.request,

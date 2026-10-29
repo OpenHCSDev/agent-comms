@@ -46,6 +46,10 @@ class SourceText(ABC):
         """The sources a cite may stand on; one source stands alone."""
         return (self,)
 
+    def in_checkout(self, checkout: Path) -> SourceText:
+        """Unqualified callers retain their own working-tree or exact revision authority."""
+        return self
+
     def repository_candidates(self, repository: RepositoryName) -> tuple[SourceRevision, ...]:
         """Unbound commits and working files confer no authority in another repository."""
         return ()
@@ -92,6 +96,10 @@ class SourceRevision(SourceText):
     def resolve(self, repository: Path) -> str:
         """The commit this revision names in ``repository``."""
 
+    @property
+    def local(self) -> SourceRevision:
+        return self
+
     def commit_at(self, repository: Path) -> str:
         if repository not in self._commits:
             self._commits[repository] = self.resolve(repository)
@@ -120,6 +128,11 @@ class SourceRevision(SourceText):
 @dataclass(frozen=True)
 class FetchedRevision(SourceRevision):
     """A revision fetched from origin before it is read."""
+
+    @cached_property
+    def local(self) -> BranchHeadRevision:
+        """Reviewing captured edits may use only an already-present explicit Git ref."""
+        return BranchHeadRevision(self.reference)
 
     @property
     @abstractmethod
@@ -168,6 +181,9 @@ class CitedRevisions(SourceRevision):
 
     def candidates(self) -> tuple[SourceRevision, ...]:
         return self.revisions
+
+    def in_checkout(self, checkout: Path) -> SourceText:
+        return self.for_repository(Repo.of(checkout).github)
 
     def repository_candidates(self, repository: RepositoryName) -> tuple[SourceRevision, ...]:
         return tuple(candidate for revision in self.revisions
@@ -277,7 +293,7 @@ class OrderRepository(CitedRepository):
     """An unqualified ``file.py:line`` names the order's own repository at its revisions."""
 
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
-        return roots.order, revision
+        return roots.order, revision.in_checkout(roots.order)
 
     def qualified(self, location: str) -> str:
         return location

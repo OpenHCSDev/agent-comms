@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import ast
 import dataclasses
+from difflib import SequenceMatcher
 import json
 import re
 import shlex
@@ -40,7 +41,7 @@ from agent_comms.commander.standing import (
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import MissingSourceLine, RelationViolationError
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -211,20 +212,27 @@ class OverrideNames(ast.NodeVisitor):
     def introduced(cls, before: str, after: str) -> str:
         """Replacement additions minus identical methods under the same declaration.
 
-        Parse failures grant no retention credit. Decorators, owner bases and method bodies
-        participate in identity; a renamed owner or changed body is still introduced source.
+        Parse failures report unavailable declaration evidence. Decorators, owner bases and
+        method bodies participate in identity; a renamed owner or changed body is introduced.
         """
         old, new = cls(), cls()
         try:
             old.visit(ast.parse(dedent(before)))
             new.visit(ast.parse(dedent(after)))
-        except SyntaxError:
-            return ''.join('+' + line + '\n' for line in after.splitlines())
-        retained = {line for identity, (body, first, last) in new.bodies.items()
-                    if identity in old.bodies and old.bodies[identity][0] == body
+        except SyntaxError as error:
+            raise MissingSourceLine(f'Replacement declaration evidence unavailable: {error}') from error
+        same = frozenset(identity for identity, (body, _, _) in new.bodies.items()
+                         if identity in old.bodies and old.bodies[identity][0] == body)
+        retained = {line for identity, (_, first, last) in new.bodies.items() if identity in same
                     for line in range(first, last + 1)}
+        changed = {line for identity, (_, first, last) in new.bodies.items() if identity not in same
+                   for line in range(first, last + 1)}
+        changed.update(line + 1
+                       for kind, _, _, first, last in SequenceMatcher(
+                           None, before.splitlines(), after.splitlines(), autojunk=False).get_opcodes()
+                       if kind != 'equal' for line in range(first, last))
         return ''.join('+' + line + '\n' for number, line in enumerate(after.splitlines(), 1)
-                       if number not in retained)
+                       if number in changed and number not in retained)
 
     @property
     def overrides(self) -> frozenset[str]:
