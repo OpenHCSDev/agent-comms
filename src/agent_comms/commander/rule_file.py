@@ -67,7 +67,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     why: str
     body: str
     opening: ClassVar[re.Pattern[str]] = re.compile(
-        r"\A(?P<wakeup>(?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(?P<why>\S[^\n]*)$", re.M
+        r"\A((?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(\S[^\n]*)$", re.M
     )
     """A rule opens with its wake-up, the greentext read before anything else, then its one
     Why line; the bullets follow."""
@@ -102,8 +102,9 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         opening = cls.opening.match(body)
         if opening is None:
             raise ValueError(f"{path.name}: does not open with its wake-up greentext, then **Why:**")
-        return FieldCodec.decode(cls, {**metadata, "wakeup": opening["wakeup"].rstrip(),
-                                       "why": opening["why"], "body": body[opening.end():].strip()})
+        wakeup, why = opening.groups()
+        return FieldCodec.decode(cls, {**metadata, "wakeup": wakeup.rstrip(), "why": why,
+                                       "body": body[opening.end():].strip()})
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:
