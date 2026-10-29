@@ -9,6 +9,7 @@ import pytest
 from agent_comms.cli_verbs.read_back import ReadBackCliCommand
 from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.comms import Comms
 from agent_comms.field_codec import ClaimId, FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import (
@@ -19,7 +20,6 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.installer.probes.commands import CliCommandProbe, CliOutput, CliRefusedError
-from agent_comms.installer.probes.owners import OwnerActionsProbe
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.upgrade import Stack
@@ -42,7 +42,9 @@ def test_owner_actions_decode_in_the_selected_worker(comms, command, source_repo
         outcomes[0].require_success(UpgradeRefused)
 
 
-def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp_path):
+def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(
+    comms: Comms, tmp_path: Path,
+) -> None:
     comms.registry.declare(Thread("only-first-root", frozenset(), Checkout(tmp_path)))
     runtime = LaunchRuntime.running()
     with InstallCommands() as commands:
@@ -55,7 +57,7 @@ def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp
         help_output = stack.probe(CliCommandProbe(("--help",)))
         assert help_output.returncode == 0
         assert help_output.stdout
-        for probe_type in (CliCommandProbe, OwnerActionsProbe):
+        for probe_type in CliCommandProbe.members_with(CliCommandProbe):
             with pytest.raises(UpgradeRefused) as refused:
                 stack.cli_reply(probe_type(("--root", str(comms.root), "not-a-command")),
                                 partial(CliOutput.decoded, result=tuple[OwnerStart, ...]))
@@ -67,7 +69,9 @@ def test_cli_probes_share_worker_and_keep_roots_and_refusals_separate(comms, tmp
 
 
 @pytest.mark.parametrize("arguments", [("read-back",), ("not-a-command",), ("--help",)])
-def test_cli_invocation_restores_the_callers_root(comms, tmp_path, arguments):
+def test_cli_invocation_restores_the_callers_root(
+    comms: Comms, tmp_path: Path, arguments: tuple[str, ...],
+) -> None:
     previous = LaunchRoot.from_path(tmp_path / "caller-root")
     with previous.selected():
         CliCommandProbe(("--root", str(comms.root), *arguments)).run()
