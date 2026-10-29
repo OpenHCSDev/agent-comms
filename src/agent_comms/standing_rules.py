@@ -34,7 +34,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import GitCommandError, Repo
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
@@ -428,6 +428,12 @@ class HeldBranch:
     def problem(self) -> str:
         return self.todo.id
 
+    def parallel_to(self, other: HeldBranch) -> bool:
+        """Different holders writing different branches of one repository with shared files."""
+        left, right = self.difference, other.difference
+        return (self.holder != other.holder and left.repository == right.repository
+                and left.branch != right.branch and bool(left.files & right.files))
+
 
 class HolderLine(StandingRule, declared_name=None):
     """A rule about one holder's order: a recorded action reaching the holder disposes its line."""
@@ -554,8 +560,12 @@ class BranchGrowth(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class SharedFileBranches(HeldBranchRule):
-    """Different held branches touch the same repository-relative file."""
+class ConflictingBranches(HeldBranchRule):
+    """Two held branches that Git cannot merge: one row per pair, only for a real conflict.
+
+    Two branches touching the same file is ordinary parallel work; the row exists only
+    when ``git merge-tree`` of their heads conflicts, and merging one into the other clears
+    it, so no row asks a question nothing can answer."""
 
     problem: str
     holder: ThreadIncarnation
@@ -564,28 +574,28 @@ class SharedFileBranches(HeldBranchRule):
     other_holder: ThreadIncarnation
     other_branch: str
     repository: RepositoryName
-    path: str
+    paths: tuple[str, ...] = field(compare=False)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
-        found = []
-        for first, second in combinations(branches, 2):
-            left, right = first.difference, second.difference
-            if (first.holder == second.holder or left.repository != right.repository
-                    or left.branch == right.branch):
-                continue
-            found.extend(cls(problem=first.problem, holder=first.holder, branch=left.branch,
-                             other_problem=second.problem, other_holder=second.holder,
-                             other_branch=right.branch, repository=left.repository, path=path)
-                         for path in sorted(left.files & right.files))
-        return tuple(found)
+        return tuple(
+            cls(problem=first.problem, holder=first.holder, branch=first.difference.branch,
+                other_problem=second.problem, other_holder=second.holder,
+                other_branch=second.difference.branch, repository=first.difference.repository,
+                paths=conflicts)
+            for first, second in combinations(branches, 2)
+            if first.parallel_to(second) and (conflicts := Repo.merge_conflicts(
+                first.repository.path, first.difference.head, second.difference.head))
+        )
 
     def line(self) -> str:
-        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} {self.other_problem}"
-                f" both touch {self.repository.to_wire()}:{self.path}. who goes first? -> sequence"
-                " them")
+        return (f"CONFLICT {self.holder.name} {self.problem} ({self.branch}) and"
+                f" {self.other_holder.name} {self.other_problem} ({self.other_branch}) do not merge"
+                f" in {self.repository.to_wire()}: {', '.join(self.paths)}. -> merge one into the"
+                " other and resolve")
 
 
+@dataclass(frozen=True)
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 
