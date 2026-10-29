@@ -57,12 +57,18 @@ class OwnerProcessOutput(RuntimeFile, PatternFile):
 
 @dataclass
 class PublicationMeasurements:
-    """Bounded transport timing counters, not a message or phase authority."""
+    """Bounded resource timings, not a message, phase or successful-send authority.
+
+    First/last delimit observed bodies, including exceptional exits. Maxima and
+    totals remain counters; nested operations must not be added as disjoint work.
+    """
     count: int = 0
     total_ns: int = 0
     maximum_ns: int = 0
     maximum_started_ns: int = 0
     maximum_finished_ns: int = 0
+    first_started_ns: int = 0
+    last_finished_ns: int = 0
     operations: dict[str, PublicationMeasurements] = field(default_factory=dict)
 
     def operation(self, name: str):
@@ -81,6 +87,9 @@ class PublicationMeasurements:
         finally:
             finished = time.monotonic_ns()
             duration = finished - started
+            if self.count == 0 or started < self.first_started_ns:
+                self.first_started_ns = started
+            self.last_finished_ns = max(self.last_finished_ns, finished)
             self.count += 1
             self.total_ns += duration
             if duration > self.maximum_ns:
@@ -104,15 +113,17 @@ def record_request_progress(root, lease, progress, native_process, *, publicatio
     RequestObservations.record(root, lease, record)
 
 
-def record_acquisition_progress(root, lease, input_id, measurements):
+def record_acquisition_progress(root, lease, input_id, measurements, native_process):
     """Report the parent's acquisition timings after its resources close.
 
-    The same diagnostic stream retains native and parent clocks with distinct
-    keys. There is no additional phase, readiness ledger or observation store.
+    The original input owns these counters, not the recipient's cursor lifetime.
+    NativeStartup observed the actual acquired child, or NoProcess if acquisition
+    never returned. This diagnostic grants no send, readiness or replay permission.
     """
     RequestObservations.record(root, lease, {
         "turn": FieldCodec.encode(lease), "input_id": input_id,
         "acquisition": FieldCodec.encode(measurements),
+        "native_process": FieldCodec.encode(native_process),
         "recorded_monotonic_ns": time.monotonic_ns(),
     })
 

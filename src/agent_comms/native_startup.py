@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .child_process import NoProcess, ProcessState
 from .diagnostics import PublicationMeasurements
 from .field_codec import boundary_decoder
 
@@ -94,10 +95,11 @@ NATIVE_STARTUP_POLICY = NativeStartupPolicy()
 
 @dataclass
 class NativeStartup:
-    """Directory and measurements shared while opening one native child."""
+    """Acquisition diagnostics shared by one operation, never send authority."""
 
     root: Path
     measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, kw_only=True)
+    native_process: ProcessState = field(default_factory=NoProcess, init=False)
 
     @classmethod
     def for_launch(
