@@ -778,9 +778,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return updated
 
     def set_commander_project(self, project: CommanderProject) -> CommanderProject:
-        """Publish a project only for its current registered commander identity."""
-        for thread in project.commanders(RegistrySnapshot.capture(self)):
-            thread.require_commander()
+        """Publish a project for its registered commander identity."""
         self.commander_project = project
         return project
 
