@@ -29,10 +29,9 @@ def _fail(error: BaseException, output: TextIO) -> int:
 
 
 def build_parser(arguments: Sequence[str] = (), *, output: TextIO) -> argparse.ArgumentParser:
-    parser_type = CliArgumentParser.writing_to(output)
-    parser = parser_type(prog="agent-comms", description=__doc__)
+    parser = CliArgumentParser(prog="agent-comms", description=__doc__, output=output)
     parser.add_root_options()
-    selection = parser_type.command_parsing(arguments)
+    selection = parser.command_parsing(arguments)
     subparsers = parser.add_subparsers(required=True)
     for declaration in selection.declarations():
         declaration.add_parser(subparsers)

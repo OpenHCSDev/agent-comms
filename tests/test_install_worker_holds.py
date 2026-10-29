@@ -96,7 +96,7 @@ def test_parser_help_uses_only_the_invocations_output(
 @pytest.mark.parametrize("message,expected", [(None, ""), ("", ""), ("parser text\n", "parser text\n")])
 def test_parser_exit_text_is_decoded_at_its_boundary(message: object, expected: str) -> None:
     output = StringIO()
-    parser = CliArgumentParser.writing_to(output)()
+    parser = CliArgumentParser(output=output)
     with pytest.raises(CliParserExit) as exited:
         parser.exit(2, message)
     assert exited.value.code == 2

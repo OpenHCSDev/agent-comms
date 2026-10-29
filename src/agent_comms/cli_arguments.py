@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import argparse
-from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING, Never, Self, TextIO
 
 from agent_comms.cli_command import CliCommand
@@ -67,19 +67,16 @@ class NoCliParserText(AbsentText, CliParserText):
     pass
 
 
-class CliArgumentParser(argparse.ArgumentParser, ABC):
+class CliArgumentParser(argparse.ArgumentParser):
     """Argument errors use Core's JSON failure boundary, including subcommands."""
 
-    @property
-    @abstractmethod
-    def output(self) -> TextIO: ...
+    def __init__(self, *args: object, output: TextIO, **kwargs: object) -> None:
+        self.output = output
+        super().__init__(*args, **kwargs)
 
-    @staticmethod
-    def writing_to(stream: TextIO) -> type[CliArgumentParser]:
-        class WritingParser(CliArgumentParser):
-            output = stream
-
-        return WritingParser
+    def add_subparsers(self, **kwargs: object) -> argparse._SubParsersAction[argparse.ArgumentParser]:
+        return super().add_subparsers(
+            parser_class=partial(type(self), output=self.output), **kwargs)
 
     def _print_message(self, message: object, file: object = None) -> None:
         for text in FieldCodec.decode(CliParserText, message).texts():
@@ -92,9 +89,8 @@ class CliArgumentParser(argparse.ArgumentParser, ABC):
         )
         self.add_argument(LaunchRoot.argument, help=argparse.SUPPRESS)
 
-    @classmethod
-    def command_parsing(cls, arguments: Sequence[str]) -> CommandParsing:
-        selection = cls(add_help=False)
+    def command_parsing(self, arguments: Sequence[str]) -> CommandParsing:
+        selection = type(self)(output=self.output, add_help=False)
         selection.add_root_options()
         selection.add_argument(
             "command", nargs="?", type=SelectedCommand.from_name, default=CommandParsing(),
