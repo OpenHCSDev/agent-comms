@@ -10,6 +10,10 @@ from .errors import RelationViolationError
 from .field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
+    from .channel_targets import NamedTarget
+    from .coordination_session import NativeCapture
+    from .external_transcript import ExternalTranscript
+    from .message_reference import MessageReference
     from .routing import Routing
     from .transcript_routes import _SessionRoutes
 
@@ -30,6 +34,12 @@ class SourceTurn(SubclassUnion, affix="SourceTurn"):
     def ids(self) -> tuple[NativeTurnId, ...]:
         return ()
 
+    def external_answers(
+        self, capture: NativeCapture, transcript: ExternalTranscript, route: NamedTarget,
+    ) -> tuple[MessageReference, ...]:
+        """An absent source opens neither the registry nor the external transcript."""
+        return ()
+
     def require_id(self) -> NativeTurnId:
         for turn_id in self.ids():
             return turn_id
@@ -47,6 +57,12 @@ class NamedSourceTurn(RecordMember, SourceTurn):
 
     def ids(self) -> tuple[NativeTurnId, ...]:
         return (self.id,)
+
+    def external_answers(
+        self, capture: NativeCapture, transcript: ExternalTranscript, route: NamedTarget,
+    ) -> tuple[MessageReference, ...]:
+        with capture as boundary, boundary.reading() as source:
+            return source.answering(transcript.opening_for(self.id), route, boundary.registry)
 
 
 class FreshNativeId(NominalText):
