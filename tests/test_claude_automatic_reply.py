@@ -15,6 +15,7 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
     comms.channels.create_tag('comms')
     for name in ('claude-code', 'viewer', 'peer'):
         comms.channels.update_tags(name, add=frozenset({'comms'}))
+    start = comms.bus.bus.message_history()[-1].seq
     channel = comms.messaging.send('peer', '#comms', '@viewer please investigate').message
     direct = comms.messaging.send('claude-code', 'viewer', 'please answer me privately').message
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
@@ -32,7 +33,7 @@ async def test_channel_mention_and_dm_share_a_turn_without_broadcasting_the_fina
 
     def replies():
         return tuple((message.target, message.body) for message in comms.bus.bus.message_history()
-                     if message.sender == 'viewer')
+                     if message.sender == 'viewer' and message.seq > start)
 
     final = decoded_record(dict(
         type='assistant', uuid=transcript_record('final'), timestamp='2026-10-29T01:00:00Z',
