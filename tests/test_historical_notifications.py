@@ -29,6 +29,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import DeliveredOutcome, ObservedMonitor
+from agent_comms.notification_progress import HarnessConsumedProgress
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.field_codec import InputId, MessageId, TurnId
 from transcript_record_fixture import transcript_record
@@ -318,7 +319,7 @@ def test_sent_recipient_progresses_through_durable_consumption_and_answer(archiv
     assert idle.label.startswith("Consumed ") and not idle.state.seen_working
     unconsumed = delivered_to(observed(ActivityState.WORKING), sent_activity)
     assert unconsumed.label.startswith("Sent ") and not unconsumed.state.seen_working
-    confirmed = replace(unconsumed, state=unconsumed.state.harness_consumed(context_entry.at_ms))
+    confirmed = replace(unconsumed, state=unconsumed.state.model_consumed(HarnessConsumedProgress(context_entry.at_ms)))
     assert confirmed.state.seen_working and confirmed.state.consumed
     assert confirmed.label == confirmed.timed_state(WorkingTakenProgress.label, context_entry.at_ms)
     # An explicit ignore decision is the only Seen, not answering.

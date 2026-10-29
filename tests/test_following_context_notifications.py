@@ -20,15 +20,19 @@ from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 from agent_comms.input_origin import WireInputOrigin
+from agent_comms.message_reference import MessageReference
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeContextProof
 from agent_comms.native_tool_call import OwnerToolConnection
+from agent_comms.notification_progress import DeliveryProgress, ShownToModelProgress
 from agent_comms.pi_commands import FollowingPrompt
 from agent_comms.backend import ObservedNativeCommit, TrackedInputContext
+from agent_comms.turn_item import FreshNativeId
 from agent_comms.turn_lease import TurnLeaseFence
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_events import ContextCommitted, InputCommitted
 from agent_comms.private_send_claim import PrivateSendClaim
+from agent_comms.read_basis import AllOutcomes
 from agent_comms.private_sidecar import native_request_digest
 from conftest import accept_initial, publish_initial
 from native_proof_cases import append_input_entry
@@ -48,6 +52,7 @@ async def following_session(directory: Path) -> AsyncIterator[PrivateSendClaim]:
 class FollowingContext:
     claim: PrivateSendClaim
     keys: tuple[InputKey, ...]
+    references: tuple[MessageReference, ...]
     text: str
     input_event: InputCommitted
     context_event: ContextCommitted
@@ -60,6 +65,10 @@ class FollowingContext:
     @property
     def lease(self) -> TurnLeaseFence:
         return self.claim.owner.thread.require_turn_lease()
+
+    def notification_states(self) -> tuple[DeliveryProgress, ...]:
+        """The projected state of each exact original for its one frozen recipient."""
+        return notification_states(self.claim, self.references)
 
     def start(self) -> None:
         for key in self.keys:
@@ -114,6 +123,17 @@ class FollowingContext:
         ))
 
 
+def notification_states(
+    claim: PrivateSendClaim, references: tuple[MessageReference, ...],
+) -> tuple[DeliveryProgress, ...]:
+    window = claim.selected.comms.views.message_notifications_for_references(AllOutcomes(), references)
+    owner = claim.owner.thread.incarnation.require_recorded().lookup
+    rows = tuple(row for reference in references
+                 for row in window.outcomes[(reference.seq, reference.message_id)])
+    assert [row.recipient_identity.recipient_lookup for row in rows] == [owner] * len(references)
+    return tuple(row.state for row in rows)
+
+
 def following_input(claim: PrivateSendClaim, *, generation: int, count: int = 1) -> FollowingContext:
     """Reserve and bind originals through InputDispositions, then retain native evidence.
 
@@ -142,7 +162,7 @@ def following_input(claim: PrivateSendClaim, *, generation: int, count: int = 1)
         native_id=native_id, text=text,
     )
     session = claim.session.identity
-    entry = f'following-{native_id}'
+    entry = FreshNativeId(f'following-{native_id}')
     start = append_input_entry(session.path, {
         'type': 'message', 'id': entry, 'timestamp': '2026-10-01T00:00:00.002Z',
         'message': {'role': 'user', 'inputId': native_id,
@@ -158,7 +178,7 @@ def following_input(claim: PrivateSendClaim, *, generation: int, count: int = 1)
     with closing(sqlite3.connect(claim.session.files(comms.root).input_proof)) as db, db:
         recorded.insert(db)
     return FollowingContext(
-        claim, keys, text,
+        claim, keys, tuple(message.message.reference for message in messages), text,
         InputCommitted(input_id=native_id, session_id=session.session_id,
                        session_entry_id=entry, session_entry_start=start),
         ContextCommitted(input_id=native_id, session_id=session.session_id,
@@ -175,18 +195,25 @@ async def test_two_following_ids_and_grouped_keys_keep_their_own_first_proof(tmp
         first.start()
         second.start()
         assert first.input_event.input_id != second.input_event.input_id != claim.input_id
+        originals = tuple(row.source for row in claim.stage.assignments)
+        assert all(state.consumed for state in notification_states(claim, originals))
         assert all(not row.model_contexts() for row in first.dispositions.read(
             first.keys + second.keys).rows.values())
+        assert not any(state.consumed for state in first.notification_states() + second.notification_states())
         proof = await first.verify()
         first.acknowledge(proof)
         for row in first.dispositions.read(first.keys).rows.values():
             assert row.has_started and not row.items_with(Unresolved, row)
             assert row.model_contexts() == (proof,)
+        assert first.notification_states() == (ShownToModelProgress(proof.committed_at_ms),) * 2
         assert all(not row.model_contexts() for row in second.dispositions.read(second.keys).rows.values())
+        assert not any(state.consumed for state in second.notification_states())
         second_proof = await second.verify()
         second.acknowledge(second_proof)
         assert all(row.model_contexts() == (second_proof,)
                    for row in second.dispositions.read(second.keys).rows.values())
+        assert second.notification_states() == (ShownToModelProgress(second_proof.committed_at_ms),)
+        assert first.notification_states() == (ShownToModelProgress(proof.committed_at_ms),) * 2
         with Coordination(claim.store_path) as store:
             original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
             assert original.require_context_proof().input_id == claim.input_id

@@ -252,7 +252,7 @@ class SelectedParticipant(MroDispatch):
             sent_read = NotificationAssignment.capture(
                 store.session._connection, OwnerOutcomes.of(sent_owner).selection(sent_sources), privacy,
             )
-        sent_read = NotificationAssignment.capture_responses(comms.root, sent_read)
+        sent_read = NotificationAssignment.capture_detached(comms.root, sent_read)
         if pending:
             participant.pointer.require_idle()
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(

@@ -19,6 +19,7 @@ from .coordination_tables.harness_deliveries import HarnessDelivery
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, ThreadLookup, boundary_decoder
+from .input_disposition import InputDispositions
 from .message_reference import MessageReference
 from .notification_progress import (
     AssignmentProgress,
@@ -225,6 +226,26 @@ class NotificationAssignment(NotificationSource):
         return replace(read, responses=MappingProxyType(responses))
 
     @classmethod
+    def capture_inputs(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
+        """Capture the selected recipients' stored inputs after releasing the coordinator snapshot.
+
+        An ordinary or following turn that took the original into the model proves it by its
+        own input row, keyed as the delivery recorded it; one keyed read covers the window.
+        """
+        registry = RegistryStore.at(root).snapshot()
+        keys = {InputDispositions.bus_key(page.source.message, thread):
+                    (recipient.recipient_lookup, page.source.message.reference)
+                for page in read.selection.pages for recipient in page.recipients
+                for thread in registry.recipient(recipient, page.source).input_owners()}
+        rows = InputDispositions(root).read(tuple(keys)).rows
+        return replace(read, inputs=MappingProxyType({keys[key]: row for key, row in rows.items()}))
+
+    @classmethod
+    def capture_detached(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
+        """Every bus-side evidence read that follows the coordinator snapshot."""
+        return cls.capture_inputs(root, cls.capture_responses(root, read))
+
+    @classmethod
     def capture(
         cls, connection: sqlite3.Connection, selection: NotificationSelection,
         privacy: RegistryPrivacy,
@@ -285,7 +306,7 @@ class NotificationAssignment(NotificationSource):
             cls, selection, privacy,
         ) as result:
             captured = result
-        return cls.capture_responses(root, captured)
+        return cls.capture_detached(root, captured)
 
     @classmethod
     def missing_store(

@@ -50,6 +50,10 @@ class RecipientSelection(ABC):
     @abstractmethod
     def read_effect(self, reads, message, snapshot, *, document=None): ...
 
+    def input_owners(self) -> tuple[Thread, ...]:
+        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
+        return ()
+
 
 @dataclass(frozen=True, slots=True)
 class KnownRecipient(RecipientSelection):
@@ -67,6 +71,9 @@ class RegisteredRecipient(KnownRecipient):
 
     def activity(self, observations, snapshot):
         return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+
+    def input_owners(self) -> tuple[Thread, ...]:
+        return (self.thread,)
 
 
 @dataclass(frozen=True, slots=True)

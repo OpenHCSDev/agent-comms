@@ -27,6 +27,14 @@ if TYPE_CHECKING:
     from .presentation import MessageNotification, WireRevision
 
 
+class ConsumptionEvidence(ABC):
+    """A recorded fact about one delivery that may prove it entered the model's context."""
+
+    @abstractmethod
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        """The delivery's progress after this fact; only a context proof moves it."""
+
+
 @dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
     def recorded(self, message: Delivered) -> AssignmentResponse:
@@ -87,11 +95,12 @@ class AnsweredResponse(AssignmentResponse):
 
 @dataclass(frozen=True)
 class SourceEvidence:
-    """One original's claims, attempts and independent responses, grouped by frozen
-    recipient. Equality over all three is the window's change test."""
+    """One original's claims, harness attempts, stored inputs and independent responses,
+    grouped by frozen recipient. Equality over all of them is the window's change test."""
 
     claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
     attempts: Mapping[ThreadLookup, tuple[HarnessDelivery, ...]] = field(default_factory=dict)
+    inputs: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(default_factory=dict)
     responses: Mapping[ThreadLookup, AssignmentResponse] = field(default_factory=lambda: MappingProxyType({}))
 
     def answered(self, recipient: ThreadLookup, notification: MessageNotification) -> MessageNotification:
@@ -99,8 +108,9 @@ class SourceEvidence:
 
     def consumed_progress(self, recipient: ThreadLookup,
                           progress: DeliveryProgress) -> DeliveryProgress:
-        """The recipient's progress after each of its own attempts on this original."""
-        for attempt in self.attempts.get(recipient, ()):
+        """The recipient's progress after each of its own harness attempts and stored inputs
+        of this original."""
+        for attempt in (*self.attempts.get(recipient, ()), *self.inputs.get(recipient, ())):
             progress = attempt.consumed_progress(progress)
         return progress
 
@@ -166,6 +176,8 @@ class NotificationAssignmentRead:
     attempts: tuple[HarnessDelivery, ...] = ()
     responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
         default_factory=lambda: MappingProxyType({}))
+    inputs: Mapping[tuple[ThreadLookup, MessageReference], ConsumptionEvidence] = field(
+        default_factory=lambda: MappingProxyType({}))
 
     @property
     def sources(self) -> tuple[Delivered, ...]:
@@ -183,15 +195,21 @@ class NotificationAssignmentRead:
         responses: dict[MessageReference, dict[ThreadLookup, AssignmentResponse]] = {
             source.message.reference: {} for source in self.sources
         }
+        inputs: dict[MessageReference, dict[ThreadLookup, tuple[ConsumptionEvidence, ...]]] = {
+            source.message.reference: {} for source in self.sources
+        }
         for (lookup, source), response in self.responses.items():
             responses[source][lookup] = response
+        for (lookup, source), stored in self.inputs.items():
+            inputs[source][lookup] = (stored,)
         for row in self.rows:
             claims.setdefault(row[0].source, []).append(row)
         for attempt in self.attempts:
             attempts[attempt.reference].setdefault(attempt.recipient_lookup, []).append(attempt)
         return {source: SourceEvidence(tuple(claims[source]), {
                     lookup: tuple(rows) for lookup, rows in attempts[source].items()},
-                    MappingProxyType(responses[source]))
+                    responses=MappingProxyType(responses[source]),
+                    inputs=MappingProxyType(inputs[source]))
                 for source in claims}
 
     def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:

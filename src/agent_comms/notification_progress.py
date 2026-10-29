@@ -78,9 +78,9 @@ class DeliveryProgress(ThreadPresentationStatus):
         return replace(notification, state=AnsweredProgress(self),
                        answer=reference, answered_at_ms=answered_at_ms, changed=True)
 
-    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
-        """Retain the original complete-body transcript observation time."""
-        return HarnessConsumedProgress(observed_at_ms)
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        """The first proof that the message entered the model's context, at its own time."""
+        return proof
 
 
 class ConsumedDelivery(SettledDelivery):
@@ -90,8 +90,8 @@ class ConsumedDelivery(SettledDelivery):
     ignored_label: ClassVar[str] = "Seen, not answering"
     consumed: ClassVar[bool] = True
 
-    def harness_consumed(self, observed_at_ms: int) -> Self:
-        """An earlier proof already timed the entry; a harness confirmation adds nothing."""
+    def model_consumed(self, proof: ShownToModelProgress) -> Self:
+        """An earlier proof already timed the entry; a later one adds nothing."""
         return self
 
     def working_notification_label(self, notification: MessageNotification) -> str:
@@ -122,16 +122,16 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     def consumed(self) -> bool:
         return self.proof.consumed
 
-    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
-        return replace(self, proof=self.proof.harness_consumed(observed_at_ms))
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        return replace(self, proof=self.proof.model_consumed(proof))
 
 
 class PendingProgress(ContextualProgress):
-    """A pending claim adds no label of its own: once a harness proves entry, the proof is
+    """A pending claim adds no label of its own: once entry is proven, the proof is
     the whole state."""
 
-    def harness_consumed(self, observed_at_ms: int) -> DeliveryProgress:
-        return self.proof.harness_consumed(observed_at_ms)
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        return self.proof.model_consumed(proof)
 
 
 class PassiveProgress(ContextualProgress):

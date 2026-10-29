@@ -30,6 +30,8 @@ from .input_origin import (
 from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .lifecycle_capability import LifecycleCapability, Unresolved
 from .native_input_proof import NativeContextProof
+from .notification_evidence import ConsumptionEvidence
+from .notification_progress import DeliveryProgress, ShownToModelProgress
 from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
@@ -91,7 +93,7 @@ class UnchangedInput(InputTransition):
 
 
 @dataclass(frozen=True)
-class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
+class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, affix="Input"):
     exists: ClassVar[bool] = False
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
@@ -134,6 +136,9 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
 
     def model_contexts(self) -> tuple[NativeContextProof, ...]:
         return ()
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress
 
     def context_committed(
         self, lease: TurnLeaseFence, sent_text: str, context: NativeContextProof,
@@ -476,6 +481,9 @@ class ContextConsumedInput(StartedInput):
 
     def model_contexts(self) -> tuple[NativeContextProof, ...]:
         return (self.context,)
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.model_consumed(ShownToModelProgress(self.context.committed_at_ms))
 
     def record_context(self, context: NativeContextProof) -> InputTransition:
         self.context.require_continuation(context)

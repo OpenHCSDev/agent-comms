@@ -19,6 +19,7 @@ from agent_comms.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
+from agent_comms.notification_evidence import ConsumptionEvidence
 from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete
 
 if TYPE_CHECKING:
@@ -28,7 +29,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliveries"):
+class HarnessDelivery(NoDelete, CoordinatorRow, ConsumptionEvidence, declared_name="harness_deliveries"):
     """One original attempt to put a bus message into a recipient's harness session."""
 
     bridge: Annotated[type[HarnessSession], FrozenColumn(primary_key=True)]

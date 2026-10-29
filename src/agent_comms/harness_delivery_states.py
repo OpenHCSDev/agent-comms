@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
+from .notification_progress import HarnessConsumedProgress
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
@@ -205,7 +206,7 @@ class ObservedMonitor(MonitorEvidence):
         return DeliveredOutcome, self
 
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
-        return progress.harness_consumed(round(self.timestamp * 1000))
+        return progress.model_consumed(HarnessConsumedProgress(round(self.timestamp * 1000)))
 
     def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
         return state.harness_delivery()
