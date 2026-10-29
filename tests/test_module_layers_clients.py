@@ -28,6 +28,28 @@ def write(path: Path, text: str = "") -> None:
     path.write_text(text)
 
 
+@pytest.mark.parametrize("declaration, roots", (
+    ("", ("src", ".")),
+    ('mypy_path = ["src", "tools"]', ("src", "tools")),
+    ('mypy_path = "src, tools"', ("src", "tools")),
+    ("mypy_path = []", ()),
+    ('mypy_path = ["{external}", "src"]', ("{external}", "src")),
+))
+def test_client_roots_follow_each_projects_native_declaration(
+    tmp_path: Path, declaration: str, roots: tuple[str, ...],
+) -> None:
+    external = tmp_path / "external-library"
+    external.mkdir()
+    client = tmp_path / "client"
+    dependency = tmp_path / "dependency"
+    write(client / "pyproject.toml", '[tool.mypy]\n' + declaration.format(external=external))
+    write(dependency / "pyproject.toml", '[tool.mypy]\nmypy_path = ["lib"]\n')
+    acquired = StackClient("client", client, dependencies=(dependency,))
+    expected = tuple(str((client / path.format(external=external)).resolve()) for path in roots)
+    assert acquired.source_paths == expected
+    assert acquired.import_paths == (*expected, str(dependency / "lib"))
+
+
 def test_materialized_clients_check_matched_sources_and_both_mixed_sources_fail(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
     materialized_clients: Callable[[Path, IntegrationInput], MaterializedClients],

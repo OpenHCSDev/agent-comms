@@ -39,6 +39,9 @@ from dataclasses import dataclass, replace
 from functools import cache, cached_property
 from pathlib import Path
 
+from mypy.config_parser import toml_config_types
+
+from agent_comms.field_codec import FieldCodec, boundary_decoder
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
@@ -313,10 +316,25 @@ class StackClient(StackSources):
     compared: tuple[Path, ...] = ()
     dependencies: tuple[Path, ...] = ()
 
+    @cached_property
+    @boundary_decoder
+    def source_paths(self) -> tuple[str, ...]:
+        """The acquired project's declaration owns development import bases.
+
+        Use mypy's native TOML conversion (array or delimited string), not another
+        path dialect. An explicit empty override stays empty. Projects without an
+        override retain the existing installed-package/src convention.
+        """
+        project = tomllib.loads((self.checkout / "pyproject.toml").read_text())
+        declared = project.get("tool", {}).get("mypy", {}).get("mypy_path", ["src", "."])
+        roots = FieldCodec.decode(list[str], toml_config_types["mypy_path"](declared))
+        return tuple(str((self.checkout / root).resolve()) for root in roots)
+
     @property
     def import_paths(self) -> tuple[str, ...]:
-        return tuple(str(root / path) for root in (self.checkout, *self.dependencies)
-                     for path in ("src", "."))
+        return tuple(dict.fromkeys((*self.source_paths,
+            *(path for checkout in self.dependencies
+              for path in StackClient(self.name, checkout).source_paths))))
 
     def files_importing(self, module: str) -> list[str]:
         """A selected path comes from either cut, but absence on this cut stays absent."""

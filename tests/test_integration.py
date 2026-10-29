@@ -186,19 +186,27 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
 ) -> None:
     pair = mutual_sources
     plugin = ('from mypy.plugin import Plugin\nfrom agent_comms.api import old_api\n'
+              'from performance.capture_live import capture\n'
               'def plugin(version: str) -> type[Plugin]:\n'
-              '    assert old_api() == "baseline"\n    return Plugin\n')
+              '    assert old_api() == capture() == "baseline"\n    return Plugin\n')
+    capture = 'from agent_comms.api import old_api\n\ndef capture() -> str:\n    return old_api()\n'
+    script = ('from agent_comms.api import old_api\nfrom performance.capture_live import capture\n'
+              'assert old_api() == capture() == "baseline"\n')
     # The native config and its plugin are real baseline source, then migrated on feature.
     pair.client.git(pair.client.checkout, "switch", "main")
     project = tomllib.loads((pair.client.checkout / "pyproject.toml").read_text())
-    project["tool"]["mypy"] = {"plugins": ["mypy_source_plugin.py"]}
-    pair.client.commit_change("Declare the baseline native mypy plugin", *pair.client.write_files({
-        Path("pyproject.toml"): tomli_w.dumps(project), Path("mypy_source_plugin.py"): plugin}))
+    project["tool"]["mypy"] = {"plugins": ["mypy_source_plugin.py"], "mypy_path": ["src", "tools"]}
+    pair.client.commit_change("Declare baseline script roots and native mypy plugin", *pair.client.write_files({
+        Path("pyproject.toml"): tomli_w.dumps(project), Path("mypy_source_plugin.py"): plugin,
+        Path("tools/performance/capture_live.py"): capture, Path("tools/acceptance.py"): script}))
     pair.client.git(pair.client.checkout, "push", "origin", "main")
     pair.client.git(pair.client.checkout, "switch", "feature")
     pair.client.git(pair.client.checkout, "merge", "--no-edit", "main")
-    head = pair.client.publish_change("Migrate the real plugin alongside the client", *pair.client.write_files({
-        Path("mypy_source_plugin.py"): plugin.replace("old_api", "new_api").replace("baseline", "candidate")}))
+    head = pair.client.publish_change("Migrate scripts and native plugin alongside the client", *pair.client.write_files({
+        path: text.replace("old_api", "new_api").replace("baseline", "candidate")
+        for path, text in ((Path("mypy_source_plugin.py"), plugin),
+                           (Path("tools/performance/capture_live.py"), capture),
+                           (Path("tools/acceptance.py"), script))}))
     stamp = "2026-10-24T00:00:00Z"
     github_cli.put(pair.client.github, DraftListedPullRequest(
         pair.client.number, "feature", head, stamp, "main", reviewable_times=(stamp,)))
@@ -208,6 +216,19 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     clients = materialized_clients(pair.output, inputs)
     assert len(ClientTypeErrors.parts(pair.core.checkout, source.baseline.commit, head,
                                      {"src/agent_comms/api.py"}, "src/", clients)) == 2
+    for side in (BaseSide, HeadSide):
+        client, = clients.at(pair.core.checkout, source.baseline.commit, head, side)
+        assert client.import_paths == tuple(str(client.checkout / path) for path in ("src", "tools"))
+        assert client.files_importing("agent_comms") == [
+            "mypy_source_plugin.py", "src/workflow.py", "tools/acceptance.py", "tools/performance/capture_live.py"]
+        # Python's script entrypoint and the plugin's import must see this same cut.
+        entry = subprocess.run((sys.executable, "tools/acceptance.py"), cwd=client.checkout,
+            env={**os.environ, "PYTHONPATH": os.pathsep.join((
+                str(side.require_materialized(pair.output, source) / "src"), *client.import_paths))},
+            capture_output=True, text=True, timeout=30)
+        assert entry.returncode == 0, entry.stdout + entry.stderr
+    # Both namespace files are selected under --explicit-package-bases: a duplicate
+    # performance/tools.performance identity aborts the real checker, not a zero count.
     result = compare(pair.core.checkout, source.baseline.commit, head, "src", 1,
                      measured=(ClientTypeErrors,), clients=clients)
     assert not result.failed

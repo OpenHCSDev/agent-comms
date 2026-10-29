@@ -953,7 +953,7 @@ class ClientTypeErrors(SideCounts):
                     cache, "--follow-imports=silent", "--ignore-missing-imports", *selected)),
                 cwd=client.checkout, timeout=600, runtime=runtime,
                 env={**os.environ, "MYPYPATH": os.pathsep.join(imports),
-                     "PYTHONPATH": os.pathsep.join((*imports, os.environ.get("PYTHONPATH", "")))},
+                     "PYTHONPATH": os.pathsep.join(imports)},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
         return Counter(f"{client.name}/{match[1]}" for match in cls.finding.finditer(output)
