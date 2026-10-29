@@ -32,7 +32,7 @@ from .field_codec import (
     NativeContext,
 )
 from .native_integer import PositiveNativeIntegerBounds
-from .native_session_reopen import PiSessionId
+from .native_session_reopen import NativeSessionIdValue, PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import SqlStorage, TextStorage
 
@@ -88,7 +88,7 @@ class NativeStageStorage(SqlStorage):
         return (NativeInputExecution.sql_constraint(column),)
 
 
-class NativeColumn(DeclaredFamily, JsonShapeFamily, affix="NativeColumn"):
+class NativeColumn(DeclaredFamily, JsonShapeFamily, NativeSessionIdValue, affix="NativeColumn"):
     """One nullable column of an original native row: SQL NULL until its group is recorded.
 
     The group's owner (the stage, or the context acknowledgement) decides what a
@@ -126,6 +126,9 @@ class UnrecordedNativeColumn(NativeColumn, JsonShapeMember):
 @dataclass(frozen=True)
 class TextNativeColumn(NativeColumn, JsonShapeMember):
     value: str
+
+    def require_recorded_session(self) -> PiSessionId:
+        return FieldCodec.decode(PiSessionId, self.value)
 
     def holds(self, value: object) -> bool:
         return self.value == value
@@ -403,7 +406,7 @@ class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
             result = FieldCodec.construct(cls, dict(
                 input_id=row.context_value("input_id"),
                 stage=row.reference_stage,
-                session_id=FieldCodec.decode(PiSessionId, row.context_value("session_id")),
+                session_id=row.session_id.require_recorded_session(),
                 request_generation=row.context_value("request_generation"),
             ))
             return result
@@ -439,7 +442,7 @@ class NativeInputContext:
 
     input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
-    session_id: PiSessionId | NativeColumn
+    session_id: NativeSessionIdValue
     request_generation: NativeColumn
 
     @property
@@ -483,10 +486,13 @@ class NativeInputContext:
         return UnrecordedNativeInputReference()
 
     def recorded_reference(self) -> NativeContextReference:
+        reference = NativeInputReference.acquire(self)
+        reference_fields = {name for name, _annotation in FieldCodec.record_fields(type(reference))}
         try:
             for plan in FieldCodec.field_plans(type(self)):
-                for directive in NativeContext.single(plan.annotation):
-                    FieldCodec.decode(directive.value, getattr(self, plan.name).value)
+                if plan.name not in reference_fields:
+                    for directive in NativeContext.single(plan.annotation):
+                        FieldCodec.decode(directive.value, getattr(self, plan.name).value)
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
-        return NativeInputReference.acquire(self)
+        return reference
