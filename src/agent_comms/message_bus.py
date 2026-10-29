@@ -27,7 +27,7 @@ from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
+from agent_comms.maintenance_barrier import FreshIngress, MaintenanceBarrier, MaintenanceHeldError
 from agent_comms.message_page import InboxPage, MessagePageRequest, PageBounds
 from agent_comms.message_reference import (
     FirstUnreadStart,
@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from agent_comms.threads import Thread
 
 
-class Watch(AsyncWork, DeclaredFamily, ABC):
+class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):
     """Observe, then apply the result while the bus is open.
 
     A hold is waited out on the service's own loop, where its stop cancels the wait. Waiting
@@ -70,7 +70,7 @@ class Watch(AsyncWork, DeclaredFamily, ABC):
 
     def enter_phase[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         """Refuse a new watch phase before its effects, without borrowing a store lock."""
-        MaintenanceBarrier(comms.registry.store.path).assert_open_unlocked()
+        self.require_entry_open(comms.root)
         return operation()
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],

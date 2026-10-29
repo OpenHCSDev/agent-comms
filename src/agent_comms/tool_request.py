@@ -27,8 +27,7 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
-from .locked_store import RegistryFile
-from .maintenance_barrier import MaintenanceBarrier
+from .maintenance_barrier import FreshIngress
 from .native_tools import (
     ArgumentTool,
     CoordinationCall,
@@ -101,7 +100,7 @@ class ToolCall:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
-    AsyncWork, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
+    AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     @classmethod
     def create_call(
@@ -149,12 +148,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
                 },
             )
         return result
-
-
-    @classmethod
-    def require_connector_ingress(cls, root: Path) -> None:
-        """Refuse a fresh external mutation before opening its registry or bus."""
-        MaintenanceBarrier(RegistryFile.path_in(root)).assert_open_unlocked()
 
     @classmethod
     def invoke(
@@ -215,7 +208,7 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool(ReadWork):
+class ReadTool(ReadWork, FreshIngress):
     """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
@@ -223,7 +216,7 @@ class ReadTool(ReadWork):
     read_only_hint: ClassVar[bool] = True
 
     @classmethod
-    def require_connector_ingress(cls, root: Path) -> None:
+    def require_entry_open(cls, root: Path) -> None:
         """Declared reads remain available to the installer's readiness checks."""
 
 
