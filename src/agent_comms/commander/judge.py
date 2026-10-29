@@ -575,7 +575,7 @@ class PromoteVerb(OkVerb, HeadOnlyVerb):
         permission = PromotedHeadReview()
         permission.require_sources(ctx.comms.goals, request, ctx.actor_identity)
         reviewed = super().review_head(ctx, request, linked)
-        return replace(reviewed, merge=permission.enqueue(reviewed.record))
+        return replace(reviewed, merge=permission.enqueue(reviewed.record, ctx.repos))
 
 
 @dataclass(frozen=True, kw_only=True)

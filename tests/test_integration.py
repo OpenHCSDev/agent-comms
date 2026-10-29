@@ -14,7 +14,7 @@ import tomli_w
 
 from agent_comms import integration
 from agent_comms.errors import ToolRefusedError
-from agent_comms.head_review import BaseSide, HeadReview, HeadSide, IntegrationInput, PromotedHeadReview, PullRequestHead
+from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.todos import (
@@ -69,9 +69,12 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
                    "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
     command = (sys.executable, "-m", "agent_comms.integration")
-    result = subprocess.run((*command, "--resolve-ci-inputs", str(output)), cwd=checkout.path,
+    workflow_output = tmp_path / "workflow-output"
+    result = subprocess.run((*command, "--resolve-ci-inputs", str(output),
+                             "--workflow-output", str(workflow_output)), cwd=checkout.path,
                             env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
+    assert workflow_output.read_text() == f"base={local.baseline.commit}\ncombined=true\n"
     assert IntegrationInput.at(output) == inputs
     assert inputs.carrier.pr == carrier.pr != pair.core.number
     assert local.heads == (PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit),)
@@ -109,9 +112,12 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
                    "GITHUB_EVENT_PATH": str(document), "GITHUB_SHA": tested,
                    "GITHUB_REPOSITORY": pair.core.github.to_wire(), "RUNNER_TEMP": str(tmp_path),
                    "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")}
-    result = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--resolve-ci-inputs", str(output)),
+    workflow_output = tmp_path / "ordinary-workflow-output"
+    result = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--resolve-ci-inputs", str(output),
+                             "--workflow-output", str(workflow_output)),
                             cwd=checkout.path, env=environment, capture_output=True, text=True, timeout=120)
     assert result.returncode == 0, result.stdout + result.stderr
+    assert workflow_output.read_text() == f"base={baseline}\ncombined=false\n"
     inputs = IntegrationInput.at(output)
     core = inputs.source(pair.core.github)
     client = inputs.source(pair.client.github)
@@ -128,6 +134,16 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
                               str(tmp_path / "refused-individual")), cwd=checkout.path,
                              env=environment, capture_output=True, text=True, timeout=120)
     assert refused.returncode != 0 and "individual source" in refused.stderr
+    document.write_text(json.dumps({"merge_group": {
+        "head_sha": tested, "base_sha": baseline,
+        "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{pair.core.number}-{head}"}}))
+    queued = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+                             str(tmp_path / "refused-ordinary-queue")), cwd=checkout.path,
+                            env={**environment, "GITHUB_EVENT_NAME": "merge_group"},
+                            capture_output=True, text=True, timeout=120)
+    assert queued.returncode != 0 and "individual source" in queued.stderr
+    assert not HeadReview.accepted(pair.core.github, tested)
+    assert not MergeHeadReview.accepted(pair.core.github, tested)
 
 
 @pytest.mark.parametrize("event", ("pull_request", "merge_group"))
@@ -172,6 +188,69 @@ def test_required_hosted_merge_gate_distinguishes_source_review_from_combined_pr
     promoted = subprocess.run((*command, str(tmp_path / "after-promotion")), cwd=checkout.path,
                               env=environment, capture_output=True, text=True, timeout=120)
     assert promoted.returncode == 0, promoted.stdout + promoted.stderr
+    assert HeadReview.accepted(carrier.repo, tested) is (event == "merge_group")
+    assert MergeHeadReview.accepted(carrier.repo, tested) is (event == "merge_group")
+    member = inputs.source(pair.client.github).heads[0]
+    QualifiedHeadVerdict(VerdictReason("This member is no longer accepted for the combined source")).post(
+        member.repo, member.head, "lead", "withdraw member")
+    stale = subprocess.run((*command, str(tmp_path / "after-member-withdrawal")), cwd=checkout.path,
+                           env=environment, capture_output=True, text=True, timeout=120)
+    assert stale.returncode != 0 and "no accepted exact-head source review" in stale.stderr
+    assert not MergeHeadReview.accepted(carrier.repo, tested)
+    assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
+
+
+def test_resolved_companion_keeps_multiple_original_links_and_the_published_carrier_tree(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
+) -> None:
+    pair = mutual_sources
+    peer = SourceRepository(checkout=pair.client.checkout, github=pair.client.github, number=8)
+    peer.git(peer.checkout, "switch", "-c", "second-client-source", "main")
+    peer_head = peer.publish_change("Independent companion source", *peer.write_files({
+        Path("src/extra.py"): "extra = 1\n"}))
+    stamp = "2026-10-24T00:00:00Z"
+    github_cli.put(peer.github, DraftListedPullRequest(
+        peer.number, "second-client-source", peer_head, stamp, "main", reviewable_times=(stamp,)))
+    comms = pair.context.comms
+    primary = comms.goals.todos.get("P2")
+    comms.goals.update_goal("worker", CreateProblemGoalAction(
+        problem="P4", commander="lead", request=primary.request,
+        assigner=comms.registry.require("lead").incarnation,
+        repo=peer.github, text="Include the second existing companion source",
+        order=replace(primary.order.checked(), pull_requests=(peer.link,),
+                      check=replace(primary.order.check, directory=peer.checkout)),
+        review_at=RecordedEventTime(9999999999.0)))
+    member_heads = (PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit),
+                    PullRequestHead(peer.github, peer.number, peer_head))
+    resolved = integration.IntegrationCheckout.create(pair.client, tmp_path / "resolved-client", pair.client.main_commit)
+    resolved.combine_sources(pair.client.main_commit, member_heads)
+    # The reviewed carrier may contain a resolved change; replaying member merges loses it.
+    (resolved.path / "src/resolution.py").write_text("resolved = True\n")
+    peer.git(resolved.path, "add", "src/resolution.py")
+    peer.git(resolved.path, "commit", "-m", "Resolve the actual companion carrier")
+    companion_head = peer.git(resolved.path, "rev-parse", "HEAD").strip()
+    number = 102
+    peer.git(resolved.path, "push", "origin", f"{companion_head}:refs/pull/{number}/head")
+    github_cli.put(peer.github, DraftListedPullRequest(
+        number, "resolved-companion", companion_head, stamp, "main", reviewable_times=(stamp,)))
+    companion = PullRequestHead(peer.github, number, companion_head)
+    inputs = pair.capture(("P2", "P3", "P4"), "preserve actual resolved companion sources", companions=(companion,))
+    carrier = pair.publish_carrier(github_cli)
+    source = inputs.source(peer.github)
+    assert isinstance(source, ResolvedIntegrationSource)
+    assert source.carrier == companion and source.heads == member_heads
+    assert inputs == CombinedInput.at(pair.output)
+    assert peer.git(HeadSide.checkout(pair.output, peer.github), "rev-parse", "HEAD").strip() == companion_head
+    inputs.validate(pair.context.repos, carrier)
+    replaced = replace(source, candidate_tree=source.baseline.commit)
+    with pytest.raises(ToolRefusedError, match="tree differs"):
+        replaced.require_tree(peer)
+    github_cli.put(peer.github, DraftListedPullRequest(
+        number, "resolved-companion", peer_head, stamp, "main", reviewable_times=(stamp,)))
+    with pytest.raises(ToolRefusedError, match="moved"):
+        inputs.validate(pair.context.repos, carrier)
+    assert comms.goals.todos.get("P2").repo == pair.core.github
+    assert {link.number for pid in ("P3", "P4") for link in comms.goals.todos.get(pid).order.checked().pull_requests} == {pair.client.number, peer.number}
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
 

@@ -18,12 +18,13 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import StackSources
-from .repo import Repo
+from .repo import GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .integration import IntegrationCheckout
     from .thread_identity import ThreadIncarnation
     from .todos import HeadReviewRecord, HeadVerdict, Todo
 
@@ -121,7 +122,7 @@ class PullRequestHead:
 
 
 @dataclass(frozen=True)
-class IntegrationSource:
+class IntegrationSource(DeclaredFamily, affix="Source"):
     """One repository's captured main, exact PR overlays and resulting Git tree."""
 
     baseline: RepositoryCommit
@@ -158,17 +159,18 @@ class IntegrationSource:
             raise ToolRefusedError("Remote main did not resolve to a full Git identity")
         return commit
 
-    def expected_tree(self, repository: Repo) -> str:
-        """Reproduce the ordered Git merge result without moving a registered checkout."""
-        reader = WorkBranches(repository.checkout)
-        reader.require_commits("origin", self.baseline.commit, *(head.head for head in self.heads))
-        commit = self.baseline.commit
-        for head in self.heads:
-            tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
-            commit = Repo.git(repository.checkout, "commit-tree", tree,
-                              "-p", commit, "-p", head.head,
-                              "-m", "Validate captured source combination").strip()
-        return Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
+    @property
+    def candidate_commit(self) -> str:
+        return self.baseline.commit
+
+    def materialize(self, repository: Repo, path: Path) -> IntegrationCheckout:
+        from .integration import IntegrationCheckout
+        checkout = IntegrationCheckout.create(repository, path, self.candidate_commit)
+        self.prepare_candidate(checkout)
+        return checkout
+
+    def prepare_candidate(self, checkout: IntegrationCheckout) -> None:
+        checkout.combine_sources(self.baseline.commit, self.heads)
 
     def require_origin(self, repository: Repo) -> None:
         if Repo.of(repository.checkout).github != self.repository:
@@ -180,10 +182,9 @@ class IntegrationSource:
             raise ToolRefusedError(f"{self.repository.to_wire()} main moved; recapture inputs")
         self.require_candidate(repository, carrier)
 
+    @abstractmethod
     def require_tree(self, repository: Repo) -> None:
-        self.require_origin(repository)
-        if self.expected_tree(repository) != self.candidate_tree:
-            raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+        """Prove this source's candidate through its declared Git construction."""
 
     def require_ancestry(self, repository: Repo, candidate: str) -> None:
         """A resolved Git combination retains every actual source, not a guessed patch."""
@@ -207,6 +208,55 @@ class IntegrationSource:
                 current = head.current()
                 if current.base != WorkBranches.main:
                     raise ToolRefusedError(f"#{head.pr} no longer targets captured main")
+
+
+@dataclass(frozen=True)
+class MergedIntegrationSource(IntegrationSource):
+    """Ordered source heads whose reproducible Git merge owns the candidate tree."""
+
+    def expected_tree(self, repository: Repo) -> str:
+        reader = WorkBranches(repository.checkout)
+        reader.require_commits("origin", self.baseline.commit, *(head.head for head in self.heads))
+        commit = self.baseline.commit
+        for head in self.heads:
+            tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
+            commit = Repo.git(repository.checkout, "commit-tree", tree,
+                              "-p", commit, "-p", head.head,
+                              "-m", "Validate captured source combination").strip()
+        return Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
+
+    def require_tree(self, repository: Repo) -> None:
+        self.require_origin(repository)
+        if self.expected_tree(repository) != self.candidate_tree:
+            raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+
+
+@dataclass(frozen=True)
+class ResolvedIntegrationSource(IntegrationSource):
+    """A separate published companion carrier preserves the actual resolved member tree."""
+
+    carrier: PullRequestHead
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if (self.carrier.repo != self.repository or len(self.carrier.head) != 40
+                or self.carrier.head != self.carrier.head.lower()):
+            raise MalformedRecord("A resolved source requires its exact full carrier identity")
+        if any(head.same_pull_request(self.carrier) for head in self.heads):
+            raise MalformedRecord("A resolved companion carrier is separate from its source members")
+
+    @property
+    def candidate_commit(self) -> str:
+        return self.carrier.head
+
+    def prepare_candidate(self, checkout: IntegrationCheckout) -> None:
+        self.require_ancestry(Repo.of(checkout.path), self.carrier.head)
+
+    def require_tree(self, repository: Repo) -> None:
+        self.require_ancestry(repository, self.carrier.head)
+        current = self.carrier.current()
+        if current.base != WorkBranches.main:
+            raise ToolRefusedError("The resolved companion carrier no longer targets main")
 
 
 @dataclass(frozen=True)
@@ -284,6 +334,16 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
                         f"{head.repo.to_wire()}#{head.pr} at {head.head} has no accepted exact-head "
                         "source review; pending qualification cannot promote the carrier.")
 
+    @property
+    def combined(self) -> bool:
+        return False
+
+    def write_workflow_output(self, path: Path, repository: RepositoryName) -> None:
+        """GitHub consumes these derived values, not another payload or branch-name rule."""
+        with path.open("a") as output:
+            output.write(f"base={self.source(repository).baseline.commit}\n")
+            output.write(f"combined={str(self.combined).lower()}\n")
+
     def require_carrier(self, core: Repo, carrier: PullRequestHead) -> None:
         raise ToolRefusedError("An individual source is not a captured combined carrier")
 
@@ -345,6 +405,10 @@ class CombinedInput(IntegrationInput):
     """The actual separate carrier before publication of this immutable source capture."""
 
     carrier: PullRequestHead
+
+    @property
+    def combined(self) -> bool:
+        return True
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -562,6 +626,10 @@ class HeadReview(DeclaredFamily, affix="HeadReview"):
     # GitHub caps a status description at 140 characters.
     description_limit: ClassVar[int] = 140
 
+    @staticmethod
+    def required_contexts() -> tuple[str, ...]:
+        return (HeadReview.context,)
+
     @classmethod
     def allows_integration(cls) -> bool:
         return False
@@ -604,7 +672,31 @@ class MergeHeadReview(HeadReview, declared_name=None):
     context = "agent-comms/merge"
 
     @classmethod
-    def require_merge(cls, request: PullRequestHead) -> None:
+    def required_contexts(cls) -> tuple[str, ...]:
+        return (*super().required_contexts(), cls.context)
+
+    @classmethod
+    def require_combined(cls, request: PullRequestHead,
+                         repositories: tuple[Repo, ...]) -> IntegrationInput:
+        repository = Repo.selected(repositories, request.repo.to_wire())
+        captured = IntegrationInput.from_message(
+            WorkBranches(repository.checkout).commit_message(request.head))
+        if not captured:
+            raise ToolRefusedError("Only a captured combined carrier may merge; accept individual source with judge ok")
+        inputs, = captured
+        inputs.validate(repositories, request)
+        inputs.require_source_reviews()
+        return inputs
+
+    @classmethod
+    def require_merge(cls, request: PullRequestHead,
+                      repositories: tuple[Repo, ...]) -> IntegrationInput:
+        inputs = cls.require_combined(request, repositories)
+        cls.require_permission(request)
+        return inputs
+
+    @classmethod
+    def require_permission(cls, request: PullRequestHead) -> None:
         if not (HeadReview.accepted(request.repo, request.head)
                 and cls.accepted(request.repo, request.head)):
             raise ToolRefusedError("The exact combined carrier has no explicit reviewed merge promotion")
@@ -628,22 +720,21 @@ class PromotedHeadReview(MergeHeadReview):
         project = goals.registry.snapshot().commander_project.require()
         if reviewer.commanding_identity != project.commander:
             raise ToolRefusedError("Only this root's commander may promote the combined carrier")
-        repository = Repo.selected(project.repos, request.repo.to_wire())
-        captured = IntegrationInput.from_message(WorkBranches(repository.checkout).commit_message(request.head))
-        if not captured:
-            raise ToolRefusedError(
-                "Only a captured combined carrier can be promoted; accept individual source with judge ok")
-        inputs, = captured
+        inputs = self.require_combined(request, project.repos)
         goals.todos.require_input_links(inputs)
-        inputs.validate(project.repos, request)
-        inputs.require_source_reviews()
 
-    def enqueue(self, record: HeadReviewRecord) -> MergeArm:
+    def enqueue(self, record: HeadReviewRecord, repositories: tuple[Repo, ...]) -> MergeArm:
         request = record.request
         if not HeadReview.accepted(request.repo, request.head):
             raise ToolRefusedError("The exact combined source review must succeed before promotion")
         current = request.current()
+        self.require_combined(request, repositories)
         self.post(request.repo, request.head, record.actor.name, f"#{request.pr}")
+        try:
+            self.require_merge(request, repositories)
+        except (ToolRefusedError, GitCommandError):
+            UnpromotedHeadReview().post(request.repo, request.head, record.actor.name, f"#{request.pr}")
+            raise
         return current.arm()
 
 

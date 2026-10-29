@@ -18,7 +18,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.build_identity import RepositoryCommit
 from agent_comms.head_review import (
-    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
+    CombinedInput, DraftMergeArm, HeadReview, IntegrationInput, IntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ReadPullRequestHead,
 )
 from agent_comms.integration import IntegrationRun
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
@@ -138,7 +138,7 @@ def test_qualification_records_each_open_order_cut_without_promoting_or_finishin
         assert not record.verdict.allows_integration()
         assert not HeadReview.accepted(request.repo, request.head)
         with pytest.raises(TodoError, match="no recorded ok verdict"):
-            record.verdict.require_merge(request)
+            record.verdict.require_merge(request, context.repos)
 
     qualify_unchanged()  # Pending: the order still requires every unfinished clause.
     claim_order("P2", pull_request=request.pr, head=request.head)
@@ -246,7 +246,35 @@ def test_native_companion_adoption_is_the_same_reviewed_orders_actual_qualificat
     assert not any(call[:2] in (("pr", "create"), ("pr", "merge")) for call in github_cli.calls())
 
 
-def test_companion_metadata_cannot_create_edit_or_adopt_missing_pr(
+def test_native_companion_creation_records_its_owned_checkout_repository_not_the_primary(
+    linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
+    tmp_path: Path,
+) -> None:
+    comms, github, primary = linked_head_bus
+    before = comms.goals.todos.get("P2")
+    companion = SourceRepository.of(companion_checkout)
+    number = primary.pr + 1
+    stamp = "2026-10-24T00:00:00Z"
+    github.create_next(companion.github, DraftListedPullRequest(
+        number, "companion-feature", companion.git(companion_checkout, "rev-parse", "HEAD").strip(),
+        stamp, "main", reviewable_times=(stamp,)))
+    body = tmp_path / "companion-body.md"
+    body.write_text("The actual paired source belongs to this existing order.\n")
+    with chdir(companion_checkout):
+        order.main(["pr", before.id, "--title", "Migrate the paired source",
+                    "--body-file", str(body)], order.Commander.read_root(comms.root))
+    after = comms.goals.todos.get(before.id)
+    link = PullRequestLink(companion.github, number)
+    assert after == replace(before, revision=before.revision + 1,
+                            order=before.order.checked().linked_to(link))
+    assert after.repo == before.repo == primary.repo != companion.github
+    assert PullRequests.linked_among((after,), companion.github) == {number: [after]}
+    created = tuple(call for call in github.calls() if call[:2] == ("pr", "create"))
+    assert created == (("pr", "create", "--draft", "-R", companion.github.to_wire(),
+                        "--title", "Migrate the paired source", "--body-file", "-"),)
+
+
+def test_companion_adoption_cannot_edit_or_adopt_missing_pr(
     linked_head_bus: tuple[Comms, GitHubFixture, PullRequestHead], companion_checkout: Path,
 ) -> None:
     comms, github, primary = linked_head_bus
@@ -254,7 +282,6 @@ def test_companion_metadata_cannot_create_edit_or_adopt_missing_pr(
     context = order.Commander.read_root(comms.root)
     with chdir(companion_checkout):
         for arguments in (
-            ["--title", "Do not create a companion", "--body-file", "not-read.md"],
             ["--existing", str(primary.pr), "--title", "Do not edit"],
             ["--existing", "999999"],
         ):
@@ -351,8 +378,8 @@ def test_qualification_withdraws_acceptance_without_claiming_to_disarm_the_reque
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     arms = tuple(call for call in github.calls() if call[:2] == ("pr", "merge"))
     assert arms == () and HeadReview.accepted(request.repo, request.head)
-    with pytest.raises(ToolRefusedError, match="no explicit reviewed merge promotion"):
-        ReviewedHeadVerdict.require_merge(request)
+    with pytest.raises(ToolRefusedError, match="captured combined carrier"):
+        ReviewedHeadVerdict.require_merge(request, order.Commander.read_root(comms.root).repos)
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is QualifiedHeadVerdict
     assert not HeadReview.accepted(request.repo, request.head)
@@ -433,7 +460,7 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
 @pytest.fixture
 def captured_input(reviewed_source: SourceRepository) -> IntegrationInput:
     source = reviewed_source
-    return OrdinaryInput((IntegrationSource(
+    return OrdinaryInput((MergedIntegrationSource(
         RepositoryCommit(source.github, source.main_commit),
         (PullRequestHead(source.github, source.number, source.branch_commit),),
         source.git(source.checkout, "rev-parse", f"{source.branch_commit}^{{tree}}").strip(),
@@ -496,7 +523,7 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
         github_cli: GitHubFixture) -> None:
     source = reviewed_source
     companion = SourceRepository.create(tmp_path / "companion", RepositoryName.from_wire("example/client"))
-    client = IntegrationSource(
+    client = MergedIntegrationSource(
         RepositoryCommit(companion.github, companion.main_commit),
         (PullRequestHead(companion.github, companion.number, companion.branch_commit),),
         companion.git(companion.checkout, "rev-parse", f"{companion.branch_commit}^{{tree}}").strip(),
@@ -705,7 +732,36 @@ def test_only_explicit_combined_promotion_arms_the_reviewed_head_and_reports_for
         assert f"#{request.pr} is a draft, so not armed" in capsys.readouterr().out
     assert StoredHeadReview.current_verdict(comms.goals.todos, request) is ReviewedHeadVerdict
     assert PromotedHeadReview.accepted(request.repo, request.head)
-    ReviewedHeadVerdict.require_merge(request)
+    ReviewedHeadVerdict.require_merge(request, context.repos)
+    # A stale pair of green carrier statuses cannot bypass current member decisions.
+    member = inputs.source(pair.client.github).heads[0]
+    QualifiedHeadVerdict(QUALIFIED).post(member.repo, member.head, "lead", "withdraw member")
+    assert HeadReview.accepted(request.repo, request.head)
+    assert MergeHeadReview.accepted(request.repo, request.head)
+    with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
+        ReviewedHeadVerdict.require_merge(request, context.repos)
+
+
+@pytest.mark.parametrize("verdict", (UnderReviewHeadVerdict(), RejectedHeadVerdict(REASON)))
+def test_failed_permission_withdrawal_preserves_the_preceding_source_record(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, verdict: HeadVerdict,
+) -> None:
+    pair = mutual_sources
+    comms = pair.context.comms
+    inputs = pair.capture(("P2", "P3"), "withdraw before recording another source decision")
+    request = pair.publish_carrier(github_cli)
+    for source in inputs.sources:
+        for head in source.heads:
+            invoke(comms, head, ReviewedHeadVerdict(ACCEPTED))
+    promote(pair.context, request)
+    before = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    github_cli.refuse_status(request.repo, request.head, MergeHeadReview.context,
+                             "Cannot withdraw the merge permission")
+    with pytest.raises(ToolRefusedError, match="Cannot withdraw"):
+        invoke(comms, request, verdict)
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request) == before
+    assert HeadReview.accepted(request.repo, request.head)
+    assert MergeHeadReview.accepted(request.repo, request.head)
 
 
 def test_source_acceptance_never_enqueues_and_promotion_refuses_an_individual_member(head_bus) -> None:

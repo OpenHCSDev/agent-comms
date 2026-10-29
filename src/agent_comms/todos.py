@@ -2679,23 +2679,23 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return tuple(self.merged(merged.sha) for merged in MergedProgress.found(source)
                      if repo.contains(merged.sha))
 
-    def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str,
+    def open_pull_request(self, todo: Todo, source: Repo, title: str, body: str,
                           store: TodoStore, actor: ThreadIncarnation) -> str:
         """Create once; record the returned identity on this order, not in its prose."""
         todo.require_actor(actor, todo.held().generation)
         self.require_linkable()
         created = subprocess.run(
-            ("gh", "pr", "create", "--draft", "-R", todo.repo.to_wire(),
+            ("gh", "pr", "create", "--draft", "-R", source.github.to_wire(),
              "--title", title, "--body-file", "-"),
             input=body,
-            cwd=checkout,
+            cwd=source.checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
             raise TodoError(created.stderr.strip() or "Order pull request creation failed.")
         url = created.stdout.strip()
         try:
             store.apply(todo.id, RecordPullRequest(todo.revision, actor,
-                                                  PullRequestLink.created(todo.repo, url),
+                                                  PullRequestLink.created(source.github, url),
                                                   todo.held().generation))
         except (ValueError, TodoError, subprocess.SubprocessError) as error:
             raise TodoError(f"Created {url}, but recording its link failed: {error}. "
@@ -4084,12 +4084,12 @@ class HeadVerdict(HeadReview, declared_name=None):
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
 
     @classmethod
-    def require_merge(cls, request: PullRequestHead) -> None:
+    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
         """Source review cannot authorize even the owner's direct merge path."""
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
-        MergeHeadReview.require_merge(request)
+        MergeHeadReview.require_merge(request, repositories)
 
     def post(self, repo: RepositoryName, head: str, reviewer: str, subject: str) -> None:
         # Withdraw first: a failed source-status write cannot leave an earlier promotion live.
@@ -4099,9 +4099,11 @@ class HeadVerdict(HeadReview, declared_name=None):
     def reviewed(self, goals: Goals, request: PullRequestHead, prepared: PreparedHeadReview,
                  reviewer: ThreadIncarnation, order: HeadReviewOrder) -> HeadReviewed:
         request = replace(request, head=prepared.current.head)
+        # Do not store a rejection/reviewing row while its old merge permission remains live.
+        UnpromotedHeadReview().post(request.repo, request.head, reviewer.name, prepared.subject)
         recorded = order.record_review(goals, request, self, reviewer)
         self.after_record(goals, recorded)
-        self.post(request.repo, request.head, reviewer.name, prepared.subject)
+        super().post(request.repo, request.head, reviewer.name, prepared.subject)
         return HeadReviewed(recorded, self.landing(prepared.current))
 
     def landing(self, current: OpenPullRequestHead) -> MergeArm:
@@ -4189,8 +4191,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
+        UnpromotedHeadReview().post(current.repo, current.head, record.actor.name, f"#{current.pr}")
         goals.todos.record_head(carried)
-        verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        HeadReview.post(verdict, current.repo, current.head, record.actor.name, f"#{current.pr}")
         return True
 
     @classmethod

@@ -7,7 +7,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -17,10 +17,6 @@ from .errors import MissingSourceLine
 from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
-
-if TYPE_CHECKING:
-    from .todos import Todo
-
 
 class RepositorySelection(ABC):
     """A repository choice is applied by the native project it configures."""
@@ -125,9 +121,6 @@ class Repo(GitLaunch, BaseModel, WireValue):
     def named(self, name: str) -> bool:
         """A repository name or path identifies this declared checkout, not another worktree."""
         return self.github.named(name) or self.checkout == Path(name).resolve()
-
-    def holds(self, todo: Todo) -> bool:
-        return self.github == todo.repo
 
     def default_branch(self) -> str:
         """The origin's declared default, never a guessed branch name."""

@@ -45,27 +45,36 @@ jobs:
       - run: true
         shell: bash
 
-  # The base every job measures from, drafts included. A pull request checks out its merge into
-  # current main, so the base is that merge's first parent; pull_request.base.sha is main when the
-  # PR was opened, and measuring from it charges the PR with everything main merged since.
+  # The native event/source reader owns both the comparison base and combined-job selection.
+  # Ordinary sources still get diagnostics; naming a branch batch/ grants nothing.
   base:
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      base: ${{ steps.base.outputs.base }}
+      base: ${{ steps.sources.outputs.base }}
+      combined: ${{ steps.sources.outputs.combined }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      - id: base
-        shell: bash
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install the native source-input reader
+        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e .
+      - name: Derive job selection from the actual tested sources
+        id: sources
         env:
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
-        run: echo "base=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
 
   smoke:
     needs: [ready, base]
-    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
+    if: needs.base.outputs.combined == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -144,7 +153,7 @@ jobs:
   install-rehearsal:
     name: install-rehearsal
     needs: [ready, base]
-    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
+    if: needs.base.outputs.combined == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -190,7 +199,7 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      statuses: read
+      statuses: write
       pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
