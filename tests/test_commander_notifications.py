@@ -688,8 +688,11 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
         overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
                          if table.record is AlarmOverflow for row in table.records)
         assert sum(row.more for row in overflow) == len(rules) - 1
-        details = "\n".join(frame.alarm_detail(frame.alarms, time.time()))
-        assert all(rule.line() in details for rule in rules)
+        now = time.time()
+        original_lines = frame.alarm_detail(frame.alarms, now)
+        assert original_lines == tuple(ping.render(now) for section in frame.alarms
+                                       for ping in section.pings)
+        assert all(rule.line() in "\n".join(original_lines) for rule in rules)
     assert rules[0].line() in original.body
     assert rules[0].line() in message.body
     assert len(message.task.handled) == 12

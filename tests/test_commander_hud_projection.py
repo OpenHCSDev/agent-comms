@@ -80,8 +80,9 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert all(ping.text in "\n".join(hud.alarm_text(hud.alarms, 1000))
                for ping in hud.packets[0].handled)
     assert hud.board == ()
-    assert all(ping.render(1000) in hud.alarm_detail(hud.alarms, 1000)
-               for ping in hud.packets[0].handled)
+    assert hud.alarm_detail(hud.alarms, 1000) == tuple(
+        ping.render(1000) for section in hud.alarms for ping in section.pings
+    )
     for section in groups:
         for table in section.tables:
             narrow = "\n".join(table.lines(60))

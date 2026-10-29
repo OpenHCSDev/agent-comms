@@ -402,10 +402,8 @@ class CommanderHud(ToolResult):
 
     @staticmethod
     def alarm_detail(sections: tuple[AlarmSection, ...], now: float) -> tuple[str, ...]:
-        """The expandable board borrows the same sections but retains every original line."""
-        return tuple(line for section in sections for line in (
-            section.heading(), *(ping.render(now) for ping in section.pings),
-        ))
+        """Every original line; the section title already owns its compact heading."""
+        return tuple(ping.render(now) for section in sections for ping in section.pings)
 
     def hud_text(self, now: float, *, colour: bool = False,
                  width: int | None = None) -> tuple[str, ...]:
