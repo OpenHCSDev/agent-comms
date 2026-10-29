@@ -33,23 +33,24 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    captured = NotificationAssignment.read(root, (initial,))
-    original = NotificationAssignment.resolve(root, captured)
+    selection = AllOutcomes().selection((initial,))
+    captured = NotificationAssignment.read(root, selection)
+    original = NotificationAssignment.resolve(captured)
     wire_before = comms.bus.bus.revision()
     assert original
     with Coordination(str(database)) as writer:
         with writer.session.writing():
             with pytest.raises(CoordinationReadUnavailable) as unavailable:
-                NotificationAssignment.read(root, (initial,))
+                NotificationAssignment.read(root, selection)
             assert unavailable.value.__cause__.sqlite_errorcode & 0xFF in (
                 sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED,
             )
             with pytest.raises(CoordinationReadUnavailable):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
-    reopened = NotificationAssignment.read(root, (initial,))
+    reopened = NotificationAssignment.read(root, selection)
     assert reopened == captured
-    assert NotificationAssignment.resolve(root, reopened) == original
+    assert NotificationAssignment.resolve(reopened) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.bus.revision() == wire_before
@@ -128,15 +129,16 @@ def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # n
 
 def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp_path):  # noqa: F811
     root, _root_id, comms, initial, _people = _root(tmp_path)
-    records = NotificationAssignment.resolve(root, NotificationAssignment.read(root, (initial,)))
+    selection = AllOutcomes().selection((initial,))
+    records = NotificationAssignment.resolve(NotificationAssignment.read(root, selection))
     assert records
-    projected = tuple(NotificationAssignment.for_deliveries((initial,), records))
+    projected = tuple(NotificationAssignment.for_deliveries(selection, records))
     assert projected[0][0] is initial
     assert any(outcome is records[0] for outcome in projected[0][1])
     with pytest.raises(ValueError):
-        tuple(NotificationAssignment.for_deliveries((initial,), (*records, records[0])))
+        tuple(NotificationAssignment.for_deliveries(selection, (*records, records[0])))
     # Duplicate evidences outside the acquired deliveries do not change their result.
-    assert tuple(NotificationAssignment.for_deliveries((), (*records, records[0]))) == ()
+    assert tuple(NotificationAssignment.for_deliveries(AllOutcomes().selection(()), (*records, records[0]))) == ()
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811

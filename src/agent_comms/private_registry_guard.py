@@ -46,7 +46,7 @@ from .private_nk_entrypoint import (
 from .private_path import PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorSchema, PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
-from .notification_evidence import NotificationAssignmentRead
+from .notification_evidence import NotificationAssignmentRead, NotificationSelection
 
 
 if TYPE_CHECKING:
@@ -162,7 +162,7 @@ class RegistryPrivacy(ABC):
 
     @abstractmethod
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead: ...
 
     @abstractmethod
@@ -202,9 +202,9 @@ class PublicRegistry(RegistryPrivacy):
         return "0"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
-        return NotificationAssignmentRead(tuple(sources), ())
+        return NotificationAssignmentRead(selection, ())
 
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
@@ -283,7 +283,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 

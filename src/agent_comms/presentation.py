@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from bisect import bisect_left, bisect_right
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -71,7 +72,8 @@ from .read_basis import (
 )
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import NotificationAssignmentRead, NotificationReadMark, NotificationWindow
+from .notification_evidence import (NotificationAssignmentRead, NotificationReadMark, NotificationWindow,
+                                    NotificationSelection, RecipientSelection)
 from .notification_read import CapturedNotificationWindow
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -122,12 +124,44 @@ if TYPE_CHECKING:
     from .ui_model.observation import ThreadsObserved
 
 
+class RecipientCursor(SubclassUnion, affix=""):
+    """Select frozen, lookup-ordered positions before expensive evidence acquisition."""
+
+    @abstractmethod
+    def positions(self, source: Delivered) -> range: ...
+
+
+@dataclass(frozen=True)
+class FirstRecipient(NullMember, RecipientCursor):
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
+
+
+@dataclass(frozen=True)
+class AfterRecipient(RecordMember, RecipientCursor):
+    recipient: FrozenRecipient
+
+    def positions(self, source: Delivered) -> range:
+        start = bisect_right(source.recipients, self.recipient.recipient_lookup,
+                             key=lambda item: item.recipient_lookup)
+        return range(start, len(source.recipients))
+
+
 class OutcomeViewer(ABC):
     """Who reads a delivery window decides which of its outcomes are shown."""
 
     @abstractmethod
-    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
-        pass
+    def positions(self, source: Delivered) -> range: ...
+
+    def selection(self, sources: Sequence[Delivered], *, after: RecipientCursor = FirstRecipient(),
+                  limit: int = RecipientSelection.max_limit) -> NotificationSelection:
+        RecipientSelection.require_limit(limit)
+        pages = []
+        for source in sources:
+            eligible, following = self.positions(source), after.positions(source)
+            pages.append(RecipientSelection(
+                source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
+        return NotificationSelection(self, tuple(pages))
 
     @abstractmethod
     def sees_direct_read(self, source: Delivered) -> bool:
@@ -142,8 +176,8 @@ class OutcomeViewer(ABC):
 class AllOutcomes(OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
 
-    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
-        return True
+    def positions(self, source: Delivered) -> range:
+        return range(len(source.recipients))
 
     def sees_direct_read(self, source: Delivered) -> bool:
         return True
@@ -162,16 +196,20 @@ class OwnerOutcomes(OutcomeViewer):
     def of(cls, owner: ThreadProvenance) -> OwnerOutcomes:
         return cls(owner.incarnation.require_recorded().lookup)
 
-    def includes(self, sender_lookup: ThreadLookup, recipient: FrozenRecipient) -> bool:
-        return self.lookup in (sender_lookup, recipient.recipient_lookup)
+    def positions(self, source: Delivered) -> range:
+        if source.sender_lookup == self.lookup:
+            return range(len(source.recipients))
+        position = bisect_left(source.recipients, self.lookup, key=lambda item: item.recipient_lookup)
+        if position < len(source.recipients) and source.recipients[position].recipient_lookup == self.lookup:
+            return range(position, position + 1)
+        return range(0)
 
     def sees_direct_read(self, source: Delivered) -> bool:
         return source.sender_lookup == self.lookup
 
     def sees(self, source: Delivered) -> bool:
         """The message's sender and its original recipients may read it."""
-        return self.lookup == source.sender_lookup or any(
-            self.lookup == recipient.recipient_lookup for recipient in source.recipients)
+        return self.lookup == source.sender_lookup or bool(self.positions(source))
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,7 +253,8 @@ class MessageNotification:
         ordered = cls.ordered(notifications)
         if not ordered:
             return "No recorded notification result"
-        # Each notification exists because the frozen publication addressed its recipient.
+        # This is a bounded observation, not the complete frozen audience and
+        # not a set of runtime acknowledgements. Membership proves neither.
         total = len(ordered)
         consumed = sum(notification.state.consumed for notification in ordered)
         read = sum(bool(notification.displayed_to) for notification in ordered)
@@ -226,9 +265,9 @@ class MessageNotification:
         return " · ".join((
             *leading.state.summary_prefix(leading),
             *(f"{label} {count}" for label, count in counted if count),
-            f"Delivered {total}/{total}",
-            f"{ConsumedDelivery.label} {consumed}/{total}",
-            f"{HumanReadProgress.label} {read}/{total}",
+            f"Observed {total} recipients (bounded)",
+            f"{ConsumedDelivery.label} {consumed} observed",
+            *((f"{HumanReadProgress.label} {read} observed",) if read else ()),
         ))
 
     @staticmethod
@@ -247,12 +286,13 @@ class MessageNotification:
     def references(
         cls, root: Path, registry: Registration, log: Bus,
         references: Sequence[MessageReference], *, viewer: OutcomeViewer,
+        after: RecipientCursor = FirstRecipient(), limit: int = RecipientSelection.max_limit,
     ) -> NotificationWindow:
         """Borrow mounted references in the original bounded delivery windows, as this
         viewer may see them."""
         def project(sources: Sequence[Delivered]) -> NotificationWindow:
-            read = NotificationAssignment.read(root, sources)
-            return cls.delivery_window(root, registry, sources, read, viewer=viewer)
+            read = NotificationAssignment.read(root, viewer.selection(sources, after=after, limit=limit))
+            return cls.delivery_window(root, registry, read)
 
         return cls.read_references(log, references, project)
 
@@ -275,61 +315,59 @@ class MessageNotification:
 
     @classmethod
     def delivery_window(
-        cls, root: Path, registry: Registration, sources: Sequence[Delivered],
-        assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
+        cls, root: Path, registry: Registration, assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
-        """Project the original frozen audience even before handling is recorded."""
+        """The captured selection owns original membership and viewer visibility."""
+        sources = assignment_read.sources
         if not sources:
             return CapturedNotificationWindow({}, (assignment_read,))
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
-            ((source, recipient) for source in sources for recipient in source.recipients
-             if viewer.includes(source.sender_lookup, recipient)),
+            ((page.source, recipient) for page in assignment_read.selection.pages for recipient in page.recipients),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
-            root, snapshot, sources, observations,
-            viewer=viewer, assignment_read=assignment_read,
+            root, snapshot, observations, assignment_read=assignment_read,
         )
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
                                  sources: Sequence[Delivered], *,
-                                 viewer: OutcomeViewer) -> NotificationWindow:
+                                 viewer: OutcomeViewer, after: RecipientCursor = FirstRecipient(),
+                                 limit: int = RecipientSelection.max_limit) -> NotificationWindow:
+        selection = viewer.selection(sources, after=after, limit=limit)
         observations = {
             recipient.recipient_lookup: RecordedRecipientActivity()
-            for source in sources for recipient in source.recipients
+            for page in selection.pages for recipient in page.recipients
         }
-        read = NotificationAssignment.read(root, sources)
+        read = NotificationAssignment.read(root, selection)
         return cls.project_delivery_window(
-            root, namespace, sources, observations,
-            assignment_read=read, viewer=viewer,
+            root, namespace, observations, assignment_read=read,
         )
 
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
-        sources: Sequence[Delivered], observations: Mapping[ThreadLookup, RecipientActivity],
-        *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
+        observations: Mapping[ThreadLookup, RecipientActivity],
+        *, assignment_read: NotificationAssignmentRead,
     ) -> NotificationWindow:
         """Original assignment and read authorities own both display projections."""
+        sources, viewer = assignment_read.sources, assignment_read.selection.viewer
         if len(sources) > NotificationWindow.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = {(source.message.seq, source.message.message_id) for source in sources}
         result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return CapturedNotificationWindow({}, (assignment_read,))
-        rows = NotificationAssignment.resolve(root, assignment_read)
+        rows = NotificationAssignment.resolve(assignment_read)
         evidence = assignment_read.evidence
         read_marks = []
         reads = ReadLedger.at(root)
         document = reads.read()
-        for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
+        for source, outcomes in NotificationAssignment.for_deliveries(assignment_read.selection, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
                 recipient = outcome.recipient()
-                if not viewer.includes(source.sender_lookup, recipient):
-                    continue
                 observation = observations[recipient.recipient_lookup]
                 notification = outcome.project(observation, source.sender_lookup)
                 state = evidence[source.message.reference].consumed_progress(
@@ -391,17 +429,15 @@ class MessageNotification:
 
     @classmethod
     def for_sources(
-        cls, root: Path, registry: Registration, viewer: OutcomeViewer,
-        sources: Sequence[Delivered], *,
-        assignment_read: NotificationAssignmentRead,
+        cls, root: Path, registry: Registration, assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Attach notification outcomes to the messages the caller already checked."""
         projected = cls.delivery_window(
-            root, registry, sources, assignment_read, viewer=viewer,
+            root, registry, assignment_read,
         )
         return tuple(
             replace(notification, message=source.message)
-            for source in sources
+            for source in assignment_read.sources
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
 
@@ -410,44 +446,6 @@ class MessageNotification:
 class SentMessageOutcome(MessageNotification):
     """The same typed outcome, with its original message required for context."""
     message: Message = field(kw_only=True)
-
-
-class RecipientCursor(SubclassUnion, affix=""):
-    """Where a page of one message's recipient outcomes starts; recipients are ordered by
-    their stable lookup, never by a display name."""
-
-    @abstractmethod
-    def following(
-        self, outcomes: Iterable[MessageNotification],
-    ) -> tuple[MessageNotification, ...]:
-        """The outcomes after this cursor, in recipient order."""
-
-    @staticmethod
-    def ordered(outcomes: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
-        return tuple(sorted(outcomes, key=lambda outcome: outcome.recipient_identity.recipient_lookup))
-
-
-@dataclass(frozen=True)
-class FirstRecipient(NullMember, RecipientCursor):
-    """No cursor given: start at the first recipient."""
-
-    def following(
-        self, outcomes: Iterable[MessageNotification],
-    ) -> tuple[MessageNotification, ...]:
-        return self.ordered(outcomes)
-
-
-@dataclass(frozen=True)
-class AfterRecipient(RecordMember, RecipientCursor):
-    """Start after this recipient, the last row of the previous page."""
-
-    recipient: FrozenRecipient
-
-    def following(
-        self, outcomes: Iterable[MessageNotification],
-    ) -> tuple[MessageNotification, ...]:
-        return tuple(outcome for outcome in self.ordered(outcomes)
-                     if outcome.recipient_identity.recipient_lookup > self.recipient.recipient_lookup)
 
 
 @dataclass(frozen=True, slots=True)

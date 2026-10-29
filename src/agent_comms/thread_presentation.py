@@ -264,10 +264,10 @@ class ThreadPresentation(ThreadStatusDisplay):
         transcripts = window.read.owner
         sources = tuple({source.message.reference: source
                          for source in (*window.sources, *window.sent_sources)}.values())
-        notification_read = NotificationAssignment.read(transcripts.root, sources)
+        viewer = OwnerOutcomes.of(window.read.identity.thread)
+        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
         projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, sources, notification_read,
-            viewer=OwnerOutcomes.of(window.read.identity.thread),
+            transcripts.root, transcripts.registry, notification_read,
         )
         incoming = tuple(
             replace(notification, message=source.message)

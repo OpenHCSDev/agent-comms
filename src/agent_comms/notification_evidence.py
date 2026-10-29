@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import DeliveryProgress
-    from .presentation import MessageNotification, WireRevision
+    from .presentation import MessageNotification, WireRevision, OutcomeViewer
     from .thread_identity import ThreadIncarnation
 
 
@@ -40,19 +40,66 @@ class SourceEvidence:
 
 
 @dataclass(frozen=True)
+class RecipientSelection:
+    """A bounded slice of original frozen positions, never a replacement audience."""
+
+    source: Delivered
+    eligible: range
+    limit: int
+    max_limit: ClassVar[int] = 100
+
+    def __post_init__(self) -> None:
+        self.require_limit(self.limit)
+
+    @classmethod
+    def require_limit(cls, limit: int) -> None:
+        if not 1 <= limit <= cls.max_limit:
+            raise ValueError(f"Recipient limit must be between 1 and {cls.max_limit}")
+
+    @property
+    def positions(self) -> range:
+        return self.eligible[:self.limit]
+
+    @property
+    def remaining(self) -> int:
+        return len(self.eligible) - len(self.positions)
+
+    @property
+    def recipients(self) -> tuple[FrozenRecipient, ...]:
+        return tuple(self.source.recipients[position] for position in self.positions)
+
+
+@dataclass(frozen=True)
+class NotificationSelection:
+    """The exact per-original recipient cuts used by every expensive evidence reader."""
+
+    viewer: OutcomeViewer
+    pages: tuple[RecipientSelection, ...]
+
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return tuple(page.source for page in self.pages)
+
+    @property
+    def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
+        return tuple((recipient.recipient_lookup, page.source.message.reference)
+                     for page in self.pages for recipient in page.recipients)
+
+
+@dataclass(frozen=True)
 class NotificationAssignmentRead:
     """A window's claims and its harness attempts, both keyed by the exact original.
 
     A harness attempt is its own consumption evidence: a no-wake or passive recipient has no
     claim for the attempt to move, and its message still entered the session."""
 
-    sources: tuple[Delivered, ...]
+    selection: NotificationSelection
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
     attempts: tuple[HarnessDelivery, ...] = ()
 
-    @classmethod
-    def empty(cls) -> NotificationAssignmentRead:
-        return cls((), ())
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return self.selection.sources
 
     @cached_property
     def evidence(self) -> Mapping[MessageReference, SourceEvidence]:
@@ -93,6 +140,10 @@ class NotificationWindow(ABC):
     outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
     reads: tuple[NotificationAssignmentRead, ...]
     read_marks: tuple[NotificationReadMark, ...] = ()
+
+    def remaining(self, reference: MessageReference) -> int:
+        return next((page.remaining for read in self.reads for page in read.selection.pages
+                     if page.source.message.reference == reference), 0)
 
     @classmethod
     def chunks[T](cls, items: Iterable[T]) -> Iterator[tuple[T, ...]]:

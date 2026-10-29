@@ -58,9 +58,10 @@ from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.historical_views import HistorySource
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_reference import MessageReference
-from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow
+from agent_comms.notification_evidence import NoNotificationWindow, NotificationWindow, RecipientSelection
 from agent_comms.presentation import (
     AllOutcomes, CoordinationSnapshot, MessageNotification, NoRevision, OutcomeViewer, ReadState,
+    FirstRecipient, RecipientCursor,
     WireRevision,
 )
 from agent_comms.registry_document import RosterVisibility
@@ -621,9 +622,12 @@ class ReadNotifications(ReadRequest):
 
     references: tuple[MessageReference, ...]
     viewer: OutcomeViewer = field(default_factory=AllOutcomes, kw_only=True)
+    after: RecipientCursor = field(default_factory=FirstRecipient, kw_only=True)
+    limit: int = field(default=RecipientSelection.max_limit, kw_only=True)
 
     def read(self, comms: Comms) -> NotificationWindow:
-        return comms.views.message_notifications_for_references(self.viewer, self.references)
+        return comms.views.message_notifications_for_references(
+            self.viewer, self.references, after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:
@@ -639,7 +643,8 @@ class ReadRecordedNotifications(ReadNotifications):
     def read(self, comms: Comms) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
-            return source.notification_references(sources, self.references, self.viewer)
+            return source.notification_references(sources, self.references, self.viewer,
+                                                  after=self.after, limit=self.limit)
 
     def changed_since(self, comms: Comms, revision: WireRevision,
                       previous: NotificationsRead) -> bool:

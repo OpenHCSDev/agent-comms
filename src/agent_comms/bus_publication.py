@@ -51,6 +51,11 @@ class Delivered(BusRecord, AudiencedMessage, declared_name=None):
     decisions: tuple[RecipientDecision, ...]
     control: str
 
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if len(self.decisions) != len(self.recipients):
+            raise ValueError("Frozen recipients and their decisions must have equal length")
+
     def projections(self):
         from .bus_tables import AwaitingAnswerSource, ReceivedSource, SentSource
 

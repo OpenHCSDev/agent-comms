@@ -203,13 +203,11 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, owner: Thread, sources: Sequence[Delivered],
-        assignment_read: NotificationAssignmentRead,
+        comms: Comms, assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, OwnerOutcomes.of(owner), sources,
-            assignment_read=assignment_read,
+            comms.root, comms.registry, assignment_read,
         )
         return tuple(
             outcome
@@ -253,12 +251,13 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, sent_sources, privacy,
+                store.session._connection, OwnerOutcomes.of(sent_owner).selection(sent_sources), privacy,
             )
+        sent_read = NotificationAssignment.capture_responses(comms.root, sent_read)
         if pending:
             participant.pointer.require_idle()
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, sent_owner, sent_sources, sent_read
+            comms, sent_read
         )
         return owner, participant, pending, sent_outcomes
 
