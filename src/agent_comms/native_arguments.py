@@ -154,26 +154,23 @@ class ExtensionArgument(NamedOption, ValueArgument):
 
 
 class ModelProvider(DeclaredFamily, affix="Provider"):
-    """Provider declarations own command permission; unknown names are refused."""
-
-    may_command: ClassVar[bool]
+    """Provider declarations; unknown names are refused."""
 
 
 class NoSelectedModel(ModelProvider, declared_name=None):
-    """External commanders without a native model remain valid commanders."""
-    may_command = True
+    """A thread with no native model selected."""
 
 
 class AnthropicProvider(ModelProvider, declared_name="anthropic"):
-    may_command = True
+    """Declared by name."""
 
 
 class OpenAIProvider(ModelProvider, declared_name="openai"):
-    may_command = True
+    """Declared by name."""
 
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
-    may_command = False
+    """Declared by name."""
 
 
 @dataclass(frozen=True)

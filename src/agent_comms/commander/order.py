@@ -826,19 +826,18 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
-    peer: Annotated[
+    acting_as: Annotated[
         CommanderPeerCaller | NoThreadCaller,
         Normalize(FieldCodec.encode),
-        Argument(
-            flags=("--as",), options={"type": CommanderPeerCaller,
-                                      "help": "another commander acting under its own name"}
-        ),
+        Argument(flags=("--as",), options={
+            "type": CommanderPeerCaller,
+            "help": "another commander in #commanders acting under its own name"}),
     ] = NoThreadCaller()
 
     @property
     def actor(self) -> CommanderForkCaller | CommanderPeerCaller | NoThreadCaller:
         """A fork acts for the commander; a peer commander acts as itself."""
-        return self.fork.acting_caller(self.peer)
+        return self.fork.acting_caller(self.acting_as)
 
     def __post_init__(self) -> None:
         if problems := self.argument_problems():
@@ -852,18 +851,12 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(ctx.commander).require_commander()
         self.actor.commanding(ctx.comms, ctx.commander)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:
-        """Gate, then run."""
-        self.gate(ctx)
         self.run(ctx)
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).require_commander()
 
 
 

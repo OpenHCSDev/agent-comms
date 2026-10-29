@@ -1504,6 +1504,7 @@ class CheckoutReads:
         self._checkouts: dict[Path, PresentCheckout] = {}
         self._branch_mains: dict[RepositoryName, str] = {}
         self._branch_facts: dict[Path, BranchDifference] = {}
+        self._conflicts: dict[tuple[str, str], tuple[str, ...]] = {}
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
@@ -1539,6 +1540,21 @@ class CheckoutReads:
         if path not in self._branch_facts:
             raise WorkBranchError(f"Unprepared branch difference in {path}")
         return self._branch_facts[path]
+
+    def branch_conflicts(self, checkout: Path, left: str, right: str) -> tuple[str, ...]:
+        """The paths two commits cannot merge, read once per pair in this cut; a merge has
+        no direction, so either order names the same answer."""
+        pair = (min(left, right), max(left, right))
+        if pair not in self._conflicts:
+            self._conflicts[pair] = Repo.merge_conflicts(checkout, *pair)
+        return self._conflicts[pair]
+
+    def require_branch_conflicts(self, left: str, right: str) -> tuple[str, ...]:
+        """Consume this cut's prepared merge answer without opening another Git read."""
+        pair = (min(left, right), max(left, right))
+        if pair not in self._conflicts:
+            raise WorkBranchError(f"Unprepared merge of {left} and {right}")
+        return self._conflicts[pair]
 
 
 class ProgressRead(PullRequests, CheckoutReads):

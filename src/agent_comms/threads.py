@@ -335,17 +335,8 @@ class Thread(ThreadProvenance, CatalogSelection):
         return replace(self, offered=UnobservedTools(),
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
 
-    def require_commander(self) -> None:
-        """The thread's declared provider owns eligibility to command."""
-        if not self.model.native(NativeArguments(())).provider_type.may_command:
-            raise RelationViolationError(
-                f"Thread {self.name!r} with declared model {self.model.otherwise(None)!r} "
-                "cannot command: no Codex commander."
-            )
-
     def commanded_child(self, child: Thread) -> Thread:
         """A commanded declaration inherits its initial audience from its commander."""
-        self.require_commander()
         return replace(child, tags=self.tags)
 
     def inherited_history(self, registry, visited):

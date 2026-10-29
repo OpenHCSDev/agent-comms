@@ -29,7 +29,6 @@ class NamedCommander(GivenText, CommanderChoice):
     def configured(self, recorded: CommanderProject, repos: RepoChoice,
                    snapshot: RegistrySnapshot) -> CommanderProject:
         commander = snapshot.require(self.text)
-        commander.require_commander()
         return recorded.named(commander.incarnation, repos)
 
 
