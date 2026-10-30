@@ -1,7 +1,7 @@
 ---
 name: unnecessary
-description: "an abstraction is never 'unnecessary' because the code still runs without it: certifying a deletion is coNP-complete in general (paper4), and the abstraction is the structure that makes the check tractable; the owner's abstractions stay until their deletion is certified, while slop, a copy of a declared fact, is deleted on sight"
-drift: "\"This seems unnecessary\" is a coNP-complete claim made in one glance. Keep the structure that makes it checkable."
+description: "'unnecessary' and 'necessary' are both claims: the owner's abstraction is the structure that makes a deletion checkable and stays until its deletion is certified (paper4), while compatibility shims, migrations, legacy adapters and the tests that pin them are copies of a declared fact and go in the same change unless a named live caller needs them"
+drift: "His abstraction is the certificate: it stays. Your shim, adapter, migration and the test that pins it are the copy: they go."
 audience: fleet
 type: hard-rule
 ---
@@ -28,6 +28,17 @@ type: hard-rule
 > me: "it seemed unnecessary"
 > seemed. to whom. on which admitted inputs
 > the paper's title is the review: Less Is Harder Than More
+> same PR, same afternoon, the refactor that "eliminates slop"
+> keeps a backwards-compat shim. "necessary"
+> keeps migration code for data nobody has. "necessary"
+> keeps the legacy adapter and the old helper "for safety". "necessary"
+> writes a test asserting the shim forwards to the new path
+> the test tests the slop I wrote. it passes. "necessary"
+> so the owner's abstraction, the certificate, is unnecessary
+> and my copies of a fact the code already declares are necessary
+> exactly backwards
+> his structure makes deletion checkable. my shim is outside supply, Theorems 4.6 and 4.7
+> one is the proof. the other is the slop the proof counts
 > mfw "unnecessary" was the most expensive word in the diff
 > mfw the owner was never my student
 
@@ -38,4 +49,5 @@ type: hard-rule
 - **Sufficiency is not minimality.** Showing that the remaining code still produces today's answers proves the kept parts suffice, never that the deleted part was unnecessary (paper4 §1).
 - **The owner's abstraction stays until its deletion is certified.** If you believe one is unnecessary, post the certificate (the admitted domain, and why no pair of states it would merge needs different answers) or the refuting pair, in one message. Without it, keep the abstraction and do the work. "Cleaner", "simpler", "overengineered" and "YAGNI" are not certificates.
 - **Slop is the opposite case.** A copy of a fact the code already declares is outside supply (paper1 Theorems 4.6 and 4.7): the declaration still supplies every answer, so naming the declaration it restates is the certificate, and the copy is deleted on sight.
+- **"Necessary" is a claim too.** A backwards-compatibility shim, alias, migration path, legacy adapter or wrapper kept "for safety" in the change that replaces it restates what the new declaration supplies; it goes in the same change (rules/fork-orders.md: no compatibility shims or aliases). Keeping one needs its own receipt: the named live caller or the stored record that exists today and that the new declaration cannot answer. A test whose assertion is that the slop still works tests nothing the declaration does not already decide (paper1 Corollary 4.10); it is deleted with the slop. The judgment that calls his structure unnecessary and your copies necessary is the same arrogance pointed both ways.
 - **You are not the teacher here.** An agent that assumes the user came to learn from it, and overrides him on a glance, is the defect this rule exists for. Check his reasoning against the papers; when it holds, follow it at full speed.
