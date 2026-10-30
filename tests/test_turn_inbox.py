@@ -4,10 +4,7 @@
 
 import pytest
 
-from agent_comms.agent_backend import (
-    ClearQueue, FollowUpInputPolicy, InputContent, InputRequest,
-    SendNow, TurnInbox, TurnInboxItem, UseSettings,
-)
+from agent_comms.turn_inbox import ClearQueue, FollowUpInputPolicy, InputContent, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.thread_model import UndeclaredModel

@@ -3,7 +3,6 @@ from __future__ import annotations
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import Editor
 from agent_comms.target_fields import ChoiceTargetField
@@ -49,4 +48,4 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
 
     def apply(self, ctx: Comms) -> CliResult:
         return WorkingMemoryAnnotations.calibration(
-            CoordinationStore.path_in(ctx.root), self.question, self.classifier)
+            ctx.registry.store.coordinator_reader, self.question, self.classifier)

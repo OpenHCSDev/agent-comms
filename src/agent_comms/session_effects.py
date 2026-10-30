@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
+from .field_codec import AcpSessionId
 from .runtime import RuntimeProxy
 from .threads import Thread
 
@@ -20,7 +21,7 @@ class SessionEffects(ABC):
     turns: TurnRunner
 
     @abstractmethod
-    def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy: ...
+    def _create_runtime_proxy(self, thread: Thread, session_id: AcpSessionId) -> RuntimeProxy: ...
 
     @abstractmethod
     def _debug_log(self, message: str) -> None: ...

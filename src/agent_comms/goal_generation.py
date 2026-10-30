@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from sqlite3 import Connection
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -48,7 +50,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def idle_execution(self, source: GoalExecutionSource) -> GoalExecution:
         return AttemptUnresolvedExecution(source.goal.id)
 
-    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
+    def evidence(self, connection: Connection, generation: Generation) -> GoalFailureEvidence:
         return NoFailedTurnEvidence()
 
     def continue_work(
@@ -160,8 +162,8 @@ class BlockedGeneration(Failed, GenerationState):
             "Retry to authorize a new attempt. Your messages can still be sent."
         )
 
-    def evidence(self, store: GoalAttemptStore, generation: Generation) -> GoalFailureEvidence:
-        return generation.failure_evidence(store)
+    def evidence(self, connection: Connection, generation: Generation) -> GoalFailureEvidence:
+        return generation.failure_evidence(connection)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         """No permit launches a blocked attempt, so a running turn is never the goal's own."""

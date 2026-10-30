@@ -15,8 +15,14 @@ from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
-from .field_codec import AcpSessionId, FieldCodec
-from .owner_connection import OwnerConnection, ResultRuntimeRequest, RuntimeRequestContext
+from .field_codec import FieldCodec
+from .owner_connection import (
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequestContext,
+    OwnerConnection,
+    ResultRuntimeRequest,
+    RuntimeRequestContext,
+)
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
 from .tool_result import ToolResult
@@ -121,8 +127,8 @@ class HostResources(ToolResult):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> HostResources:
+class ReadHostResourcesRuntimeRequest(AttachedResultRuntimeRequest):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> HostResources:
         owners = sum(len(state.executors()) for state in ctx.server.agent.inputs.drained.values())
         def capture() -> HostResources:
             comms = ctx.server.agent._comms
@@ -139,7 +145,7 @@ class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReadOwnerLaunchRuntimeRequest(ResultRuntimeRequest):
+class ReadOwnerLaunchRuntimeRequest(AttachedResultRuntimeRequest):
     owner: OwnerIdentity
 
     def require_owner(self, entry: RegistryEntry) -> Thread:
@@ -147,15 +153,15 @@ class ReadOwnerLaunchRuntimeRequest(ResultRuntimeRequest):
             raise RelationViolationError("Launch request's owner lease changed")
         return super().require_owner(entry)
 
-    async def result(self, ctx: RuntimeRequestContext) -> RetainedOwnerLaunch:
-        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> RetainedOwnerLaunch:
+        state = ctx.server.agent.inputs.state(ctx.session).owned()
         if state.owner != self.owner:
             raise RelationViolationError("Launch request names another original session")
         return state.configuration.launch
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartOwnerRuntimeRequest(ResultRuntimeRequest):
+class StartOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     launch: RetainedOwnerLaunch
     owner: OwnerIdentity
 
@@ -166,7 +172,7 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest):
             raise RelationViolationError("Start request belongs to another host process")
         if self.thread != self.owner.incarnation.name:
             raise RelationViolationError("Start request names another owner")
-        return RuntimeRequestContext(server, reader, client, AcpSessionId(self.thread), self.thread)
+        return RuntimeRequestContext(server, reader, client, self.thread)
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerAttachedReply:
         await ctx.server.agent.sessions.start_owner(self.launch, self.owner)
@@ -174,7 +180,7 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopOwnerRuntimeRequest(ResultRuntimeRequest):
+class StopOwnerRuntimeRequest(AttachedResultRuntimeRequest):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
@@ -186,8 +192,8 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
             raise RelationViolationError("Stop request belongs to another host process")
         return entry.thread
 
-    async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
-        return await ctx.server.agent.inputs.state(ctx.session_id).retire_for_stop(
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> OwnerRetiredReply:
+        return await ctx.server.agent.inputs.state(ctx.session).retire_for_stop(
             ctx.server.agent.sessions, self)
 
     async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:

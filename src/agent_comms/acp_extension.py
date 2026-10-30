@@ -22,13 +22,14 @@ from .acp_failure import (
     FailureSource,
     UnrecordedFailureSource,
 )
-from .agent_backend import SendNow, TurnInbox
+from .turn_inbox import SendNow, TurnInbox
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading
 from .declared_family import DeclaredFamily
 from .external_transcript import DraftRow
 from .field_codec import (
+    AcpSessionId,
     AssignmentId,
     ClaimId,
     AcceptsNull,
@@ -435,7 +436,7 @@ class QueueScope(AttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         projection.without_scope()
 
-    def start_revision(self, inputs: InputDrain, session_id: str) -> int | None:
+    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int | None:
         return None
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -474,7 +475,7 @@ class LiveQueueScope(QueueScope, LiveAttachmentScope):
     def validate_scope(self, projection: QueueProjection) -> None:
         pass
 
-    def start_revision(self, inputs: InputDrain, session_id: str) -> int:
+    def start_revision(self, inputs: InputDrain, session_id: AcpSessionId) -> int:
         return inputs.next_revision(session_id)
 
     def accepts_request(self, projection: QueueProjection) -> bool:
@@ -753,7 +754,7 @@ class PromptRequest(CommsRequest):
     @abstractmethod
     def enqueue_control(self, inbox: TurnInbox, input_id: InputId) -> None: ...
 
-    async def publish_acceptance(self, inputs: InputDrain, session_id: str) -> None:
+    async def publish_acceptance(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         await inputs.emit_queue_state(session_id)
 
 

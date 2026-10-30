@@ -21,12 +21,12 @@ from . import agent_events as events
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import NativeTurnOutcome
 from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
-from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import record_request_progress, record_terminal_failure
 from .publication_measurements import PublicationMeasurements
 from .messages import AlertKind, NoticeRole
+from .field_codec import AcpSessionId
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
@@ -35,22 +35,17 @@ from .turn_phase import PublishingPhase
 
 if TYPE_CHECKING:
     from .owned_turn import OwnedTurn
-    from .session_lifecycle import SessionLifecycle
-    from .turn_effects import TurnEffects
     from .turn_failure import TurnFailure
     from .turn_goal_account import TurnGoalAccount
 
 
 @dataclass(kw_only=True)
 class TurnEventPublication(MroDispatch):
-    comms: Comms
-    sessions: SessionLifecycle
-    effects: TurnEffects
-    sync_goal_execution: Callable[[str, str], Awaitable[None]]
-    session_id: str
-    @handles(events.InputStarted, events.Done, events.StreamSettled, events.ToolEnd)
+    sync_goal_execution: Callable[[AcpSessionId], Awaitable[None]]
+    session_id: AcpSessionId
+    @handles(events.InputStarted, events.Done)
     async def sync_goals(self, event: events.InputStarted) -> None:
-        await self.sync_goal_execution(self.session_id, self.sessions.require(self.session_id))
+        await self.sync_goal_execution(self.session_id)
 
 
 
@@ -64,11 +59,11 @@ class TurnProgress(events.AgentEventConsumer):
         inputs,
         effects,
         runtime,
-        session_id,
+        session_id: AcpSessionId,
         turn: OwnedTurn,
         finish_event,
         goals: TurnGoalAccount,
-        sync_goals,
+        sync_goals: Callable[[AcpSessionId], Awaitable[None]],
     ):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
@@ -86,9 +81,6 @@ class TurnProgress(events.AgentEventConsumer):
             if route else TurnEventConsumer(effects, session_id, runtime, self.turn_lease.turn_id)
         )
         self.publication = TurnEventPublication(
-            comms=comms,
-            sessions=sessions,
-            effects=effects,
             sync_goal_execution=sync_goals,
             session_id=session_id,
         )

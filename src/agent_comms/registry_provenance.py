@@ -48,6 +48,9 @@ class DeletedThread:
 class RecipientSelection(ABC):
     """One registry selection owns live, archived and retired recipient behavior."""
 
+    def activity_threads(self) -> tuple[Thread, ...]:
+        return ()
+
     @abstractmethod
     def activity(self, observations, snapshot): ...
 
@@ -68,6 +71,9 @@ class KnownRecipient(RecipientSelection):
 @dataclass(frozen=True, slots=True)
 class RegisteredRecipient(KnownRecipient):
     thread: Thread
+
+    def activity_threads(self) -> tuple[Thread, ...]:
+        return (self.thread,)
 
     def activity(self, observations, snapshot):
         return self.thread.execution.observe_recipient(observations, snapshot, self.thread)

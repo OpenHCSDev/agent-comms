@@ -47,9 +47,8 @@ from .field_codec import (
     WireOmitDefault,
     projected,
 )
-from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution
-from .goal_waits import GoalWaits
+from .locked_store import GoalWakeFile
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -875,13 +874,6 @@ def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 
 
-def goal_execution_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return (
-        *GoalWaits.source_paths(views.root),
-        *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(views.root)),
-    )
-
-
 def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
     return (relationships.RelationshipStore.path_in(views.root),)
 
@@ -968,7 +960,7 @@ class WireRevision(ReadState):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(goal_execution_paths, *StatusSourced.views()),
+        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views()),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],

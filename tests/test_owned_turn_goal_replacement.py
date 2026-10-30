@@ -9,10 +9,10 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.agent_backend import InputContent
+from agent_comms.turn_inbox import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import InputId, OrderId, TurnId
+from agent_comms.field_codec import AcpSessionId, InputId, OrderId, TurnId
 from agent_comms.goal_actions import (
     BlockedGoalAction,
     CreateProblemGoalAction,
@@ -117,6 +117,9 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                 await asyncio.gather(task, return_exceptions=True)
 
 
+WORKER_SESSION = AcpSessionId('worker-session')
+
+
 @pytest.fixture
 async def prepared_owner(tmp_path):
     comms = installed_comms(tmp_path)
@@ -127,7 +130,7 @@ async def prepared_owner(tmp_path):
         ))
     agent = CommsAgent(comms, auto_wake=False)
     try:
-        await agent.sessions.bind_owned(comms.registry.require('worker'), 'worker-session')
+        await agent.sessions.bind_owned(comms.registry.require('worker'), WORKER_SESSION)
         yield comms, agent
     finally:
         await agent.shutdown()
@@ -146,7 +149,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         repo=RepositoryName.from_wire('org/repo'), text='Repair the turn owner',
     ))
     actor = comms.registry.require('lead').incarnation
-    old = OwnedTurn(agent.turns, 'worker-session', 'worker', 'first input',
+    old = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'first input',
                     original_owner_input=True, original_goal_id=initial.id,
                     acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
@@ -162,7 +165,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
 
     # Exercise the real lease-to-reservation boundary without replacing any methods.
     # A second commander publication during preparation makes the leased snapshot stale.
-    current = OwnedTurn(agent.turns, 'worker-session', 'worker', 'next input',
+    current = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'next input',
                         original_owner_input=True, original_goal_id=replaced.id,
                         acceptance=NoTurnAcceptance())
     assert current.authorize()
@@ -210,7 +213,7 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
     )
     actor = comms.registry.require('lead').incarnation
     # QueuedInputContext.active_goal_id of a blocked goal, as queued_input.py passes it.
-    turn = OwnedTurn(agent.turns, 'worker-session', 'worker', 'retry order message',
+    turn = OwnedTurn(agent.turns, WORKER_SESSION, 'worker', 'retry order message',
                      original_owner_input=True,
                      original_goal_id=blocked.active().reported_id(), acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
