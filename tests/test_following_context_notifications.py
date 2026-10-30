@@ -11,7 +11,7 @@ import sqlite3
 
 import pytest
 
-from agent_comms.agent_backend import InputContent, InputRequest, SteerInputPolicy
+from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
