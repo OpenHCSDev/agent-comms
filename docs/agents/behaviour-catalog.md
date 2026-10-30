@@ -3,7 +3,7 @@
 Generated from `agent_comms.behaviour_patterns` by
 `python -m agent_comms.behaviour_patterns > docs/agents/behaviour-catalog.md`; do not edit by hand.
 
-Each behaviour failure pattern is declared once in Core with its signature (what it looks like in state, readable without trusting a report) and the existing checks that enforce it. Patterns in code, rather than in behaviour, are the refactor-audit skill's catalog (`refactor-audit/references/patterns/README.md`).
+Each behaviour failure pattern is declared once in Core with its signature (what it looks like in state, readable without trusting a report) and the existing checks that enforce it. Patterns in code, rather than in behaviour, are NominalRefactorAdvisor's catalog (`nominal_refactor_advisor/audit/patterns/README.md`).
 
 A pending check records a known gap, not enforcement. Adding a pattern means adding one `BehaviourPattern` subclass; membership and this document derive from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.
 
@@ -39,6 +39,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 28, It called a workaround a fix: no pattern cites it yet
 - Failure 29, It softened slop into neutral words: no pattern cites it yet
 - Failure 30, It waited on checks that test nothing it changed: no pattern cites it yet
+- Failure 31, It read the rules after compaction and repeated their first story anyway: no pattern cites it yet
 
 ## plan_idle
 
@@ -120,7 +121,7 @@ Checked by:
 
 - check in `agent_comms.todos.TodoStore.apply`
 
-Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Two strikes on one task take it away."
+Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Strikes measure misses and trigger scrutiny; they never release work."
 
 ## report_instead_of_state
 

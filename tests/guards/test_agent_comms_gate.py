@@ -1,6 +1,6 @@
-"""agent-comms' ratchet: its declared facts and its CI entry, against real Git commits.
+"""agent-comms' NRA gate: its declared facts and its CI entry, against real Git commits.
 
-The measures and the comparison are the pinned refactor-audit's and are tested there; these
+The measures and the comparison are NominalRefactorAdvisor's and are tested there; these
 tests prove what only agent-comms declares (its lock owners, its absence decoder, its codec
 modules, its done plan phases and its stored-record probe), that the entry's pool and probes
 die with it, and that its command line keeps the report and exit contract."""
@@ -20,7 +20,7 @@ import pytest
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
-from agent_comms.pinned_audit import audit
+from nominal_refactor_advisor import audit
 from fixture_git import IDENTITY
 from module_layers import StackClient
 from process_tree_fixture import TREE, identities, ready
@@ -28,7 +28,7 @@ from process_tree_fixture import TREE, identities, ready
 pytestmark = pytest.mark.refactor_guard
 
 SOURCE = Path(__file__).resolve().parents[2]
-# This checkout, as the ratchet measures it.
+# This checkout, as the NRA gate measures it.
 PROJECT = AgentCommsProject(SOURCE)
 
 
@@ -38,7 +38,7 @@ def search_path(*first: Path) -> str:
     return os.pathsep.join([*map(str, first), *([inherited] if inherited else [])])
 
 
-def ratchet_environment() -> dict[str, str]:
+def gate_environment() -> dict[str, str]:
     """The command's environment: this checkout's src before the inherited path."""
     return {**os.environ, "PYTHONPATH": search_path(SOURCE / "src")}
 
@@ -76,16 +76,16 @@ class Checkout:
     @contextmanager
     def comparing(self, base: str, head: str) -> Iterator[SpawnedProcess]:
         """The command launched as its own process, for the tests of its process tree."""
-        command = (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
+        command = (sys.executable, str(SOURCE / "tools/nra_gate.py"),
                    *self.arguments(base, head))
-        with SpawnedProcess.launch(command, cwd=self.path, env=ratchet_environment(),
+        with SpawnedProcess.launch(command, cwd=self.path, env=gate_environment(),
                                    output=subprocess.PIPE) as child:
             yield child
 
-    def compare(self, base: str, head: str, *measured: type[audit.ratchet.Compared]) -> tuple[int, dict]:
+    def compare(self, base: str, head: str, *measured: type[audit.gate.Compared]) -> tuple[int, dict]:
         """The comparison's exit status and report, taking only the named measures'
         measurements. The command line itself is proven by the tests that launch it."""
-        result = audit.ratchet.compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
+        result = audit.gate.compare(AgentCommsProject(self.path), base, head, self.root, 2, measured)
         return int(result.failed), json.loads(json.dumps(result.report()))
 
 
@@ -160,7 +160,7 @@ def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Pat
             observed = identities(announcement)
             assert all(member.alive() for member in observed)
             pool = child.platform.group_members(child.identity)
-            assert len(pool) > 1, "the real ratchet must have started its pool"
+            assert len(pool) > 1, "the real gate must have started its pool"
             with pytest.raises(subprocess.TimeoutExpired):
                 child.collect(timeout=.05)
         after = child.platform.group_members(child.identity)
@@ -187,9 +187,6 @@ def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_pa
         ["git", "archive", "HEAD", "--", "src/agent_comms", "tools/stored_formats.py"], timeout=20
     )
     subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
-    # A Git archive carries no submodule: the complete producer stamp's child reaches the
-    # pinned audit only through the measurement's own source paths.
-    assert not (tmp_path / audit.project.AUDIT_SCRIPTS.resolve().relative_to(SOURCE) / "audit").exists()
     dependency = tmp_path / "dependencies"
     dependency.mkdir()
     (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")
@@ -378,14 +375,14 @@ def source_type_errors(repo: Checkout, client: StackClient) -> int:
     revision = repo.commit({"uses_external.py": USES_EXTERNAL_VALUE})
     selected = [f"{repo.root}/uses_external.py"]
     _, sites = audit.checkers.TypeErrors.findings(
-        AgentCommsProject(repo.path), revision, revision, repo.root, selected, audit.ratchet.HeadSide)
+        AgentCommsProject(repo.path), revision, revision, repo.root, selected, audit.gate.HeadSide)
     return sum(site.path == selected[0] for site in sites)
 
 
 def client_type_errors(repo: Checkout, client: StackClient) -> int:
     revision = repo.commit({"__init__.py": ""})
     _, sites = ClientTypeErrors.findings(
-        AgentCommsProject(repo.path), revision, client, audit.ratchet.HeadSide)
+        AgentCommsProject(repo.path), revision, client, audit.gate.HeadSide)
     return sum(site.path == f"{client.name}/src/uses_external.py" for site in sites)
 
 
@@ -416,9 +413,9 @@ def test_growth_lines_end_the_merged_log(repo: Checkout) -> None:
     base = repo.commit({"check.py": 'value = row["a"]\n'})
     head = repo.commit({"check.py": "value = type(x) is int\n"})
     merged = subprocess.run(
-        (sys.executable, str(SOURCE / "tools/debt_ratchet.py"),
+        (sys.executable, str(SOURCE / "tools/nra_gate.py"),
          "--root", repo.root, "--base", base, "--head", head),
-        cwd=repo.path, env=ratchet_environment(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        cwd=repo.path, env=gate_environment(), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
         text=True, timeout=120,
     )
     assert merged.returncode == 1
@@ -426,10 +423,10 @@ def test_growth_lines_end_the_merged_log(repo: Checkout) -> None:
 
 
 def test_content_cache_digest_covers_a_module_only_loaded_indirectly():
-    """The ratchet never imports coordination_tables.attempts by name; agent_comms loads it
-    through its own imports. Its source is still one of the ratchet's measuring code, so a
+    """The gate never imports coordination_tables.attempts by name; agent_comms loads it
+    through its own imports. Its source is still one of the gate's measuring code, so a
     change to it is a different cache key."""
     indirect = Path(sys.modules["agent_comms.coordination_tables.attempts"].__file__).resolve()
     assert indirect in PROJECT.measuring_sources()
-    assert (audit.project.AUDIT_SCRIPTS / "audit" / "findings.py").resolve() in PROJECT.measuring_sources()
+    assert Path(audit.findings.__file__).resolve() in PROJECT.measuring_sources()
     assert indirect.is_relative_to(Path(__file__).resolve().parents[2] / "src")
