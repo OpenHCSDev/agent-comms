@@ -387,7 +387,7 @@ def retained_transfer(checkout_command_bus, repository):
     comms = checkout_command_bus
     worker = comms.registry.require('worker')
     rule = comms.registry.storage_rule
-    source = rule.order_checkout(rule.roots_of(worker), 'P0')
+    source = rule.order_checkout(rule.roots_of(worker), 'P4')
     source.parent.mkdir(parents=True, exist_ok=True)
     checkout = Checkout.add(repository, source, NewBranchStart('retained-transfer', 'HEAD'))
     comms.registry.register(replace(worker, worktree=checkout), StoppedThreadStatus())
@@ -499,6 +499,7 @@ def test_transfer_refuses_foreign_allocation_even_after_its_owner_changes_projec
     comms, source, destination = retained_transfer
     rule = comms.registry.storage_rule
     worker = comms.registry.require('worker')
+    assert rule.owns_present_checkout(worker, source.path)
     worker_path = rule.order_checkout(rule.roots_of(worker), 'P2')
     Checkout.add(repository, worker_path, NewBranchStart('worker-next', 'HEAD'))
     reviewer = comms.registry.declare(Thread(
