@@ -198,3 +198,20 @@ def test_push_times_come_from_origin_reflogs_only(tmp_path):
     git(worktree, 'commit', '-q', '--allow-empty', '-m', 'never pushed')
     side = git(worktree, 'rev-parse', 'HEAD~1')
     assert sorted(sha for sha, _ in PresentCheckout(worktree).origin_pushes) == sorted([pushed, side])
+
+
+def test_every_order_greps_one_history_walk_per_selection(tmp_path):
+    """Each held order re-walked every origin ref with its own `git log -1 --grep`: about 500
+    walks of one history per heartbeat (36 s of a 220 s pass, 2026-10-30). One walk per
+    selection answers every order with the newest match Git's --grep would give."""
+    worktree = unit_checkout(tmp_path / 'worker--P1')
+    for message in ('P1 first', 'fix P12 slot', 'body only\n\nrefs p3 here', 'P1: second', 'XP1 is not P1x'):
+        git(worktree, 'commit', '-q', '--allow-empty', '-m', message)
+    checkout = PresentCheckout(worktree)
+    refs = ('HEAD',)
+    for pattern in (*(rf'(^|[^A-Za-z0-9_]){problem}([^A-Za-z0-9_]|$)' for problem in ('P1', 'P12', 'P3', 'P4')),
+                    'second', ''):
+        expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',
+                       f'--grep={pattern}', '--format=%H', *refs, '--not')
+        assert [point.sha for point in checkout.commits(pattern, refs)] == expected.split()
+    assert tuple(checkout.walks) == ((refs, ()),)

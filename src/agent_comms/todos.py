@@ -1247,6 +1247,25 @@ class ProgressPoint(DisclosedRecord):
 
 
 @dataclass(frozen=True)
+class LoggedCommit:
+    """One commit of a frame's history walk with the message every problem pattern greps."""
+    point: ProgressPoint
+    message: str
+
+    format: ClassVar[str] = f"{ProgressPoint.format}%x00%B%x00"
+
+    @classmethod
+    def walked(cls, output: str) -> tuple[LoggedCommit, ...]:
+        fields = output.split("\0")
+        return tuple(cls(ProgressPoint.listed(head), message)
+                     for head, message in zip(fields[0::2], fields[1::2]) if head.strip())
+
+    def matches(self, pattern: re.Pattern[str]) -> bool:
+        """Git's --grep: the pattern searched line by line, ignoring case."""
+        return bool(pattern.search(self.message))
+
+
+@dataclass(frozen=True)
 class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
@@ -1470,14 +1489,26 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
+    @cached_property
+    def walks(self) -> dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[LoggedCommit, ...]]:
+        """This frame's history walks, one per selection of refs; every order greps them."""
+        return {}
+
+    def walk(self, refs: tuple[str, ...], excluded: tuple[str, ...]) -> tuple[LoggedCommit, ...]:
+        if (refs, excluded) not in self.walks:
+            self.walks[refs, excluded] = LoggedCommit.walked(self.git(
+                "log", f"--format={LoggedCommit.format}", *refs, "--not", *excluded))
+        return self.walks[refs, excluded]
+
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
         if refs:
-            for line in self.git("log", "-1", "--extended-regexp", "--regexp-ignore-case",
-                                 f"--grep={pattern}", f"--format={ProgressPoint.format}",
-                                 *refs, "--not", *excluded).splitlines():
-                yield ProgressPoint.listed(line)
+            matcher = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+            for commit in self.walk(refs, excluded):
+                if commit.matches(matcher):
+                    yield commit.point
+                    return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
