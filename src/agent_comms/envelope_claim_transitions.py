@@ -190,6 +190,10 @@ class RecordedScope(ClaimScope, declared_name=None):
     def held_at(self, claimed_generation: int) -> bool:
         return claimed_generation == self.owner_claimed_generation
 
+    def reuses(self, other: RecordedScope) -> bool:
+        """Every operation of one held scope shares its acquisition; only the operation differs."""
+        return replace(self, operation_id=other.operation_id) == other
+
     @property
     def operation_ids(self) -> tuple[ClaimId, ...]:
         return (self.operation_id,)
@@ -200,9 +204,6 @@ class NativeClaim(RecordMember, RecordedScope):
     """A tool acquisition belongs to one ordinary native input."""
 
     input_id: InputId
-
-    def reuses(self, other: RecordedScope) -> bool:
-        return replace(self, operation_id=other.operation_id) == other
 
 
 @dataclass(frozen=True)
