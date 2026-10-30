@@ -17,6 +17,7 @@ from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from subprocess import TimeoutExpired
@@ -85,10 +86,14 @@ class MainTree:
     def has(self, path: str) -> bool:
         return not self.missing((path,))[0]
 
+    @cached_property
+    def objects(self) -> dict[str, str]:
+        """This tree's membership, including directories, without requiring blob contents."""
+        return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r", "-t")
+
     def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
         """Tree membership does not require a present path's promised contents."""
-        entries = Repo.tree_objects(self.repo.checkout, self.commit, paths)
-        return tuple(path not in entries for path in paths)
+        return tuple(path not in self.objects for path in paths)
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
         """``git grep -E`` rows of this tree's Python modules, like ``module`` and ``modules``;
@@ -145,8 +150,10 @@ class MainTree:
         """Every Python module under ``paths``. Each path keeps its last parsed blob, so every
         evidence reading one commit parses it once, and the rest are read in one
         ``git cat-file --batch``."""
+        for deleted in self.parsed.keys() - self.objects.keys():
+            del self.parsed[deleted]
         listed = Repo.tree_objects(self.repo.checkout, self.commit, paths, "-r")
-        blobs = [(blob, name) for name, blob in listed.items() if name.endswith(self.source)]
+        blobs = [(self.objects[name], name) for name in listed if name.endswith(self.source)]
         fresh = [(blob, name) for blob, name in blobs
                  if self.parsed.get(name, ("", None))[0] != blob]
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
@@ -236,8 +243,7 @@ class PlanReading:
         return self.reads[evidence]
 
     def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
-        if main == self.main:
-            main = replace(main, parsed=self.main.parsed)
+        main = replace(main, parsed=self.main.parsed)
         return type(self)(todos, main, {
             evidence: answer for evidence, answer in self.reads.items()
             if answer.retained(evidence, self.main, main)
