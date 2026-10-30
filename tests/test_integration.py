@@ -42,10 +42,10 @@ def heads() -> tuple[PullRequestHead, ...]:
     return (PullRequestHead(repo, 7, "a" * 40), PullRequestHead(repo, 8, "b" * 40))
 
 
-@pytest.mark.parametrize("event", ("pull_request", "merge_group"))
+@pytest.mark.parametrize(("event", "moved_main_refuses"), (("pull_request", False), ("merge_group", True)))
 def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidates(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
-    tmp_path: Path, event: str,
+    tmp_path: Path, event: str, moved_main_refuses: bool,
 ) -> None:
     pair = mutual_sources
     inputs = pair.capture(("P2", "P3"), "CI source graph")
@@ -94,7 +94,8 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     pair.client.git(pair.client.checkout, "push", "origin", "HEAD:main")
     stale = subprocess.run((*command, "--revalidate-ci-inputs", str(output)), cwd=checkout.path,
                            env=environment, capture_output=True, text=True, timeout=120)
-    assert stale.returncode != 0 and "main moved" in stale.stderr
+    # A pull request keeps the bases it captured; only the merge group must be current.
+    assert (stale.returncode != 0 and "main moved" in stale.stderr) == moved_main_refuses, stale.stderr
     assert pair.core.git(pair.core.checkout, "rev-parse", "HEAD").strip() == original
     assert not any(call[:2] == ("pr", "merge") or "state=success" in call for call in github_cli.calls())
 

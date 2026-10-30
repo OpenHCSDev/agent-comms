@@ -344,6 +344,13 @@ class TestedSources(DeclaredFamily, affix="Sources"):
     def require_local_candidate(self, inputs: IntegrationInput) -> None:
         inputs.require_local_candidate(self.repository, self.carrier)
 
+    def require_current_mains(self, inputs: IntegrationInput, repositories: tuple[Repo, ...]) -> None:
+        mains = self.main_commits(inputs)
+        for source in inputs.sources:
+            repository = Repo.selected(repositories, source.repository.to_wire())
+            if IntegrationSource.main_head(repository) != mains[source.repository]:
+                raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
+
     def require_merge_review(self, repositories: tuple[Repo, ...]) -> IntegrationInput:
         """Source computation precedes promotion; its exact combined proof is still required."""
         return MergeHeadReview.require_combined(self.carrier, repositories)
@@ -446,11 +453,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         else:
             for source in inputs.sources:
                 source.require_ordinary(self.carrier)
-        mains = self.main_commits(inputs)
-        for source in inputs.sources:
-            repository = Repo.selected(repositories, source.repository.to_wire())
-            if IntegrationSource.main_head(repository) != mains[source.repository]:
-                raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
+        self.require_current_mains(inputs, repositories)
         self.require_local_candidate(inputs)
         for source in inputs.companions:
             source.require_candidate(Repo.selected(repositories, source.repository.to_wire()), self.carrier)
@@ -469,6 +472,10 @@ class PullRequestSources(TestedSources, declared_name="pull_request"):
             raise IntegrationFailed("The tested second parent is not the event's exact PR head")
         graph.require_carrier()
         return graph
+
+    def require_current_mains(self, inputs: IntegrationInput, repositories: tuple[Repo, ...]) -> None:
+        """A pull request is measured against the bases its inputs captured; a later main
+        is the merge group's to prove, so a busy main never fails the PR's own checks."""
 
 
 class MergeGroupSources(TestedSources, declared_name="merge_group"):
