@@ -26,7 +26,8 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
 from nominal_refactor_advisor import audit
-from nominal_refactor_advisor.audit.findings import GodFunction, ParsedModule
+from nominal_refactor_advisor.ast_tools import ParsedModule
+from nominal_refactor_advisor.audit.findings import GodFunction
 from nominal_refactor_advisor.audit.source_measures import ForeignAbsenceProbe
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import GitCommandError, Repo
@@ -103,9 +104,8 @@ class MainTree:
         )
 
     def module(self, path: str) -> ParsedModule:
-        blob, = Repo.blobs(self.repo.checkout, f"{self.commit}:{path}")
-        source = blob.decode()
-        return ParsedModule(path, source, ast.parse(source, filename=path), path)
+        module, = self.modules((path,))
+        return module
 
     def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
@@ -126,8 +126,9 @@ class MainTree:
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
         for (blob, name), content in zip(fresh, contents, strict=True):
             source = content.decode()
-            self.parsed[name] = blob, ParsedModule(name, source,
-                                                   ast.parse(source, filename=name), name)
+            self.parsed[name] = blob, ParsedModule(
+                path=Path(name), module_name=name,
+                module=ast.parse(source, filename=name), source=source)
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
@@ -449,7 +450,7 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
     def read(self, main: MainTree) -> bool:
         scan = type(self)()
         for module in main.modules(("src",)):
-            scan.visit(module.tree)
+            scan.visit(module.module)
         return not scan.found
 
     def describe(self) -> str:
@@ -676,7 +677,7 @@ class NoExactCopies(MainEvidence):
         shapes = [
             ErasedBody.of(function)
             for module in main.present_modules(self.paths)
-            for function in NamedFunctions.of(self.names, module.tree)
+            for function in NamedFunctions.of(self.names, module.module)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -695,7 +696,7 @@ class NoGodFunction(MainEvidence):
         return not any(
             found
             for module in main.present_modules((self.path,))
-            for function in NamedFunctions.of((self.name,), module.tree)
+            for function in NamedFunctions.of((self.name,), module.module)
             for found in GodFunction.from_node(function, module)
         )
 
@@ -715,7 +716,7 @@ class NoAbsenceProbes(MainEvidence):
         return not any(
             ForeignAbsenceProbe.occurrences(node)
             for module in main.present_modules(self.paths)
-            for node in ast.walk(module.tree)
+            for node in ast.walk(module.module)
         )
 
     def describe(self) -> str:
@@ -745,7 +746,7 @@ class ClassFlagsAbsent(MainEvidence):
             statements = (
                 (path, statement.lineno)
                 for path in {path for path, _ in matched}
-                for declared in Classes.of((main.module(path).tree,))
+                for declared in Classes.of((main.module(path).module,))
                 for statement in declared.body
             )
         return not any(statement in matched for statement in statements)
@@ -924,8 +925,8 @@ class OwnClassChecksAbsent(MainEvidence):
     def checks(main: MainTree) -> ClassChecks:
         checks = ClassChecks()
         for module in main.modules(("src",)):
-            checks.path = module.path
-            checks.visit(module.tree)
+            checks.path = module.file_path
+            checks.visit(module.module)
         return checks
 
     def describe(self) -> str:
@@ -946,13 +947,13 @@ class ParentsShared(MainEvidence):
             *(
                 declared.name
                 for declared in Classes.of(
-                    module.tree for module in main.present_modules(self.paths)
+                    module.module for module in main.present_modules(self.paths)
                 )
             ),
         }
         members = Counter(
             base
-            for member in Classes.of(module.tree for module in main.modules(("src",)))
+            for member in Classes.of(module.module for module in main.modules(("src",)))
             for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
@@ -1121,10 +1122,10 @@ class DeclaredScopes:
         self.modules: dict[QualifiedName, ModuleBindings] = {}
         self.module_of: dict[str, QualifiedName] = {}
         for module in main.modules(paths):
-            name, package = self.dotted(module.path, paths)
-            bindings = self.modules[name] = ModuleBindings(self, module.path, name, package)
-            bindings.visit(module.tree)
-            self.module_of[module.path] = name
+            name, package = self.dotted(module.file_path, paths)
+            bindings = self.modules[name] = ModuleBindings(self, module.file_path, name, package)
+            bindings.visit(module.module)
+            self.module_of[module.file_path] = name
 
     @staticmethod
     def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:
