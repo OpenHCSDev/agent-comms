@@ -622,9 +622,9 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     whole = {"file_path": str(parts[0])}
     assert not refused(capsys, gated(transcript, "Read", whole))
     assert refused(capsys, gated(transcript, "Read", {"file_path": str(transcript)}))  # not dealt
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a Read that never completed
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}))  # a Read that never completed
     gated(transcript, "Read", {**whole, "limit": 5}).completed()
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a partial read is not a reading
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}))  # a partial read is not a reading
     for part in parts:
         gated(transcript, "Read", {"file_path": str(part)}).completed()
     audit = transcript.with_suffix(".audit.json")
@@ -647,7 +647,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     words = ("Read the rules.\nThen write the audit.",)
     start.prepare(CommanderReader(), words)
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
-        gated(transcript, tool, {}).judge()
+        gated(transcript, tool, {"file_path": str(transcript)}).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]
