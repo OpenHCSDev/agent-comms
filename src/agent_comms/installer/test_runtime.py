@@ -35,7 +35,9 @@ def main() -> None:
             parser.error("--home must not name the live home")
         TestHome(home).prepare()
         with InstallCommands() as commands:
-            RuntimeStack.build(Checkout.prepared(Path.cwd()), commands, home).test(*arguments)
+            built = RuntimeStack.build(Checkout.prepared(Path.cwd()), commands, home)
+            built.complete()
+            built.test(*arguments)
 
 
 if __name__ == "__main__":
