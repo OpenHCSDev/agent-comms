@@ -1031,7 +1031,9 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return ProcessIdentity.capture(os.getpid())
 
     async def session_worktree(self) -> Checkout:
-        return self.comms.registry.require(self.binding.bus).worktree
+        """Only a thread not yet registered asks, before any binding exists: the session runs
+        where its bridge was started."""
+        return Checkout(Path.cwd())
 
     async def registered_watch(self, operation: Inbox) -> None:
         with ExitStack() as endpoint:
