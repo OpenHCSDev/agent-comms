@@ -66,6 +66,10 @@ class Ping(DeclaredFamily, affix="Ping"):
         return False
 
     @property
+    def owner_flagged(self) -> bool:
+        return False
+
+    @property
     @abstractmethod
     def key(self) -> object: ...
 
@@ -104,7 +108,7 @@ class Ping(DeclaredFamily, affix="Ping"):
             key: value for key, value in FieldCodec.encode(self).items() if key not in ignored
         }))
         since = self.since.recorded_at("A heartbeat line")
-        return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds)
+        return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds, self.owner_flagged)
 
     def render(self, now: float) -> str:
         return f"{self.text} ({self.since.age(now)})"
@@ -121,6 +125,10 @@ class RulePing(Ping):
     @property
     def urgent(self) -> bool:
         return self.rule.urgent
+
+    @property
+    def owner_flagged(self) -> bool:
+        return self.rule.owner_flagged
 
     @property
     def alarm_kind(self) -> type[StandingRule]:
