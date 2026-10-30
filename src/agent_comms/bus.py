@@ -397,7 +397,7 @@ class BusReader(RouteCounts, ABC):
 
     def received(
         self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
@@ -408,7 +408,7 @@ class BusReader(RouteCounts, ABC):
 
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         """Read the bounded append-time policy index before loading deliveries."""
