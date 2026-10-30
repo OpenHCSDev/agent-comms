@@ -31,7 +31,7 @@ from .field_codec import (
     WireRequired,
     WireValue,
 )
-from .audience_manifest import FrozenRecipient
+from .participant_identity import FrozenRecipientIdentity
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
@@ -1223,7 +1223,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: Delivered
+        self, recipient: FrozenRecipientIdentity, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
