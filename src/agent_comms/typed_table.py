@@ -143,8 +143,8 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         return value
 
     @classmethod
-    def json_text(cls, expression: str) -> str:
-        """The stored value as JSON text, without a Python decode/encode trip."""
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The stored value as JSON text, without a domain-object round trip."""
         return f"json_quote({expression})"
 
     @classmethod
@@ -187,9 +187,10 @@ class RealStorage(SqlStorage):
         return annotation is float
 
     @classmethod
-    def json_text(cls, expression: str) -> str:
-        # Alternate-form-2 retains the stored double; json_quote rounds to 15 digits.
-        return f"CASE WHEN {expression} IS NULL THEN 'null' ELSE printf('%0!.26g', {expression}) END"
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The codec owns exact float spelling; SQLite's formatters differ."""
+        db.create_function(cls.declared_name, 1, FieldCodec.compact, deterministic=True)
+        return f'"{cls.declared_name}"({expression})'
 
 
 class BooleanStorage(SqlStorage):
@@ -208,7 +209,7 @@ class BooleanStorage(SqlStorage):
         return None if value is None else int(value)
 
     @classmethod
-    def json_text(cls, expression: str) -> str:
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
         return f"CASE {expression} WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END"
 
     @classmethod
@@ -282,7 +283,7 @@ class JsonStorage(SqlStorage):
         return None if value is None else FieldCodec.compact(value, allow_nan=False)
 
     @classmethod
-    def json_text(cls, expression: str) -> str:
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
         return f"COALESCE({expression}, 'null')"
 
     @classmethod
@@ -511,9 +512,9 @@ class _Field(SqlValue):
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
 
-    def wire_record(self, plan: FieldPlan, alias: str) -> str:
+    def wire_record(self, db: sqlite3.Connection, plan: FieldPlan, alias: str) -> str:
         expression = self.reference(alias)
-        projected = plan.project_encoded(self.storage.json_text(expression), self.json_record)
+        projected = plan.project_encoded(self.storage.json_text(db, expression), self.json_record)
         if not plan.constructor_required and plan.omitted(plan.default()):
             default = SQLiteLiteral.of(self.encode(plan.default()))
             return f"CASE WHEN {expression} IS {default} THEN '{{}}' ELSE {projected} END"
@@ -2460,10 +2461,10 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
-    def wire_record(cls, plan: FieldPlan) -> str:
+    def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
         """Project one declared field's stored value into its public wire record."""
         item, = cls._fields_named((plan.name,))
-        return item.wire_record(plan, cls.declared_name)
+        return item.wire_record(db, plan, cls.declared_name)
 
     @classmethod
     def qualified(cls, *names: str) -> str:

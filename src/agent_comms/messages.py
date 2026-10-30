@@ -1067,11 +1067,11 @@ class Message(MessageInput, TurnOrigin):
         return {}
 
     @classmethod
-    def stored_wire_query(cls, identity: type[TypedTable]) -> str:
+    def stored_wire_query(cls, db: sqlite3.Connection, identity: type[TypedTable]) -> str:
         """Project the public envelope from its declared stored fields, not domain objects."""
         tables = cls.tables()
         stored = {name: table for table in tables for name in table.column_projection()}
-        pieces = [stored[plan.name].wire_record(plan)
+        pieces = [stored[plan.name].wire_record(db, plan)
                   for plan in FieldCodec.field_plans(cls) if plan.records]
         identity_key = cls.message_id.wire_name
         pieces.append("json_object('" + identity_key + "', " + identity.qualified("message_id") + ")")
