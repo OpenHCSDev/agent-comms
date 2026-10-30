@@ -617,9 +617,7 @@ class Unengaged(Owed):
         ) + f" Answer them in {self.audit}: at most {self.batch} rules may stand unanswered."
 
     def permits_read(self, path: Path) -> bool:
-        return path in self.read or (
-            len(self.faults) < self.batch and path == next(iter(self.unopened), None)
-        )
+        return path in self.read or path in self.unopened[:self.batch - len(self.faults)]
 
 
 @dataclass(frozen=True)
@@ -636,9 +634,10 @@ class Unread(Owed):
     before: ClassVar[str] = "reading"
 
     def permits_read(self, path: Path) -> bool:
-        """Any file already opened, since re-reading is how a rule gets answered, or the next
-        unopened one in the dealt order."""
-        return path not in self.unopened or path == self.unopened[0]
+        """Any file already opened, since re-reading is how a rule gets answered, or one of the
+        next unopened batch in the dealt order: a parallel batch's hooks reach the lock in any
+        order, so naming only the very next file refused reads the batch had sent in order."""
+        return path not in self.unopened or path in self.unopened[:Unengaged.batch]
 
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
