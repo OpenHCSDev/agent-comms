@@ -566,8 +566,8 @@ def answer_rules(comms: Comms, name: str) -> None:
 
 
 def engaged(rule: str, source: Path) -> dict[str, str]:
-    """An audit entry answering one rule file with a line it really holds."""
-    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.strip())
+    """An audit entry answering one rule file with a greentext line it really holds."""
+    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.startswith("> "))
     return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
 
 

@@ -75,7 +75,8 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.nominal_census import NominalPlanReadings
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
@@ -432,7 +433,7 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReadings().prepare_reading(repository, todos, tuple(
+        return NominalPlanReadings().prepare_reading(repository, todos, tuple(
             phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
@@ -474,7 +475,18 @@ class CommanderContext(BaseModel):
         return self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers,
             origin=self.actor.origin(),
-            answerer=CommanderReceipts(self.actor_identity, (self.incarnation,))).message
+            answerer=self.receipts).message
+
+    @property
+    def receipts(self) -> CommanderReceipts:
+        """Whose receipts this actor answers: its commander's, and those of every commander of
+        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
+        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
+        a retired commander's directives included."""
+        actor = self.actor_identity
+        owners = (self.incarnation, *(request.commander for request
+                                      in self.comms.goals.todos.open_requests(actor)))
+        return CommanderReceipts(actor, tuple(dict.fromkeys(owners)))
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.

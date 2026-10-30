@@ -6372,6 +6372,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             StoredHeadReview.insert_values(db, record=record)
 
+    def recorded_head_review(self, actor: RecordedThreadIncarnation) -> bool:
+        """Whether this actor recorded any head verdict: the record keeps the actor's own
+        birth, a fork's included, so a fork's verdicts are its record in Core."""
+        actor_key = FieldCodec.record_key(HeadReviewRecord, 'actor')
+        birth_key = FieldCodec.record_key(RecordedThreadIncarnation, 'created_at')
+        with self.snapshot() as db:
+            return StoredHeadReview.exists(
+                db, where=f"json_extract({{record}}, '$.{actor_key}.{birth_key}') = ?",
+                parameters=(actor.created_at,))
+
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but
         judges none of the edits before it, so only a decided head review moves the cut."""

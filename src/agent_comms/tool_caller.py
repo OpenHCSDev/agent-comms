@@ -323,18 +323,22 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         return fork.incarnation.require_recorded().acting_for(snapshot.require(parent).incarnation)
 
     def recorded(self, comms: Comms) -> bool:
-        """Every commander verb that records announces it on the bus, so a fork that sent
-        nothing recorded nothing."""
-        return self.name in comms.bus.bus.activity_clocks().sent
+        """A fork's record in Core is what it sent on the bus or a head verdict it recorded:
+        a verdict on an orderless head posts nothing, yet Core holds it."""
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return (self.name in comms.bus.bus.activity_clocks().sent
+                or comms.goals.todos.recorded_head_review(own))
 
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
-            command = shlex.join(('agent-comms-commander', *LaunchRoot.from_path(comms.root).arguments(),
-                                  'order', 'say', '#comms', 'FILE', *self.commander_arguments(comms)))
+            launch = ('agent-comms-commander', *LaunchRoot.from_path(comms.root).arguments())
+            actor = self.commander_arguments(comms)
+            command = shlex.join((*launch, 'order', 'say', '#comms', 'FILE', *actor))
+            review = shlex.join((*launch, 'judge', '...', *actor))
             raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: post what it found with"
-                f" `{command}` before it stops.")
+                f"{self.name} recorded nothing in Core: record a head verdict with"
+                f" `{review}` or post what it found with `{command}` before it stops.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:

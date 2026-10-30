@@ -17,6 +17,7 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
+from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import CompletedWatch, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
@@ -60,7 +61,8 @@ class CommanderObservation:
         )
 
 
-class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService, CompletedWatch,
+class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, CommanderService,
+                         CompletedWatch,
                          PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
 
     pass_duration: ClassVar[float] = 270

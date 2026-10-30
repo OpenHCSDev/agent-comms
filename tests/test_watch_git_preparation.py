@@ -30,6 +30,7 @@ from agent_comms.comms import Comms
 from agent_comms.message_bus import Watch
 from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
+from agent_comms.nominal_census import NominalCensus, NominalPlanReadings
 from agent_comms.phase_evidence import (
     BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent,
     RetainedPlanReadings,
@@ -38,6 +39,10 @@ from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
+
+
+class RetainedNominalReadings(RetainedPlanReadings, NominalPlanReadings):
+    """The commander heartbeat's plan readings without the rest of the heartbeat."""
 
 
 @dataclass(frozen=True)
@@ -233,7 +238,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     repo = case.repository
     head = case.commit_at_remote(case.source.main_commit, "Future plan", "refs/pull/99/head")
     evidence = CommitMerged(head)
-    plans = RetainedPlanReadings()
+    plans = RetainedNominalReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
     failed = plans.prepare_reading(repo, (), (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
@@ -251,7 +256,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
-    reading = RetainedPlanReadings().prepare_reading(repo, (), ())
+    reading = RetainedNominalReadings().prepare_reading(repo, (), ())
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
     assert not reading.holds(missing)
@@ -290,7 +295,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     trace = tmp_path / "observation.trace2.jsonl"
     monkeypatch.setenv("GIT_TRACE2_EVENT", str(trace))
     before = case.snapshot()
-    main = MainTree(repo, head)
+    main = MainTree(repo, head, NominalCensus())
     assert main.has("src/promised.py")
     assert not main.has("src/deleted.py")
     assert main.missing(paths) == (False, True, False)
@@ -306,7 +311,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     with pytest.raises(GitCommandError):
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
-    plans = RetainedPlanReadings()
+    plans = RetainedNominalReadings()
     failed = plans.prepare_reading(repo, (), (evidence,))
     plans.observe_reading(failed, (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
