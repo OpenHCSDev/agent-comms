@@ -218,6 +218,8 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
                    for sample in measurements)
         assert all(sample.fleet_resident_bytes <= sample.fleet_budget_bytes
                    for sample in measurements)
+        assert all(len(sample.memory.holders) == 3 and sample.memory.tracer > 0
+                   for sample in measurements)
         await Coordination.run_worker(partial(comms.owners.stop, names[0]))
         assert host.alive()
         assert comms.registry.require(names[0]).process_identity == NoProcess()

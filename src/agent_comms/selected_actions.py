@@ -175,6 +175,5 @@ class PlannedSelectedWrite(NoSelectedTools):
         return self.plan.operation_id
 
     def apply(self, owner: CodingToolOwner) -> None:
-        self.authority.require_current(self.assignment, self.thread, self.plan.operation_id)
-        SelectedExistingFileWrite(self.plan.resource, self.plan.contents).apply(owner)
-        self.authority.applied(self.assignment, self.thread, self.plan.operation_id)
+        with self.authority.writing(self.assignment, self.thread, self.plan.operation_id):
+            SelectedExistingFileWrite(self.plan.resource, self.plan.contents).apply(owner)

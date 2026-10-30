@@ -23,6 +23,7 @@ import sys
 import termios
 import threading
 import time
+import tracemalloc
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor, wait
@@ -131,6 +132,43 @@ class ResidentMemory(ProcfsRecord):
                 yield from map(int, listing.read_text().split())
             except (FileNotFoundError, ProcessLookupError):
                 continue
+
+@dataclass(frozen=True)
+class AllocationSite:
+    """One traced source line and the bytes its live allocations hold."""
+
+    file: str
+    line: int
+    bytes: int
+
+    def text(self) -> str:
+        return f"{self.file}:{self.line} {self.bytes / 2**20:.0f} MiB"
+
+
+@dataclass(frozen=True, kw_only=True)
+class TracedResidentMemory(ResidentMemory):
+    """This process's own status sample with the source lines holding the most traced memory.
+    run_host starts tracemalloc with one frame, so the shared host can name its growing owner;
+    tracer is what tracemalloc itself holds inside the resident total."""
+
+    holders: tuple[AllocationSite, ...]
+    tracer: int
+
+    @classmethod
+    def own(cls, top: int = 3) -> Self:
+        sample = ProcessIdentity.capture(os.getpid()).memory()
+        statistics = tracemalloc.take_snapshot().statistics("lineno")[:top]
+        return cls(
+            **vars(sample),
+            holders=tuple(AllocationSite(frame.filename, frame.lineno, statistic.size)
+                          for statistic in statistics for frame in statistic.traceback[:1]),
+            tracer=tracemalloc.get_tracemalloc_memory(),
+        )
+
+    def holders_text(self) -> str:
+        return (", ".join(site.text() for site in self.holders)
+                + f" (tracer {self.tracer / 2**20:.0f} MiB)")
+
 
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
