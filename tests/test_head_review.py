@@ -547,6 +547,8 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
         "-m", f"Combine the substantive Core source\n\n{snapshot.trailer}",
     ).strip()) for snapshot in (inputs, updated))
     reader = WorkBranches(source.checkout)
+    for head in heads:
+        reader.prepare_pull_request("main", head.head)
     before, after = (head.change_identity(reader, "main") for head in heads)
     assert before.patch == after.patch
     assert before.integration_digest == inputs.digest
