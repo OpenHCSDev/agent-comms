@@ -18,6 +18,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.ui_model.observation import ReadCommanderUnit
 from agent_comms.ui_model.unit_state import UnitState
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
@@ -86,6 +87,36 @@ def test_recorded_failure_precedes_stale_board_and_load_without_changing_retaine
     assert recovered.heartbeat.since(old_completion)
     assert any(path.read_bytes() != before for path, before in published_before)
     assert recovered.heartbeat == RecordedEventTime(services.read().commander_completed[owner])
+
+
+def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_details(published_board):
+    comms = published_board
+    owner = comms.registry.require('lead').incarnation.require_recorded()
+    services = ServicePassStore.at(comms.root)
+    services.update(lambda passes: DocumentChange.to(replace(
+        passes, commander_completed=passes.commander_completed | {owner: time.time() - 3600})))
+    hud = CommanderFrame.current(comms, 'lead')
+    assert not hud.services.failing
+    assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
+    assert 'STALE retained' in hud.retained_status()
+    card = hud.units[0]
+    request = ReadCommanderUnit(
+        root=str(comms.root), commander=owner, unit=card.unit,
+        orders=tuple(dict.fromkeys(order.order for order in card.orders)))
+    with pytest.raises(ToolRefusedError, match='no failure recorded, so no heartbeat is running'):
+        request.read(comms)
+
+
+def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
+    comms = published_board
+    services = ServicePassStore.at(comms.root)
+    owner = comms.registry.require('lead').incarnation.require_recorded()
+    services.heartbeat_passed((owner,), (owner,))
+    services.failed('another-watch', OSError('independent watch failed'))
+    hud = CommanderFrame.current(comms, 'lead')
+    assert 'independent watch failed' in hud.header[0]
+    assert hud.retained_status() == 'Retained board rows and load:'
+    hud.require_current()
 
 
 def test_missing_frame_reports_recorded_failure_without_fabricating_a_board(fork_bus):

@@ -241,7 +241,7 @@ class CommsUnjudgedTool(ThreadReadTool):
                 edits.extend(read.read())
             except (WorkBranchError, OSError) as error:
                 unavailable.append(UnavailableOrderEdits(
-                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, str(error)))
+                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, error))
         return UnjudgedEdits(tuple(edits), tuple(unavailable)).with_services(passes, owner)
 
 

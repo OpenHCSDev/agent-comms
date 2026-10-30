@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -15,7 +15,7 @@ from .context_store import ContextStore
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec, projected
+from .field_codec import FieldCodec, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
@@ -29,6 +29,7 @@ from .tool_result import ToolResult
 from .service_passes import ServiceReading
 from .transcript_events import IncomingTranscript, TurnDigest
 from .turn_item import NativeTurnId
+from .work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -77,7 +78,11 @@ class UnavailableOrderEdits(ToolResult):
 
     problem: ProblemNumber
     owner: ThreadIncarnation
-    error: str
+    cause: Annotated[WorkBranchError | OSError, WireTransient()]
+
+    @projected(view='wire')
+    def error(self) -> str:
+        return str(self.cause)
 
 
 @dataclass(frozen=True)

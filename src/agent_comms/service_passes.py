@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
+from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
 from .errors import ToolRefusedError
 from .field_codec import WireTransient, projected
@@ -45,13 +46,9 @@ class ServicePasses:
             return RecordedEventTime(self.commander_completed[commander])
         return UnrecordedEventTime()
 
-    def stall(self) -> str:
-        """Why passes stopped completing: every recorded failure with its error, or, with none
-        recorded, that no watch is running at all."""
-        return "; ".join(
-            f"{watch} failing since {RecordedEventTime(failure.since).clock()}: {failure.error}"
-            for watch, failure in self.failing.items()
-        ) or "no failure recorded, so no heartbeat is running"
+    def heartbeat_current(self, heartbeat: EventTime) -> bool:
+        """Only the commander's completion clock determines heartbeat freshness."""
+        return heartbeat.since(time.time() - 3 * Coordination.watch_period)
 
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
@@ -73,7 +70,15 @@ class ServiceReading(ToolResult):
     @projected(view='wire')
     def service_status(self) -> tuple[str, ...]:
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
-        return (*self.services.failure_lines(), *(clock or ('Tristan last completed: unrecorded',)))
+        failures = self.services.failure_lines()
+        if not failures and not self.services.heartbeat_current(self.heartbeat):
+            failures = ('no failure recorded, so no heartbeat is running',)
+        return (*failures, *(clock or ('Tristan last completed: unrecorded',)))
+
+    def require_current(self) -> None:
+        """A disclosure without a health header cannot serve stale cards silently."""
+        if not self.services.heartbeat_current(self.heartbeat):
+            raise BoardUnavailable(self, 'the commander heartbeat is stale')
 
 
 class BoardUnavailable(ToolRefusedError):

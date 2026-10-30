@@ -1943,7 +1943,7 @@ class DirectiveWords(OrderWords):
 class PlainText(DirectiveWords):
     """Prose in the words the user uses: no word that hides what happened."""
 
-    REFUSED = re.compile(r'\b(edit ownership|prepared|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+    REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
     refusal = "Jargon {1} hides what happened; say it plainly."
 
     @staticmethod
@@ -3594,7 +3594,7 @@ class Assignment(TodoHolder):
 
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
                              snapshot: RegistrySnapshot, workplaces: EditWorkplaces) -> None:
-        """Compare prepared physical edit edit ownership; launch/check paths confer no occupancy."""
+        """Compare prepared physical edit ownership; launch/check paths confer no occupancy."""
         proposed = workplaces.orders[problem]
         prepared = proposed.held()
         if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):

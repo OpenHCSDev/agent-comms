@@ -18,7 +18,6 @@ from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
-from agent_comms.coordinator import Coordination
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import DisclosureIdentity, OrderId, projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -262,7 +261,7 @@ class CommanderLoad(ServiceReading):
     load: OverloadDegradation
 
     def retained_status(self) -> str:
-        if not self.services.failing and self.heartbeat.since(time.time() - 3 * Coordination.watch_period):
+        if self.services.heartbeat_current(self.heartbeat):
             return 'Retained board rows and load:'
         return 'STALE retained board rows and load:'
 
