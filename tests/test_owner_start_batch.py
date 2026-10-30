@@ -13,6 +13,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_launch import ReadOwnerLaunchRuntimeRequest, RetainedOwnerLaunch
+from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from bus_record_fixture import prepare_native_comms
@@ -64,3 +65,31 @@ def test_later_selection_failure_joins_the_already_dispatched_start(
         assert not comms.owners.start_many(("first",))[0].launched
     finally:
         comms.owners.stop("first")
+
+
+def test_failed_binding_retires_without_stopping_its_shared_host(
+    tmp_path: Path, native_runtime_package: VerifiedNativePackage,
+) -> None:
+    comms = prepare_native_comms(wire(tmp_path / "wire"))
+    for name in ("healthy", "failed"):
+        comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
+    gate = PiRedeal.of(comms, comms.registry.require("failed"))
+    gate.record.parent.mkdir(parents=True, exist_ok=True)
+    gate.record.write_text("{")  # Fail before an ACP session is published, not a model input.
+    try:
+        comms.owners.start_many(("healthy",))
+        host = attached_launch(comms, "healthy").process
+        with pytest.raises(RuntimeError):
+            comms.owners.start_many(("failed",))
+        assert comms.registry.require("failed").require_process() == host
+
+        comms.owners.stop("failed")
+
+        assert not comms.registry.require("failed").process_alive
+        assert attached_launch(comms, "healthy").process == host
+        assert host.alive()
+        gate.record.unlink()
+        comms.owners.start_many(("failed",))
+        assert attached_launch(comms, "failed").process == host
+    finally:
+        comms.owners.stop("failed", "healthy")

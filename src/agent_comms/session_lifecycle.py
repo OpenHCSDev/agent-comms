@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
 from dataclasses import dataclass
 import os
 from functools import partial
@@ -148,14 +149,18 @@ class SessionLifecycle:
 
     def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
-        for session_id, published in self.published.items():
-            if entry.matches_name(published.name):
-                return session_id
+        for session_id in self.owned_sessions(entry):
+            return session_id
         raise Refused.invalid_params({
             "reason": f"Registered owner {entry.thread.name!r} has no loaded ACP session. "
                       "PID registration does not attach a session.",
             "owner": entry.thread.name,
         })
+
+    def owned_sessions(self, entry: RegistryEntry) -> Iterator[AcpSessionId]:
+        """Published attachments belonging to this registry identity, including aliases."""
+        return (session_id for session_id, published in self.published.items()
+                if entry.matches_name(published.name))
 
     @staticmethod
     def reject_foreign_mcp(request: NewSessionRequest | LoadSessionRequest) -> None:

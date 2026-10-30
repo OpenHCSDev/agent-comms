@@ -10,7 +10,7 @@ from agent_comms.turn_inbox import SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError
-from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_session_reopen import SessionRetention
@@ -24,7 +24,7 @@ from agent_comms.turn_stats import RequestedStats, StatsRequest
 
 
 def test_drain_lifecycle_keeps_inbox_and_original_in_one_owner():
-    state = DrainedSession()
+    state = DrainedSession(identifier=AcpSessionId("drain"))
     assert not state.turn_open() and not state.turn.has_source
     with pytest.raises(KeyError):
         state.require_inbox()
@@ -115,7 +115,7 @@ async def test_native_absence_does_not_admit_a_wait_or_a_forwarding_job():
 
 
 async def test_unobserved_private_state_and_unmeasured_session_have_no_authority(tmp_path):
-    state = DrainedSession()
+    state = DrainedSession(identifier=AcpSessionId("unobserved"))
     assert not state.settled()
     await state.turn.finish_original(None)
     state.open_inbox()

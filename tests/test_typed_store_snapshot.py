@@ -111,3 +111,33 @@ def test_the_carry_derives_declared_objects_and_refuses_an_undeclared_column(tmp
             f'ALTER TABLE "{InputDispositionRow.declared_name}" ADD COLUMN extra TEXT DEFAULT "kept"')
     with maintenance_held(tmp_path), pytest.raises(RelationViolationError):
         InputDispositions.reconcile_at(store.path)
+
+
+def test_a_schema_changed_after_its_check_is_refused_on_the_next_read(tmp_path):
+    """Readers compare the stored SQL once per schema version; a change in place raises the
+    version, so a verified file that loses a declared index is refused again."""
+    store = InputDispositions(tmp_path)
+    store.record(BusInputKey(1), seq=1, owner="kid", claim_scope=1, target="kid", text="first")
+    with store.snapshot() as connection:
+        store.require_schema(connection)
+    index = next(name for name, sql in store.declared_schema().items()
+                 if not sql.lstrip().upper().startswith("CREATE TABLE"))
+    with store.writing() as connection:
+        connection.execute(f'DROP INDEX "{index}"')
+    with pytest.raises(RelationViolationError), store.snapshot():
+        pytest.fail("A schema changed in place must be compared again")
+
+
+def test_in_memory_schema_checks_remember_nothing():
+    """An in-memory database has no file identity, so its checks compare again and keep no
+    record: one remembered entry per read was an unbounded set on the reader path."""
+    import sqlite3
+    from agent_comms.typed_table import FiledSchema, SchemaRevision, TableSchema, UnfiledSchema
+
+    connection = sqlite3.connect(":memory:")
+    before = len(FiledSchema.verified_schemas)
+    for _ in range(50):
+        revision = SchemaRevision.read(connection)
+        assert isinstance(revision, UnfiledSchema)
+        revision.remember(TableSchema, ())
+    assert len(FiledSchema.verified_schemas) == before

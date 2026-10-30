@@ -43,7 +43,7 @@ from .private_nk_entrypoint import (
     PrivateNkLaunch,
     SharedRootLaunch,
 )
-from .private_path import PrivateFileRole
+from .private_path import FileObservation, PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
 from .notification_evidence import NotificationAssignmentRead
@@ -124,6 +124,14 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
+
+    def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
+                       registry: FileObservation) -> tuple[FileObservation, ...]:
+        """The observed files this answer was decided from.
+
+        A public root is decided by the guard's absence and the coordinator's schema.
+        """
+        return guard, coordinator
 
     def native_answered(self, answers: HistoricalNativeAnswers,
                         references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
@@ -262,6 +270,11 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
 
 
     filename = ".registry-owner-guard"
+
+    def guard_evidence(self, guard: FileObservation, coordinator: FileObservation,
+                       registry: FileObservation) -> tuple[FileObservation, ...]:
+        """A private root is decided by its guard slots and the registry digest they name."""
+        return guard, registry
 
     def declare_acceptance(self, db: sqlite3.Connection, recipient_lookup: ThreadLookup) -> None:
         AcceptanceFrontier(

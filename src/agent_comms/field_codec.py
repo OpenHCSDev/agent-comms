@@ -2604,6 +2604,7 @@ class FieldCodec(MroDispatch, Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
+    @cache
     def _types(declaration: type) -> dict[str, type[object]]:
         """Every field annotation a declaration has, each evaluated in the module that wrote it.
         get_type_hints on a class swaps the class dict in as the eval globals, so a lambda in an
