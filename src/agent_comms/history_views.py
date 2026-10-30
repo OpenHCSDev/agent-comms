@@ -46,6 +46,7 @@ from .exporting import (
     WireExportFormat,
     WireExportLimit,
     WireExportProvenance,
+    WireExportObserver,
     WireExportScope,
     WireTranscriptExporter,
 )
@@ -319,19 +320,23 @@ class HistoryViews:
         limit: WireExportLimit,
         overwrite: bool = False,
         export_started_at: float | None = None,
+        observer: WireExportObserver = WireExportObserver(),
     ) -> WireExportProvenance:
         """Export one fixed, non-mutating snapshot of authoritative wire rows."""
         started_at = time.time() if export_started_at is None else export_started_at
         resolved = scope.resolve(self.bus.require_channel, self.registry)
         with self.bus.bus.reading() as source:
             through = source.revision()
-            selected = (message for message in source.message_history() if resolved.matches(message))
-            return WireTranscriptExporter(
-                format=format,
-                scope=resolved.scope,
-                limit=limit,
-                boundary=WireExportBoundary(through, started_at),
-            ).export(selected, Path(destination).expanduser(), overwrite=overwrite)
+            with source.stored_message_history(
+                resolved.predicate, resolved.parameters, through=through,
+            ) as selected:
+                return WireTranscriptExporter(
+                    format=format,
+                    scope=resolved.scope,
+                    limit=limit,
+                    boundary=WireExportBoundary(through, started_at),
+                ).export_stored(selected, Path(destination).expanduser(), overwrite=overwrite,
+                                observer=observer)
 
     def channel_views(
         self, visibility: RosterVisibility = DEFAULT_ROSTER,

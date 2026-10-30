@@ -200,8 +200,10 @@ class RootFile:
         yield
 
     @staticmethod
-    def settle(path: Path) -> None:
-        """A plain file keeps no committed bytes beside it, so there is nothing to settle."""
+    @contextmanager
+    def pinned(path: Path) -> Iterator[None]:
+        """A plain file's bytes move only when something writes it; there is nothing to pin."""
+        yield
 
     @staticmethod
     def digest(path: Path) -> str:
@@ -1013,14 +1015,15 @@ class SQLiteFile(SQLiteStorage):
                 held.execute("ROLLBACK")
 
     @classmethod
-    def settle(cls, path: Path) -> None:
-        wal = cls.wal_path(path)
-        if not (wal.is_file() and wal.stat().st_size):
-            return
-        with cls.exclusive_writer(path) as db:
-            busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-        if busy:
-            raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")
+    @contextmanager
+    def pinned(cls, path: Path) -> Iterator[None]:
+        """Keep the file's bytes where they are while held. Only a database's last close
+        checkpoints its WAL into the file (new bytes, same rows); one open connection means
+        no other close is the last. It holds no transaction, so it waits on and blocks no
+        reader or writer, and a read-only close never checkpoints."""
+        with closing(cls._open_reader(path, DEFAULT_STORE_CONTENTION)) as db:
+            db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+            yield
 
     @classmethod
     def digest(cls, path: Path) -> str:

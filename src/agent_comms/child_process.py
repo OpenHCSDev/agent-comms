@@ -786,6 +786,13 @@ class LinuxPlatform(PidfdHandles, Platform):
                 os.close(descriptor)
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
+        """The kernel answers an empty group in one call; only a live one walks /proc."""
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return ()
+        except PermissionError:
+            pass
         members = []
         for entry in Path("/proc").iterdir():
             if entry.name.isdecimal():

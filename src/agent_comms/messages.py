@@ -19,7 +19,7 @@ from contextlib import closing
 from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
-from itertools import accumulate
+from itertools import accumulate, batched
 from typing import (
     TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
     get_origin,
@@ -460,6 +460,16 @@ class BusCapability(TypedRow, ProjectionSource):
             db, f"{header}>?" + predicate + f" ORDER BY {header}", (after, *parameters)))
 
     @staticmethod
+    def public_messages(
+        db: sqlite3.Connection, sequences: Iterable[int], page: int = 100,
+    ) -> Iterator[Message]:
+        """The public messages of these ascending records, assembled one joined page at a time."""
+        for chunk in batched(sequences, page):
+            for record in BusCapability.at_sequences(db, chunk):
+                for message in record.messages():
+                    yield Message.from_message(message)
+
+    @staticmethod
     def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusRecord, ...]:
         """Exactly these records, in the given order, from one joined read; a sequence with no
         stored row is refused, as a single lookup refuses it."""
@@ -481,8 +491,10 @@ class BusCapability(TypedRow, ProjectionSource):
         offsets = dict(zip(tables, accumulate(
             (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
+        columns = [BusRow.qualified(*BusRow.column_projection())]
+        columns.extend(table.qualified(*table.column_projection()) for table in tables)
         with closing(db.execute(
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
+            f"SELECT {', '.join(columns)} "
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
@@ -1065,15 +1077,36 @@ class Message(MessageInput, TurnOrigin):
         """Live messages carry no historical provenance decoration."""
         return {}
 
+    @classmethod
+    def stored_wire_query(cls, db: sqlite3.Connection, identity: type[TypedTable]) -> str:
+        """Project the public envelope from its declared stored fields, not domain objects."""
+        tables = cls.tables()
+        stored = {name: table for table in tables for name in table.column_projection()}
+        pieces = [stored[plan.name].wire_record(db, plan)
+                  for plan in FieldCodec.field_plans(cls) if plan.records]
+        identity_key = cls.message_id.wire_name
+        pieces.append("json_object('" + identity_key + "', " + identity.qualified("message_id") + ")")
+        fragments = " UNION ALL ".join(f"SELECT substr(({piece}), 2, length(({piece})) - 2) AS body"
+                                       for piece in pieces)
+        wire = "'{' || COALESCE((SELECT group_concat(NULLIF(body, ''), ',') FROM (" + fragments + ")), '') || '}'"
+        columns = ", ".join(f'{table.qualified(name)} AS "{name}"'
+                            for name, table in stored.items())
+        joins = " ".join(table.join_to(BusRow) for table in (*tables, identity))
+        extra = tuple(name for name in identity.column_projection() if name not in stored)
+        identity_columns = ', '.join(f'{identity.qualified(name)} AS "{name}"' for name in extra)
+        return (f'SELECT {columns}, {identity_columns}, {wire} AS wire '
+                f'FROM "{BusRow.declared_name}" {joins}')
+
     def to_wire(self) -> dict:
         return {"seq": self.seq, "id": self.message_id, **FieldCodec.encode(self.envelope)}
 
     @classmethod
-    def from_wire(cls, data: Mapping) -> Message:
+    def from_wire(cls, data: object) -> Message:
         # Content identity is derived from the declared message fields.
         plan = FieldCodec.field_plan(Message, 'type')
         kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
-        return kind.decode_message({"ts": 0.0, **data})
+        # The field decoder has already required a record; do not validate/copy it again.
+        return kind.decode_message({"ts": 0.0, **cast(Mapping[str, object], data)})
 
     def awaits_answer_from(self, recipient: ThreadTarget) -> bool:
         """The original message owns whether this named recipient owes its sender an answer."""
@@ -1208,6 +1241,39 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         super().__init_subclass__()
         dataclass(cls, frozen=True, kw_only=True)
         cls.tables()
+
+
+@dataclass(frozen=True)
+class StoredWireMessage:
+    """One public envelope as its stored wire text, read on a held SQLite snapshot."""
+
+    seq: int
+    timestamp: float
+    wire: str
+
+
+@dataclass(frozen=True)
+class StoredWireHistory:
+    """A captured public-envelope query; cursors stream and retire with the read."""
+
+    db: sqlite3.Connection
+    query: str
+    parameters: tuple[object, ...]
+
+    def rows(self) -> Iterator[StoredWireMessage]:
+        with closing(self.db.execute(
+            f"SELECT seq, timestamp, wire FROM ({self.query}) ORDER BY seq", self.parameters,
+        )) as cursor:
+            for row in cursor:
+                yield StoredWireMessage(*row)
+
+    def messages(self) -> Iterator[Message]:
+        """The selected rows' public messages, decoded once from their capability tables."""
+        with closing(self.db.execute(
+            f"SELECT seq FROM ({self.query}) ORDER BY seq", self.parameters,
+        )) as cursor:
+            yield from BusCapability.public_messages(
+                self.db, (FieldCodec.decode(int, seq) for seq, in cursor))
 
 
 class PublicRecord(BusRecord):

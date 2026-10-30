@@ -215,6 +215,18 @@ class Repo(GitLaunch, BaseModel, WireValue):
         """Acquire exact commits from this repository's own remote."""
         self.require_commits(self.checkout, self.remote, *objects)
 
+    @classmethod
+    def unservable_commits(cls, checkout: Path | str, remote: str,
+                           *objects: str) -> tuple[str, ...]:
+        """Fetch each missing object alone, so one the remote refuses cannot cost the others;
+        answer the ones still absent."""
+        for name in cls.missing_commits(checkout, *objects):
+            try:
+                cls.git(checkout, "fetch", "--quiet", "--no-tags", "--", remote, name)
+            except GitCommandError:
+                continue
+        return cls.missing_commits(checkout, *objects)
+
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Strict local ancestry; only valid local non-ancestors mean False."""
         self.require_local_commits(self.checkout, sha, revision)
@@ -674,8 +686,8 @@ class PublishedUpstream(TrackedUpstream):
     def unpushed(self, history: CheckoutHistory, head: str,
                  published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
         if published:
-            (remote_head,) = published
-            count = history.count(head, remote_head)
+            # Ahead of the upstream is not unpushed: only a commit on no remote exists only locally.
+            count = history.unpublished(head, "")
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(history, head, published)
 

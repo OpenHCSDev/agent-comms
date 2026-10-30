@@ -71,6 +71,17 @@ class UnrelatedCommitBase(CommitBase):
         return f'has unrelated Git history: {count} commits cannot be compared with main'
 
 
+@dataclass(frozen=True)
+class UnservableCommitBase(CommitBase):
+    """The forge names a head the remote no longer serves: nothing can be compared with main."""
+
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return (head,)
+
+    def description(self, count: int) -> str:
+        return 'has a head commit origin no longer serves'
+
+
 class BranchLink(DeclaredFamily, affix="BranchLink"):
     """Why a branch's work can be found again."""
 

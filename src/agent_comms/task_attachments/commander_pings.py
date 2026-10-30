@@ -371,8 +371,9 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                 opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
 
     @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings
+    def needs_disposal(cls) -> bool:
+        """The heartbeat prints these above the unit tables; the rest follow them."""
+        return True
 
     @classmethod
     def sections(cls, packets: tuple[CommanderUpdate, ...],
@@ -384,17 +385,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                      for members in (group.members(packets, opened, new),) if members)
 
 
-class CompactAlarms:
-    """Sections keep actionable representatives and explicit per-kind overflow."""
-
-    maximum_per_kind: ClassVar[int] = 1
-
-    @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings[:cls.maximum_per_kind]
-
-
-class NewAlarms(CompactAlarms, AlarmGroup):
+class NewAlarms(AlarmGroup):
     tone = AccentTone
 
     @classmethod
@@ -403,7 +394,7 @@ class NewAlarms(CompactAlarms, AlarmGroup):
         return new
 
 
-class StillOpenAlarms(CompactAlarms, AlarmGroup):
+class StillOpenAlarms(AlarmGroup):
     tone = WarningTone
 
     @classmethod
@@ -413,8 +404,12 @@ class StillOpenAlarms(CompactAlarms, AlarmGroup):
         return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new_members)
 
 
-class WatchingAlarms(CompactAlarms, AlarmGroup):
+class WatchingAlarms(AlarmGroup):
     """A still-failing source remains visible, but it has no commander disposal to wake for."""
+
+    @classmethod
+    def needs_disposal(cls) -> bool:
+        return False
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
@@ -432,13 +427,6 @@ class AlarmLine:
 
 
 @dataclass(frozen=True)
-class AlarmOverflow:
-    kind: type[DeclaredFamily]
-    more: int
-    oldest_age: Annotated[str, PublicationExclude()]
-
-
-@dataclass(frozen=True)
 class AlarmSection:
     group: type[AlarmGroup]
     pings: tuple[Ping, ...]
@@ -446,22 +434,6 @@ class AlarmSection:
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
 
-    def tables(self, now: float) -> tuple[ViewTable[AlarmLine] | ViewTable[AlarmOverflow], ...]:
-        grouped: dict[type[DeclaredFamily], list[Ping]] = {}
-        for ping in self.pings:
-            grouped.setdefault(ping.alarm_kind, []).append(ping)
-        lines: list[AlarmLine] = []
-        overflow: list[AlarmOverflow] = []
-        for kind, members in grouped.items():
-            shown = self.group.visible(tuple(members))
-            lines.extend(AlarmLine(kind, ping.text, ping.since.age(now)) for ping in shown)
-            rest = members[len(shown):]
-            if rest:
-                overflow.append(AlarmOverflow(kind, len(rest), min(
-                    rest, key=lambda ping: ping.since.chronology()).since.age(now)))
-        tables: list[ViewTable[AlarmLine] | ViewTable[AlarmOverflow]] = [
-            ViewTable(AlarmLine, HudExclude, tuple(lines)),
-        ]
-        if overflow:
-            tables.append(ViewTable(AlarmOverflow, HudExclude, tuple(overflow)))
-        return tuple(tables)
+    def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
+        return (ViewTable(AlarmLine, HudExclude, tuple(
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)

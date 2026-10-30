@@ -109,6 +109,10 @@ class TurnBound(DeclaredFamily):
     def page_count(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(turns)
 
+    def displayed(self, turns: tuple[TurnDigest, ...]) -> tuple[TurnDigest, ...]:
+        """The returned turns a reader sees as text, so their selected messages are decoded."""
+        return turns
+
     def older(self, turns: tuple[TurnDigest, ...]) -> TurnBound:
         """A recorded identity continues even across undated or equal-time turns."""
         if not turns:
@@ -198,6 +202,10 @@ class RecentTurnsSince(TurnsSince):
         remaining = iter(turns)
         return (*self.recent.take(remaining), *super().take(remaining))
 
+    def displayed(self, turns: tuple[TurnDigest, ...]) -> tuple[TurnDigest, ...]:
+        """Only the recent window is read as text; turns behind it answer for their calls."""
+        return self.recent.take(turns)
+
 
 @dataclass(frozen=True)
 class ThreadRead[Result](ConversationPreparation):
@@ -256,7 +264,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
     def from_native(self, source: TranscriptSource, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
         """A woken input reads as the messages its wake selected, from their bus records."""
         recorded = source.recorded_contexts(
-            ContextStore(self.root), tuple(turn.turn_id for turn in turns))
+            ContextStore(self.root), tuple(turn.turn_id for turn in self.bound.displayed(turns)))
         selected = {turn_id: manifest.wire_sources() for turn_id, manifest in recorded.items()}
         references = tuple(dict.fromkeys(ref for refs in selected.values() for ref in refs))
         deliveries = (Bus(Bus.path_in(self.root)).deliveries_for_references(references)

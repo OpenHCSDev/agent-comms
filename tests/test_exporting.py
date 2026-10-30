@@ -26,7 +26,10 @@ from agent_comms.exporting import (
     WireExportLimit,
     WireTranscriptExporter,
 )
-from agent_comms.messages import Message, InfoKind
+from agent_comms.bus import Bus, ClaimRecord
+from agent_comms.envelope_claim_transitions import UnscopedClaims
+from agent_comms.field_codec import ClaimId
+from agent_comms.messages import ClaimNoticeKind, Message, InfoKind
 from agent_comms.threads import Thread
 
 
@@ -425,3 +428,21 @@ def test_wire_codec_preserves_timestamp_spelling_and_identity(timestamp):
     reopened = Message.from_wire(json.loads(json.dumps(record)))
     assert json.dumps(reopened.to_wire()) == json.dumps(record)
     assert reopened.message_id == source.message_id
+
+
+def test_stored_text_and_jsonl_export_render_claim_notices(tmp_path):
+    def claim_notice(seq, db):
+        notice = Message("worker", "worker", "Claimed", ClaimNoticeKind, timestamp=5.0, seq=seq)
+        return ClaimRecord.of(notice, UnscopedClaims(
+            owner="worker", incarnation="1", seq=seq, message_id=notice.message_id,
+            claims=("/owned",), generation=ClaimId("f" * 32)))
+
+    bus = Bus.install(Bus.path_in(tmp_path))
+    stored = bus.append(claim_notice)
+    for format, name in ((TextFormat(), "claims.txt"), (JsonlFormat(), "claims.jsonl")):
+        with bus.stored_message_history(through=stored.seq) as source:
+            receipt = exporter(format=format, through=stored.seq).export_stored(
+                source, tmp_path / name)
+        assert receipt.exported_messages == 1
+    assert "type=claim-notice" in (tmp_path / "claims.txt").read_text()
+    assert records(tmp_path / "claims.jsonl")[1]["message"]["type"] == "claim-notice"

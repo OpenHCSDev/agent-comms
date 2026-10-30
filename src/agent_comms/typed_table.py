@@ -143,6 +143,11 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         return value
 
     @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The stored value as JSON text, without a domain-object round trip."""
+        return f"json_quote({expression})"
+
+    @classmethod
     def for_type(cls, annotation: object) -> type[SqlStorage]:
         annotation, _ = _base_type(annotation)
         if get_origin(annotation) is Literal:
@@ -181,6 +186,12 @@ class RealStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         return annotation is float
 
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The codec owns exact float spelling; SQLite's formatters differ."""
+        db.create_function(cls.declared_name, 1, FieldCodec.compact, deterministic=True)
+        return f'"{cls.declared_name}"({expression})'
+
 
 class BooleanStorage(SqlStorage):
     sql_type = "INTEGER"
@@ -196,6 +207,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> int | None:
         return None if value is None else int(value)
+
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"CASE {expression} WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END"
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -266,6 +281,10 @@ class JsonStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> str | None:
         return None if value is None else FieldCodec.compact(value, allow_nan=False)
+
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"COALESCE({expression}, 'null')"
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -502,6 +521,20 @@ class _Field(SqlValue):
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
+
+    def wire_record(self, db: sqlite3.Connection, plan: FieldPlan, alias: str) -> str:
+        expression = self.reference(alias)
+        projected = plan.project_encoded(self.storage.json_text(db, expression), self.json_record)
+        if not plan.constructor_required and plan.omitted(plan.default()):
+            default = SQLiteLiteral.of(self.encode(plan.default()))
+            return f"CASE WHEN {expression} IS {default} THEN '{{}}' ELSE {projected} END"
+        return projected
+
+    @staticmethod
+    def json_record(values: Mapping[str, str]) -> str:
+        pieces = [sql_literal(json.dumps(key) + ':') + ' || ' + expression
+                  for key, expression in values.items()]
+        return "'{' || " + " || ',' || ".join(pieces) + " || '}'" if pieces else "'{}'"
 
     @property
     def lifecycle_family(self) -> type[LifecycleState]:
@@ -2473,10 +2506,25 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
+    def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
+        """Project one declared field's stored value into its public wire record."""
+        item, = cls._fields_named((plan.name,))
+        return item.wire_record(db, plan, cls.declared_name)
+
+    @classmethod
     def qualified(cls, *names: str) -> str:
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)
         return ", ".join(f"{table}.{_identifier(item.wire_name)}" for item in cls._fields_named(names))
+
+    @classmethod
+    def join_to(cls, other: type[TypedTable]) -> str:
+        """Join a capability to the other table's declared primary key."""
+        keys = tuple(item.name for item in other._fields if item.column.primary_key)
+        if not keys:
+            raise TypeError(f"{other.__name__} declares no join key")
+        condition = " AND ".join(f"{cls.qualified(name)} = {other.qualified(name)}" for name in keys)
+        return f'JOIN {_identifier(cls.declared_name)} ON {condition}'
 
     @classmethod
     def decode_at(cls, row: tuple[object, ...], offset: int) -> Self:

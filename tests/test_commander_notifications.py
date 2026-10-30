@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.registry_document import RegisteredCommanderProject
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
@@ -761,21 +761,15 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    from agent_comms.task_attachments.commander_pings import AlarmOverflow
-
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
     message = packet.send(comms, time.time(), hud.hud_text(time.time()))
     for frame in (lead_hud(comms), hud):
-        assert len(frame.alarm_text(frame.alarms, time.time())) < len(rules)
-        overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
-                         if table.record is AlarmOverflow for row in table.records)
-        assert sum(row.more for row in overflow) == len(rules) - 1
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
         assert all(section.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
-    assert rules[0].line() in original.body
-    assert rules[0].line() in message.body
+    assert all(rule.line() in original.body for rule in rules)
+    assert all(rule.line() in message.body for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
@@ -908,6 +902,24 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
         thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
+
+
+def test_a_closed_lead_session_leaves_the_board_for_the_live_commanders(notification_bus):
+    """The lead's process going away must not empty the heartbeat for #commanders still running."""
+    comms = notification_bus
+    comms.registry.register(replace(
+        comms.registry.require("worker"), tags=frozenset({"comms", CommandersTag.declared_name}),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.register(replace(comms.registry.require("lead"),
+                                    process_identity=NoProcess()))
+    lead = comms.registry.require("lead")
+    assert not lead.process_alive
+    assert CommanderHeartbeat.boards(comms.registry, comms.goals) == (lead,)
+    beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
+                                    error="independent source", failed_at=time.time()),))
+    worker = comms.registry.require("worker").incarnation
+    assert CommanderUpdate.latest(comms, worker)
+    assert CommanderFrame.current(comms, "worker").commander == worker
 
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):

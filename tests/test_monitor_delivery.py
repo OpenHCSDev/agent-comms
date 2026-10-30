@@ -424,17 +424,14 @@ def attachment_notification(line, record_id=transcript_record('notification-reco
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('record_factory', (notification, attachment_notification))
-async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_delivery, record_factory):
-    message = await emitted_delivery('x' * 3000)
+async def test_pages_require_every_line_then_reopen(bridge):
+    """Out-of-order and repeated pages never count twice, and survive a reopened bridge."""
+    message, export = await exported(bridge, body_of(7))
     state, binding = bridge.options.state, bridge.binding
-    lines = [bridge.encode(part) for part in bridge.incoming_frame(message).parts]
-    assert len(lines) == 7
-    assert all(len(line.encode('utf-16-le')) // 2 <= ClaudeMonitorFrame.EVENT_CHARS for line in lines)
-    # Out-of-order observations and repeated history must not count twice.
+    text = export.read_text(newline='')
+    lines = text.split('\n')[:-1]
     for number in (6, 1, 3, 1, 5, 2):
-        for update in record_factory(lines[number], record_id=transcript_record(f'record-{number}')).updates(ClaudeSession()):
-            await update.observed(bridge)
+        await observe(bridge, read_records(export, shown(lines[number + 1], number + 2), f'record-{number}'))
     attempt, = await stored_attempts(bridge)
     assert attempt.outcome is EmittedOutcome
     bridge.db.close()
@@ -442,13 +439,9 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
         reopened = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
         await reopened.options.operation.prepare(reopened)
         for number in (0, 4):
-            for update in record_factory(lines[number], record_id=transcript_record(f'record-{number}')).updates(ClaudeSession()):
-                await update.observed(reopened)
+            await observe(reopened, read_records(export, shown(lines[number + 1], number + 2), f'record-{number}'))
         confirmed, = await reopened.attempts(message.message_id)
         assert confirmed.outcome is DeliveredOutcome
-        for line in lines:
-            for update in record_factory(line, record_id=transcript_record('later-overlap')).updates(ClaudeSession()):
-                await update.observed(reopened)
         # Confirmation can beat the final socket-drain emission report: that report was
         # decided from a row read before the confirmation, and must not overwrite it.
         await reopened.finish(confirmed, partial(replace, outcome=EmittedOutcome))
@@ -463,14 +456,7 @@ async def test_parts_require_complete_exact_body_then_reopen(bridge, emitted_del
 
 def body_of(parts):
     """A body whose Claude frame has exactly this many parts."""
-    body = ''
-    for size in range(1, 100_000):
-        body = 'x' * (size * 50)
-        frame = ClaudeMonitorFrame(Message(sender='peer', target='viewer', type=InfoKind,
-                                           body=body, timestamp=1., seq=1))
-        if len(frame.parts) == parts:
-            return body
-    raise AssertionError(parts)
+    return 'x' * 50 if parts == 1 else '\n'.join(('x' * 300,) * parts)
 
 
 def read_started(session, path, label):
@@ -560,7 +546,8 @@ async def test_a_larger_message_is_one_notice_and_one_whole_read_confirms_it(bri
         assert stat.S_IMODE(export.stat().st_mode) == 0o600
         text = export.read_text(newline='')
         lines = text.split('\n')[:-1]
-        assert ''.join(ClaudeMonitorFrame.decode_line(item).body for item in lines) == body
+        assert lines[0] == f'Comms in · peer · {message.message_id}'
+        assert '\n'.join(lines[1:]) == body
         # The notice frees its own reservation and proves nothing about the body.
         await observe(bridge, notification(line, record_id=transcript_record('notice')).updates(
             ClaudeSession()))
@@ -583,7 +570,7 @@ async def test_only_visible_pages_of_the_exact_export_confirm(bridge):
     _, other_export = await exported(bridge, body_of(23) + 'y')
     text = export.read_text(newline='')
     lines = text.split('\n')[:-1]
-    copied = export.parent.parent / 'copied.jsonl'
+    copied = export.parent.parent / 'copied.txt'
     shutil.copyfile(export, copied)
     whole = shown(text)
     truncated = lines[-1][:-1]
@@ -650,9 +637,11 @@ async def test_a_wrong_body_in_the_export_never_confirms(bridge, capsys):
     await observe(bridge, read_records(export, shown(forged), 'wrong-body'))
     stored, = await bridge.attempts(message.message_id)
     assert stored.outcome is EmittedOutcome
-    assert isinstance(stored.monitor, MismatchedMonitor)
-    assert 'message remains pending' in capsys.readouterr().err
+    assert stored.monitor == ReceivingMonitor(23)
     assert export.exists()
+    await observe(bridge, read_records(export, shown(text), 'honest-read'))
+    confirmed, = await bridge.attempts(message.message_id)
+    assert confirmed.outcome is DeliveredOutcome
 
 
 @pytest.mark.asyncio
@@ -671,7 +660,7 @@ async def test_line_separators_inside_a_body_stay_inside_their_part(bridge, sepa
     body = body_of(23)[:-80] + (separator + '\n\r"\\😀') * 10
     message, export = await exported(bridge, body)
     lines = export.read_text(newline='').split('\n')[:-1]
-    assert ''.join(ClaudeMonitorFrame.decode_line(line).body for line in lines) == body
+    assert '\n'.join(lines[1:]) == body
     # Two visible pages of the actual numbered Read output, the later page, reaching the end
     # and its terminator, first.
     session = ClaudeSession()
@@ -726,7 +715,7 @@ async def test_an_export_leaf_symlink_refuses(bridge, tmp_path):
     message = bridge.comms.messaging.send('peer', 'viewer', body_of(23)).message
     notice = MonitorReadFile.naming(bridge.exports, message.reference)
     bridge.exports.mkdir(mode=0o700)
-    target = tmp_path / 'target.jsonl'
+    target = tmp_path / 'target.txt'
     target.write_text('"part"\n')
     Path(notice.path).symlink_to(target)
     with pytest.raises(OSError):
@@ -773,17 +762,24 @@ async def test_an_uncertain_export_stays_and_reopening_never_replays_it(bridge):
         assert not export.exists()
 
 
-@pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short'])
+@pytest.mark.parametrize('body', ['x'*3000, ('\n"\\😀\t')*500, 'short', 'line one\n\nline three\n'])
 @pytest.mark.parametrize('sender', ['claude-code', 'a · b " 😀'])
-def test_frame_cap_and_exact_reconstruction(body, sender):
+def test_frame_parts_rebuild_the_body_and_cut_only_at_line_ends(body, sender):
     message=Message(sender=sender,target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
     frame=ClaudeMonitorFrame(message)
-    decoded=[ClaudeMonitorFrame.decode_line(json.dumps(part,ensure_ascii=False)) for part in frame.parts]
-    assert all(isinstance(part,MonitorPart) for part in decoded)
-    assert ''.join(part.body for part in decoded)==body
-    assert all(part.sender==sender for part in decoded)
-    assert all(frame.event_size(part)<=frame.EVENT_CHARS for part in frame.parts)
-    assert [part.number for part in decoded]==list(range(1,len(decoded)+1))
+    shown_rows=tuple(enumerate(frame.export_lines,1))
+    assert ''.join(part.body for part in frame.read_parts(shown_rows))==body
+    assert all(part.sender==sender for part in frame.read_parts(shown_rows))
+    assert all(len(line)<=frame.READ_LINE_CHARS for line in frame.export_lines[1:])
+    assert frame.fits_one_event==(frame.event_size(frame.inline)<=frame.EVENT_CHARS)
+
+
+def test_a_heartbeat_sized_message_is_one_readable_file_not_fragments():
+    body='\n'.join(f'row {number} '+'word '*40 for number in range(40))
+    message=Message(sender='user',target='viewer',type=InfoKind,body=body,timestamp=1.,seq=1)
+    frame=ClaudeMonitorFrame(message)
+    assert frame.export_lines[1:]==tuple(body.split('\n'))
+    assert sum(line.startswith(frame.HEADER) for line in frame.export_lines)==1
 
 
 def test_foreign_task_notifications_are_named_and_malformed_matching_xml_fails():
@@ -1128,30 +1124,26 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     assert replies == (("lead", "unit answers"),)
 
 
-@pytest.mark.parametrize(('rows', 'start', 'frames'), (
-    (('A', 'B', ''), 1, (MonitorPart, MonitorPart)),
-    (('A', 'B', ''), 7, (MonitorPart, MonitorPart)),
-    (('A', 'B'), 1, (MonitorPart, MonitorPart)),
-    (('A', '', 'B', ''), 1, (MonitorPart, ForeignMonitorFrame, MonitorPart)),
-    (('A', 'B', '', ''), 1, (MonitorPart, MonitorPart, ForeignMonitorFrame)),
-    (('A', 'junk'), 1, (MonitorPart, ForeignMonitorFrame)),
-    (('',), 1, (ForeignMonitorFrame,)),
+@pytest.mark.parametrize(('rows', 'parts'), (
+    ((1, 2, 3, 4), ('one\n', 'two')),
+    ((1, 2, 3), ('one\n', 'two')),
+    ((2, 3, 4), ('one\n', 'two')),
+    ((3,), ('two',)),
+    ((1,), ()),
+    ((1, 2, 3, 4, 5), ()),
 ))
-def test_only_the_final_numbered_empty_row_is_the_read_terminator(rows, start, frames):
-    """Claude numbers the empty row after a file's final LF; that one row is not a record,
-    and every other empty or foreign row stays a frame the all-lines gate refuses."""
-    message = Message(sender='peer', target='viewer', type=InfoKind, body='x' * 30000,
+def test_only_the_one_empty_row_after_the_final_lf_is_the_read_terminator(rows, parts):
+    """Claude numbers the empty row after a file's final LF; any row past it is no line of
+    this message, so that read confirms nothing."""
+    message = Message(sender='peer', target='viewer', type=InfoKind, body='one\ntwo',
                       timestamp=1., seq=1)
-    first, second, *_ = (json.dumps(part, ensure_ascii=False)
-                         for part in ClaudeMonitorFrame(message).parts)
-    physical = dict(A=first, B=second)
-    text = shown('\n'.join(physical.get(row, row) for row in rows), start)
-    observed = ReadResultObserved('export', text, ObservedMonitor(transcript_record('read'), 1.),
-                                  frozenset())
-    assert tuple(type(frame) for frame in observed.frames()) == frames
+    frame = ClaudeMonitorFrame(message)
+    physical = (*frame.export_lines, '', '')
+    read = tuple((number, physical[number - 1]) for number in rows)
+    assert tuple(part.body for part in frame.read_parts(read)) == parts
 
 
 def test_a_gap_at_the_terminator_number_makes_no_line_count():
     observed = ReadResultObserved('export', '1\t"x"\n3\t',
                                   ObservedMonitor(transcript_record('read'), 1.), frozenset())
-    assert observed.frames() == ()
+    assert observed.rows() == ()

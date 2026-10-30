@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -90,6 +91,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
+    READ_LINE_CHARS = 2000
     HEADER = 'Comms in'
     JSON_TEXT = WireModel.adapter(str)
 
@@ -106,42 +108,59 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                 f'{self.message.message_id} · {number}/{total}\n')
 
     @cached_property
+    def inline(self) -> str:
+        return self.header(1, 1) + self.message.body
+
+    @cached_property
+    def fits_one_event(self) -> bool:
+        return self.event_size(self.inline) <= self.EVENT_CHARS
+
+    @cached_property
+    def slices(self) -> tuple[str, ...]:
+        """The body as file lines: each keeps its own LF, so joined they are the body. Only a
+        line longer than Read can show is cut, because Read cannot page within one line."""
+        return tuple(
+            line[start:start + self.READ_LINE_CHARS]
+            for line in re.findall(r'[^\n]*\n|[^\n]+', self.message.body)
+            for start in range(0, len(line), self.READ_LINE_CHARS)
+        )
+
+    @cached_property
     def parts(self) -> tuple[str, ...]:
-        # At least one body character fits each part. Using the maximum possible
-        # ordinal width avoids rebuilding the body to discover its final count.
-        upper = len(self.message.body)  # Message already requires a nonempty body.
-        budget = self.EVENT_CHARS - self.event_size(self.header(upper, upper))
-        bodies: list[str] = []
-        current: list[str] = []
-        used = 0
-        for character in self.message.body:
-            size = self.event_size(character) - 2  # JSON quotes belong to the header budget.
-            if size > budget:
-                raise ValueError('Claude Monitor header leaves no room for a body character')
-            if used + size > budget:
-                bodies.append(''.join(current))
-                current, used = [], 0
-            current.append(character)
-            used += size
-        bodies.append(''.join(current))
-        total = len(bodies)
-        return tuple(self.header(number, total) + body
-                     for number, body in enumerate(bodies, 1))
+        return (self.inline,) if self.fits_one_event else self.slices
+
+    @cached_property
+    def export_lines(self) -> tuple[str, ...]:
+        """The readable message: who sent it, then its lines as written."""
+        return (f'{self.HEADER} · {self.message.sender} · {self.message.message_id}',
+                *(part.removesuffix('\n') for part in self.slices))
+
+    def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
+        """The parts a Read showed, judged against the bus message and never decoded from the
+        file. Any shown row that is not this message's line at that number confirms nothing.
+        Only one empty row right after the final LF is Read's terminator."""
+        lines = self.export_lines
+        shown = rows[:-1] if rows and rows[-1] == (len(lines) + 1, '') else rows
+        if any(not 1 <= number <= len(lines) or lines[number - 1] != text for number, text in shown):
+            return ()
+        return tuple(MonitorPart(id=self.message.message_id, sender=self.message.sender,
+                                 number=number - 1, total=len(self.slices),
+                                 body=self.slices[number - 2])
+                     for number, _ in shown if number > 1)
 
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
-        """A body that fits one event goes inline as its one part. Any larger body is exported
-        as all its parts, one per line, and only the notice naming that file is emitted, so no
-        part reaches the model as an instruction on its own."""
-        lines = tuple(LineMonitorBridge.encode(part) for part in self.parts)
-        if len(lines) == 1:
-            await attachment.emit(self.message.message_id, 1, lines[0], window_bytes)
+        """A body that fits one event goes inline. Any larger body is the private file the one
+        notice names, whole and readable, so no piece reaches the model on its own."""
+        if self.fits_one_event:
+            await attachment.emit(self.message.message_id, 1, LineMonitorBridge.encode(self.inline),
+                                  window_bytes)
             return
         notice = MonitorReadFile.naming(exports, self.message.reference)
         line = notice.model_dump_json()
         if self.units(line) > self.EVENT_CHARS:
             raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
                              f'Monitor event: {notice.path}')
-        await asyncio.to_thread(notice.export, lines)
+        await asyncio.to_thread(notice.export, self.export_lines)
         await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
 
     @classmethod
@@ -725,28 +744,19 @@ class ReadResultObserved(ConfirmedDelivery):
         """The export this Read may retire: none while another Read of it is still open."""
         return () if export.path in self.reading else (export,)
 
-    def frames(self) -> tuple[MonitorFrame, ...]:
+    def rows(self) -> tuple[tuple[int, str], ...]:
         """Claude shows each file line as its number, a tab, then the line. The leading
         numbered block is the file; numbers that do not run consecutively make no line count.
-        Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
-        characters str.splitlines would split on. A Read reaching the end of a file that ends
-        in LF also numbers the empty row after that LF: once the numbering holds, that one
-        final empty row is the tool's terminator, not a record. Any other row, empty or not,
-        stays a frame the all-lines gate judges."""
-        numbers: list[int] = []
-        lines: list[str] = []
+        Records end only at a physical LF: a line may hold U+2028, U+0085 or other characters
+        str.splitlines would split on."""
+        rows: list[tuple[int, str]] = []
         for row in self.text.split('\n'):
             number, tab, line = row.partition('\t')
             if not (tab and number.isdecimal()):
                 break
-            numbers.append(int(number))
-            lines.append(line)
-        start = numbers[0] if numbers else 0
-        if numbers != list(range(start, start + len(numbers))):
-            return ()
-        if len(lines) > 1 and lines[-1] == '':
-            lines.pop()
-        return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
+            rows.append((int(number), line))
+        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:]))
+        return tuple(rows) if consecutive else ()
 
     async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
         return replace(self, references=await bridge.read_export(self))
@@ -757,7 +767,7 @@ class FailedReadObserved(ReadResultObserved):
     """A failed Read's text is its error, never file lines: it confirms no part, and only
     releases the export once no other Read of it is open."""
 
-    def frames(self) -> tuple[MonitorFrame, ...]:
+    def rows(self) -> tuple[tuple[int, str], ...]:
         return ()
 
 

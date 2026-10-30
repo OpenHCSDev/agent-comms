@@ -378,9 +378,10 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
         yield
 
     @staticmethod
-    def settle(path: Path) -> None:
-        # The snapshot protocol has no WAL or checkpoint operation.
-        pass
+    @contextmanager
+    def pinned(path: Path) -> Iterator[None]:
+        # Published inodes are immutable and the snapshot protocol has no WAL to checkpoint.
+        yield
 
     @classmethod
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:
