@@ -2895,7 +2895,7 @@ class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
         return self.accepts(data)
 
     def accepts_value(self, value: object) -> bool:
-        return type(value) is self.target
+        return self.accepts(value)
 
     def parse_editor(self, text: object) -> object:
         value = super().parse_editor(text)

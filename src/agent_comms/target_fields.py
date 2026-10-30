@@ -69,10 +69,6 @@ class TargetField(ABC):
     @abstractmethod
     def editor_initial(self) -> object: ...
 
-    @property
-    @abstractmethod
-    def editor_default(self) -> str | None: ...
-
     @abstractmethod
     def default_schema(self) -> dict[str, JsonValue]: ...
 
@@ -131,10 +127,6 @@ class UnsuppliedTargetField(TargetField):
 
     @property
     def editor_initial(self) -> object:
-        return None
-
-    @property
-    def editor_default(self) -> None:
         return None
 
     def default_schema(self) -> dict[str, JsonValue]:
