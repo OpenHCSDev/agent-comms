@@ -407,9 +407,7 @@ class Redeals(RuleDeal):
     """A deal its backend renews itself: at the first start, after each compaction, and at
     each declared share of context left, read from the backend's own context-use report."""
 
-    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.5),)
-    """Once per compaction, at half the window: the deal carries both papers (about 300 KB), so a
-    second mid-context re-deal costs more context than it buys."""
+    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.66), RefreshAt(0.33))
 
     @property
     def refreshed(self) -> Path:
@@ -419,6 +417,11 @@ class Redeals(RuleDeal):
     @abstractmethod
     def renew(self) -> None:
         """Deal this session's sources and its owner's latest words again."""
+
+    @abstractmethod
+    def reread(self) -> None:
+        """Deal the rules again before a compaction: the papers are still in the context, so a
+        refresh deals the rules and the owner's latest words without them."""
 
     def redeal(self) -> None:
         """A start or compaction arms every refresh again, then deals."""
@@ -443,4 +446,4 @@ class Redeals(RuleDeal):
         ]:
             with self.refreshed.open("a", encoding="utf-8") as record:
                 record.write("".join(f"{key}\n" for key in due))
-            self.renew()
+            self.reread()

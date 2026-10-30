@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
+from agent_comms.commander.package import CommanderPackage
 from agent_comms.context_reading import ContextUsage
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import ReadTool
@@ -109,18 +110,24 @@ def refused(deal: PiRedeal) -> bool:
 
 
 def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_deal):
-    """Pi's own context report deals the rules again once when half the window is left, and
-    each compaction arms it again."""
-    assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.5]
+    """Pi's own context report deals the rules again when 66% and then 33% of the window is
+    left, once each, without the papers still in its context; each compaction arms both again
+    and deals the papers too."""
+    assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
     events.CompactionEnd().deal_rules(unit_deal)
+    assert unit_deal.current().sources()[:len(CommanderPackage.paper())] == tuple(
+        path.resolve() for path in CommanderPackage.paper())
     answer_deal(unit_deal)
-    for used, closes in ((30, False), (49, False), (50, True), (70, False), (95, False)):
+    for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
         unit_deal.observe_context(ContextUsage(used, 100))
         assert refused(unit_deal) is closes, used
+        if closes:
+            assert not set(unit_deal.current().sources()) & {
+                path.resolve() for path in CommanderPackage.paper()}
         answer_deal(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
-    unit_deal.observe_context(ContextUsage(55, 100))
+    unit_deal.observe_context(ContextUsage(40, 100))
     assert refused(unit_deal)
 
 
