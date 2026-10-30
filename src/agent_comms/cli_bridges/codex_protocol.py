@@ -215,10 +215,6 @@ class NoClientId(ClientId):
 class ForeignClientId(ClientId):
     text: str
 
-    @property
-    def external(self) -> str:
-        return self.text
-
 
 @dataclass(frozen=True)
 class BusClientId(ClientId):

@@ -1,6 +1,7 @@
 """Only a turn's opening DMs receive its final; channels always require explicit sends."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Mess
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.repo import Checkout
 from agent_comms.turn_digests import LastTurns
+from agent_comms.registration import Registration
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.runtime_updates import AllTurnsCancelled, AllTurnsEnded, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NamedSourceTurn, NativeTurnId
@@ -394,6 +396,47 @@ async def test_original_kind_owns_automatic_answer_without_suppressing_the_turn(
         *observations, assistant_record('kind-final', 'Holding'), TURN_FINISHED,
     ))
     assert replies_after(bridge, original.seq) == expected
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('transition', 'targets'), (
+    (Registration.archive, ()),
+    (Registration.begin_delete, ()),
+    (Registration.status, ('claude-code',)),
+), ids=('archived', 'deleting', 'visible'))
+async def test_requester_presence_keeps_the_final_and_the_next_delivery(
+    bridge: ClaudeBridge, transition: Callable[[Registration, str], object],
+    targets: tuple[str, ...],
+) -> None:
+    comms = bridge.comms
+    original = comms.messaging.send('claude-code', 'viewer', 'An asked opening', QuestionKind).message
+    output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
+    session = ClaudeSession()
+    await confirm_messages(bridge, output, session, (original,), prompt_id='retiring-requester')
+    turn_id = session.turn.source.require_id()
+    output.publish_batch(list(assistant_record('retiring-final', 'The retained answer').updates(session)))
+    transition(comms.registry, original.sender)
+    finish_reply(output, session)
+    assert replies_after(bridge, original.seq) == tuple((target, 'The retained answer') for target in targets)
+    assert_retained_final(output, turn_id, 'The retained answer')
+    publications = tuple(message for message in comms.bus.bus.message_history()
+                         if message.sender == 'viewer' and message.seq > original.seq)
+    assert tuple(message.answers for message in publications) == tuple((original.reference,) for _ in targets)
+    finish_reply(output, session)
+    assert replies_after(bridge, original.seq) == tuple((target, 'The retained answer') for target in targets)
+
+    following = comms.messaging.send('peer', 'viewer', 'The next ordinary question', QuestionKind).message
+    await confirm_messages(bridge, output, session, (following,), prompt_id='after-retirement')
+    next_turn = session.turn.source.require_id()
+    assert next_turn != turn_id
+    assert output.transcript.opening_for(next_turn) == (following.reference,)
+    output.publish_batch(list(assistant_record('following-final', 'The bridge kept receiving').updates(session)))
+    finish_reply(output, session)
+    assert replies_after(bridge, following.seq) == (('peer', 'The bridge kept receiving'),)
+    assert_retained_final(output, next_turn, 'The bridge kept receiving')
+    final, = (message for message in comms.bus.bus.message_history()
+              if message.sender == 'viewer' and message.seq > following.seq)
+    assert final.answers == (following.reference,)
 
 
 @pytest.mark.asyncio

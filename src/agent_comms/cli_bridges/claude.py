@@ -61,14 +61,13 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         return await self.deliver(replace(message, body=self.board_wake))
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
-        """On restart only the last 4 MiB is published again; Core's finish is idempotent, so
-        completed items may overlap. The first record starts after a newline in that window."""
+        """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""
         start = max(0, boundary - self.RECENT_BYTES)
         if start:
             stream.seek(start - 1)
             stream.readline()
             start = stream.tell()
-        return start
+        return self.opening_before(stream, start)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()

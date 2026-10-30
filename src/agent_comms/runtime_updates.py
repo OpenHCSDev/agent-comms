@@ -26,7 +26,7 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
@@ -34,6 +34,7 @@ if TYPE_CHECKING:
     from .importing import ImportBuffer
     from .comms import Comms
     from .messaging import Messaging
+    from .thread_status import ThreadStatus
 
 
 @dataclass
@@ -287,19 +288,25 @@ class ReplyingThreadOutput(ThreadOutput):
         for message in opening:
             for target in message.automatic_reply_targets():
                 replies.setdefault(target, []).append(message.reference)
+        recipients: dict[str, ThreadStatus] = {}
+        if replies:
+            registry = self.messaging.registry.snapshot()
+            recipients = {target: registry.status(target) for target in replies}
         for key in tuple(self.pending):
             if key.turn_id != turn_id:
                 continue
             item = self.pending[key]
-            publications = tuple(
-                self.messaging.send(
-                    sender=self.activity_thread, target=target, body=item.assistant_text,
-                    answers=tuple(references),
-                ).message.reference
+            published = tuple(
+                publication
                 for target, references in sorted(replies.items())
+                for publication in recipients[target].reply(
+                    self.messaging, sender=self.activity_thread, target=target,
+                    body=item.assistant_text, answers=tuple(references),
+                    source_turn=NoSourceTurn(),
+                )
             )
             super().publish_item(replace(item, events=tuple(
-                event.with_publications(publications) for event in item.events
+                event.with_publications(published) for event in item.events
             )))
             del self.pending[key]
         super().end_turn(turn_id)

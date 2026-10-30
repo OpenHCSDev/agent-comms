@@ -424,6 +424,12 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """Whether Claude replaced everything before this record (compaction)."""
         return False
 
+    def ends_turn(self) -> bool:
+        return False
+
+    def opening_position(self, following: int) -> int:
+        return following
+
     def request(self) -> str:
         """The prompt this record carries, read without the session around it."""
         return ''
@@ -638,6 +644,9 @@ class Originated(WireModel):
 
 class UserBlock(TaggedWire, ABC, affix=""):
 
+    def ends_turn(self) -> bool:
+        return False
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
 
@@ -650,8 +659,11 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
     def prompt_text(self) -> str:
         return self.text
 
+    def ends_turn(self) -> bool:
+        return self.text.startswith('[Request interrupted by user')
+
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        if self.text.startswith('[Request interrupted by user'):
+        if self.ends_turn():
             return session.retired(AllTurnsCancelled())
         return record.origin.prompt(record, self.text, session)
 
@@ -800,6 +812,9 @@ class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
 
     promptId: NativeTurnId
 
+    def opening_position(self, following: int) -> int:
+        return self.position
+
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = session.turn.opened(self)
         return self.opened_updates(session)
@@ -810,6 +825,9 @@ class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
 
 class UserRecord(PromptRecord, Originated, declared_name='user'):
     message: UserMessage
+
+    def ends_turn(self) -> bool:
+        return any(block.ends_turn() for block in self.message.content)
 
     def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
@@ -846,6 +864,9 @@ class SubtypeHeader(WireHeader):
 class SystemEvent(TaggedWire, ABC, affix=""):
     header = SubtypeHeader
 
+    def ends_turn(self) -> bool:
+        return False
+
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
@@ -861,6 +882,9 @@ class BridgeStatus(SystemEvent, declared_name='bridge_status'):
 
 
 class TurnDuration(SystemEvent, declared_name='turn_duration'):
+
+    def ends_turn(self) -> bool:
+        return True
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.retired(AllTurnsEnded())
@@ -918,6 +942,9 @@ class SystemRecord(ClaudeRecord, declared_name='system'):
 
     def begins_history(self) -> bool:
         return self.subtype.begins_history()
+
+    def ends_turn(self) -> bool:
+        return self.subtype.ends_turn()
 
 
 class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
