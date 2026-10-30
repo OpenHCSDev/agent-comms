@@ -108,7 +108,7 @@ def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:
 
 def test_disclosure_reuses_original_children_and_declared_identity() -> None:
     unit = example_hud().units[0]
-    text = DisclosureText.of(unit)
+    text = DisclosureText.describe(unit)
     assert isinstance(text, IdentifiedRecordText)
     assert text.summary == unit.unit.name
     assert text.children is text.children
@@ -121,7 +121,7 @@ def test_disclosure_reuses_original_children_and_declared_identity() -> None:
         FieldKey(CommanderUnit, plan.name) for plan in FieldCodec.field_plans(CommanderUnit) if plan.records)
     assert next(child for child in text.children if child.key == FieldKey(CommanderUnit, "strikes")).value.value == unit.strikes
 
-    mapping = DisclosureText.of({"units": (unit,)})
+    mapping = DisclosureText.describe({"units": (unit,)})
     assert isinstance(mapping, MappingText)
     assert mapping.children is mapping.children
     sequence = mapping.children[0].value

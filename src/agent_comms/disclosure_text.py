@@ -50,12 +50,8 @@ class MappingKey(DisclosureKey):
 
 
 @dataclass(frozen=True)
-class DisclosureText(ValueDescription["DisclosureText"]):
+class DisclosureText(ValueDescription):
     value: object
-
-    @classmethod
-    def of(cls, value: object) -> DisclosureText:
-        return FieldCodec.describe(value, DisclosureText)
 
     @cached_property
     def summary(self) -> str:
@@ -70,7 +66,7 @@ class DisclosureText(ValueDescription["DisclosureText"]):
         return self.value
 
     def column_value(self, column: ViewColumn) -> DisclosureText:
-        return DisclosureText.of(column.current(self.value))
+        return DisclosureText.describe(column.current(self.value))
 
     @handles(object, str, bytes)
     @classmethod
@@ -156,7 +152,7 @@ class ViewTable[R]:
 
     @cached_property
     def row_values(self) -> tuple[DisclosureText, ...]:
-        return tuple(DisclosureText.of(record) for record in self.records)
+        return tuple(DisclosureText.describe(record) for record in self.records)
 
     @cached_property
     def entities(self) -> Mapping[DisclosureKey, R]:
@@ -378,7 +374,7 @@ class SequenceText(CollectionText):
     def children(self) -> tuple[DisclosureEntry, ...]:
         entries = []
         for index, value in enumerate(self.value):
-            text = DisclosureText.of(value)
+            text = DisclosureText.describe(value)
             entries.append(DisclosureEntry(text.sequence_key, str(index + 1), text))
         return tuple(entries)
 
@@ -390,5 +386,5 @@ class MappingText(CollectionText):
 
     @cached_property
     def children(self) -> tuple[DisclosureEntry, ...]:
-        return tuple(DisclosureEntry(MappingKey(key), str(key), DisclosureText.of(value))
+        return tuple(DisclosureEntry(MappingKey(key), str(key), DisclosureText.describe(value))
                      for key, value in self.value.items())

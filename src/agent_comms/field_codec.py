@@ -2275,52 +2275,52 @@ class DisclosedRecord:
         return tuple(plan for plan in FieldCodec.field_plans(cls)
                      if DisclosureIdentity.read(plan.annotation, False))
 
-    def disclose[T](self, presentation: type[ValueDescription[T]]) -> T:
+    def disclose[T: ValueDescription](self, presentation: type[T]) -> T:
         identity = type(self).disclosure_identity()
         return (presentation.identified_record(self, identity) if identity
                 else presentation.record(self))
 
 
-class ValueDescription[Product](MroDispatch, ABC):
+class ValueDescription(MroDispatch, ABC):
     """Presentation dispatch is independent of FieldCodec's external decoder dispatch."""
 
     @classmethod
-    def describe(cls, value: object) -> Product:
-        handler: Callable[[object], Product] = cls.handler_for(type(value))
+    def describe(cls, value: object) -> Self:
+        handler: Callable[[object], Self] = cls.handler_for(type(value))
         return handler(value)
 
     @handles(DisclosedRecord)
     @classmethod
-    def disclosed(cls, value: DisclosedRecord) -> Product:
+    def disclosed(cls, value: DisclosedRecord) -> Self:
         return value.disclose(cls)
 
     @classmethod
     @abstractmethod
-    def scalar(cls, value: object) -> Product: ...
+    def scalar(cls, value: object) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def record(cls, value: object) -> Product: ...
+    def record(cls, value: object) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> Product: ...
+    def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def class_value(cls, value: type) -> Product: ...
+    def class_value(cls, value: type) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def family_value(cls, value: type[DeclaredFamily]) -> Product: ...
+    def family_value(cls, value: type[DeclaredFamily]) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def mapping(cls, value: Mapping[Hashable, object]) -> Product: ...
+    def mapping(cls, value: Mapping[Hashable, object]) -> Self: ...
 
     @classmethod
     @abstractmethod
-    def sequence(cls, value: Collection[object]) -> Product: ...
+    def sequence(cls, value: Collection[object]) -> Self: ...
 
 
 class Projected(ViewColumn, property):
@@ -2375,11 +2375,6 @@ class FieldCodec(MroDispatch, Sealed):
     Annotated field representations add scalar/capture behavior while retaining
     the single record codec and declaration-derived schema.
     """
-
-    @classmethod
-    def describe[T](cls, value: object, presentation: type[ValueDescription[T]]) -> T:
-        """The presentation owns its nominal input handlers, not the decoder's table."""
-        return presentation.describe(value)
 
     @classmethod
     def decode_external[T](
