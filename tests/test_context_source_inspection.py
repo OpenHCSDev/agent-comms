@@ -70,16 +70,18 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
     })
     assert data.segments == (segment,)
     assert data.observation() == original
-    result = data.public_source_text(None, original, 0, source)
+    selected = data.public_source(original, 0, source)
+    assert selected == source
+    result = ContextSourceText(selected.public_description(), selected.public_text(None))
     assert FieldCodec.decode(ContextSourceText, FieldCodec.encode(result)) == result
     assert result.text == path.read_text()
     with pytest.raises(ValueError):
-        data.public_source_text(None, original, 0, replace(source, path=str(tmp_path / "foreign")))
+        data.public_source(original, 0, replace(source, path=str(tmp_path / "foreign")))
     with pytest.raises(ValueError):
-        data.public_source_text(None, replace(original, context_digest="b" * 64), 0, source)
+        data.public_source(replace(original, context_digest="b" * 64), 0, source)
     path.write_text("Today's different instruction")
     with pytest.raises(ValueError):
-        data.public_source_text(None, original, 0, source)
+        data.public_source(original, 0, source).public_text(None)
 
 
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import typing
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
@@ -62,11 +62,12 @@ from .pi_vocabulary import (
 )
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
+from .thread_identity import ThreadIncarnation
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
 from .tool_result import DeclaredReply
 from .turn_context import (
-    ContextSourceText, ContextTurn, MeasuredNativeSegment, PreviewProvenance, Provenance,
+    ContextTurn, MeasuredNativeSegment, PreviewProvenance, Provenance,
     SegmentManifest, TurnContext,
 )
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
@@ -89,9 +90,6 @@ from .turn_item import CompactionChargeId, PiRequestKey, ProviderResponseId, Usa
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .backend import NativeSession, TurnSession
-    from .comms import Comms
-    from .threads import Thread
-    from .native_attestation import NativeAttestation
     from .native_entries import TranscriptProjection
     from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
@@ -1171,6 +1169,13 @@ class PiContextUsage(PiPayload):
         return self.tokens
 
 
+class SnapshotAttestation(ABC):
+    """The identity-conflict contract a native snapshot can ask its attestation."""
+
+    @abstractmethod
+    def conflicts(self, data: NativeSessionSnapshot) -> bool: ...
+
+
 @dataclass(frozen=True)
 class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 
@@ -1199,7 +1204,7 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
     def cleared_inputs(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
         return ()
 
-    def conflicts_attestation(self, attestation: NativeAttestation) -> bool:
+    def conflicts_attestation(self, attestation: SnapshotAttestation) -> bool:
         return False
 
     @classmethod
@@ -1227,16 +1232,14 @@ class NativeContextData(StrictFields, PiResponseData, DeclaredReply):
         self.identity.require_same_session(original.identity)
         return original
 
-    def public_source_text(
-        self, comms: Comms, observation: PreviewProvenance,
-        segment: int, source: Provenance,
-    ) -> ContextSourceText:
+    def public_source(
+        self, observation: PreviewProvenance, segment: int, source: Provenance,
+    ) -> Provenance:
         if observation != self.observation():
             raise ValueError("Current native preview changed since the selected observation")
         if not 0 <= segment < len(self.segments):
             raise ValueError("Source has no selected context segment")
-        selected = self.segments[segment].require_source(source)
-        return ContextSourceText(selected.public_description(), selected.public_text(comms))
+        return self.segments[segment].require_source(source)
 
     def recorded_public_text(self, expected: SegmentManifest) -> str:
         self.identity.require_same_session(expected.sources.native_identity())
@@ -1245,15 +1248,14 @@ class NativeContextData(StrictFields, PiResponseData, DeclaredReply):
             originals.setdefault(original.sha256, []).append(original)
         values: dict[str, list[MeasuredNativeSegment]] = {}
         for segment in self.segments:
-            measured = segment.manifest(segment.tokens)
             if not any(segment.matches_recorded(original)
-                       for original in originals.get(measured.sha256, ())):
+                       for original in originals.get(segment.sha256, ())):
                 raise ValueError("Recorded SDK source is outside the selected original value")
-            values.setdefault(measured.sha256, []).append(segment)
+            values.setdefault(segment.sha256, []).append(segment)
         return expected.recorded_public_text(values)
 
-    def for_turn(self, owner: Thread, turn: ContextTurn) -> TurnContext:
-        return TurnContext(owner.incarnation, turn, self.segments)
+    def for_turn(self, owner: ThreadIncarnation, turn: ContextTurn) -> TurnContext:
+        return TurnContext(owner, turn, self.segments)
 
     def require_session_file(self, session_file: str) -> NativeContextData:
         if self.identity.session_file != session_file:
@@ -1320,7 +1322,7 @@ class NativeSessionSnapshot(PiPayload):
         known, observed = self._known_identity(), other._known_identity()
         return any(known[key] != observed[key] for key in known.keys() & observed.keys())
 
-    def conflicts_attestation(self, attestation: NativeAttestation) -> bool:
+    def conflicts_attestation(self, attestation: SnapshotAttestation) -> bool:
         return attestation.conflicts(self)
 
 

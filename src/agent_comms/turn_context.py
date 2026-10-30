@@ -839,6 +839,8 @@ class MeasuredNativeSegment(ContextSegment):
     """An SDK-owned input observation, not a second native message vocabulary."""
 
     tokens: int
+    sha256: str
+    utf8_bytes: int
     contributors: tuple[SegmentManifest, ...] = ()
 
     @abstractmethod
@@ -881,9 +883,6 @@ class MeasuredNativeSegment(ContextSegment):
 @dataclass(frozen=True, kw_only=True)
 class SystemLayerSegment(PublicInstructionAnnotations, MeasuredNativeSegment):
     content: str
-    tokens: int
-    sha256: str
-    utf8_bytes: int
     source_spans: Annotated[
         tuple[ContributionCoordinates, ...], WireOmitDefault()
     ] = ()
@@ -934,9 +933,6 @@ class NativeMessages:
     # These are the SDK's exact *provider* messages, including opaque extension
     # and provider fields. Core does not decode them as its event/message subset.
     messages: tuple[dict[str, JsonValue], ...]
-    tokens: int
-    sha256: str
-    utf8_bytes: int
 
     @classmethod
     def recorded_parts(cls, original: SegmentManifest) -> tuple[SegmentManifest, ...]:
@@ -1020,9 +1016,6 @@ class InjectionMessageSegment(NativeAnnotations, MeasuredNativeSegment):
 @dataclass(frozen=True, kw_only=True)
 class ToolCatalogSegment(MeasuredNativeSegment):
     tools: tuple[dict[str, JsonValue], ...]
-    tokens: int
-    sha256: str
-    utf8_bytes: int
 
     def provider_value(self):
         return list(self.tools)

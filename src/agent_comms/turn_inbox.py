@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .field_codec import InputId
@@ -15,10 +14,6 @@ from .image_input import ImageInput
 from .pi_vocabulary import ThinkingLevelField
 from .thread_model import ThreadModel
 from .turn_context import InputContributionCoordinates
-
-if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .turn_inputs import InputForwarding
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
@@ -70,9 +65,6 @@ class TurnInboxItem(ABC):
     @property
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()
-
-    def refuse(self, inputs: InputForwarding, turn: TurnSession) -> None:
-        inputs.refuse(turn, self.carried_inputs)
 
 
 class TurnInbox(asyncio.Queue[TurnInboxItem]):

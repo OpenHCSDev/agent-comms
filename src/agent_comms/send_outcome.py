@@ -65,7 +65,7 @@ class DeferredSend(SendOutcome):
 class RefusedSend(SendOutcome):
     def apply(self, inputs: InputForwarding, session: NativeSession,
               item: TurnInboxItem, write: Callable[[], None]) -> Awaitable[bool]:
-        item.refuse(inputs, session)
+        session.refuse(item)
         return asyncio.sleep(0, result=True)
 
 

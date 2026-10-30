@@ -71,7 +71,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
                                                  False, context, segments, str(error))
             finally:
                 await connection.close()
-            native_context = native.for_turn(owner, NextContextTurn())
+            native_context = native.for_turn(owner.incarnation, NextContextTurn())
             return NativeContextInspection(
                 "next-native-base-and-core-contributors; before future input and provider hooks",
                 False, context, segments, native_context.segments, native_context.render().provider,

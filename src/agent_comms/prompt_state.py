@@ -62,11 +62,6 @@ class UnwrittenPrompt(QueuedOperation):
     def dispatch(self):
         return UnacknowledgedPrompt()
 
-    def refuse(self, inputs, session):
-        session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
-        session.finish_request()
-        session.rejected_signal.set()
-
     def raise_native_failure(self, error, attestation) -> Never:
         raise NativePiInputNotSent(error, attestation) from error
 

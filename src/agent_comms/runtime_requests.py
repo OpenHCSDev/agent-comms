@@ -45,6 +45,7 @@ from .owner_connection import (
     NoControllerToken,
 )
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerReady
+from .pi_payloads import NativeContextData
 from .thread_identity import ThreadIncarnation
 from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
@@ -379,7 +380,7 @@ class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class ContextRuntimeRequest(AttachedResultRuntimeRequest):
-    async def inspect(self, ctx: AttachedRuntimeRequestContext):
+    async def inspect(self, ctx: AttachedRuntimeRequestContext) -> NativeContextData:
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
         context = await agent.turns.inspect_context(ctx.session, owner)
@@ -395,13 +396,17 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
     segment: int
     source: Provenance
 
-    async def result(self, ctx: AttachedRuntimeRequestContext):
+    def read_source(
+        self, ctx: AttachedRuntimeRequestContext, context: NativeContextData,
+    ) -> ContextSourceText:
+        source = context.public_source(self.observation, self.segment, self.source)
+        return ContextSourceText(
+            source.public_description(), source.public_text(ctx.server.agent._comms),
+        )
+
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> ContextSourceText:
         context = await self.inspect(ctx)
-        text = await Coordination.run_worker(partial(
-            context.public_source_text, ctx.server.agent._comms,
-            self.observation, self.segment, self.source,
-        ))
-        return text
+        return await Coordination.run_worker(partial(self.read_source, ctx, context))
 
 
 @dataclass(frozen=True, kw_only=True)
