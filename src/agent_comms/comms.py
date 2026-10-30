@@ -23,7 +23,6 @@ from .agent_inbox import TakenInputStart
 from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
-from .phase_evidence import PlanReadings
 from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .route_client import ActivityClient
@@ -34,12 +33,8 @@ from .watched import FileSource
 
 
 class Comms(ActivityClient):
-    def __init__(
-        self, root: CommsRoute,
-        *, plans: PlanReadings = PlanReadings(),
-    ) -> None:
+    def __init__(self, root: CommsRoute) -> None:
         super().__init__(root)
-        self.plans = plans
         self.bus = MessageBus(
             self.root,
             self.registry,
@@ -94,19 +89,15 @@ class Comms(ActivityClient):
                         break
 
 
-def wire(
-    root: Path | str | None = None,
-    *, plans: PlanReadings = PlanReadings(),
-) -> Comms:
+def wire(root: Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     route = resolve_comms_route(root)
-    return Comms(route, plans=plans)
+    return Comms(route)
 
 
-def client_wire(root: Path | str | None = None, *,
-                plans: PlanReadings = PlanReadings()) -> AbstractContextManager[Comms]:
+def client_wire(root: Path | str | None = None) -> AbstractContextManager[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Every reader observes committed bus rows without preparing another store.
     """
-    return Comms.client(resolve_comms_route(root), plans=plans)
+    return Comms.client(resolve_comms_route(root))
