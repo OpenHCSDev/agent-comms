@@ -1023,6 +1023,10 @@ class AiTitle(MetadataRecord, declared_name='ai-title'):
     pass
 
 
+class ToolsUsed(MetadataRecord, declared_name='tools-used'):
+    """The tools the conversation had used, recorded at a compaction; nothing here reaches the bus."""
+
+
 class PrLink(MetadataRecord, declared_name='pr-link'):
     pass
 
