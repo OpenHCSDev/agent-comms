@@ -88,6 +88,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     bash.judge_under(unit_deal)  # an aborted compaction kept the context
     events.CompactionEnd().deal_rules(unit_deal)
     assert unit_deal.current().due.owner_words == words
+    assert unit_deal.owner_said(unit_deal.current().due) == words[-1:]
     with pytest.raises(RulesUnread, match="You just tried bash before reading. Call #1"):
         bash.judge_under(unit_deal)
     with pytest.raises(RulesUnread):  # a file nobody dealt is not a way through
@@ -106,9 +107,8 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     with pytest.raises(RulesUnread, match="template was in your first refusal"):
         bash.judge_under(unit_deal)  # the whole template is printed once per deal
     answered = [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()]
-    unit_deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
-    with pytest.raises(RulesUnread, match="then fix the gate"):
-        bash.judge_under(unit_deal)  # the audit answers the owner's words too
+    unit_deal.audit.write_text(json.dumps({"rules": answered}))
+    bash.judge_under(unit_deal)  # the rules answered, nothing more is owed
     unit_deal.audit.unlink()
     with pytest.raises(RulesUnread):
         call("write", {"path": "notes.md", "content": "x"}).judge_under(unit_deal)
@@ -117,7 +117,6 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         json.dumps(
             {
                 "rules": [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()],
-                "owner_words": [{"words": text, "doing": "reading the gate"} for text in words],
             }
         )
     )
@@ -142,7 +141,7 @@ def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(uni
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
     unit_deal.observe_context(ContextUsage(35, 100))
-    unit_deal.audit.write_text(json.dumps({"rules": [], "owner_words": []}))
+    unit_deal.audit.write_text(json.dumps({"rules": []}))
     dealt = unit_deal.current().dealt
     rules = [source for source in dealt if source.stem in unit_deal.current().due.rules]
     batch, following = rules[:Unengaged.batch], rules[Unengaged.batch]
@@ -158,7 +157,7 @@ def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(uni
     with pytest.raises(RulesUnread):
         call("edit", {"path": "notes.md", **edit}).judge_under(unit_deal)
     unit_deal.audit.write_text(json.dumps(
-        {"rules": [engaged(source.stem, source) for source in batch], "owner_words": []}))
+        {"rules": [engaged(source.stem, source) for source in batch]}))
     call("read", {"path": str(following)}).judge_under(unit_deal)
 
 
@@ -233,6 +232,6 @@ def test_the_dealt_commander_skill_owes_an_answer_like_a_rule(commander_bus):
         deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
         if source.stem in record.due.rules and source not in unanswered:
             answered.append(engaged(source.stem, source))
-        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
+        deal.audit.write_text(json.dumps({"rules": answered}))
     with pytest.raises(RulesUnread, match=f"audit's entry for {skill.stem} does not answer it"):
         deal.judge_read("read", order[order.index(skill) + 1])

@@ -1,8 +1,8 @@
 """The Claude Code leaf of the rule gate (agent_comms.rule_deal): its deal lives beside the
 transcript, and a refusal is a PreToolUse denial.
 
-PreToolUse only judges: it refuses any tool but reading a dealt file and answering it while one is
-unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
+PreToolUse only judges: it refuses any tool but reading a dealt file, answering it, hearing the bus
+and arming the watch while one is unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
 only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
 Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
@@ -16,9 +16,10 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, ReadSpan
+from agent_comms.rule_deal import AuditDue, DealtRuleGate, ReadSpan
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.seats import SeatedSubagent
@@ -88,6 +89,48 @@ class EditTool(WriteTool, declared_name="Edit"):
     """Answering one rule edits the audit in place; an edit is judged like a write."""
 
 
+class HearingTool(ToolMeaning):
+    """The bus stays open during a deal: on 2026-10-30 the commander's watch expired mid-deal and
+    could not be re-armed, and Tristan's orders waited unread behind the files he had it reading."""
+
+    def judge(self, call: GatedCall) -> None:
+        return
+
+
+class BusInbox(HearingTool, declared_name="mcp__comms__comms_inbox"):
+    """What the bus delivered to this session."""
+
+
+class BusHistory(HearingTool, declared_name="mcp__comms__comms_history"):
+    """What was said on a thread or channel."""
+
+
+class BusThreads(HearingTool, declared_name="mcp__comms__comms_threads"):
+    """Who is on the bus."""
+
+
+class BusSend(HearingTool, declared_name="mcp__comms__comms_send"):
+    """Answering him. Orders and verdicts wait for the deal; a word to the bus does not."""
+
+
+class WatchArming(ToolMeaning):
+    """The one command that re-arms this session's watch runs; any other waits like the rest."""
+
+    command: ClassVar[str] = "agent-comms-claude-bridge watch"
+
+    def judge(self, call: GatedCall) -> None:
+        if call.tool_input.get("command") != self.command:
+            super().judge(call)
+
+
+class BashTool(WatchArming, declared_name="Bash"):
+    """The shell, which may arm the watch."""
+
+
+class MonitorTool(WatchArming, declared_name="Monitor"):
+    """The Monitor, which is how the watch is held."""
+
+
 @dataclass(frozen=True)
 class GatedCall(ClaudeToolHook, DealtRuleGate):
     """One tool call of the session's own agent, judged before it runs and seen after it
@@ -104,6 +147,19 @@ class GatedCall(ClaudeToolHook, DealtRuleGate):
     def completed(self) -> None:
         """PostToolUse: what this completed call records."""
         ToolMeaning.of(self.tool_name).completed(self)
+
+    def owner_said(self, due: AuditDue) -> tuple[str, ...]:
+        """His last prompt from the transcript as this call runs, not as the deal showed it.
+        The transcript's decoder imports Core, so only a refusal pays for it, never a call that
+        runs (tests/test_hook_import_path.py)."""
+        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+
+        transcript = Path(self.transcript_path)
+        if not transcript.exists():
+            return super().owner_said(due)
+        with transcript.open("rb") as stream:
+            return (ClaudeJsonLines().owner_words(stream, transcript.stat().st_size, 1)
+                    or super().owner_said(due))
 
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)

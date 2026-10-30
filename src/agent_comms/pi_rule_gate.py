@@ -24,7 +24,7 @@ from agent_comms_hooks.skill import (
 
 from .bus_publication import Delivered
 from .field_codec import ThreadLookup
-from .rule_deal import DealTrigger, DealtRuleGate, Redeals
+from .rule_deal import AuditDue, DealTrigger, DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
@@ -45,8 +45,10 @@ class PiRuleGate(DealtRuleGate):
     worktree: Path
 
     @classmethod
-    def of(cls, comms: Comms, thread: Thread) -> PiRuleGate:
-        return cls(comms.registry.storage_rule.roots_of(thread).scratch, thread.worktree.path)
+    def of(cls, comms: Comms, thread: Thread) -> PiRedeal:
+        """A gate that can read his latest words from the bus for its refusals."""
+        return PiRedeal(comms.registry.storage_rule.roots_of(thread).scratch,
+                        thread.worktree.path, comms, thread)
 
     @property
     def stem(self) -> Path:
@@ -63,10 +65,9 @@ class PiRedeal(PiRuleGate, Redeals):
     comms: Comms
     thread: Thread
 
-    @classmethod
-    def of(cls, comms: Comms, thread: Thread) -> PiRedeal:
-        gate = PiRuleGate.of(comms, thread)
-        return cls(gate.scratch, gate.worktree, comms, thread)
+    def owner_said(self, due: AuditDue) -> tuple[str, ...]:
+        """His last message to this thread as this call runs, not as the deal showed it."""
+        return self.owner_words(self.comms.registry.snapshot())[-1:] or super().owner_said(due)
 
     def renew(self, trigger: DealTrigger) -> None:
         """A start or compaction deals the papers, then the rules."""
