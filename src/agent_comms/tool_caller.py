@@ -261,15 +261,18 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         return comms.registry.require(parent)
 
     def recorded(self, comms: Comms) -> bool:
-        """Every commander verb that records announces it on the bus, so a fork that sent
-        nothing recorded nothing."""
-        return self.name in comms.bus.bus.activity_clocks().sent
+        """A fork's record in Core is what it sent on the bus or a head verdict it recorded:
+        a verdict on an orderless head posts nothing, yet Core holds it."""
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return (self.name in comms.bus.bus.activity_clocks().sent
+                or comms.goals.todos.recorded_head_review(own))
 
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
             raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: post what it found with"
+                f"{self.name} recorded nothing in Core: record a head verdict with"
+                f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
         self.end(comms)
 

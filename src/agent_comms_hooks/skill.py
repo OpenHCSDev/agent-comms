@@ -272,13 +272,13 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. After each rule file, before the next unread file opens,"
-            " answer it in the audit: a line it holds quoted verbatim, what that line did, and why"
+            " answer it in the audit: greentext lines it holds quoted verbatim, what they did, and why"
             " it holds. Check what you did since your last start or compaction against it and"
             " name every action that broke it, and fix what you can: reading alone is passive, the"
             " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
             " one session). That audit is not optional: every tool but Read, and Write or Edit of"
             f" {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "quote": A LINE OF IT VERBATIM, "does": what that line did,'
+            ' {"rules": [{"rule": NAME, "quote": WHOLE GREENTEXT LINES OF IT VERBATIM, "does": what they did,'
             ' "why": why it holds, "broke": [each action since the last start or compaction that'
             ' broke it; empty means kept]}, one entry for every rule you were dealt],'
             ' "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are doing about'
@@ -330,6 +330,18 @@ class DeckStart(DealtDeck):
         """The deal, and the deck dealt again from its start."""
         self.deal(type(reader), prompts)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
+
+    def widened(self, reader: DeckReader) -> tuple[str, ...]:
+        """The deck of this session's role is the one record of the role it was dealt. A
+        session whose role changed finds none of its kind and is dealt only the files the role
+        adds, keeping what it read and wrote, since its context was never lost; a session bound
+        after it started is dealt in full and told so."""
+        deck = self.deck(reader)
+        if deck.exists():
+            return ()
+        said = self.current().widen(self, type(reader), lambda: self.dealt(reader), ())
+        deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
+        return said
 
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]

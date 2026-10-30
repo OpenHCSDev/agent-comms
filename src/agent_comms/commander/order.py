@@ -81,6 +81,7 @@ from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
     ClearingVerb,
@@ -92,6 +93,7 @@ from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
     CleanHunt,
+    CorrectLinkTodo,
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
@@ -427,7 +429,18 @@ class CommanderContext(BaseModel):
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers,
-            answerer=CommanderReceipts(self.actor_identity, (self.incarnation,))).message
+            answerer=self.receipts).message
+
+    @property
+    def receipts(self) -> CommanderReceipts:
+        """Whose receipts this actor answers: its commander's, and those of every commander of
+        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
+        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
+        a retired commander's directives included."""
+        actor = self.actor_identity
+        owners = (self.incarnation, *(request.commander for request
+                                      in self.comms.goals.todos.open_requests(actor)))
+        return CommanderReceipts(actor, tuple(dict.fromkeys(owners)))
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -1246,6 +1259,23 @@ class RunVerb(OrderVerb):
     def run(self, ctx: Commander) -> None:
         ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
         print(f'{self.pid}: order now works when {self.text}')
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnlinkVerb(Reasoned, OrderVerb):
+    help = ("take a pull request off an open order that never held its work; keeps its holder, "
+            "review timer and strikes")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    repo: Annotated[RepositoryName, Argument(flags=("repo",), options={"metavar": "OWNER/NAME"})]
+    number: Annotated[int, Argument(flags=("number",), options={"metavar": "PR"})]
+
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.get(self.pid)
+        link = PullRequestLink(self.repo, self.number)
+        ctx.call(CommsChangeProblemTool(problem=self.pid, operation=CorrectLinkTodo(
+            todo.revision, ctx.incarnation, self.why,
+            previous=todo.order.pull_requests, link=link)))
+        print(f'{self.pid}: order no longer links {link.url}')
 
 
 @dataclass(frozen=True, kw_only=True)

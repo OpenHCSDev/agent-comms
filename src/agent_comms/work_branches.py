@@ -312,6 +312,10 @@ class NoUpstream(BranchUpstream):
     """This local branch declares no upstream."""
 
 
+class DetachedHead(BranchUpstream):
+    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
+
+
 @dataclass(frozen=True)
 class TrackedUpstream(BranchUpstream, declared_name=None):
     tracking: str
@@ -480,11 +484,12 @@ query($owner: String!, $name: String!, $after: String) {
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            BranchUpstream.from_git(line) for line in self._git(
+            DetachedHead("HEAD"),
+            *(BranchUpstream.from_git(line) for line in self._git(
                 "for-each-ref",
                 "--format=%(refname:strip=2)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
                 "refs/heads/",
-            ).splitlines()
+            ).splitlines()),
         )}
 
     def prepare_upstreams(self) -> None:
