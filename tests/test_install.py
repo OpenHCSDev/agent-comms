@@ -21,7 +21,7 @@ from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
 from agent_comms.commander.config import GivenRepos, KeptRepos, NamedCommander
-from agent_comms.repo import Repo
+from agent_comms.repo import Repo, RepositoryName
 from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.installer.refusals import UpgradeRefused
@@ -260,16 +260,16 @@ def test_the_commander_verb_names_a_lead_and_removes_a_commander_at_runtime(priv
     comms.registry.declare(Thread("new-lead", frozenset({"commanders"}), Checkout(private_directory)))
     comms.registry.declare(Thread("peer", frozenset({"commanders"}), Checkout(private_directory)))
     recorded = RegisteredCommanderProject(
-        comms.registry.require("old-lead").incarnation, (Repo.of(private_directory),))
+        comms.registry.require("old-lead").incarnation, (Repo(checkout=private_directory, github=RepositoryName.from_wire("owner/repo")),))
     comms.registry.set_commander_project(recorded)
     named = CommanderCliCommand(lead=NamedCommander("new-lead")).apply(comms)
     project = comms.registry.snapshot().commander_project
     assert project == recorded.named(comms.registry.require("new-lead").incarnation, KeptRepos())
     assert project.repos == recorded.repos
-    assert named.lead == "new-lead" and "old-lead" not in named.commanders
+    assert named.leads == ("new-lead",) and "old-lead" not in named.commanders
     with pytest.raises(RelationViolationError):
-        CommanderCliCommand(remove="new-lead").apply(comms)
-    removed = CommanderCliCommand(remove="peer").apply(comms)
+        CommanderCliCommand(remove=frozenset({"new-lead"})).apply(comms)
+    removed = CommanderCliCommand(remove=frozenset({"peer"})).apply(comms)
     assert removed.commanders == ("new-lead",)
     assert "commanders" not in comms.registry.require("peer").tags
 
