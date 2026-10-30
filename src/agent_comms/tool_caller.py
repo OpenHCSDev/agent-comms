@@ -219,7 +219,7 @@ class ActsForCommander(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
 
 
 @dataclass(frozen=True)
