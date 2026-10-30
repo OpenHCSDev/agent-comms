@@ -259,6 +259,20 @@ class ThreadCatalog(DurableFile, PatternFile):
     __slots__ = ()
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
 
+    @classmethod
+    def publish(cls, thread: Thread, root: Path) -> Path:
+        """Project the current declaration through the native session's one catalog."""
+        launch = LaunchRoot.from_path(root)
+        path = thread.catalog_path(launch.path)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        catalog = ThreadToolCatalogResult(
+            tuple(NativeRequestTools.catalog()), thread.service_tier, launch.arguments(),
+        )
+        body = FieldCodec.compact(catalog.to_wire())
+        if not path.exists() or path.read_text() != body:
+            AtomicFile(path).write_text(body)
+        return path
+
 
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance, CatalogSelection):
@@ -440,13 +454,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         """The existing native session directory owns this root's launch catalog."""
         if not arguments.loads(NativeRequestTools.native_extension(package)):
             return arguments.argv
-        launch = LaunchRoot.from_path(root)
-        path = self.catalog_path(launch.path)
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        catalog = ThreadToolCatalogResult(
-            tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
-        )
-        AtomicFile(path).write_text(FieldCodec.compact(catalog.to_wire()))
+        path = ThreadCatalog.publish(self, root)
         return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:

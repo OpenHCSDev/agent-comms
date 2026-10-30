@@ -22,6 +22,7 @@ class TestToolCatalog:
         from agent_comms.cli_verbs.tools import ToolsCliCommand
         from agent_comms.native_arguments import NativeArguments
         from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration, ThreadCatalog
         from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
@@ -38,6 +39,20 @@ class TestToolCatalog:
         assert {tool["name"] for tool in payload["tools"]} == {
             tool["name"] for tool in NativeRequestTools.catalog()
         }
+        for tier in (ServiceTier.PRIORITY, ServiceTier.STANDARD):
+            thread = comms.threads.set_thread_configuration(
+                comms.registry.require(thread.name),
+                NextTurnConfiguration(service_tier=ChosenServiceTier(tier)),
+            )
+            assert ThreadCatalog.publish(thread, comms.root) == Path(path)
+            updated = json.loads(Path(path).read_text())
+            assert updated == {**payload, "service_tier": tier.value}
+            revision = Path(path).stat()
+            ThreadCatalog.publish(thread, comms.root)
+            repeated = Path(path).stat()
+            assert (revision.st_mtime_ns, revision.st_size) == (
+                repeated.st_mtime_ns, repeated.st_size,
+            )
 
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")

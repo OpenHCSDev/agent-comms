@@ -21,7 +21,7 @@ from .config_options import (CatalogConfigOption,
 from .coordinator import Coordination
 from .field_codec import FieldCodec
 from .native_failures import NativePiUnavailable
-from .threads import ChosenModel, NextTurnConfiguration
+from .threads import ChosenModel, NextTurnConfiguration, ThreadCatalog
 from .thread_model import CatalogSelection
 from .watched import FileSource
 
@@ -151,6 +151,7 @@ class SessionConfigOptions:
     async def use_stored_settings(self, session_id: str, name: str) -> None:
         """A running turn switches at its next model call, whichever process stored the change."""
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        await Coordination.run_worker(partial(ThreadCatalog.publish, thread, self.comms.root))
         settings = self.stored_settings(thread)
         if self.settings_in_use.get(session_id, settings) == settings:
             return
@@ -216,7 +217,8 @@ class SessionConfigOptions:
         async with aclosing(Bus.watch_sources(FileSource(self.comms.registry.store.path))) as observations:
             async for _ in observations:
                 for session_id in tuple(self._publication_sessions):
-                    await self.sessions.sync_identity(session_id)
+                    name = await self.sessions.sync_identity(session_id)
+                    await self.use_stored_settings(session_id, name)
                     await self.publish_configuration(session_id)
 
     async def close(self) -> None:
