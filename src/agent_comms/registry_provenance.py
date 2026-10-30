@@ -243,8 +243,8 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         """Only a matching name or its actual birth changing invalidates that channel."""
         current = self.memberships
         for name in current.keys() | earlier.keys():
-            before = name in earlier and tags <= earlier[name].tags
-            after = name in current and tags <= current[name].tags
+            before = name in earlier and earlier[name].carries(tags)
+            after = name in current and current[name].carries(tags)
             if before != after:
                 return False
             if before and earlier[name].incarnation != current[name].incarnation:

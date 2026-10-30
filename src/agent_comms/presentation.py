@@ -530,9 +530,11 @@ class BusPresentation:
         self._display_unread = DisplayUnread()
 
     @contextmanager
-    def snapshot(self, viewer: DisplayViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+    def snapshot(
+        self, viewer: DisplayViewer, *, check_same_thread: bool = True,
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         """Borrow the bus-owned source cut without preparing a second store."""
-        with self.bus.snapshot(viewer) as selected:
+        with self.bus.snapshot(viewer, check_same_thread=check_same_thread) as selected:
             yield selected
 
     @contextmanager
@@ -543,7 +545,7 @@ class BusPresentation:
         serializes page use and retirement, without keeping any store exclusion held.
         """
         with ExitStack() as lifetime:
-            basis, source = lifetime.enter_context(self.snapshot(viewer))
+            basis, source = lifetime.enter_context(self.snapshot(viewer, check_same_thread=False))
             captured = CapturedBusPresentation(self, basis, source)
             try:
                 yield captured
@@ -623,7 +625,9 @@ class CapturedBusPresentation(BusPresentation):
         self._use = RLock()
 
     @contextmanager
-    def snapshot(self, viewer: DisplayViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+    def snapshot(
+        self, viewer: DisplayViewer, *, check_same_thread: bool = True,
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         with self._use:
             if viewer.resolve(self.basis.registry) != self.basis.viewer:
                 raise ValueError("A captured display cut belongs to its original viewer")

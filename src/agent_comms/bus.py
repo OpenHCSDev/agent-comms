@@ -164,7 +164,9 @@ class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
-    def observing(self) -> AbstractContextManager[sqlite3.Connection]:
+    def observing(
+        self, *, check_same_thread: bool = True,
+    ) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one read snapshot through the reader's declared lifetime."""
 
     def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
@@ -174,9 +176,9 @@ class BusReader(RouteCounts, ABC):
             return MessageIdentitySource.answering(connection, references, route, snapshot)
 
     @contextmanager
-    def reading(self) -> Iterator[BusSnapshot]:
+    def reading(self, *, check_same_thread: bool = True) -> Iterator[BusSnapshot]:
         """Keep queries and their physical identity on one held snapshot."""
-        with self.observing() as db:
+        with self.observing(check_same_thread=check_same_thread) as db:
             yield BusSnapshot.from_connection(db)
 
     def revision(self) -> int:
@@ -520,10 +522,8 @@ class StoredBusReader(BusReader):
         """The file named by this reader's owning declaration."""
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
-        # A captured display cut moves between the preparation owner's workers.
-        # Its presentation serializes page use and retirement; it remains read-only.
-        with SQLiteFile.opened_reader(self.path, check_same_thread=False) as db:
+    def observing(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        with SQLiteFile.opened_reader(self.path, check_same_thread=check_same_thread) as db:
             yield db
 
 
@@ -676,10 +676,10 @@ class BusSnapshot(PresentPath, BusReader):
         return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
-    def observing(self) -> Iterator[sqlite3.Connection]:
+    def observing(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
         """The held snapshot is already attached, so it takes no lock."""
         yield self._connection
 
     @contextmanager
-    def reading(self) -> Iterator[BusSnapshot]:
+    def reading(self, *, check_same_thread: bool = True) -> Iterator[BusSnapshot]:
         yield self

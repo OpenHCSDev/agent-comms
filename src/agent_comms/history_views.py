@@ -10,8 +10,7 @@ from .activity_clocks import ChannelActivity
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -247,41 +246,20 @@ class HistoryViews:
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         return self.bus.history.threads(name)
 
-    def dm_display_page(
-        self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
-    ) -> MessagePage:
-        viewer = self.messaging.user_identity(worktree)
-        return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
-
-    @contextmanager
-    def dm_display_reading(
+    def dm_display_view(
         self, peer: ThreadTarget, *, worktree: Checkout,
-    ) -> Iterator[Callable[[PageBounds], MessagePage]]:
+    ) -> DMDisplayHistory:
         viewer = self.messaging.user_identity(worktree)
-        with DMDisplayHistory(viewer.name, peer, worktree).reading(self.presentation) as pages:
-            yield pages
+        return DMDisplayHistory(viewer.name, peer, worktree)
 
-    @contextmanager
-    def channel_display_reading(
+    def channel_display_view(
         self, target: str, *, viewer: DisplayViewer = AnonymousViewer(),
-    ) -> Iterator[Callable[[PageBounds], MessagePage]]:
-        channel = self.bus.require_channel(target)
-        with ChannelDisplayHistory(channel, viewer).reading(self.presentation) as pages:
-            yield pages
+    ) -> ChannelDisplayHistory:
+        return ChannelDisplayHistory(self.bus.require_channel(target), viewer)
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""
         return NamedViewer(self.messaging.user_identity(worktree).name)
-
-    def channel_display_page(
-        self,
-        target: str,
-        *,
-        viewer: DisplayViewer = AnonymousViewer(),
-        bounds: PageBounds = NEWEST_PAGE,
-    ) -> MessagePage:
-        channel = self.bus.require_channel(target)
-        return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
     def mark_page_read(self, page: MessagePage, *, worktree: Checkout) -> None:
         """Acknowledge the original read evidence of exactly the painted page."""

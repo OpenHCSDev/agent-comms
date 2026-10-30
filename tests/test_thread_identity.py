@@ -257,7 +257,10 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     message = comms.messaging.send("owner", viewer, "already painted").message
-    page = comms.views.dm_display_page(ThreadTarget("owner"), worktree=Checkout(tmp_path))
+    page = comms.views.dm_display_view(
+        ThreadTarget('owner'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation)
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     path = comms.bus.reads.path
     document = FieldCodec.decode(ReadDocument, json.loads(path.read_text()))
@@ -271,7 +274,10 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
     conversation = reopened.bus.reads.conversation(message, snapshot)
     assert message.seq in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(conversation)
     next_message = reopened.messaging.send("owner", viewer, "new paint").message
-    page = reopened.views.dm_display_page(ThreadTarget("owner"), worktree=Checkout(tmp_path))
+    page = reopened.views.dm_display_view(
+        ThreadTarget('owner'),
+        worktree=Checkout(tmp_path),
+    ).page(reopened.views.presentation)
     reopened.views.mark_page_read(page, worktree=Checkout(tmp_path))
     seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()).for_conversation(conversation)
     assert all(sequence in seen for sequence in (message.seq, next_message.seq))

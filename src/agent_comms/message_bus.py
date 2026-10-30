@@ -145,8 +145,10 @@ class MessageBus[Writes: Publisher]:
             return self._channels.read().views(activity)
 
     @contextmanager
-    def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
-        with self.bus.reading() as source:
+    def snapshot(
+        self, viewer: DisplayViewer = AnonymousViewer(), *, check_same_thread: bool = True,
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+        with self.bus.reading(check_same_thread=check_same_thread) as source:
             basis = CapturedSelection.load(
                 self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
             )

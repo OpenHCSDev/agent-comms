@@ -86,7 +86,9 @@ def reader(live, kind):
         return lambda bounds: live.views.history_page(CommandTarget.named("carol"), bounds, viewer=NamedViewer(name))
     if kind == "any-mode":
         live.channels.set_channel_any_mode("#api", True)
-        return lambda bounds: live.views.channel_display_page("#api", bounds=bounds)
+        return lambda bounds: live.views.channel_display_view(
+            '#api',
+        ).page(live.views.presentation, bounds=bounds)
     target = {
         "channel": "#api",
         "any": "#any",

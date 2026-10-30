@@ -150,7 +150,10 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms = prepared(tmp_path)
     for i in range(5):
         comms.messaging.send("alice", "#team", f"message {i}").message.message_id
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name), bounds=PageBounds(limit=2))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation, bounds=PageBounds(limit=2))
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 3
 
@@ -158,7 +161,10 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
 def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms = prepared(tmp_path)
     comms.messaging.send("alice", "#team", "visible in both views").message.message_id
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation)
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#any"].count == 0
 
@@ -169,7 +175,10 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     hidden = comms.messaging.send("bob", "carol", "no member mentioned").message
     shown = comms.messaging.send("bob", "carol", "@alice shown by mention").message
     comms.channels.set_channel_any_mode("#team", True)
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation)
     assert [message.seq for message in page.messages] == [shown.seq]
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     comms.channels.update_tags("bob", add=frozenset({"team"}))
@@ -189,10 +198,16 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     comms.registry.register(replace(peer, process_identity=ProcessIdentity.capture(os.getpid())))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send("alice", viewer, "painted").message.message_id
-    page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
+    page = comms.views.dm_display_view(
+        ThreadTarget('alice'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation)
     assert page.selection.basis.peer_identity == peer.incarnation
     comms.registry.lease_local_turn("alice", TurnId('0b225c32b06b9107d59b5d92d13b83a3'))
-    fresh = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
+    fresh = comms.views.dm_display_view(
+        ThreadTarget('alice'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation)
     assert fresh.selection.basis.peer_identity == page.selection.basis.peer_identity
     comms.registry.register(Thread('unrelated', frozenset(), Checkout(tmp_path)))
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
@@ -213,9 +228,11 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
             "import os, sys\n"
             "from agent_comms.channel_targets import ThreadTarget\n"
             "from agent_comms.comms import wire\n"
+            "from agent_comms.repo import Checkout\n"
             "comms = wire(sys.argv[1])\n"
-            "page = comms.views.dm_display_page(ThreadTarget('alice'), worktree=sys.argv[1])\n"
-            "comms.views.mark_page_read(page, worktree=sys.argv[1])\n"
+            "project = Checkout(sys.argv[1])\n"
+            "page = comms.views.dm_display_view(ThreadTarget('alice'), worktree=project).page(comms.views.presentation)\n"
+            "comms.views.mark_page_read(page, worktree=project)\n"
             "os._exit(9)\n",
             str(tmp_path),
         ],
@@ -243,12 +260,12 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
                 for i in range(12)]
     for _ in range(18):
         comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
-        page = comms.views.channel_display_page(
-            rng.choice(["#team", "#any"]),
+        page = comms.views.channel_display_view(
+            rng.choice(['#team', '#any']),
             viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
-            bounds=PageBounds(
-                limit=rng.randrange(1, 8), traversal=FieldCodec.decode(PageCursor, rng.choice([None, 6, 10])).older()
-            ),
+        ).page(
+            comms.views.presentation,
+            bounds=PageBounds(limit=rng.randrange(1, 8), traversal=FieldCodec.decode(PageCursor, rng.choice([None, 6, 10])).older()),
         )
         if page.messages:
             through = rng.choice(page.messages).seq
@@ -324,7 +341,10 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     comms.messaging.send("alice", "#team", "painted").message
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation)
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     replacement = tmp_path / "replacement.sqlite3"
     comms.bus.bus.backup(replacement)
@@ -335,7 +355,10 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     from agent_comms.coordination_errors import DMScopeChanged
     with pytest.raises(DMScopeChanged):
         reopened.views.mark_page_read(page, worktree=Checkout(tmp_path))
-    fresh = reopened.views.channel_display_page("#team", viewer=NamedViewer(viewer))
+    fresh = reopened.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(viewer),
+    ).page(reopened.views.presentation)
     reopened.views.mark_page_read(fresh, worktree=Checkout(tmp_path))
     assert reopened.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
 
@@ -354,7 +377,10 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.bus.path))
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).unread["alice"].count == 1
 
-    page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
+    page = comms.views.dm_display_view(
+        ThreadTarget('alice'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation)
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     recorded = RecordedBus(FileIdentity.from_stat(comms.bus.bus.path.stat()))
     assert ledger.read().bus_identity == recorded == page.selection.basis.bus_identity
@@ -375,7 +401,10 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert reopened.views.viewer_snapshot(Checkout(tmp_path)).unread["alice"].count == 1
     with pytest.raises(DMScopeChanged):
         reopened.views.mark_page_read(page, worktree=Checkout(tmp_path))
-    fresh = reopened.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
+    fresh = reopened.views.dm_display_view(
+        ThreadTarget('alice'),
+        worktree=Checkout(tmp_path),
+    ).page(reopened.views.presentation)
     reopened.views.mark_page_read(fresh, worktree=Checkout(tmp_path))
     assert reopened.views.viewer_snapshot(Checkout(tmp_path)).unread["alice"].count == 0
 
@@ -383,7 +412,10 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     comms = prepared(tmp_path)
     messages = [comms.messaging.send("alice", "#team", f"row {i}").message for i in range(5)]
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name), bounds=PageBounds(limit=3))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation, bounds=PageBounds(limit=3))
     scope = page.selection.scope
     assert scope is not None and scope.displayed is not None
     # Requested sequences outside the original page cannot become read facts.
@@ -448,13 +480,19 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         elif operation == "display":
             if rng.choice([True, False]):
-                page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path), bounds=PageBounds(limit=3))
+                page = comms.views.dm_display_view(
+                    ThreadTarget('alice'),
+                    worktree=Checkout(tmp_path),
+                ).page(comms.views.presentation, bounds=PageBounds(limit=3))
                 basis = page.selection.basis.displayed
                 kind, target = "dm", "alice"
                 proof = page.selection.basis
             else:
                 target = rng.choice(["#team", "#any"])
-                page = comms.views.channel_display_page(target, viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name), bounds=PageBounds(limit=3))
+                page = comms.views.channel_display_view(
+                    target,
+                    viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+                ).page(comms.views.presentation, bounds=PageBounds(limit=3))
                 basis = page.selection.scope.displayed
                 kind, proof = "channel", page.selection.scope
             selected = {m.seq for m in page.messages if rng.choice([True, False])}

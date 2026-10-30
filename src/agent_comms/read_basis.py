@@ -1232,7 +1232,7 @@ class MemberActivityDisplayScope(ParticipantActivityDisplayScope):
         return self.registry.tagged_names(self.tags)
 
     def includes_participant(self, name: str) -> bool:
-        return name in self.memberships and self.tags <= self.memberships[name].tags
+        return name in self.memberships and self.memberships[name].carries(self.tags)
 
 
 @dataclass(frozen=True, slots=True)

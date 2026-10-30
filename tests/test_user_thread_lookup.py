@@ -41,9 +41,14 @@ def test_channel_and_dm_history_keep_the_human_as_sender(tmp_path):
     human = comms.registry.user_thread().existing()[0]
     assert channel.sender == direct.sender == human.name
     assert channel.sender_role is direct.sender_role is UserThreadRole
-    channel_page = comms.views.channel_display_page(
-        '#comms', viewer=comms.views.display_viewer(Checkout(tmp_path)))
-    direct_page = comms.views.dm_display_page(ThreadTarget('peer'), worktree=Checkout(tmp_path))
+    channel_page = comms.views.channel_display_view(
+        '#comms',
+        viewer=comms.views.display_viewer(Checkout(tmp_path)),
+    ).page(comms.views.presentation)
+    direct_page = comms.views.dm_display_view(
+        ThreadTarget('peer'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation)
     assert channel.message_id in {message.message_id for message in channel_page.messages}
     assert direct.message_id in {message.message_id for message in direct_page.messages}
     assert all(message.sender == human.name for message in (*channel_page.messages, *direct_page.messages))

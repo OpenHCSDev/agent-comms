@@ -11,7 +11,10 @@ def test_mark_all_after_partial_reads_preserves_next_unread_message(tmp_path):
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     first = comms.messaging.send('alice', '#team', 'already painted').message
     comms.messaging.send('bob', '#team', 'not painted').message
-    page = comms.views.channel_display_page('#team', viewer=NamedViewer(viewer))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(viewer),
+    ).page(comms.views.presentation)
     selection = page.selection
     scope = selection.scope
     page = replace(page, selection=replace(selection, scope=replace(

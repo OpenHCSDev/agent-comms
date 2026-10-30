@@ -82,7 +82,7 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
     delivery = comms.bus.bus.delivery(sent.seq)
     assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
         ("renamed", target.incarnation.require_recorded().lookup)]
-    page = comms.views.dm_display_page(target, worktree=worktree)
+    page = comms.views.dm_display_view(target, worktree=worktree).page(comms.views.presentation)
     assert page.messages == (Message.from_message(original), Message.from_message(sent))
     assert page.selection.basis.peer_identity == target.incarnation
     generic_page = comms.views.history_page(target, viewer=NamedViewer(sent.sender))
@@ -115,7 +115,7 @@ def test_retained_dm_refuses_a_removed_birth_at_every_selection_boundary(tmp_pat
         comms.messaging.send_user_message(target, "must not reach successor", worktree=worktree)
     assert comms.bus.bus.revision() == before
     with pytest.raises(UnregisteredThreadError):
-        comms.views.dm_display_page(target, worktree=worktree)
+        comms.views.dm_display_view(target, worktree=worktree).page(comms.views.presentation)
     with pytest.raises(UnregisteredThreadError):
         DMDisplayHistory.revision(comms.views, target, ConversationObservation(), worktree=worktree)
     with pytest.raises(UnregisteredThreadError):
@@ -150,6 +150,6 @@ def test_dm_page_refuses_replacement_between_registry_capture_and_bus_read(tmp_p
 
     monkeypatch.setattr(ConversationMessagePageRequest, "read_opened", replace_before_read)
     with pytest.raises(DMScopeChanged):
-        comms.views.dm_display_page(target, worktree=worktree)
+        comms.views.dm_display_view(target, worktree=worktree).page(comms.views.presentation)
     assert len(successor_messages) == 1
     assert comms.bus.bus.lookup(successor_messages[0].seq) == successor_messages[0]

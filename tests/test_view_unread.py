@@ -98,7 +98,10 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send("carol", "dave", "hidden old DM").message
     comms.messaging.send("alice", "bob", "painted DM").message
-    painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+    painted = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation)
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
@@ -131,5 +134,7 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         assert child.returncode == 9
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
-        assert [message.seq for message in list(reopened.views.channel_display_page("#team").messages)] == [1, 2]
+        assert [message.seq for message in list(reopened.views.channel_display_view(
+            '#team',
+        ).page(reopened.views.presentation).messages)] == [1, 2]
         assert reopened.views.viewer_snapshot(Checkout(root)).channel_unread["#team"].count == 2

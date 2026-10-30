@@ -17,6 +17,9 @@ class ThreadMembership(ThreadBirthRecord):
 
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
 
+    def carries(self, tags: frozenset[str]) -> bool:
+        return tags <= self.tags
+
     def __post_init__(self) -> None:
         super().__post_init__()
         for tag in self.tags:

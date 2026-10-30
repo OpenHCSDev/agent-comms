@@ -61,12 +61,12 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_bus = comms.bus.bus.page(comms.bus.bus.revision() + 1, 100)
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
-    assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
+    assert bodies(comms.views.channel_display_view("#api").page(comms.views.presentation)) == ["exact target"]
 
     selected = comms.channels.set_channel_any_mode("#api", True)
     assert selected.exact and selected.any_mode
     assert wire(tmp_path).bus.require_channel("#api").any_mode
-    page = comms.views.channel_display_page("#api")
+    page = comms.views.channel_display_view("#api").page(comms.views.presentation)
     assert bodies(page) == [
         "exact target",
         "member to outsider",
@@ -77,12 +77,14 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert len({message.seq for message in page.messages}) == len(page.messages)
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
     assert [message.body for message in list(comms.views.history_page(CommandTarget.named("#api")).messages)] == ["exact target"]
-    assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
+    assert bodies(comms.views.channel_display_view(
+        '#ui',
+    ).page(comms.views.presentation)) == ["unrelated channel"]
     assert comms.bus.bus.page(comms.bus.bus.revision() + 1, 100) == before_bus
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         assert comms.bus.pending_counts_opened(source, basis) == before_delivery
     assert not comms.channels.set_channel_any_mode("api", False).any_mode
-    assert bodies(comms.views.channel_display_page("#api")) == ["exact target"]
+    assert bodies(comms.views.channel_display_view("#api").page(comms.views.presentation)) == ["exact target"]
 
 
 def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(tmp_path):
@@ -102,7 +104,7 @@ def test_mode_rejects_builtins_union_view_and_unknown_without_sidecar_mutation(t
         comms.channels.set_channel_any_mode("#api", 1)
     assert (metadata.read_bytes() if metadata.exists() else None) == before
     with pytest.raises(ValueError):
-        comms.views.channel_display_page("#missing")
+        comms.views.channel_display_view("#missing").page(comms.views.presentation)
 
 
 def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
@@ -114,7 +116,9 @@ def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
     on = comms.views.viewer_snapshot(Checkout(tmp_path)).channels["#api"]
     assert on.last_user_input > 0
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 0
-    assert bodies(comms.views.channel_display_page("#api")) == ["human input to member"]
+    assert bodies(comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation)) == ["human input to member"]
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == []
 
 
@@ -123,19 +127,23 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.messaging.send("alice", "bob", "old sender DM").message.message_id
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.bus.revision()
-    assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
+    assert bodies(comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation)) == ["old sender DM"]
     initial = comms.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert initial["#api"].last_activity > 0
 
     comms.registry.rename("alice", "renamed")
     assert comms.bus.bus.revision() == high_water
-    assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
+    assert bodies(comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation)) == ["old sender DM"]
     renamed = comms.registry.require("renamed")
     comms.registry.register(
         replace(renamed, tags=frozenset({"ui"})), comms.registry.status("renamed")
     )
     assert comms.bus.bus.revision() == high_water
-    assert bodies(comms.views.channel_display_page("#api")) == []
+    assert bodies(comms.views.channel_display_view("#api").page(comms.views.presentation)) == []
     after = comms.views.viewer_snapshot(Checkout(tmp_path)).channels
     assert after["#api"].last_activity < initial["#api"].last_activity
 
@@ -145,7 +153,9 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     assert comms.bus.require_channel("#services").any_mode
     with pytest.raises(ValueError):
         comms.bus.require_channel("#api")
-    assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
+    assert bodies(comms.views.channel_display_view(
+        '#services',
+    ).page(comms.views.presentation)) == ["old sender DM"]
     comms.channels.delete_tag("services")
     metadata = comms.channels.catalog.path
     assert not any(
@@ -181,10 +191,14 @@ def test_page_boundaries_match_target_pager(tmp_path):
     comms.messaging.send("outsider", "#api", "second target").message.message_id
     comms.messaging.send("bob", "alice", "third projected").message.message_id
     comms.channels.set_channel_any_mode("#api", True)
-    rows = comms.views.channel_display_page("#api").messages
-    head = comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 1))
+    rows = comms.views.channel_display_view("#api").page(comms.views.presentation).messages
+    head = comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation, bounds=PageBounds(NewerTraversal(), 1))
     assert head.has_newer and not head.has_older
-    tail = comms.views.channel_display_page("#api", bounds=PageBounds(LiveCursor(rows[-1].seq).older(), 1))
+    tail = comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation, bounds=PageBounds(LiveCursor(rows[-1].seq).older(), 1))
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
 
 
@@ -212,16 +226,25 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     assert started.wait(timeout=3)
     try:
         for _ in range(20):
-            page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+            page = comms.views.channel_display_view(
+                '#api',
+                viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+            ).page(comms.views.presentation)
             if page.newest_seq is not None:
                 comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
-            dm = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
+            dm = comms.views.dm_display_view(
+                ThreadTarget('alice'),
+                worktree=Checkout(tmp_path),
+            ).page(comms.views.presentation)
             assert bodies(dm) == ["DM original"]
             comms.views.mark_page_read(dm, worktree=Checkout(tmp_path))
     finally:
         writer.join(timeout=10)
     assert finished.is_set() and not writer.is_alive() and not failures
-    page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
+    page = comms.views.channel_display_view(
+        '#api',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name),
+    ).page(comms.views.presentation)
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
     with pytest.raises(DMScopeChanged):
@@ -234,5 +257,7 @@ def test_views_answer_how_far_the_bus_has_grown(tmp_path):
     comms.messaging.send("outsider", "#api", "to a channel").message.message_id
     comms.messaging.send("alice", "bob", "to someone else").message.message_id
     # Every message counts, not only those one conversation shows.
-    newest_in_channel = comms.views.channel_display_page("#api").messages[-1].seq
+    newest_in_channel = comms.views.channel_display_view(
+        '#api',
+    ).page(comms.views.presentation).messages[-1].seq
     assert comms.views.latest_sequence() == comms.bus.bus.revision() > newest_in_channel

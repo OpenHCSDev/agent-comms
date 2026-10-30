@@ -79,8 +79,8 @@ class AfterReadBus(Bus, declared_name=None):
         self.changed = False
 
     @contextmanager
-    def reading(self):
-        with super().reading() as source:
+    def reading(self, *, check_same_thread: bool = True):
+        with super().reading(check_same_thread=check_same_thread) as source:
             yield source
         if not self.changed:
             self.changed = True
