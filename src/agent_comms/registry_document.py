@@ -15,6 +15,8 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
+from .channel_targets import CommandersTag
+from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -548,7 +550,12 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
     @abstractmethod
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """Every commander of this bus."""
+
+    @abstractmethod
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered commander that owns the project's board, repositories and orders."""
 
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
@@ -585,6 +592,10 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A bus with no commander project has no commanders, tagged or not."""
+        return ()
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
@@ -608,6 +619,12 @@ class RegisteredCommanderProject(CommanderProject):
     repos: tuple[Repo, ...]
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered lead first, then every thread declared in #commanders."""
+        return tuple(dict.fromkeys((
+            *self.leads(snapshot),
+            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name])))
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
         if not selected:
             raise RelationViolationError("The registered commander thread no longer exists.")

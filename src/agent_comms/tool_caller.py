@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from .bus_publication import AgentOrigin
+from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
@@ -202,12 +203,10 @@ class CommanderPeerCaller(ThreadCaller):
     the declaration, so its verdicts and orders record its own incarnation, never the
     registered commander's."""
 
-    channel = "commanders"
-
     def commanding(self, comms: Comms, commander: str) -> None:
-        if self.channel not in comms.registry.require(self.name).tags:
+        if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
             raise ToolRefusedError(
-                f"{self.name} is not in #{self.channel}; join it to act as a commander.")
+                f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return CommanderPeerAuthority(self.name, commander)
