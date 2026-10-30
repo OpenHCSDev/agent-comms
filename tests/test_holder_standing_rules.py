@@ -19,7 +19,7 @@ from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
+from agent_comms.commander.order import Commander, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander.standing import (
     HeartbeatNotStarted,
@@ -73,6 +73,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    CorrectLinkTodo,
     CorrectMergedLinkTodo,
     MergedLink,
     PullRequestLink,
@@ -506,6 +507,42 @@ def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_o
     assert assigned.held().owner_identity == outsider.incarnation
     assert assigned.order == corrected.order
     assert {name: held_bus.registry.require(name).goal for name in goals} == goals
+
+
+def test_unlink_takes_another_orders_pull_request_off_a_held_order(held_bus, durable_home):
+    """P904: a claim recorded another order's PR on a held order. `order unlink` corrects the
+    order in place while its holder still holds it; only that link leaves, and a later send
+    carries only the links the corrected order keeps."""
+    store = held_bus.goals.todos
+    held = store.get("P1")
+    foreign = PullRequestLink(held.repo, 3566)
+    own = PullRequestLink(RepositoryName.from_wire("OpenHCSDev/toad"), 1319)
+    with store.writing() as connection:
+        replace(held, revision=held.revision + 1, order=replace(
+            held.order.checked(), pull_requests=(foreign, own))).upsert(connection)
+    linked = store.get("P1")
+
+    def unlink(*arguments: str):
+        return commander('--root', str(held_bus.root), 'order', 'unlink', 'P1', *arguments,
+                         '--why', 'a claim recorded P883 work on this order')
+
+    refused = unlink('openhcsdev/agent-comms', '1')
+    assert refused.returncode != 0 and 'does not link' in refused.stdout + refused.stderr
+    assert store.get("P1") == linked
+    run = unlink('openhcsdev/agent-comms', '3566')
+    assert run.returncode == 0, run.stdout + run.stderr
+    corrected = store.get("P1")
+    assert corrected.order.pull_requests == (own,)
+    assert corrected.order.corrections[-1] == CorrectLinkTodo(
+        linked.revision, held_bus.registry.require("lead").incarnation,
+        "a claim recorded P883 work on this order", previous=(foreign, own), link=foreign,
+        at=corrected.order.corrections[-1].at)
+    assert (replace(corrected.order, pull_requests=(), corrections=())
+            == replace(linked.order, pull_requests=(), corrections=()))
+    assert ((corrected.holder, corrected.review_at, corrected.strike_count)
+            == (linked.holder, linked.review_at, linked.strike_count))
+    resent = replace(corrected.order, pull_requests=())
+    assert ListedProblems().carried(resent, ["P1"], {"P1": corrected}).pull_requests == (own,)
 
 
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
