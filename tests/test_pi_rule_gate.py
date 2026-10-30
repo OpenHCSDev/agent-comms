@@ -4,6 +4,7 @@ in full and written the audit, through the same deal the Claude Code hooks judge
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
 
@@ -46,6 +47,21 @@ def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(commander_bus):
         deal.audit.write_text("{}")
         deal.start()
         assert deal.audit.exists()
+
+
+def test_a_retired_package_source_redeals_before_owner_binding(unit_deal):
+    unit_deal.start()
+    old = unit_deal.current()
+    first = old.paths[0]
+    unit_deal.audit.write_text("{}")
+    unit_deal.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
+
+    unit_deal.start()
+
+    assert unit_deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+    assert not unit_deal.audit.exists()
+    with pytest.raises(RulesUnread):
+        unit_deal.judge_tool("bash")
 
 
 def test_every_dealt_file_fits_one_default_read_on_every_backend():
@@ -175,9 +191,6 @@ def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, 
     deal = PiRedeal.of(comms, unit)
     deal.start()
     assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
-
-
-
 
 
 def test_every_refusal_opens_with_why_its_deal_was_dealt(unit_deal):

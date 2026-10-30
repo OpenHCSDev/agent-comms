@@ -27,6 +27,12 @@ type: feedback
 > the follow-up fixes a bug the first PR introduced
 > it is waiting behind the first PR
 > mfw I turned one change into a supply chain
+> run it back
+> branch, push, PR at the first real commit
+> review finds a one-line fix: commit 2, same PR
+> the test: commit 3. the docstring: commit 4
+> one review, one queue run, 40 minutes not spent waiting behind myself
+> mfw the supply chain was `git commit` the whole time
 
 **Why:** the commander writes orders from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; 2026-10-24: "always make a pr before starting to no allow brnches to disappear"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
 

@@ -6,6 +6,7 @@ import os
 import asyncio
 import sys
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -15,7 +16,7 @@ from .errors import RelationViolationError
 from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
-from .field_codec import FieldCodec
+from .field_codec import AcpSessionId, FieldCodec
 from .owner_connection import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequestContext,
@@ -180,7 +181,7 @@ class StartOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopOwnerRuntimeRequest(AttachedResultRuntimeRequest):
+class StopOwnerRuntimeRequest(ResultRuntimeRequest[RuntimeRequestContext]):
     owner: OwnerIdentity
     claim: ClaimedIdentity
 
@@ -192,8 +193,20 @@ class StopOwnerRuntimeRequest(AttachedResultRuntimeRequest):
             raise RelationViolationError("Stop request belongs to another host process")
         return entry.thread
 
-    async def result(self, ctx: AttachedRuntimeRequestContext) -> OwnerRetiredReply:
-        return await ctx.server.agent.inputs.state(ctx.session).retire_for_stop(
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> RuntimeRequestContext:
+        # A failed start reserved an owner but never published an ACP attachment.
+        return RuntimeRequestContext(server, reader, client, self.thread)
+
+    async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
+        agent = ctx.server.agent
+        entry = (await Coordination.run_worker(partial(
+            agent._comms.registry.entry, self.thread,
+        ))).entry
+        owner = self.require_owner(entry)
+        session = next(agent.sessions.owned_sessions(entry), AcpSessionId(owner.name))
+        return await agent.inputs.state(session).retire_for_stop(
             ctx.server.agent.sessions, self)
 
     async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:

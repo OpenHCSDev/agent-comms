@@ -33,6 +33,12 @@ type: feedback
 > for being late at 20:36
 > it read the clock, not the commit
 > mfw the deadline was the only thing late and we were proud of meeting it
+> run it back
+> no due time on the order
+> done at 21:05, pushed at 21:05, diff read when the timer comes up, installed minutes later
+> five fixes ride that install. Tristan's app works half an hour early
+> the clock never struck anyone because nobody asked it anything
+> mfw "on time" was a flex nobody needed
 
 **Why:** a due time is a target the unit hits by the cheapest route, so it ships half-finished work early, and a clock that strikes on its own strikes working units. On 2026-10-20 the deadline watcher struck P331 at 20:36:55 although PR 2351 was pushed at 20:31:45, and the stall watcher struck P358 at 20:38:20 while its unit ran the ordered tests. Tristan, 2026-10-20: "it promotes stalling we should give no deadline to the unit and the commander should keep track regularly like timers for items in a q3 cpma match".
 

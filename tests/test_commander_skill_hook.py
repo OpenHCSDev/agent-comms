@@ -579,6 +579,19 @@ def test_a_parallel_batch_opens_a_batch_of_rules_and_refuses_the_next(capsys, de
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}))
 
 
+def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session):
+    """Every part of a paper is judged before any read of it completes, and none waits on an
+    audit answer, so the whole paper and the first rules read in one call."""
+    transcript, _ = dealt_session
+    papers = CommanderPackage.paper()
+    for part in papers:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part.resolve())}))
+    rules = CommanderReader.rules()
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}))
+
+
 def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
     """On 2026-10-30 a session opened the indictment and two rules first and never read the
     papers: the next dealt file opens, any later one is refused and named the next to read."""
@@ -799,7 +812,8 @@ def test_two_agents_on_one_session_keep_separate_deals(
                                      agent_id="a9"))
 
 
-def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session):
+@pytest.mark.parametrize("retired", [False, True])
+def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session, retired):
     """A resume keeps the context it had: the reads made and the audit written stay, where a
     re-deal on 2026-10-30 unlinked claude-code's audit mid-gate and demanded 23 reads again."""
     transcript = tmp_path / "session.jsonl"
@@ -809,10 +823,13 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     first = start.current().paths[0]
     start.record_read(first, ReadSpan(1, sys.maxsize, sys.maxsize))
     start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    if retired:
+        old = start.current()
+        start.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
     result = session_start(transcript, "resume")
     assert result.returncode == 0, result.stderr
-    assert start.audit.exists()
-    assert start.current().read_by(start) == (first,)
+    assert start.audit.exists() is not retired
+    assert start.current().read_by(start) == (() if retired else (first,))
     assert session_start(transcript, "compact").returncode == 0
     assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
     assert start.current().read_by(start) == ()

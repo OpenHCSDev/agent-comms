@@ -4,7 +4,8 @@ but reading them and writing the audit that answers them is refused until it has
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
 path forward, whatever runs the agent. Reading alone is passive too, so each rule read is answered
-in the audit, by a verbatim greentext quote and what it did, before the next unread file opens.
+in the audit, by a verbatim greentext quote and what it did, before more than `Unengaged.batch`
+rules stand unanswered; a paper carries no rule, so all its parts open in one batch.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -68,11 +69,19 @@ class DealtSource:
     @classmethod
     def of(cls, path: Path) -> DealtSource:
         """The installed package file this path names, under this runtime or an earlier one."""
+        source = cls.find(path)
+        if source is None:
+            raise ValueError(f"{path} names no file of an installed package")
+        return source
+
+    @classmethod
+    def find(cls, path: Path) -> DealtSource | None:
+        """The current installed source, or none when its package no longer supplies it."""
         for index, name in enumerate(path.parts[:-1]):
             source = cls(name, PurePosixPath(*path.parts[index + 1:]).as_posix())
             if name.isidentifier() and source.installed():
                 return source
-        raise ValueError(f"{path} names no file of an installed package")
+        return None
 
     def installed(self) -> bool:
         spec = find_spec(self.package)
@@ -741,11 +750,19 @@ class RuleDeal(State):
             return calls.tell()
 
     def current(self) -> DealRecord:
-        """The deal this session holds; the record is its one declaration."""
+        """Keep a deal while its sources exist; a retired source requires a fresh deal.
+
+        Installation can move or remove packaged files without losing native context. The
+        old list then cannot be answered: startup must use the backend's current deck, not
+        crash while resolving the old list or silently waive the unread replacement.
+        """
         try:
-            return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            record = FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            if all(DealtSource.find(path) is not None for path in record.dealt):
+                return record
         except FileNotFoundError:
-            return UndealtRecord((), AuditDue(frozenset(), ()))
+            pass
+        return UndealtRecord((), AuditDue(frozenset(), ()))
 
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
@@ -824,7 +841,7 @@ class ToolGate(RuleDeal):
 
 
 class AnswersDealtRules(ToolGate, owes=(Unengaged,)):
-    """Each rule read is answered in the audit before the next unread file opens."""
+    """Each rule read is answered in the audit; at most `Unengaged.batch` stand unanswered."""
 
 
 class ReadsDealtSources(ToolGate, owes=(Unread,)):
@@ -836,7 +853,7 @@ class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
 
 
 class DealtRuleGate(AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
-    """Read a file, answer it, read the next, then finish the audit: the gate every backend runs."""
+    """Read a batch, answer it, read the next, then finish the audit: the gate every backend runs."""
 
 
 @dataclass(frozen=True)
