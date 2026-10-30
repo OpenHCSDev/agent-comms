@@ -88,11 +88,12 @@ class HistoryView(ABC):
         unchanged, and retires it off the UI thread when that source is replaced.
         """
         with presentation.reading(self.viewer) as captured:
-            yield partial(self.page, captured)
+            history = captured.bus.history.captured()
+            yield partial(history.integrated_page, self, captured)
 
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        with presentation.reading(self.viewer) as captured:
-            return captured.bus.history.integrated_page(self, captured, bounds)
+        with self.reading(presentation) as read:
+            return read(bounds)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
@@ -478,14 +479,29 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         with self.read_sources() as sources:
             return sources
 
+    def captured(self) -> CapturedHistoryArchive:
+        """Retain the catalogue and its revision from the same original descriptor."""
+        document = self._capture_unlocked()
+        return CapturedHistoryArchive(
+            self.path, self.read_copied(document), document.revision,
+        )
+
+    @property
+    def history_revision(self) -> FileObservation:
+        return self.captured().catalogue_revision
+
+    @contextmanager
+    def reading(self) -> Iterator[CapturedHistoryArchive]:
+        """Validate a page's original catalogue before and after using it."""
+        captured = self.captured()
+        self._require_revision(captured.catalogue_revision)
+        yield captured
+        self._require_revision(captured.catalogue_revision)
+
     @contextmanager
     def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
-        """Decode one read's catalogue; reject changes without decoding it again."""
-        captured = self._capture_unlocked()
-        sources = self.read_copied(captured)
-        self._require_revision(captured.revision)
-        yield sources
-        self._require_revision(captured.revision)
+        with self.reading() as captured:
+            yield captured.sources()
 
     def _require_revision(self, revision: FileObservation) -> None:
         if FileRevision.capture(self.path) != revision:
@@ -565,12 +581,16 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
     def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
+        with self.reading() as captured:
+            return captured._integrated_page(view, presentation, bounds)
+
+    def _integrated_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
         page = self._source_page(view, presentation, bounds)
         pages = deque((page,))
         while (following := bounds.after(page)) is not None:
             part = self._source_page(view, presentation, following)
-            if part.selection.history_revision != page.selection.history_revision:
-                raise HistoricalSourceChanged("Historical sources changed; reload history")
             if not bounds.fits(len(page.messages) + len(part.messages)):
                 break
             bounds.traversal.append(pages, part)
@@ -580,10 +600,15 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
     def _source_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
+        page = self._select_source_page(view, presentation, bounds)
+        return replace(page, selection=replace(
+            page.selection, history_revision=self.history_revision,
+        ))
+
+    def _select_source_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
         historical = bounds.traversal.historical
-        if not self.sources() and not historical:
-            return view.live_page(presentation, bounds)
-        history_revision = FileRevision.capture(self.path)
         def historical_page() -> MessagePage:
             history = self.page(
                 view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
@@ -592,27 +617,21 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                 latest = view.live_page(presentation, PageBounds(limit=1))
                 return replace(
                     history,
-                    selection=replace(history.selection, history_revision=history_revision),
                     has_newer=history.has_newer or bool(latest.messages),
                 )
             selected = history if historical else page
-            result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))
             if historical:
                 return bounds.traversal.after_exhausted_history(
                     lambda traversal: view.live_page(presentation, replace(bounds, traversal=traversal)),
-                    result,
+                    selected,
                 )
-            return result
+            return selected
 
         if historical:
             return historical_page()
         page = view.live_page(presentation, bounds)
         return bounds.traversal.source_page(
-            replace(
-                page,
-                has_older=page.has_older or bool(self.sources()),
-                selection=replace(page.selection, history_revision=history_revision),
-            ),
+            replace(page, has_older=page.has_older or bool(self.sources())),
             historical_page,
         )
 
@@ -624,3 +643,17 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                           for thread in source.provenance.threads.values()
                           if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
         return tuple(result)
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedHistoryArchive(HistoryArchive, declared_name=None):
+    """One reading's immutable catalogue; page logic remains on HistoryArchive."""
+
+    captured_sources: tuple[HistorySource, ...]
+    catalogue_revision: FileObservation
+
+    def captured(self) -> CapturedHistoryArchive:
+        return self
+
+    def sources(self) -> tuple[HistorySource, ...]:
+        return self.captured_sources

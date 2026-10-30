@@ -57,6 +57,39 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
     assert not archive.path.exists()
 
 
+@pytest.mark.parametrize('exists', [False, True])
+def test_captured_catalogue_refuses_later_creation_or_replacement(tmp_path, exists):
+    archive = HistoryArchive.at(tmp_path)
+    if exists:
+        archive.path.write_text('[]')
+    captured = archive.captured()
+    with captured.read_sources() as sources:
+        assert sources == ()
+    archive.path.write_text('[ ]')
+    with pytest.raises(HistoricalSourceChanged):
+        with captured.read_sources():
+            pass
+    with archive.read_sources() as sources:
+        assert sources == ()
+
+
+def test_held_display_reading_rejects_later_archive_without_bus_growth(migrated, tmp_path):
+    _, _, live, _ = migrated
+    with live.views.channel_display_reading('#team', viewer=NamedViewer('alice')) as read:
+        first = read(PageBounds(limit=1))
+        revision = live.bus.bus.revision()
+        later = setup(tmp_path / 'later', 1)
+        live.views.attach_history(later.root)
+        assert live.bus.bus.revision() == revision
+        with pytest.raises(HistoricalSourceChanged):
+            read(PageBounds(first.oldest_cursor.older(), 1))
+    # Retiring the old reading is harmless; a new reading adopts the catalogue.
+    fresh = live.views.channel_display_page(
+        '#team', viewer=NamedViewer('alice'), bounds=PageBounds(limit=1),
+    )
+    assert fresh.selection.history_revision != first.selection.history_revision
+
+
 def setup(root, count=5):
     comms = wire(root)
     comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
