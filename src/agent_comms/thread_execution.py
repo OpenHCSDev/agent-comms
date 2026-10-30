@@ -258,7 +258,7 @@ class CommanderForkExecution(SubagentExecution):
 
     @classmethod
     def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A fork answers through CommanderReceipts on its commander's records."""
+        """A fork answers on its commander's records, so a channel never reaches it directly."""
         return ()
 
     @classmethod
