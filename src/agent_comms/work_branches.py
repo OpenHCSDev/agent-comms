@@ -343,8 +343,8 @@ class PublishedUpstream(TrackedUpstream):
     def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
         published = reader.selected_heads(self.remote, self.reference)
         if published:
-            (remote_head,) = published
-            count = int(reader._git("rev-list", "--count", f"{remote_head}..{head}"))
+            # Ahead of the upstream is not unpushed: only a commit on no remote exists only locally.
+            count = int(reader._git("rev-list", "--count", head, "--not", "--remotes"))
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(reader, head)
 
