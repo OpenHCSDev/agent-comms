@@ -45,8 +45,3 @@ class FrozenRecipientIdentity(ParticipantIdentity):
     @property
     def lookup(self) -> ThreadLookup:
         return self.recipient_lookup
-
-    def same_identity(self, other: FrozenRecipientIdentity) -> bool:
-        """Bus writers and detached readers name the same send-time participant."""
-        return (self.recipient_lookup == other.recipient_lookup
-                and self.canonical_thread == other.canonical_thread)

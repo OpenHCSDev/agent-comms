@@ -19,6 +19,7 @@ from .agent_activity import (
     RecordedRecipientActivity,
 )
 from .participant_identity import FrozenRecipientIdentity
+from .audience_manifest import FrozenRecipient
 from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -315,7 +316,7 @@ class MessageNotification:
             return CapturedNotificationWindow({}, ())
         peer = CommandTarget.named(message.target).direct_peer(snapshot)
         for target in () if peer is None else peer.role.human(peer):
-            recipient = FrozenRecipientIdentity(target.incarnation.lookup, target.name)
+            recipient = FrozenRecipient(target.incarnation.lookup, target.name)
             displayed_to = reads.displayed_recipient(
                 source, recipient, snapshot, document=document
             )
