@@ -281,8 +281,7 @@ class GoalScheduler:
             thread_name = self.sessions.require(session_id)
             request = (GoalRefresh() if execution_changed else
                        DeclaredGoalRefresh(document.entry(thread_name).thread.goal))
-            if request.needed(self.publication(session_id).snapshot):
-                publications.append(self.effects._runtime.background(
-                    self.sync_goal_execution(session_id, request)))
+            publications.append(self.effects._runtime.background(
+                self.sync_goal_execution(session_id, request)))
         # An independent session's failed projection must not cancel its peers.
         await asyncio.gather(*publications, return_exceptions=True)

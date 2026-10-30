@@ -136,7 +136,7 @@ class OwnerConnection:
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self.session_id, parameters)
 
-    def __init__(self, comms: Comms, session_id: str, path: Path):
+    def __init__(self, comms: Comms, session_id: AcpSessionId, path: Path):
         self.session_id = session_id
         self.path = path
         self._comms = comms

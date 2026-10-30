@@ -513,7 +513,7 @@ class RuntimeProxy(RuntimeConnection):
             "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
         })
         await client.publish_update(
-            session_id=notification.session_id, update=notification.update
+            session_id=self.session_id, update=notification.update
         )
 
     def ask(self, request: OwnerPermissionRequest) -> None:

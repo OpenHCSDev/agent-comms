@@ -259,7 +259,7 @@ class SessionLifecycle:
         session_id = AcpSessionId(thread.name)
         state = await self.bind_owner(
             thread, session_id, ConfigOptions(launch, self.comms.route), owner)
-        self.effects.inputs.ensure_live_drain(str(session_id))
+        self.effects.inputs.ensure_live_drain(session_id)
         key = selected.take_startup_input(launch.environment)
         if key:
             self.runtime.background(self.run_startup_input(state, InputKeyText.decode(key)))
