@@ -868,8 +868,6 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
-# typing evaluates class annotations with the class namespace as globals, so a
-# lambda written inside one cannot see this module; named functions can.
 def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 

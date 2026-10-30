@@ -33,7 +33,6 @@ from typing import (
     cast,
     get_args,
     get_origin,
-    get_type_hints,
     overload,
 )
 from uuid import uuid4
@@ -1761,7 +1760,7 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 
     @classmethod
     def _json_shape(cls) -> tuple[type, object]:
-        hints = {name: hint for name, hint in get_type_hints(cls, include_extras=True).items()
+        hints = {name: hint for name, hint in FieldCodec._types(cls).items()
                  if hint is not ClassVar and get_origin(hint) is not ClassVar}
         if tuple(hints) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
@@ -2451,7 +2450,14 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     @cache
     def _types(declaration: type) -> dict[str, object]:
-        return get_type_hints(declaration, include_extras=True)
+        """Every field annotation a declaration has, each evaluated in the module that wrote it:
+        get_type_hints swaps a class's dict in as the eval globals, so a lambda in an annotation
+        could not see its own module (WireRevision.goal_execution, 2026-10-30)."""
+        return {
+            name: type(None) if hint is None else hint
+            for base in reversed(declaration.__mro__)
+            for name, hint in inspect.get_annotations(base, eval_str=True).items()
+        }
 
     @overload
     @classmethod
@@ -2615,7 +2621,7 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     @cache
     def field_types(target: type[DataclassInstance]) -> tuple[tuple[str, type[object]], ...]:
-        hints = get_type_hints(target, include_extras=True)
+        hints = FieldCodec._types(target)
         return tuple((item.name, hints[item.name]) for item in fields(target) if item.init)
 
     @staticmethod
