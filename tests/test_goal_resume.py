@@ -162,6 +162,39 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
     assert store.snapshot(goal_goal_id).attempt_id == reservation.attempt_id
 
 
+def test_authorized_retry_does_not_consume_standby_report(comms, monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
+    for name in ("owner", "dependency"):
+        comms.registry.declare(Thread(
+            name, frozenset(), Checkout(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
+    started = invoke_tool(comms, "comms_set_goal", {"text": "finish after recovery"})["goal"]
+    goal_id = FieldCodec.decode(GoalId, started["id"])
+    store = comms.goals.open_goal_store()
+    generation = store.require_generation(goal_id)
+    store.reserve(goal_id, generation.number).fail(store, FailedTurnResolution(BackendFailed))
+    turn = TurnId.mint()
+    comms.agents.begin_turn("owner", turn)
+    before = comms.registry.require("owner").goal.reported_turn
+
+    invoke_tool(comms, "comms_goal", {
+        "goal_id": started["id"], "status": "retry", "progress": "cause fixed",
+    })
+    assert comms.registry.require("owner").goal.reported_turn == before
+    result = invoke_tool(comms, "comms_goal", {
+        "goal_id": started["id"], "status": "standby", "wait_for": ["dependency"],
+        "progress": "waiting for dependency",
+    })
+    assert result["goal"]["progress"] == "waiting for dependency"
+    reopened = wire(comms.root)
+    assert reopened.registry.require("owner").goal.reports_turn(ReportedTurn(turn))
+    with pytest.raises(ValueError, match="already reported"):
+        invoke_tool(reopened, "comms_goal", {
+            "goal_id": started["id"], "status": "active", "progress": "duplicate",
+        })
+
+
 def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
     started = _goal(comms, monkeypatch)
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
