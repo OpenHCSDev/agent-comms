@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms_project import AgentCommsProject
-from agent_comms.pinned_audit import audit
+from nominal_refactor_advisor import audit
 
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_verbs.stop import StopCliCommand
