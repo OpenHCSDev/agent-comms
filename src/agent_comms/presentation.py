@@ -548,7 +548,7 @@ class BusPresentation:
             try:
                 yield captured
             finally:
-                with captured.use:
+                with captured.reading(viewer):
                     lifetime.close()
 
     def roster(
@@ -620,11 +620,11 @@ class CapturedBusPresentation(BusPresentation):
         super().__init__(original.bus, original.registry, original.catalog,
                          original.agents, original.goals)
         self.basis, self.source = basis, source
-        self.use = RLock()
+        self._use = RLock()
 
     @contextmanager
     def snapshot(self, viewer: DisplayViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
-        with self.use:
+        with self._use:
             if viewer.resolve(self.basis.registry) != self.basis.viewer:
                 raise ValueError("A captured display cut belongs to its original viewer")
             yield self.basis, self.source
