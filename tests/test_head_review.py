@@ -416,6 +416,25 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == todo.id
 
 
+def test_a_reviewing_mark_on_an_unclaimed_linked_order_is_recorded(head_bus):
+    """Every order that takes ok or back on its linked head also takes the reviewing mark."""
+    comms, _, request = head_bus
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    todo = comms.goals.todos.get(todo.id)
+    scope = OrderHeadReview.for_request(
+        (todo,), request, lambda linked: UnquotedHeadReview.of(linked, ()))
+    invoke(comms, request, UnderReviewHeadVerdict(), scope)
+    changed = comms.goals.todos.get(todo.id)
+    assert changed.order == todo.order
+    assert changed.revision == todo.revision + 1
+    review, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert type(review.verdict) is UnderReviewHeadVerdict
+    assert review.order.problem == todo.id
+
+
 def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_file(
         head_bus, reviewed_source):
     comms, github, _ = head_bus
