@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import signal
+import socket
 import subprocess
 import sys
 import threading
@@ -124,3 +125,22 @@ class HeldGitHTTP(ThreadingHTTPServer):
                 worker.join(timeout=5)
                 if worker.is_alive():
                     raise TimeoutError("Private HTTP server did not retire")
+
+
+@contextmanager
+def held_commit(hooks: Path) -> Iterator[socket.socket]:
+    """The actual Git hook announces entry, then waits on a bounded socket read."""
+    with socket.socket() as gate:
+        gate.settimeout(10)
+        gate.bind(("127.0.0.1", 0))
+        gate.listen(1)
+        hook = hooks / "pre-commit"
+        hook.write_text(
+            f"#!{sys.executable}\nimport socket\n"
+            f"with socket.create_connection({gate.getsockname()!r}, timeout=10) as gate:\n"
+            "    gate.sendall(b'ready')\n"
+            "    with gate.makefile('rb') as response:\n"
+            "        if response.read(2) != b'go': raise RuntimeError('Commit control closed')\n"
+        )
+        hook.chmod(0o755)
+        yield gate

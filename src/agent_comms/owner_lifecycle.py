@@ -35,7 +35,7 @@ from .launch_root import LaunchRoot
 from .input_key import AcpInputKey, InputKey
 from .field_codec import InputId
 from .input_disposition import InputDispositions
-from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import (
@@ -436,12 +436,6 @@ class OwnerLifecycle:
         ) as owner:
             return owner
 
-    def start(
-        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
-        agent_args: LaunchArguments = InheritedArguments(),
-    ) -> OwnerStartResult:
-        return self.start_many((name,), agent_bin=agent_bin, agent_args=agent_args)[0]
-
     def start_many(
         self, names: Sequence[str], *, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
@@ -582,12 +576,12 @@ class OwnerLifecycle:
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str] = INHERITED_ENVIRONMENT,
     ) -> Iterator[Thread]:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
         RecoveryMonitorCapability.recover_owners(self, (thread,))
-        env = dict(os.environ if environment is None else environment)
+        env = dict(environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)

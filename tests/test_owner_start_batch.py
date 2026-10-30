@@ -61,6 +61,6 @@ def test_later_selection_failure_joins_the_already_dispatched_start(
         # join its attachment, not close the reply pipe or roll it back.
         launch = attached_launch(comms, "first")
         assert launch.process == comms.registry.require("first").require_process()
-        assert not comms.owners.start("first").launched
+        assert not comms.owners.start_many(("first",))[0].launched
     finally:
         comms.owners.stop("first")
