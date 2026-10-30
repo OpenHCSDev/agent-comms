@@ -306,6 +306,15 @@ class SessionSource(str):
         return StartReason.member_or_default(self, LostContext)()
 
 
+class UnboundPrime(Exception):
+    """/prime asked of a session no bus thread holds: no gate holds a deal for it, so it is
+    refused out loud instead of printing nothing."""
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(f"session {session_id} is bound to no bus thread, so there is no gate "
+                         "to deal it; bind it to the bus first")
+
+
 @dataclass(frozen=True)
 class DeckStart(DealtDeck):
     """A session start, resume or compaction: the deal, its order and the deck."""
@@ -331,8 +340,11 @@ class DeckStart(DealtDeck):
         """The owner's /prime: a fresh deal of the variant's reader for this session's role,
         whatever its context holds, through the same gate as a compaction."""
         return WatchClaim(self.session_id).state().by_role(
-            unbound=tuple, fleet=lambda record: self.dealt(prime.fleet()),
+            unbound=self.refuse_unbound, fleet=lambda record: self.dealt(prime.fleet()),
             commander=lambda record: self.dealt(prime.commander()))
+
+    def refuse_unbound(self) -> tuple[str, ...]:
+        raise UnboundPrime(self.session_id)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path."""

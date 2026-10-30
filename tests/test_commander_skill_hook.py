@@ -48,7 +48,8 @@ from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader, Prime
+from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
+                                     Prime, UnboundPrime)
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
@@ -451,6 +452,17 @@ def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indic
             assert prime.commander.leading()[-1] == indictment
         assert prime.commander.slices() and prime.fleet.slices()
     assert kept == {(True, True), (True, False), (False, True), (False, False)}
+
+
+def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode({"hook_event_name": "SessionStart", "session_id": "loose",
+                              "transcript_path": str(transcript)})
+    with pytest.raises(UnboundPrime, match="loose"):
+        start.primed(FullPrime)
+    assert not transcript.with_suffix(".deal.json").exists()
 
 
 def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):

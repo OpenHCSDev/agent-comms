@@ -9,7 +9,8 @@ Tristan calls /prime when a session has drifted back to its own frame. It is a f
 
 1. Run in Bash, choosing the variant he named (default `full`):
    `agent-comms-prime --variant full|no-papers|no-indictment|light`
-   - `full`: the papers, every rule, and for a commander the indictment and its closing rule. The same deal as a compaction.
+   - `full`: the papers, every rule, and for a commander the indictment. The same deal as a compaction.
+   Every variant keeps every rule, including the closing rules dealt last.
    - `no-papers`: the rules without the papers, for when the papers are still in context.
    - `no-indictment`: the papers and rules without the indictment.
    - `light`: the rules alone. Use it mid-context so the window doesn't fill.
