@@ -337,63 +337,64 @@ class ThreadRow(DeclaredWireType):
             raise MalformedRecord("thread row must be an object")
         return cls(MappingProxyType(raw), ThreadRows.unbound)
 
-    @classmethod
-    def from_thread(cls, thread: Thread, binding: Callable[[Thread], Thread]) -> Self:
-        row = cls.from_wire(thread.to_wire()).bound(binding)
-        row.__dict__[cls.decoded.func.__name__] = binding(thread)
-        return row
+    @staticmethod
+    def from_thread(
+        thread: Thread, binding: Callable[[Thread], Thread],
+    ) -> WrittenThreadRow:
+        return WrittenThreadRow(MappingProxyType(thread.to_wire()), binding, thread)
 
     def bound(self, binding: Callable[[Thread], Thread]) -> Self:
-        if self.binding == binding:
-            return self
-        row = replace(self, binding=binding)
-        decoded = type(self).decoded.func.__name__
-        if decoded in self.__dict__:
-            row.__dict__[decoded] = binding(self.decoded)
-        return row
+        return replace(self, binding=binding)
 
     def to_wire(self) -> dict[str, JsonValue]:
         return dict(self.raw)
 
     def __reduce__(self) -> tuple[
-        Callable[[object], Self], tuple[dict[str, JsonValue]],
+        Callable[[object], ThreadRow], tuple[dict[str, JsonValue]],
         dict[str, Callable[[Thread], Thread]],
     ]:
-        # The wire stays portable; pickle also retains this cut's physical binding.
-        return type(self).from_wire, (self.to_wire(),), {"binding": self.binding}
+        # Pickle restores a lazy wire row, retaining this cut's physical binding.
+        return ThreadRow.from_wire, (self.to_wire(),), {"binding": self.binding}
 
     @cached_property
     def birth_record(self) -> ThreadBirthRecord:
         return FieldCodec.project_record(ThreadBirthRecord, dict(self.raw), source=Thread)
 
     @cached_property
-    def captured_birth(self) -> Mapping[str, object]:
-        return MappingProxyType({entry.name: entry.current(self.birth_record)
-                                 for entry in FieldCodec.field_plans(ThreadBirthRecord)
-                                 if entry.records})
-
-    @cached_property
     def membership(self) -> ThreadMembership:
         return FieldCodec.project_record(
-            ThreadMembership, dict(self.raw), source=Thread, decoded_fields=self.captured_birth,
+            ThreadMembership, dict(self.raw), source=Thread,
+            decoded_fields=FieldCodec.recorded_fields(self.birth_record),
         )
 
     @cached_property
     def goal_owner(self) -> GoalOwner:
         return FieldCodec.project_record(
-            GoalOwner, dict(self.raw), source=Thread, decoded_fields=self.captured_birth,
+            GoalOwner, dict(self.raw), source=Thread,
+            decoded_fields=FieldCodec.recorded_fields(self.birth_record),
         )
 
     @cached_property
     def decoded(self) -> Thread:
         try:
-            owner = self.goal_owner
-            values = {entry.name: entry.current(owner)
-                      for entry in FieldCodec.field_plans(GoalOwner) if entry.records}
-            thread = FieldCodec.decode_record(Thread, dict(self.raw), decoded_fields=values)
+            thread = FieldCodec.decode_record(
+                Thread, dict(self.raw),
+                decoded_fields=FieldCodec.recorded_fields(self.goal_owner),
+            )
         except ValueError as error:
             raise InvalidRegistryDocument(error) from error
         return self.binding(thread)
+
+
+@dataclass(frozen=True)
+class WrittenThreadRow(ThreadRow):
+    """An assigned row already holds its full Thread; no wire decode supplies it."""
+
+    thread: Annotated[Thread, WireTransient()]
+
+    @cached_property
+    def decoded(self) -> Thread:
+        return self.binding(self.thread)
 
 
 class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
@@ -408,6 +409,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         return thread
 
     def bind(self, binding: Callable[[Thread], Thread]) -> None:
+        if self._binding == binding:
+            return
         self._binding = binding
         self._rows = {name: row.bound(binding) for name, row in self._rows.items()}
 

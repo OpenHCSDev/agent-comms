@@ -2555,6 +2555,12 @@ class FieldCodec(MroDispatch, Sealed):
             data, {}, field_types=field_types, decoded_fields=decoded_fields))
 
     @classmethod
+    def recorded_fields(cls, record: object) -> dict[str, object]:
+        """Already-decoded values supplied by this record's stored-field declarations."""
+        return {entry.name: entry.current(record)
+                for entry in cls.field_plans(type(record)) if entry.records}
+
+    @classmethod
     def project_record(
         cls, target: type[T], data: object, *, source: type,
         decoded_fields: Mapping[str, object] = types.MappingProxyType({}),

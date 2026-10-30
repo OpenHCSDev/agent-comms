@@ -171,6 +171,10 @@ class RegistryNames(Generic[Member]):
             return DeletedThread(canonical)
         raise UnregisteredThreadError(f"Thread {canonical!r} was never registered.")
 
+    def registered(self, name: str) -> bool:
+        """Current membership, including retained aliases, without acquiring a Thread."""
+        return self.canonical_name(name) in self.threads
+
     def require_canonical(self, name: str) -> str:
         canonical = self.canonical_name(name)
         if canonical not in self.threads:

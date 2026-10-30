@@ -229,10 +229,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return snapshot.incarnation(self.name)
 
     def current(self, snapshot: RegistryProvenance) -> bool:
-        try:
-            return snapshot.incarnation(self.name) == self
-        except UnregisteredThreadError:
-            return False
+        return snapshot.registered(self.name) and snapshot.incarnation(self.name) == self
 
     def recorded_or(
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
@@ -270,10 +267,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         The registry owns aliases and birth. A stored name does not supply or
         manufacture either fact, including after a name is reused.
         """
-        try:
-            return self.resolved(snapshot) == snapshot.incarnation(name)
-        except UnregisteredThreadError:
-            return False
+        return snapshot.registered(name) and self.resolved(snapshot) == snapshot.incarnation(name)
 
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
