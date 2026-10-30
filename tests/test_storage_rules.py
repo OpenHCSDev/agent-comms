@@ -151,6 +151,21 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
+def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(checkout_comms: Comms):
+    """unit-fieldplan is registered at $HOME: its audit path, which the rule gate requires, sat
+    inside its project and was refused as source it does not hold, so nothing could run."""
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    above = rule.scratch_base.parent
+    thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
+    projection = StorageProjection(rule, thread, comms)
+    projection.require_write(rule.roots_of(thread).scratch / 'compaction-deal.audit.json')
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(above / 'notes.txt')
+    with pytest.raises(StorageDenied, match='foreign scratch'):
+        projection.require_write(rule.scratch_base / 'worker' / 'notes.txt')
+
+
 def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
     comms = checkout_comms
     rule = comms.registry.storage_rule
