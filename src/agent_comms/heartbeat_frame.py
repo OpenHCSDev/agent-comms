@@ -94,7 +94,8 @@ class HeartbeatFrame(CommanderInputs):
                 comms.root, self.live, self.pulls.progress(self.todos, comms.registry),
                 self.workplaces):
             if read.todo.id not in self._edit_counts:
-                self._edit_counts[read.todo.id] = read.from_turns(self.turns_for(comms, read.thread))
+                self._edit_counts[read.todo.id] = read.from_turns(
+                    self.turns_for(comms, read.thread))
         for todo in self.todos:
             self._edit_counts.setdefault(todo.id, 0)
         return self._edit_counts

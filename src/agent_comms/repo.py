@@ -9,7 +9,7 @@ import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -25,6 +25,7 @@ from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .todos import Todo
+    from .work_branches import WorkBranches
 
 
 class RepositorySelection(ABC):
@@ -601,20 +602,114 @@ class Checkout(SingleFieldValue, PresentMember):
 
 
 @dataclass(frozen=True)
+class UnpushedHead:
+    head: str
+    commits: int = field(compare=False)
+    upstream: str = field(compare=False)
+
+
+@dataclass(frozen=True)
+class BranchUpstream(DeclaredFamily):
+    """Git's upstream decoded once; each member owns acquisition and publication answers."""
+
+    branch: str
+    prefix: ClassVar[str] = "refs/heads/"
+
+    @classmethod
+    def from_git(cls, name: str, upstream: str, remote: str, reference: str) -> BranchUpstream:
+        """Decode foreign for-each-ref fields before the reference enters our family."""
+        branch = name.removeprefix(cls.prefix)
+        if not upstream:
+            return NoUpstream(branch)
+        if remote == Repo.local_remote:
+            return LocalUpstream(branch, upstream)
+        return PublishedUpstream(branch, upstream, remote, reference)
+
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        """Only published upstreams supply remote/reference acquisition requirements."""
+        return ()
+
+    def require_prepared(self, reader: WorkBranches) -> None:
+        """An absent or local upstream requires no published remote head."""
+
+    def tracking_name(self) -> str:
+        return ""
+
+    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
+        # A local, absent or deleted upstream cannot make its stale tracking ref publication.
+        tracking = self.tracking_name()
+        count = reader.history.unpublished(head, tracking)
+        return (UnpushedHead(head, count, tracking),) if count else ()
+
+
+class NoUpstream(BranchUpstream):
+    """This local branch declares no upstream."""
+
+
+class DetachedHead(BranchUpstream):
+    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
+
+
+@dataclass(frozen=True)
+class TrackedUpstream(BranchUpstream, declared_name=None):
+    tracking: str
+
+    def tracking_name(self) -> str:
+        return self.tracking
+
+
+class LocalUpstream(TrackedUpstream):
+    """Git's dot remote names another local branch, never a publication."""
+
+
+@dataclass(frozen=True)
+class PublishedUpstream(TrackedUpstream):
+    remote: str
+    reference: str
+
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.remote, self.reference),)
+
+    def require_prepared(self, reader: WorkBranches) -> None:
+        for head in reader.selected_heads(self.remote, self.reference):
+            reader.history.commit(head)
+
+    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
+        published = reader.selected_heads(self.remote, self.reference)
+        if published:
+            (remote_head,) = published
+            count = reader.history.count(head, remote_head)
+            return (UnpushedHead(head, count, self.tracking),) if count else ()
+        return super().unpushed(reader, head)
+
+
+@dataclass(frozen=True)
 class GitReference:
-    """One ref, including HEAD's symbolic target and a local branch's upstream."""
+    """A repository ref; local branch members additionally own their decoded upstream."""
 
     name: str
     commit: Annotated[str, GitCommitText]
-    symbolic: str
-    upstream: str
-    remote: str
-    remote_ref: str
 
     @classmethod
     def listed(cls, row: str) -> GitReference:
-        name, commit, symbolic, upstream, remote, remote_ref = row.split("\0")
-        return cls(name, GitCommitText.decode(commit), symbolic, upstream, remote, remote_ref)
+        name, commit, upstream, remote, remote_ref = row.split("\0")
+        sha = GitCommitText.decode(commit)
+        if name.startswith(BranchUpstream.prefix):
+            return LocalGitReference(
+                name, sha, BranchUpstream.from_git(name, upstream, remote, remote_ref),
+            )
+        return cls(name, sha)
+
+    def upstreams(self) -> tuple[BranchUpstream, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class LocalGitReference(GitReference):
+    upstream: BranchUpstream
+
+    def upstreams(self) -> tuple[BranchUpstream, ...]:
+        return (self.upstream,)
 
 
 @dataclass(frozen=True)
@@ -750,7 +845,7 @@ class CheckoutHistory:
     def refs(self) -> dict[str, GitReference]:
         return {reference.name: reference for reference in map(GitReference.listed, Repo.git(
             self.checkout.common_dir, "for-each-ref",
-            "--format=%(refname)%00%(objectname)%00%(symref)%00%(upstream)"
+            "--format=%(refname)%00%(objectname)%00%(upstream)"
             "%00%(upstream:remotename)%00%(upstream:remoteref)",
             "refs/heads/", "refs/remotes/",
         ).splitlines())}
