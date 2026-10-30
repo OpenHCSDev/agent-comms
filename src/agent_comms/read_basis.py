@@ -6,10 +6,11 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 """
 
 from __future__ import annotations
+
 from agent_comms.repo import Checkout
 
 from .bus_tables import AwaitingAnswerSource
-from .messages import MessageInput
+from .messages import BusRecord, MessageInput
 
 from .class_fact import ClassFact
 import asyncio
@@ -28,13 +29,14 @@ from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion, WireTransient
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_membership import ThreadMembership
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -728,16 +730,28 @@ class DMDisplayBasis:
         Fetching is not paint proof. A UI may use the basis only after proving
         that the corresponding inbound tail was contiguous and visibly painted.
         """
-        snapshot = registry.snapshot()
-        viewer_name = snapshot.canonical_name(viewer.name)
+        with bus.snapshot(NamedViewer(viewer.name)) as (selection, source):
+            return cls.fetch_captured(
+                bus, registry, root, peer, selection, source,
+                worktree=worktree, bounds=bounds,
+            )
+
+    @classmethod
+    def fetch_captured(
+        cls, bus: MessageBus, registry: Registration, root: Path,
+        peer: ThreadTarget, selection: CapturedSelection, source: BusSnapshot,
+        *, worktree: Checkout, bounds: PageBounds,
+    ) -> MessagePage:
+        """Build each DM page from the page source's original identity/read cut."""
+        snapshot = selection.registry
+        viewer_name = selection.require_viewer()
         peer_name = peer.selected_name(snapshot)
         scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
         viewer_thread = snapshot.threads[viewer_name]
         peer_thread = snapshot.participant(peer_name)
         viewer_names, peer_names = scope.first_names, scope.second_names
-        document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
         result = bounds.conversation(scope).displayed(
-            bus.reads, document, viewer_name, snapshot, snapshot, bus.bus,
+            selection.reads, selection.document, viewer_name, snapshot, snapshot, source,
         )
         page, displayed = result.page, result.displayed
         root_info = root.stat()
@@ -875,20 +889,23 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)
 
-    def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
-        """A bounded recent selection closed over its answers, without crossing this scope.
+    def history(self, source: BusReader, *, limit: int) -> tuple[BusRecord, ...]:
+        """Full copy records selected by this scope, closed over their disclosed answers.
 
-        A copied message keeps only the answers this scope discloses: a reference to a message
-        outside it would name that message, and its original stays on the source bus."""
-        selected: dict[int, Message] = {}
+        Display pages stay lightweight. A copy acquires each original record on the held
+        reader so its declared history_record retains deliveries and removes claims.
+        References outside this scope stay on the source bus.
+        """
+        selected: dict[int, BusRecord] = {}
         with source.reading() as reader:
             for message in self.records(reader, descending=True, limit=limit):
-                added: dict[int, Message] = {}
+                added: dict[int, BusRecord] = {}
                 pending = [message]
                 while pending and len(selected) + len(added) <= limit:
-                    answer = pending.pop()
-                    if answer.seq in selected or answer.seq in added:
+                    candidate = pending.pop()
+                    if candidate.seq in selected or candidate.seq in added:
                         continue
+                    answer = reader.lookup(candidate.seq)
                     disclosed = tuple(original for original in
                                       reader.messages_for_references(answer.answers)
                                       if self.includes(original))
@@ -950,6 +967,13 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
         targets = self.index_targets
         return ((key, value) for key, value in cursor.conversations.items()
                 if key.in_targets(targets, snapshot))
+
+    @property
+    def memberships(self) -> Mapping[str, ThreadMembership]:
+        return {}
+
+    def same_membership(self, earlier: MessageDisplayScope) -> bool:
+        return True
 
     @abstractmethod
     def includes(self, message: Message) -> bool:
@@ -1122,10 +1146,15 @@ class AllChannelDisplayScope(AllTargetsDisplayScope):
 
 
 @dataclass(frozen=True, slots=True)
-class MemberActivityDisplayScope(AllTargetsDisplayScope):
-    """Member activity may match a sender, DM peer or mention on any target."""
+class ParticipantActivityDisplayScope(AllTargetsDisplayScope, declared_name=None):
+    """Sender, DM peer and mention activity share one relational predicate."""
 
-    participant_names: frozenset[str] = frozenset()
+    @property
+    @abstractmethod
+    def participant_query(self) -> tuple[str, tuple[object, ...]]: ...
+
+    @abstractmethod
+    def includes_participant(self, name: str) -> bool: ...
 
     def capture_deliveries(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                            source: BusSnapshot, *, document: ReadDocument,
@@ -1134,40 +1163,76 @@ class MemberActivityDisplayScope(AllTargetsDisplayScope):
         rows = source.selected_sequences(*self.intersection(audience), through)
         return reads.capture(viewer, rows, snapshot, source, document=document)
 
-    @classmethod
-    def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
-        members = frozenset(name for name, thread in snapshot.threads.items()
-                            if channel.tags <= thread.tags)
-        names = members | frozenset(alias for alias, owner in snapshot.aliases.items()
-                                    if owner in members)
-        return cls(channel.name, channel.history_targets, participant_names=names)
-
     @property
     def condition(self) -> tuple[str, tuple]:
-        targets, names = tuple(self.targets), tuple(self.participant_names)
-        target_marks, name_marks = ",".join("?" for _ in targets), ",".join("?" for _ in names)
+        targets = tuple(self.targets)
+        members, parameters = self.participant_query
+        target_marks = ",".join("?" for _ in targets)
         mention_key = FieldCodec.field_plan(ThreadMention, "thread").key
-        return (f"{{target}} IN ({target_marks}) OR {{sender}} IN ({name_marks}) OR "
-                f"({{target}} NOT LIKE '#%' AND {{target}} IN ({name_marks})) OR "
+        return (f"{{target}} IN ({target_marks}) OR {{sender}} IN ({members}) OR "
+                f"({{target}} NOT LIKE '#%' AND {{target}} IN ({members})) OR "
                 f"EXISTS (SELECT 1 FROM json_each({{mentions}}) "
-                f"WHERE json_extract(value,?) IN ({name_marks}))",
-                (*targets, *names, *names, f"$.{mention_key}", *names))
+                f"WHERE json_extract(value,?) IN ({members}))",
+                (*targets, *parameters, *parameters, f"$.{mention_key}", *parameters))
 
     def includes(self, message: Message) -> bool:
         return self._includes(message.sender, message.target,
                               (mention.thread for mention in message.mentions))
 
     def activity(self, source: BusReader):
-
+        members, parameters = self.participant_query
         return ChannelActivity.combine((
             ChannelDisplayScope(self.channel, self.targets).activity(source),
-            source.participant_activity(self.participant_names),
+            source.participant_activity(f"participant IN ({members})", parameters),
         ))
 
     def _includes(self, sender: str, target: str, mentions: Iterable[str]) -> bool:
-        return (target in self.targets or sender in self.participant_names
-                or not self.participant_names.isdisjoint(CommandTarget.named(target).direct_names)
-                or any(name in self.participant_names for name in mentions))
+        return (target in self.targets or self.includes_participant(sender)
+                or any(self.includes_participant(name)
+                       for name in CommandTarget.named(target).direct_names)
+                or any(self.includes_participant(name) for name in mentions))
+
+
+@dataclass(frozen=True, slots=True)
+class NamedActivityDisplayScope(ParticipantActivityDisplayScope):
+    """An explicitly selected set, used by root checks rather than channel tags."""
+
+    participants: frozenset[str] = frozenset()
+
+    @property
+    def participant_query(self) -> tuple[str, tuple[object, ...]]:
+        return "SELECT value FROM json_each(?)", (json.dumps(sorted(self.participants)),)
+
+    def includes_participant(self, name: str) -> bool:
+        return name in self.participants
+
+
+@dataclass(frozen=True, slots=True)
+class MemberActivityDisplayScope(ParticipantActivityDisplayScope):
+    """A channel declaration joined to the original immutable namespace's tags."""
+
+    tags: frozenset[str] = frozenset()
+    registry: Annotated[RegistryProvenance, WireTransient()] = field(
+        kw_only=True, compare=False, repr=False,
+    )
+
+    @classmethod
+    def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
+        return cls(channel.name, channel.history_targets, tags=channel.tags, registry=snapshot)
+
+    @property
+    def memberships(self) -> Mapping[str, ThreadMembership]:
+        return self.registry.memberships
+
+    def same_membership(self, earlier: MessageDisplayScope) -> bool:
+        return self.registry.same_tag_membership(earlier.memberships, self.tags)
+
+    @property
+    def participant_query(self) -> tuple[str, tuple[object, ...]]:
+        return self.registry.tagged_names(self.tags)
+
+    def includes_participant(self, name: str) -> bool:
+        return name in self.memberships and self.memberships[name].carries(self.tags)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1178,18 +1243,36 @@ class UnreadQuery:
     moved for some conversations differs from its earlier count only in those
     conversations' rows above the lower of their two high waters."""
 
-    channel: str
+    scope: ChannelDisplayScope
     cursors: tuple[CursorRow, ...]
     lower_bound: int
-    predicate: str
-    parameters: tuple
     viewer_names: str
+    target_groups: tuple[tuple[str, ...], ...] = ()
+
+    @property
+    def channel(self) -> str:
+        return self.scope.channel
+
+    @property
+    def predicate(self) -> str:
+        predicate, _ = self.scope.index_predicate
+        for targets in self.target_groups:
+            predicate = f"({predicate}) AND target IN ({', '.join('?' * len(targets))})"
+        return predicate
+
+    @property
+    def parameters(self) -> tuple:
+        _, parameters = self.scope.index_predicate
+        return (*parameters, *(target for targets in self.target_groups for target in targets))
+
+    def same_membership(self, earlier: UnreadQuery) -> bool:
+        return self.scope.same_membership(earlier.scope)
 
     @property
     def counting(self) -> UnreadQuery:
         """The same rows and rule with no read cursor: what stays fixed while reading. The
         lower bound is the cursor's own floor over the scope's targets, so it moves with it."""
-        return replace(self, cursors=(), lower_bound=0)
+        return replace(self, cursors=(), lower_bound=0, target_groups=())
 
     def moved(self, earlier: UnreadQuery) -> tuple[UnreadQuery, ...]:
         """The earlier and current counts over only the conversations whose cursor moved;
@@ -1209,8 +1292,7 @@ class UnreadQuery:
         """This query over only these targets' rows above floor; every row at or below a
         moved conversation's lower high water is read under both cursors."""
         return replace(self, lower_bound=max(self.lower_bound, floor),
-                       predicate=f"({self.predicate}) AND target IN ({', '.join('?' * len(targets))})",
-                       parameters=(*self.parameters, *targets))
+                       target_groups=(*self.target_groups, targets))
 
 
 @dataclass(frozen=True, slots=True)
@@ -1227,10 +1309,9 @@ class DisplayUnreadSelection:
         names = json.dumps(self.viewer_names)
         return tuple(
             UnreadQuery(
-                scope.channel,
+                scope,
                 ReadCursor.rows(self.registry, {"viewer": self.seen.counted(scope, self.registry)}),
                 self.seen.lower_bound(scope, self.registry),
-                *scope.index_predicate,
                 names,
             )
             for scope in self.scopes

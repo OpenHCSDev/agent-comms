@@ -247,25 +247,20 @@ class HistoryViews:
     def historical_threads(self, name: str | None = None) -> tuple[HistoricalThread, ...]:
         return self.bus.history.threads(name)
 
-    def dm_display_page(
-        self, peer: ThreadTarget, *, worktree: Checkout, bounds: PageBounds = NEWEST_PAGE
-    ) -> MessagePage:
+    def dm_display_view(
+        self, peer: ThreadTarget, *, worktree: Checkout,
+    ) -> DMDisplayHistory:
         viewer = self.messaging.user_identity(worktree)
-        return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
+        return DMDisplayHistory(viewer.name, peer, worktree)
+
+    def channel_display_view(
+        self, target: str, *, viewer: DisplayViewer = AnonymousViewer(),
+    ) -> ChannelDisplayHistory:
+        return ChannelDisplayHistory(self.bus.require_channel(target), viewer)
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""
         return NamedViewer(self.messaging.user_identity(worktree).name)
-
-    def channel_display_page(
-        self,
-        target: str,
-        *,
-        viewer: DisplayViewer = AnonymousViewer(),
-        bounds: PageBounds = NEWEST_PAGE,
-    ) -> MessagePage:
-        channel = self.bus.require_channel(target)
-        return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
     def mark_page_read(self, page: MessagePage, *, worktree: Checkout) -> None:
         """Acknowledge the original read evidence of exactly the painted page."""

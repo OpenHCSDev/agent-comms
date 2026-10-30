@@ -872,10 +872,12 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def read_snapshot(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        *, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
+        return cls._acquire_snapshot(cls._open_reader(
+            path, contention, check_same_thread=check_same_thread))
 
     @classmethod
     def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:

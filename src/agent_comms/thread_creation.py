@@ -6,11 +6,12 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Set
+from typing import Annotated, TypeAlias
 
 from metaclass_registry.mro_dispatch import handles
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldRepresentation, WireValue
+from .field_codec import FieldCodec, FieldRepresentation, WireRequired, WireValue
 
 
 class CreationTime(float, WireValue, ABC):
@@ -67,3 +68,6 @@ class CreationSeconds(FieldRepresentation):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return CreationTime.schema()
+
+
+RequiredCreationTime: TypeAlias = Annotated[CreationTime, CreationSeconds, WireRequired()]

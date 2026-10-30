@@ -105,7 +105,7 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
 
     def require_release(self, acknowledgement, snapshot, current) -> None:
         sent = ClaimedIdentity(current.incarnation, self.value)
-        fence = ClaimedIdentity(acknowledgement.incarnation(), acknowledgement.before)
+        fence = ClaimedIdentity(acknowledgement.incarnation, acknowledgement.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending claim_scope")
         if snapshot.claim_generation(current.name) == acknowledgement.after:

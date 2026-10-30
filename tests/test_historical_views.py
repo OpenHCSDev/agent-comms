@@ -17,7 +17,7 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
-from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
+from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource, HistoryView
 from agent_comms.installer.backup import bus_files
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.messages import Message
@@ -57,6 +57,43 @@ def test_missing_catalogue_is_empty_without_creating_it(tmp_path):
     assert not archive.path.exists()
 
 
+@pytest.mark.parametrize('exists', [False, True])
+def test_captured_catalogue_refuses_later_creation_or_replacement(tmp_path, exists):
+    archive = HistoryArchive.at(tmp_path)
+    if exists:
+        archive.path.write_text('[]')
+    captured = archive.captured()
+    with captured.read_sources() as sources:
+        assert sources == ()
+    archive.path.write_text('[ ]')
+    with pytest.raises(HistoricalSourceChanged):
+        with captured.read_sources():
+            pass
+    with archive.read_sources() as sources:
+        assert sources == ()
+
+
+def test_held_display_reading_rejects_later_archive_without_bus_growth(migrated, tmp_path):
+    _, _, live, _ = migrated
+    with live.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer('alice'),
+    ).reading(live.views.presentation) as read:
+        first = read(PageBounds(limit=1))
+        revision = live.bus.bus.revision()
+        later = setup(tmp_path / 'later', 1)
+        live.views.attach_history(later.root)
+        assert live.bus.bus.revision() == revision
+        with pytest.raises(HistoricalSourceChanged):
+            read(PageBounds(first.oldest_cursor.older(), 1))
+    # Retiring the old reading is harmless; a new reading adopts the catalogue.
+    fresh = live.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer('alice'),
+    ).page(live.views.presentation, bounds=PageBounds(limit=1))
+    assert fresh.selection.history_revision != first.selection.history_revision
+
+
 def setup(root, count=5):
     comms = wire(root)
     comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root), created_at=10.0))
@@ -68,13 +105,13 @@ def setup(root, count=5):
     return comms
 
 
-def collect(comms, method, *args, **kwargs):
-    page = getattr(comms.views, method)(*args, bounds=PageBounds(limit=3), **kwargs)
+def collect(comms, view: HistoryView):
+    page = view.page(comms.views.presentation, PageBounds(limit=3))
     result = list(page.messages)
     for _ in range(40):
         if not page.has_older:
             return result
-        page = getattr(comms.views, method)(*args, bounds=PageBounds(page.oldest_cursor.older(), 3), **kwargs)
+        page = view.page(comms.views.presentation, PageBounds(page.oldest_cursor.older(), 3))
         result[0:0] = page.messages
     raise AssertionError("paging did not terminate")
 
@@ -92,18 +129,20 @@ def migrated(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "method,args,reader",
+    "view_factory,expected",
     [
-        ("channel_display_page", ("#team",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
-        ("dm_display_page", (ThreadTarget("alice"),), lambda live: dict(worktree=Checkout(live.root))),
-        ("channel_display_page", ("#any",), lambda live: dict(viewer=live.views.display_viewer(Checkout(live.root)))),
+        (lambda live: live.views.channel_display_view(
+            "#team", viewer=live.views.display_viewer(Checkout(live.root))), 9),
+        (lambda live: live.views.dm_display_view(
+            ThreadTarget("alice"), worktree=Checkout(live.root)), 9),
+        (lambda live: live.views.channel_display_view(
+            "#any", viewer=live.views.display_viewer(Checkout(live.root))), 18),
     ],
 )
-def test_all_history_backward_and_forward(migrated, method, args, reader):
+def test_all_history_backward_and_forward(migrated, view_factory, expected):
     old, prior, live, source = migrated
-    scope = reader(live)
-    rows = collect(live, method, *args, **scope)
-    expected = 18 if args == ("#any",) else 9
+    view = view_factory(live)
+    rows = collect(live, view)
     assert len(rows) == expected
     assert len({row.view_key for row in rows}) == expected
     assert len({row.seq for row in rows}) < expected
@@ -111,7 +150,7 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
     forward = []
     cursor = HistoryCursor(source=source.key, sequence=0)
     for _ in range(40):
-        page = getattr(live.views, method)(*args, bounds=PageBounds(cursor.newer(), 2), **scope)
+        page = view.page(live.views.presentation, PageBounds(cursor.newer(), 2))
         forward.extend(page.messages)
         if not page.has_newer:
             break
@@ -121,7 +160,9 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
 
 def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
-    rows = collect(live, "channel_display_page", "#team", viewer=live.views.display_viewer(Checkout(live.root)))
+    rows = collect(live, live.views.channel_display_view(
+        "#team", viewer=live.views.display_viewer(Checkout(live.root)),
+    ))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
@@ -135,8 +176,11 @@ def test_original_identity_and_no_delivery_authority(migrated):
 def test_sparse_historical_ack_does_not_ack_live(migrated):
     _, _, live, source = migrated
     viewer = live.messaging.user_identity(Checkout(live.root))
-    page = live.views.channel_display_page(
-        "#team", viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
+    page = live.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
+    ).page(
+        live.views.presentation,
         bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 3),
     )
     live.views.mark_page_read(page.select([page.messages[1].seq]), worktree=Checkout(live.root))
@@ -163,11 +207,15 @@ def test_select_painted_page_keeps_its_source_with_attached_history(migrated, co
     _, _, live, source = migrated
     bounds = PageBounds(HistoryCursor(source=source.key, sequence=100).older(), 2) if archived else PageBounds(limit=2)
     if conversation == "channel":
-        page = live.views.channel_display_page(
-            "#team", viewer=live.views.display_viewer(Checkout(live.root)), bounds=bounds,
-        )
+        page = live.views.channel_display_view(
+            '#team',
+            viewer=live.views.display_viewer(Checkout(live.root)),
+        ).page(live.views.presentation, bounds=bounds)
     else:
-        page = live.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(live.root), bounds=bounds)
+        page = live.views.dm_display_view(
+            ThreadTarget('alice'),
+            worktree=Checkout(live.root),
+        ).page(live.views.presentation, bounds=bounds)
     message = page.messages[-1]
     selected = page.select((message.seq,))
     assert selected.messages == (message,)
@@ -239,7 +287,12 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
 def test_stale_cursor_is_rejected(migrated):
     _, _, live, _ = migrated
     with pytest.raises(HistoricalSourceChanged):
-        live.views.channel_display_page("#team", bounds=PageBounds(HistoryCursor(source="detached", sequence=2).older()))
+        live.views.channel_display_view(
+            '#team',
+        ).page(
+            live.views.presentation,
+            bounds=PageBounds(HistoryCursor(source='detached', sequence=2).older()),
+        )
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
@@ -328,10 +381,10 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     source = live.views.attach_history(old.root)
     assert root_bytes(old.root) == original
     assert not (Path(source.root) / "unknown-input.json").exists()
-    page = live.views.channel_display_page(
-        "#team", viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
-        bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()),
-    )
+    page = live.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(live.messaging.user_identity(Checkout(live.root)).name),
+    ).page(live.views.presentation, bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()))
     archived = Bus(Bus.path_in(Path(source.root)))
     original = page.messages[0]
     archived.append(lambda seq, db: PublicRecord.from_message(Message(
@@ -339,8 +392,11 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     with pytest.raises(ValueError):
         live.views.mark_page_read(page, worktree=Checkout(live.root))
     with pytest.raises(ValueError):
-        live.views.channel_display_page(
-            "#team", bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older())
+        live.views.channel_display_view(
+            '#team',
+        ).page(
+            live.views.presentation,
+            bounds=PageBounds(HistoryCursor(source=source.key, sequence=100).older()),
         )
 
 
@@ -359,7 +415,10 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
     _, _, live, source = migrated
     live.registry.unregister("alice")
     live.registry.remove("alice")
-    page = live.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(live.root))
+    page = live.views.dm_display_view(
+        ThreadTarget('alice'),
+        worktree=Checkout(live.root),
+    ).page(live.views.presentation)
     assert page.messages
     assert all(isinstance(message, HistoricalMessage) for message in page.messages)
     assert "alice" not in live.registry

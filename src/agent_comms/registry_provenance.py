@@ -9,6 +9,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
@@ -18,6 +19,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
+from .thread_membership import ThreadMembership
 from .threads import Thread, ThreadProvenance
 
 if TYPE_CHECKING:
@@ -135,11 +137,22 @@ class RegistryNames(Generic[Member]):
             name, suffix = f"{base}-{suffix}", suffix + 1
         return name
 
+    def declared_names(self) -> Iterator[str]:
+        """The current namespace, including each declaration's retained aliases."""
+        yield from self.threads
+        yield from self.aliases
+
     def named_members(self) -> Iterator[tuple[str, Member]]:
         """Original declarations under their canonical and retained alias names."""
-        yield from self.threads.items()
-        for alias in self.aliases:
-            yield alias, self.require(alias)
+        return ((name, self.require(name)) for name in self.declared_names())
+
+    def incarnation(self, name: str) -> ThreadIncarnation:
+        """Recorded namespaces already hold their original nominal members."""
+        return self.require(name).incarnation
+
+    def named_incarnations(self) -> Iterator[tuple[str, ThreadIncarnation]]:
+        """Project identity through the namespace owner, never a consumer's roster."""
+        return ((name, self.incarnation(name)) for name in self.declared_names())
 
     def names_for(self, name: str) -> frozenset[str]:
         """Current and retained names of one declared member."""
@@ -168,12 +181,21 @@ class RegistryNames(Generic[Member]):
             return DeletedThread(canonical)
         raise UnregisteredThreadError(f"Thread {canonical!r} was never registered.")
 
-    def require(self, name: str) -> Member:
+    def registered(self, name: str) -> bool:
+        """Current membership, including retained aliases, without acquiring a Thread."""
+        return self.canonical_name(name) in self.threads
+
+    def require_canonical(self, name: str) -> str:
         canonical = self.canonical_name(name)
-        try:
-            return self.threads[canonical]
-        except KeyError as error:
-            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
+        if canonical not in self.threads:
+            raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.")
+        return canonical
+
+    def require(self, name: str) -> Member:
+        return self.threads[self.require_canonical(name)]
+
+    def membership(self, name: str) -> ThreadMembership:
+        return self.require(name)
 
 
 @dataclass(frozen=True, slots=True)
@@ -199,6 +221,45 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         names = set(self.threads)
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
+
+    @cached_property
+    def memberships(self) -> Mapping[str, ThreadMembership]:
+        """One immutable tag/identity relation from this namespace, including retained aliases."""
+        canonical = {name: self.membership(name) for name in self.threads}
+        return MappingProxyType({
+            **canonical,
+            **{alias: canonical[owner] for alias, owner in self.aliases.items()},
+        })
+
+    @cached_property
+    def membership_json(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(
+            dict(self.memberships), dict[str, ThreadMembership],
+        ))
+
+    def tagged_names(self, tags: frozenset[str]) -> tuple[str, tuple[object, ...]]:
+        """A relational tag predicate, not an expanded channel-member name list."""
+        key = FieldCodec.field_plan(ThreadMembership, "tags").key
+        return (
+            "SELECT member.key FROM json_each(?) AS member "
+            "WHERE NOT EXISTS (SELECT 1 FROM json_each(?) AS wanted "
+            "WHERE NOT EXISTS (SELECT 1 FROM json_each(member.value, ?) AS owned "
+            "WHERE owned.value = wanted.value))",
+            (self.membership_json, json.dumps(sorted(tags)), f"$.{key}"),
+        )
+
+    def same_tag_membership(self, earlier: Mapping[str, ThreadMembership],
+                            tags: frozenset[str]) -> bool:
+        """Only a matching name or its actual birth changing invalidates that channel."""
+        current = self.memberships
+        for name in current.keys() | earlier.keys():
+            before = name in earlier and earlier[name].carries(tags)
+            after = name in current and current[name].carries(tags)
+            if before != after:
+                return False
+            if before and earlier[name].incarnation != current[name].incarnation:
+                return False
+        return True
 
     def bound_to(self, root: Path) -> RegistryProvenance:
         """Recorded transcripts resolve under the root this namespace was captured from."""
