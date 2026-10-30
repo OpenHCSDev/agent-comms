@@ -133,6 +133,17 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
             raise refusal
 
     @classmethod
+    def reference_predicate(
+        cls, references: tuple[MessageReference, ...],
+    ) -> tuple[str, tuple[object, ...]]:
+        plans = FieldCodec.field_plans(MessageReference)
+        columns = cls._column_list(tuple(plan.name for plan in plans))
+        selected = ', '.join('json_extract(value, ?)' for plan in plans)
+        return (f'({columns}) IN (SELECT {selected} FROM json_each(?))',
+                (*(f'$.{plan.key}' for plan in plans),
+                 FieldCodec.compact([FieldCodec.encode(reference) for reference in references])))
+
+    @classmethod
     def require_sequences(cls, db: sqlite3.Connection, sequences: tuple[int, ...]) -> None:
         matches = ReferenceMatch.read(db.execute(
             f'SELECT identity.seq IS NOT NULL AS matched FROM json_each(?) AS supplied '
