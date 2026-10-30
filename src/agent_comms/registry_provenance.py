@@ -16,7 +16,7 @@ from agent_comms.field_codec import FieldCodec, ThreadLookup
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import Thread, ThreadProvenance

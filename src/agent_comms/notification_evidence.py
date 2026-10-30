@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily
+from .frozen_recipient import FrozenRecipient
 from .field_codec import (
     FieldCodec,
     MalformedRecord,
@@ -26,7 +27,6 @@ from .field_codec import (
     boundary_decoder,
 )
 from .message_reference import MessageReference
-from .audience_manifest import FrozenRecipient
 from .recorded_bus import RecordedBusIdentity
 from .thread_identity import ThreadIncarnation
 

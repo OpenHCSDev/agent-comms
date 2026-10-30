@@ -31,7 +31,7 @@ from .field_codec import (
     WireRequired,
     WireValue,
 )
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,

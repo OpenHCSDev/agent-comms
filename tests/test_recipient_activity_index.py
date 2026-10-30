@@ -9,7 +9,7 @@ import pytest
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.activity import Activity, ActivityState, ActivityStore
-from agent_comms.audience_manifest import FrozenRecipient
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.notification_assignment import NotificationAssignment

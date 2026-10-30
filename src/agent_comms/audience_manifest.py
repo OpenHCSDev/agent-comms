@@ -8,12 +8,6 @@ and bind the value to the original committed envelope before runtime use.
 
 from __future__ import annotations
 
-from .bus_tables import (
-    AwaitingAnswerSource,
-    ReceivedSource,
-)
-
-from .class_fact import ClassFact
 import hashlib
 import math
 from collections.abc import Sequence
@@ -21,12 +15,10 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Final
 
-from .participant_identity import ParticipantIdentity
-
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
+from .frozen_recipient import FrozenRecipient
 from .messages import BusCapability, CarriesEnvelope, Message
-from .projection_source import ProducedRow, ProjectionSource
 
 AUDIENCE_VERSION: Final = 1
 MAX_RECIPIENTS: Final = 4096
@@ -49,26 +41,6 @@ def _canonical_json(value: object, *, limit: int) -> bytes:
 
 def _digest(domain: bytes, payload: bytes) -> str:
     return hashlib.sha256(domain + payload).hexdigest()
-
-
-@dataclass(frozen=True, slots=True)
-class FrozenRecipient(ParticipantIdentity, ProjectionSource):
-    """Stable coordination lookup paired with its send-time canonical name."""
-
-    recipient_lookup: ThreadLookup
-    canonical_thread: str
-
-    def __post_init__(self) -> None:
-        self.require_text(self.recipient_lookup, "recipient_lookup")
-        self.require_canonical(self.canonical_thread, "canonical_thread")
-
-    @property
-    def lookup(self) -> ThreadLookup:
-        return self.recipient_lookup
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (ReceivedSource, AwaitingAnswerSource)
 
 
 @dataclass(frozen=True, kw_only=True)

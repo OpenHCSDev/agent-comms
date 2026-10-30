@@ -15,7 +15,8 @@ from agent_comms.response_acknowledgement import (
 )
 from agent_comms.wake import OrdinaryControl
 
-from .audience_manifest import FrozenRecipient, freeze_audience
+from .audience_manifest import freeze_audience
+from .frozen_recipient import FrozenRecipient
 from .bus_publication import Delivered
 from .private_registry_guard import RegistryPrivacy
 from .channel_targets import CommandTarget

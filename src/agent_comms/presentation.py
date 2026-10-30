@@ -19,7 +19,7 @@ from .agent_activity import (
     AgentActivity,
     RecordedRecipientActivity,
 )
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .bus import DisplayUnread
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels

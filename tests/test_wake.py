@@ -7,7 +7,8 @@ from typing import Type
 
 import pytest
 
-from agent_comms.audience_manifest import AudiencedMessage, FrozenRecipient, freeze_audience
+from agent_comms.audience_manifest import AudiencedMessage, freeze_audience
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import (

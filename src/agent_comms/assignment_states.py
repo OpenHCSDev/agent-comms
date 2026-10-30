@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from typing import Self
 
     from .agent_activity import RecipientActivity
-    from .audience_manifest import FrozenRecipient
+    from .frozen_recipient import FrozenRecipient
     from .bus_publication import Delivered
     from .coordination_tables.assignments import WakeAssignment
     from .coordination_tables.responses import ResponseObligation
