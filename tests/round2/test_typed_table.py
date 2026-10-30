@@ -1,8 +1,10 @@
 """Declaration families round-trip through real SQLite without a schema roster."""
 
+import gc
 import json
 import sqlite3
-from contextlib import nullcontext
+import sys
+from contextlib import closing, nullcontext
 from dataclasses import dataclass, field, replace
 from enum import Enum, IntFlag
 from time import perf_counter
@@ -13,6 +15,7 @@ import pytest
 from agent_comms.field_codec import (
     AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
 )
+from agent_comms.store_files import DEFAULT_STORE_CONTENTION
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -568,3 +571,18 @@ def test_streamed_query_decodes_only_consumed_rows_and_releases_cursor():
         rows = StreamProjection.iterate(db.execute("SELECT 2 AS enabled"))
         with pytest.raises(ValueError):
             next(rows)
+
+
+def test_store_connection_releases_streams_its_scope_outlives(monkeypatch):
+    @dataclass(frozen=True)
+    class StreamProjection(TypedRow):
+        enabled: bool
+
+    unraisable = []
+    monkeypatch.setattr(sys, "unraisablehook", unraisable.append)
+    with closing(DEFAULT_STORE_CONTENTION.writer(":memory:")) as db:
+        rows = StreamProjection.iterate(db.execute("SELECT 1 AS enabled UNION ALL SELECT 2"))
+        assert next(rows) == StreamProjection(True)
+    del rows
+    gc.collect()
+    assert unraisable == []
