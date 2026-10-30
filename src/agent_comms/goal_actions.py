@@ -443,6 +443,9 @@ class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ctx.goals.todos.apply(self.problem, self.operation)
+        return self.revise(goal, ctx)
+
+    def revise(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         return replace(self.revised(goal, ctx), revision=goal.revision + 1)
 
 
@@ -453,7 +456,12 @@ class SentBackOrderGoalAction(HeldOrderGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class HeadReviewedOrderGoalAction(HeldOrderGoalAction):
+    """The optional goal revision after the retained review transaction has committed."""
+
     operation: RecordOrderHeadVerdict
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return self.revise(goal, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

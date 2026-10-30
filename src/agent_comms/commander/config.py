@@ -60,9 +60,6 @@ class GivenRepos(DeclaredWireType, RepoChoice):
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
         return tuple(Repo.of(checkout) for checkout in self.checkouts)
 
-    def founding(self, commander: str) -> tuple[Repo, ...]:
-        return self.applied(())
-
     def without_commander(self) -> None:
         raise UpgradeRefused("--repos names a commander's repositories; this bus records no "
                              "commander, so name one with --commander")

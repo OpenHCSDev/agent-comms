@@ -16,34 +16,40 @@ from agent_comms.commander import judge, order
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.goal_actions import ClearGoalAction, CreateProblemGoalAction, SetGoalAction
 from commander_heartbeat_fixture import capture_frame
-from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
+from agent_comms.head_review import HeadReview, HeadReviewOrder, PullRequestHead, ReadPullRequestHead
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import RecordProblems
+from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.field_codec import FieldCodec, GoalId, OrderId, RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.work_branches import (
     SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
 )
-from agent_comms.order_tools import CommsHeadVerdictTool
+from agent_comms.order_tools import CommsHeadVerdictTool, CommsSetRepositoryHeadReviewersTool, RepositoryHeadReviewersSet
+from agent_comms.registry_document import CommanderProject, RepositoryHeadReviewers
+from agent_comms.commander.config import GivenRepos, KeptCommander, KeptRepos, NamedCommander
+from agent_comms.connector_caller import DirectorCaller
+from agent_comms.tool_caller import CommanderForkCaller
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import (
-    CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
+    CarriedHeadVerdict, ClaimOrder, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderClaim, OrderMessage, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, SupersededHeadVerdict, TodoError, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
+from test_todos import order as declared_order
 
 pytest_plugins = ("test_holder_standing_rules", "github_fixture")
 
@@ -93,6 +99,195 @@ def invoke(comms, request, verdict, order=NoHeadOrder()):
     return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
 
 
+@pytest.fixture
+def scoped_review_bus(head_bus, configured_repository, tmp_path):
+    comms, github, request = head_bus
+    source = SourceRepository.create(tmp_path / 'nra',
+                                    RepositoryName.from_wire('OpenHCSDev/NominalRefactorAdvisor'))
+    primary = comms.registry.snapshot().commander_project.require().repos[0]
+    configured_repository(comms, primary, source)
+    for name in ('claude-nra', 'claude-ai'):
+        comms.registry.declare(Thread(name, frozenset(), Checkout(source.checkout)))
+    nra = opened(github, source, source.number, source.branch_commit)
+    return comms, github, request, nra
+
+
+def select_reviewers(comms, repository, reviewers, caller=ThreadCaller('lead')):
+    tool = CommsSetRepositoryHeadReviewersTool(repository=repository, reviewers=reviewers)
+    return FieldCodec.decode(RepositoryHeadReviewersSet, tool.invoke(comms, tool.arguments, caller=caller))
+
+
+def test_scoped_public_grant_reviews_only_selected_repository_and_preserves_todos(scoped_review_bus):
+    comms, github, primary, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    before = comms.goals.todos.list(primary.repo)
+    result = select_reviewers(comms, nra.repo, (reviewer,))
+    assert result.reviewers == (reviewer,)
+    tool = CommsHeadVerdictTool(request=nra, operation=ReviewedHeadVerdict(ACCEPTED))
+    tool.invoke(comms, tool.arguments, caller=ThreadCaller('claude-nra'))
+    recorded, = StoredHeadReview.head_reviews(comms.goals.todos, nra)
+    assert recorded.actor == reviewer
+    assert recorded.order == NoHeadOrder()
+    assert comms.goals.todos.list(primary.repo) == before
+    calls = tuple(github.calls())
+    denied = CommsHeadVerdictTool(request=primary, operation=ReviewedHeadVerdict(ACCEPTED))
+    with pytest.raises(RecordProblems, match='selected head reviewer'):
+        denied.invoke(comms, denied.arguments, caller=ThreadCaller('claude-nra'))
+    assert tuple(github.calls()) == calls
+    todo = comms.goals.todos.get('P2')
+    with pytest.raises(TodoError):
+        todo.require_commander(reviewer)
+    assert comms.goals.todos.list(primary.repo) == before
+
+
+@pytest.mark.parametrize('name', ('outsider', 'claude-nra', 'claude-ai'))
+def test_native_name_and_scoped_permission_cannot_grant_themselves(scoped_review_bus, name):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    select_reviewers(comms, nra.repo, (reviewer,))
+    before = comms.registry.snapshot().commander_project
+    with pytest.raises(RelationViolationError, match='founder authority'):
+        select_reviewers(comms, nra.repo, (reviewer,), ThreadCaller(name))
+    assert comms.registry.snapshot().commander_project == before
+
+
+@pytest.mark.parametrize('authority', ('director', 'fork'))
+def test_nominal_owner_and_real_commander_fork_may_select_without_becoming_reviewer(
+        scoped_review_bus, authority):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    if authority == 'director':
+        caller = DirectorCaller('outsider')
+    else:
+        caller = CommanderForkCaller('real-review-fork')
+        caller.join(comms, 'lead')
+    select_reviewers(comms, nra.repo, (reviewer,), caller)
+    project = comms.registry.snapshot().commander_project.require()
+    assert project.repository_head_reviewers == (RepositoryHeadReviewers(nra.repo, (reviewer,)),)
+    assert project.commander == comms.registry.require('lead').incarnation
+
+
+def test_grant_wire_default_configuration_retention_and_removed_scope_do_not_resurrect(scoped_review_bus):
+    comms, _, primary, nra = scoped_review_bus
+    original = comms.registry.snapshot().commander_project.require()
+    original_wire = FieldCodec.encode(original)
+    assert 'repository_head_reviewers' not in original_wire
+    assert FieldCodec.encode(FieldCodec.decode(CommanderProject, original_wire)) == original_wire
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    select_reviewers(comms, nra.repo, (reviewer,))
+    selected = comms.registry.snapshot().commander_project.require()
+    assert FieldCodec.decode(CommanderProject, FieldCodec.encode(selected)) == selected
+    assert selected.reconfigured(KeptRepos()) == selected
+    snapshot = comms.registry.snapshot()
+    assert KeptCommander().configured(selected, KeptRepos(), snapshot) == selected
+    assert NamedCommander('lead').configured(selected, KeptRepos(), snapshot) == selected
+    order.Commander.on_root('lead', original.repos, comms.root)
+    assert comms.registry.snapshot().commander_project.require().repository_head_reviewers == selected.repository_head_reviewers
+    retained = selected.named(original.commander, GivenRepos(tuple(repo.checkout for repo in original.repos)))
+    assert retained.repository_head_reviewers == selected.repository_head_reviewers
+    removed = selected.reconfigured(GivenRepos((original.repos[0].checkout,))).require()
+    assert removed.repository_names() == (primary.repo,)
+    assert not removed.repository_head_reviewers
+    restored = removed.reconfigured(GivenRepos(tuple(repo.checkout for repo in original.repos))).require()
+    assert not restored.repository_head_reviewers
+    select_reviewers(comms, nra.repo, ())
+    assert FieldCodec.encode(comms.registry.snapshot().commander_project.require()) == original_wire
+
+
+def test_rename_retains_birth_but_rebirth_cannot_inherit_and_empty_revoke_removes_stale_grant(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    select_reviewers(comms, nra.repo, (reviewer,))
+    comms.registry.rename('claude-nra', 'renamed-reviewer')
+    snapshot = comms.registry.snapshot()
+    project = snapshot.commander_project.require()
+    project.require_head_reviewer(snapshot, nra.repo, snapshot.require('renamed-reviewer').incarnation)
+    comms.registry.remove('renamed-reviewer')
+    comms.registry.declare(Thread('claude-nra', frozenset(), Checkout(project.repos[0].checkout)))
+    snapshot = comms.registry.snapshot()
+    with pytest.raises(TodoError):
+        project.require_head_reviewer(snapshot, nra.repo, snapshot.require('claude-nra').incarnation)
+    with pytest.raises(RelationViolationError, match='registered incarnation'):
+        select_reviewers(comms, nra.repo, (reviewer,))
+    select_reviewers(comms, nra.repo, ())
+    assert not comms.registry.snapshot().commander_project.require().repository_head_reviewers
+
+
+def test_unregistered_repository_and_stale_birth_cannot_publish_grants(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    original = comms.registry.snapshot().commander_project
+    with pytest.raises(RelationViolationError, match='not registered'):
+        select_reviewers(comms, RepositoryName.from_wire('example/foreign'), (reviewer,))
+    with pytest.raises(RelationViolationError, match='registered incarnation'):
+        select_reviewers(comms, nra.repo, (RecordedThreadIncarnation(reviewer.name, reviewer.created_at - 1),))
+    assert comms.registry.snapshot().commander_project == original
+
+
+@pytest.mark.parametrize('changed', ('actor', 'root'))
+def test_guarded_grant_rechecks_captured_actor_and_root_on_editing_document(scoped_review_bus, changed):
+    comms, _, _, nra = scoped_review_bus
+    snapshot = comms.registry.snapshot()
+    root = snapshot.commander_project.require().commander
+    actor = snapshot.require('lead').incarnation
+    other = snapshot.require('outsider').incarnation
+    reviewer = snapshot.require('claude-nra').incarnation.require_recorded()
+    with pytest.raises(RelationViolationError, match='changed before publication'):
+        comms.registry.set_repository_head_reviewers(
+            RepositoryHeadReviewers(nra.repo, (reviewer,)),
+            other if changed == 'actor' else actor,
+            other if changed == 'root' else root,
+            ThreadCaller('lead').repository_head_review_grant_actor)
+    assert comms.registry.snapshot().commander_project == snapshot.commander_project
+
+
+def test_context_configuration_keeps_supplied_source_and_github_without_rediscovery(scoped_review_bus, tmp_path):
+    comms, _, primary, nra = scoped_review_bus
+    source = SourceRepository.create(tmp_path / 'custom-source', RepositoryName.from_wire('example/origin'))
+    module = source.checkout / 'packages' / 'custom' / 'owner.py'
+    module.parent.mkdir(parents=True)
+    module.write_text('class CustomOwner:\n    pass\n')
+    source.publish_change('Declare nondefault source', 'packages/custom/owner.py')
+    explicit = Repo(checkout=source.checkout, github=nra.repo, source='packages/custom')
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    select_reviewers(comms, nra.repo, (reviewer,))
+    project = comms.registry.snapshot().commander_project.require()
+    supplied = (project.repos[0], explicit)
+    order.Commander.on_root('lead', supplied, comms.root)
+    configured = comms.registry.snapshot().commander_project.require()
+    assert configured.repos == supplied
+    assert configured.repository_head_reviewers == project.repository_head_reviewers
+    assert explicit.github != Repo.of(explicit.checkout).github
+    order.Commander.on_root('lead', (supplied[0],), comms.root)
+    remaining = comms.registry.snapshot().commander_project.require()
+    assert remaining.repository_names() == (primary.repo,)
+    assert not remaining.repository_head_reviewers
+
+
+def test_public_grant_refuses_historical_root_without_changing_project(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    reviewer = comms.registry.require('claude-nra').incarnation.require_recorded()
+    before = comms.registry.snapshot().commander_project
+    comms.registry.store.mark_historical()
+    with pytest.raises(RelationViolationError, match='Historical roots are read-only'):
+        select_reviewers(comms, nra.repo, (reviewer,))
+    assert comms.registry.snapshot().commander_project == before
+
+
+def test_prepared_reviewer_birth_cannot_be_granted_to_a_replacement(scoped_review_bus):
+    comms, _, _, nra = scoped_review_bus
+    original = comms.registry.require('claude-nra')
+    tool = CommsSetRepositoryHeadReviewersTool(
+        repository=nra.repo, reviewers=(original.incarnation.require_recorded(),))
+    arguments = tool.arguments
+    before = comms.registry.snapshot().commander_project
+    comms.registry.remove(original.name)
+    comms.registry.declare(Thread(original.name, frozenset(), original.worktree))
+    with pytest.raises(RelationViolationError, match='registered incarnation'):
+        tool.invoke(comms, arguments, caller=ThreadCaller('lead'))
+    assert comms.registry.snapshot().commander_project == before
+
+
 def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp_path):
     source = SourceRepository.create(tmp_path / 'status-source')
     github_cli.configure(source.github)
@@ -107,6 +302,20 @@ def test_integration_reads_latest_review_in_the_declared_context(github_cli, tmp
     RejectedHeadVerdict(REASON).post(request.repo, request.head, 'lead', 'integration')
     assert not HeadReview.accepted(request.repo, request.head)
     assert not HeadReview.accepted(request.repo, 'a' * 40)
+
+
+def test_unauthorized_review_cannot_trigger_forge_or_source_preview(head_bus):
+    comms, github, request = head_bus
+    todo = comms.goals.todos.get('P2')
+    scope = OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, 'short'))
+    before = tuple(github.calls())
+    tool = CommsHeadVerdictTool(request=request, operation=ReviewedHeadVerdict(ACCEPTED), order=scope)
+    with pytest.raises(RecordProblems) as refused:
+        tool.invoke(comms, tool.arguments, caller=ThreadCaller('outsider'))
+    assert {'--serves', '--problem'} <= refused.value.problems.keys()
+    assert tuple(github.calls()) == before
+    assert comms.goals.todos.get(todo.id) == todo
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(head_bus):
@@ -130,7 +339,7 @@ def test_orderless_head_family_persists_both_outcomes_and_posts_each_exact_head(
 
 def test_judge_ok_and_back_dispatch_orderless_prs_without_positional_edit_ids(head_bus):
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     why = ACCEPTED.text
     common = ["--repo", request.repo.to_wire(), "--pr", str(request.pr), "--head", request.head,
               "--why", why]
@@ -154,7 +363,7 @@ def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudl
     for number in (8, 9):
         reviewed_source.git(reviewed_source.checkout, "push", "-q", "origin",
                             f"{request.head}:refs/pull/{number}/head")
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     github.put(request.repo, DraftListedPullRequest(
         8, "fix/draft", request.head, stamp, "main", reviewable_times=(stamp,)))
@@ -186,7 +395,7 @@ def test_judge_ok_requests_merge_at_the_judged_head_unless_draft_and_fails_loudl
 def test_a_verdict_lists_every_argument_refusal_in_one_run_and_records_nothing(head_bus):
     """ok with empty --serves and both edit IDs and --pr took one run per refusal."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     with pytest.raises(RecordProblems) as refused:
         judge.main(["ok", "E1:abcd", "--pr", str(request.pr), "--head", request.head,
                     "--why", ACCEPTED.text, "--serves", ""], context)
@@ -202,7 +411,7 @@ def test_judge_reviewing_after_ok_withdraws_the_accepted_status_on_that_head(
     """GitHub keeps the newest status per context on a commit, so reviewing an approved head
     holds it out of the merge queue until a new ok."""
     comms, github, request = head_bus
-    context = order.Commander.read_root(comms.root)
+    context = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     second_checkout = tmp_path / "second-review-checkout"
     reviewed_source.git(reviewed_source.checkout, "worktree", "add", "-q", "--detach",
                         str(second_checkout))
@@ -387,6 +596,137 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
     assert not subject.disposed(history, time.time() + 1)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
+
+
+@pytest.fixture
+def retained_linked_head(head_bus):
+    """Both grouped problems are genuinely claimed before their holder can replace its goal."""
+    comms, _, request = head_bus
+    worker = comms.registry.require('worker').incarnation
+    lead = comms.registry.require('lead').incarnation
+    for problem in ('P1', 'P2'):
+        todo = comms.goals.todos.get(problem)
+        original = comms.messaging.send('lead', 'worker', todo.order.instructions(todo)).message
+        OrderMessage(todo.revision, lead, original.message_id,
+                     at=RecordedEventTime(time.time())).record(comms.goals, todo.id)
+        todo = comms.goals.todos.get(problem)
+        claim = OrderClaim.for_order(todo, worker, request.pr, request.head,
+            'The actual source declaration was repaired; inspect its retained head before acceptance.',
+            original.reference, store=comms.goals.todos)
+        ClaimOrder(todo.revision, worker, todo.held().generation, claim).record(comms.goals, todo.id)
+    todo = comms.goals.todos.get('P2')
+    scope = OrderHeadReview(todo.revision, LinkedHeadReview.of(todo, 'Repair the existing owner'))
+    return comms, request, todo, scope
+
+
+@pytest.mark.parametrize('goal_action', (None,
+    SetGoalAction(text='An unrelated current goal whose complete declaration must survive'),
+    ClearGoalAction(),
+))
+def test_retained_linked_review_does_not_depend_on_the_current_goal(retained_linked_head, goal_action):
+    comms, request, todo, scope = retained_linked_head
+    held = todo.held()
+    if goal_action is not None:
+        comms.goals.update_goal('worker', goal_action)
+    before = comms.registry.require('worker').goal
+    waits = comms.goals.waits.read()
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    changed = comms.goals.todos.get(todo.id)
+    assert changed.held() == held
+    assert changed.order.checked().id == todo.order.checked().id
+    assert changed.revision == todo.revision + 1
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order == scope.link
+    after = comms.registry.require('worker').goal
+    if goal_action is None:
+        assert after.require().revision == before.require().revision + 1
+    else:
+        assert after == before
+        assert comms.goals.waits.read() == waits
+
+
+def test_reborn_holder_gets_no_goal_side_effect_from_its_predecessors_review(retained_linked_head):
+    comms, request, todo, scope = retained_linked_head
+    worker = comms.registry.require('worker')
+    comms.registry.unregister(worker.name)
+    comms.registry.remove(worker.name)
+    comms.registry.declare(Thread('worker', worker.tags, worker.worktree))
+    reborn = comms.registry.require('worker')
+    assert reborn.incarnation != worker.incarnation
+    comms.goals.update_goal('worker', SetGoalAction(text='The reborn owner has unrelated current work'))
+    before = comms.registry.require('worker').goal
+    waits = comms.goals.waits.read()
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.registry.require('worker').goal == before
+    assert comms.goals.waits.read() == waits
+    assert comms.goals.todos.get(todo.id).held() == todo.held()
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.previous == todo.held()
+
+
+@pytest.mark.parametrize('violation', ('order', 'revision', 'assignment', 'head'))
+def test_retained_review_still_refuses_stale_todo_or_head_authority(retained_linked_head, violation):
+    comms, request, todo, scope = retained_linked_head
+    if violation == 'order':
+        scope = replace(scope, link=replace(scope.link, order_id=OrderId.mint()))
+    elif violation == 'revision':
+        scope = replace(scope, expected_revision=todo.revision - 1)
+    elif violation == 'assignment':
+        scope = replace(scope, link=replace(scope.link,
+            previous=replace(scope.link.previous, generation=GoalId.mint())))
+    elif violation == 'head':
+        request = replace(request, head='b' * 40)
+    before = comms.registry.require('worker').goal
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.goals.todos.get(todo.id) == todo
+    assert comms.registry.require('worker').goal == before
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
+
+
+def test_reassigned_order_cannot_be_reviewed_through_its_old_link(
+        retained_linked_head, reviewed_source):
+    from test_review_assignment_lifecycle import declared_successor, release
+
+    comms, request, old, scope = retained_linked_head
+    ctx = order.Commander.read_root(comms.root, ThreadCaller('lead'))
+    released, _ = release(ctx, old)
+    action = declared_successor(ctx, reviewed_source, released)
+    comms.goals.update_goal('outsider', action)
+    current = comms.goals.todos.get(old.id)
+    goal = comms.registry.require('outsider').goal
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert comms.goals.todos.get(old.id) == current
+    assert comms.registry.require('outsider').goal == goal
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
+
+
+def test_qualified_companion_head_uses_its_declared_repository(
+        head_bus, reviewed_source, configured_repository, tmp_path):
+    comms, github, primary = head_bus
+    companion = SourceRepository.create(tmp_path / 'companion', RepositoryName.from_wire('example/toad'))
+    configured_repository(comms, reviewed_source, companion)
+    request = opened(github, companion, companion.number, companion.branch_commit)
+    existing = comms.goals.todos.get('P2')
+    declaration = replace(declared_order(reviewed_source),
+        pull_requests=(reviewed_source.link, companion.link), edits=('Repair the existing owner',))
+    comms.goals.update_goal('outsider', CreateProblemGoalAction(
+        problem='P3', repo=primary.repo, text='Review the declared qualified companion',
+        order=declaration, request=existing.request.require(), commander='lead',
+        assigner=comms.registry.require('lead').incarnation, review_at=existing.review_at))
+    todo = comms.goals.todos.get('P3')
+    held = todo.held()
+    assert todo.repo == primary.repo and todo.repo != request.repo
+    assert HeadReviewOrder.holding((todo,), request) == (todo,)
+    foreign = replace(request, repo=RepositoryName.from_wire('example/foreign'))
+    assert HeadReviewOrder.holding((todo,), foreign) == ()
+    scope = OrderHeadReview.for_request((todo,), request,
+        lambda linked: LinkedHeadReview.of(linked, 'Repair the existing owner'))
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), scope)
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].request == request
+    assert comms.goals.todos.get(todo.id).held() == held
+    assert comms.goals.todos.get(todo.id).order.id == declaration.id
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, foreign)
+    assert comms.goals.todos.get(todo.id).held() == held
 
 
 def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus):

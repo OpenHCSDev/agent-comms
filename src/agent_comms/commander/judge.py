@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import time
 from typing import Annotated, ClassVar
@@ -38,20 +37,21 @@ from pathlib import Path
 
 
 from agent_comms.comms import Comms
-from agent_comms.change_report import FileLine
+from agent_comms.change_report import BranchHeadRevision, FileLine, MainRevision
 from agent_comms.field_codec import (
-    Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
+    Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems, ToolCallId,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime
-from agent_comms.errors import TodoError
+from agent_comms.errors import MissingSourceLine, TodoError
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
     DirectiveText,
     DroppedVerdict,
     EditSendBackVerdict,
+    EditVerdict,
     PeerAcceptedVerdict,
     RewrittenVerdict,
     GrownHeadVerdict,
@@ -94,6 +94,11 @@ class Hunk(ReplacementEdit):
         return sum(1 for line in self.new_text.splitlines() if BRANCH.search(line)) - sum(
             1 for line in self.old_text.splitlines() if BRANCH.search(line))
 
+    def introduced_forwarders(self, sources: tuple[str, ...]) -> list[str]:
+        """Captured replacements own both texts; unavailable declarations refuse judgment."""
+        return order.forwarders_added(
+            order.OverrideNames.introduced(self.old_text, self.new_text), sources)
+
     def rendered(self) -> str:
         return (''.join(f'- {line}\n' for line in self.old_text.splitlines())
                 + ''.join(f'+ {line}\n' for line in self.new_text.splitlines()))
@@ -121,8 +126,34 @@ class Edit(EditCall):
     def added_lines(self) -> tuple[str, ...]:
         return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
 
-    def added(self) -> str:
-        return ''.join('+' + line + '\n' for line in self.added_lines())
+    def introduced_forwarders(self, ctx: order.Commander, todo: Todo,
+                              revision: BranchHeadRevision,
+                              after_revision: BranchHeadRevision) -> list[str]:
+        """Retained hunk text, or an exact local declared main cut for whole-file writes.
+
+        Mutable checkout bytes are never a preimage. All checked edits share the
+        revision's per-repository commit capture. Failure to resolve it is unavailable
+        source evidence, not proof that the edit created the file.
+        """
+        repo, checkout = EditVerdict.edited(ctx.comms.goals, todo, todo.held(), self.path, self.id)
+        path = Path(self.path).absolute().relative_to(checkout).as_posix()
+        if all(hunk.old_text for hunk in self.hunks):
+            # Capture the allocation's committed head, never mutable checkout bytes.
+            sources = (after_revision.text(checkout, path),)
+            return [found for hunk in self.hunks for found in hunk.introduced_forwarders(sources)]
+        if len(self.hunks) != 1:
+            raise MissingSourceLine(f'Edit {self.id} has no established whole-file preimage.')
+        try:
+            revision.commit_at(repo.checkout)
+            try:
+                before = revision.text(repo.checkout, path)
+            except MissingSourceLine:
+                before = ''  # The exact commit establishes absence, not old_text=''.
+        except MissingSourceLine as error:
+            raise MissingSourceLine(
+                f'Edit {self.id} source evidence unavailable in {repo.github.to_wire()}: {error}') from error
+        after = self.hunks[0].new_text
+        return order.forwarders_added(order.OverrideNames.introduced(before, after), (after,))
 
     def rendered(self) -> str:
         return (f'--- {self.id} {self.at.clock()} {self.path}\n'
@@ -162,7 +193,7 @@ class JudgeVerb(CommanderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ShowVerb(JudgeVerb):
+class ShowVerb(order.CommanderReadVerb, JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
     thread: Annotated[
         str, Argument(flags=("thread",), options={"nargs": "?"})
@@ -175,7 +206,7 @@ class ShowVerb(JudgeVerb):
         show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if self.selects(edit)])
 
 
-class AlarmVerb(JudgeVerb):
+class AlarmVerb(order.CommanderReadVerb, JudgeVerb):
     help = "loop: every minute, name edits unjudged for 5 min"
 
     def run(self, ctx: order.Commander) -> None:
@@ -254,13 +285,19 @@ class EditReview(ReviewSubject):
         """The verdicts these IDs carry; a refusal exits before anything is written."""
         orders = {todo.id: todo for todo in ctx.held_orders()}
         edits = {edit.id: edit for edit in unjudged if edit.problem in orders}
-        ids = [token.split(':')[0] for token in self.ids]
+        selected: list[tuple[str, ToolCallId]] = []
         problems: dict[str, str] = {}
-        for token, i in zip(self.ids, ids):
+        for token in self.ids:
+            try:
+                selected.append((token, FieldCodec.decode(ToolCallId, token.split(':')[0])))
+            except ValueError as error:
+                problems |= MalformedRecord(str(error)).located(
+                    token, 'read judge show and select a current edit ID:CODE')
+        for token, i in selected:
             if i not in edits:
                 problems |= MalformedRecord('unknown edit id').located(
                     token, 'read judge show and select a current edit ID:CODE')
-        known = [(token, edits[i]) for token, i in zip(self.ids, ids) if i in edits]
+        known = [(token, edits[i]) for token, i in selected if i in edits]
         for token, edit in known:
             if options.problem and edit.problem != options.problem:
                 problems |= MalformedRecord(f'its checkout files this edit under {edit.problem}').located(
@@ -275,10 +312,10 @@ class EditReview(ReviewSubject):
                         f'{token} --line', 'quote an exact line from this edit with --line')
         if problems:
             raise RecordProblems(problems)
-        options.check_edits([edits[i] for i in ids])
+        options.check_edits(ctx, [(orders[edits[i].problem], edits[i]) for _, i in selected])
         return tuple(JudgedCall(edits[i].problem,
                                 options.operation(ctx, orders[edits[i].problem], edits[i]))
-                     for i in ids)
+                     for _, i in selected)
 
 
 def record(ctx: order.Commander, verb: JudgeVerb, verdicts: tuple[JudgedCall, ...], unjudged: int) -> None:
@@ -308,7 +345,7 @@ class PullRequestReview(ReviewSubject):
             options.pr, options.head))
 
     def run(self, options: HeadVerdictVerb, ctx: order.Commander) -> None:
-        options.check_edits([])
+        options.check_edits(ctx, [])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
         reviewed = ctx.call(CommsHeadVerdictTool(request=self.request,
@@ -412,8 +449,8 @@ class VerdictVerb(JudgeVerb):
     @abstractmethod
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict: ...
 
-    @abstractmethod
-    def check_edits(self, edits: list[Edit]) -> None: ...
+    def check_edits(self, ctx: order.Commander, edits: list[tuple[Todo, Edit]]) -> None:
+        """Source acceptance performs the appropriate guard."""
 
     def selection_problems(self) -> dict[str, str]:
         """This verdict selects edits by ID alone."""
@@ -533,14 +570,20 @@ class OkVerb(ReasonedVerb, QuotingVerb):
             for number, text in enumerate(self.growth, 1)
             for refused in GrowthReason.wording_refusal(text)}
 
-    def check_edits(self, edits: list[Edit]) -> None:
-        for edit in edits:
-            path = edit.path
-            after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
-            if added := order.forwarders_added(edit.added(), after):
-                raise RecordProblems(MalformedRecord(
-                    f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok').located(
-                        edit.id, 'send this edit back with judge back'))
+    def check_edits(self, ctx: order.Commander, edits: list[tuple[Todo, Edit]]) -> None:
+        revision = BranchHeadRevision(MainRevision().reference)
+        after_revision = BranchHeadRevision('HEAD')
+        for todo, edit in edits:
+            if edit.path.endswith('.py'):
+                try:
+                    added = edit.introduced_forwarders(ctx, todo, revision, after_revision)
+                except MissingSourceLine as error:
+                    raise RecordProblems(MalformedRecord(str(error)).located(
+                        edit.id, 'restore captured source evidence before judging this edit')) from error
+                if added:
+                    raise RecordProblems(MalformedRecord(
+                        f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok').located(
+                            edit.id, 'send this edit back with judge back'))
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
 @dataclass(frozen=True, kw_only=True)
@@ -559,9 +602,6 @@ class ReviewingVerb(HeadVerdictVerb):
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
         """Unreachable: selecting edits is refused among this verb's argument problems."""
         raise RecordProblems(self.edit_problems())
-
-    def check_edits(self, edits: list[Edit]) -> None:
-        pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -585,8 +625,6 @@ class SupersededVerb(ReasonedVerb, HeadVerdictVerb):
                                  ctx.actor_identity,
                                  todo.held(), edit.id, replacement=self.by, reason=self.why)
 
-    def check_edits(self, edits: list[Edit]) -> None:
-        pass
 
 @dataclass(frozen=True, kw_only=True)
 class DroppedVerb(VerdictVerb):
@@ -596,8 +634,6 @@ class DroppedVerb(VerdictVerb):
         return DroppedVerdict(todo.revision, ctx.actor_identity, todo.held(), edit.id,
                               path=edit.path, added=edit.added_lines())
 
-    def check_edits(self, edits: list[Edit]) -> None:
-        pass
 
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(ReasonedVerb, HeadVerdictVerb):
@@ -679,7 +715,7 @@ class BackVerb(ReasonedVerb, HeadVerdictVerb):
                                    evidence=self.head_evidence(), path=edit.path,
                                    at=self.judged_at)
 
-    def check_edits(self, edits: list[Edit]) -> None:
+    def check_edits(self, ctx: order.Commander, edits: list[tuple[Todo, Edit]]) -> None:
         _ = self.rejection_reason
 
 @dataclass(frozen=True, kw_only=True)

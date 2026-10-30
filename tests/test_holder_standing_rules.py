@@ -8,6 +8,7 @@ import json
 from contextlib import nullcontext
 import os
 import re
+import shlex
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
@@ -32,8 +33,9 @@ from agent_comms.commander.standing import (
     HolderGone,
     MissedHeartbeat,
     UnitAskUnanswered,
+    ReassignedWheelSpin,
 )
-from agent_comms.commander_heartbeat import CommanderHeartbeat
+from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
 from agent_comms.commander_hud import CommanderFrame
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
@@ -43,6 +45,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
 )
+from agent_comms.todos import ReleaseTodo, SharedWorktreeRefusal, StrikeReason
+from agent_comms.work_dispatch import ReusedWorkDispatch
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
@@ -89,7 +93,7 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProgressRead,
 )
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.unit_state import AwaitingCommander, Blocked, Detached, UnitState
 from cli_command import commander
@@ -157,6 +161,52 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
     copied_bus = wire(copied)
     configured_repository(copied_bus)
     return copied_bus
+
+
+def test_shared_worktree_proposal_is_reported_without_aborting_the_board(held_bus, installed_runtime):
+    comms = held_bus
+    original = comms.goals.todos.get('P1')
+    retained = comms.goals.todos.get('P2')
+    lead = comms.registry.require('lead').incarnation
+    ReleaseTodo(original.revision, lead, original.held(), StrikeReason(
+        'Release this isolated pending fixture while preserving its source and original order.'
+    )).record(comms.goals, original.id)
+    released = comms.goals.todos.get(original.id)
+    worker = comms.registry.require('worker')
+    declare_test_bus(comms, threads=(Thread(name='proposed', tags=frozenset({'comms'}),
+                                          worktree=worker.worktree),))
+    candidate = comms.registry.require('proposed')
+    goal_before = candidate.goal
+    action = ReissuedOrderGoalAction.for_todo(released, 'lead')
+    dispatch = ReusedWorkDispatch.for_unit(action, candidate)
+    proposal = ReassignedWheelSpin(released, dispatch)
+    question = comms.messaging.send('outsider', 'lead',
+        'Which retained source owns this independent question?', type=QuestionKind).message
+    ordinary = UnitAskUnanswered(question, 'outsider')
+    frame = capture_frame(comms, 'lead', ProgressRead())
+    observation = CommanderObservation(comms.registry.require('lead'), frame, (proposal, ordinary), ())
+    CommanderHeartbeat().pass_body(comms, (observation,))
+    packet, = CommanderUpdate.latest(comms, lead)
+    assert len(packet.not_applied) == 1
+    assert released.id in packet.not_applied[0] and retained.id in packet.not_applied[0]
+    assert candidate.name in packet.not_applied[0] and worker.name in packet.not_applied[0]
+    assert question.message_id in packet.body(time.time(), ())
+    assert comms.goals.todos.get(released.id) == released
+    assert comms.goals.todos.get(retained.id) == retained
+    assert comms.registry.require('proposed').goal == goal_before
+    with pytest.raises(SharedWorktreeRefusal) as refused:
+        dispatch.start(comms)
+    refusal = refused.value
+    assert (refusal.problem, refusal.holding_problem) == (released.id, retained.id)
+    assert refusal.holder == candidate.incarnation
+    assert refusal.holding_holder == worker.incarnation
+    assert str(refusal.worktree) in refusal.explanation()
+    assert str(refusal.worktree) in packet.not_applied[0]
+    isolated = comms.registry.require('outsider')
+    ReusedWorkDispatch.for_unit(action, isolated).start(comms)
+    assigned = comms.goals.todos.get(released.id)
+    assert assigned.held().owner_identity == isolated.incarnation
+    assert comms.goals.todos.get(retained.id) == retained
 
 
 def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
@@ -634,12 +684,24 @@ def test_unanswered_page_retains_the_original_response_eligibility(
     ('lead', 'The worker needs an answer'),
     ('#comms', '@lead The worker needs an answer'),
 ])
-def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path):
+def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body, tmp_path, installed_runtime):
     question = held_bus.bus.publisher.publish_ordinary(
         Message(sender='worker', target=target, type=QuestionKind, body=body,
                 timestamp=time.time() - AwaitingCommander.seconds - 1), destination=CommandTarget.named(target), origin=AgentOrigin(),
     )
-    ctx = Commander.read_root(held_bus.root)
+    worker = held_bus.registry.require('worker').incarnation
+    outsider = held_bus.registry.require('outsider').incarnation
+    ask, = (rule for rule in OwedAnswer.opened(held_bus, 'lead')
+            if isinstance(rule, UnitAskUnanswered) and rule.message.message_id == question.message_id)
+    assert question.seq > 0
+    assert ask.questions_for(worker) == (question,)
+    assert ask.questions_for(outsider) == ()
+    frame = capture_frame(held_bus, 'lead', ProgressRead())
+    observation, = (reading for reading in UnitState.observations(held_bus, 'lead', frame)
+                    if reading.thread.incarnation == worker)
+    assert question in observation.due_questions
+    assert tuple(AwaitingCommander.derive(observation))
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / 'reply.txt'
     reply.write_text('Responding to the worker with the actual commander command')
     say = SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,))
@@ -660,7 +722,7 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
 
 def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
     question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=question.message_id):
@@ -701,7 +763,7 @@ def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, caps
     """An answer is never refused for the debts it leaves: they warn and stay owed."""
     first = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 2)
     second = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     capsys.readouterr()
@@ -719,11 +781,21 @@ def test_a_refusal_lists_the_asks_still_inside_their_answer_window(held_bus, tmp
     """A retry costs a call, so the refusal names the asks that fall due before it lands too."""
     owed = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ripening = publish(held_bus, "worker", "lead", time.time() - 60)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     with pytest.raises(RecordProblems) as refused:
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
-    assert {owed.message_id, ripening.message_id} <= set(
-        re.search(r"order say worker BODYFILE --answers (.*)", str(refused.value)).group(1).split())
+    retry = next(value for value in refused.value.problems.values()
+                 if value.startswith('agent-comms-commander '))
+    arguments = shlex.split(retry)[1:]
+    assert arguments[arguments.index('--from') + 1] == 'lead'
+    assert arguments[arguments.index('--root') + 1] == str(held_bus.root)
+    assert {owed.message_id, ripening.message_id} <= set(arguments[arguments.index('--answers') + 1:])
+    reply = tmp_path / 'reply.txt'
+    reply.write_text('The generated reply reaches the actual asker as the same caller')
+    arguments[arguments.index('BODYFILE')] = str(reply)
+    result = commander(*arguments, caller=NoThreadCaller())
+    assert result.returncode == 0, result.stderr
+    assert unanswered(held_bus) == ()
 
 
 def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
@@ -742,7 +814,7 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
     """The vibe check waits like any owed message: a reply naming a unit's ask still lands."""
     check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     with pytest.raises(RecordProblems, match=check.message_id):
@@ -767,7 +839,7 @@ def test_a_peer_commanders_answer_clears_the_vibe_check_for_the_seat(held_bus):
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):
     question = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Waiting on the merge queue, owner unit-goalblock")
     revision = held_bus.bus.bus.revision()
@@ -787,7 +859,7 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
     selected = NewestOpenRequest().select(store, held_bus.registry.require('lead').incarnation)
     store.record_directive(selected[0].id, RequestDirective(
         directive.seq, directive.timestamp + RequestDirective.window))
-    ctx = Commander.read_root(held_bus.root)
+    ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
     reply.write_text("Installing now")
     with pytest.raises(RecordProblems, match=re.escape(
@@ -840,7 +912,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     order_file.write_text(json.dumps(FieldCodec.encode(document)))
 
     def cli(*arguments):
-        run = commander('--root', str(held_bus.root), 'order', *arguments)
+        run = commander('--root', str(held_bus.root), 'order', *arguments, caller=ThreadCaller('lead'))
         assert run.returncode == 0, run.stdout + run.stderr
         print(run.stdout)
 

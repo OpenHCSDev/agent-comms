@@ -6,6 +6,7 @@ import io
 from contextlib import nullcontext
 import json
 import os
+import shlex
 import subprocess
 import sys
 import time
@@ -78,7 +79,7 @@ from agent_comms.todos import (
     Todo,
     UnlocatedProblemFinding,
 )
-from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, SubagentCaller, ThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms_hooks import read_gate
 from agent_comms.tool_declaration import ToolDeclaration
@@ -158,7 +159,7 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
 
 def command(comms, *args):
     """Exercise the real parser and state without cold-importing Core for every verb."""
-    return commander("--root", str(comms.root), *args)
+    return commander("--root", str(comms.root), *args, caller=ThreadCaller('lead'))
 
 
 def process_command(comms, *args):
@@ -170,6 +171,7 @@ def process_command(comms, *args):
             "from agent_comms.commander.cli import main; main()",
             "--root",
             str(comms.root),
+            *ThreadCaller('lead').from_flag(),
             *args,
         ],
         env={**os.environ, "PYTHONPATH": str(Path(__file__).parents[1] / "src")},
@@ -1025,11 +1027,15 @@ def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
         subagent_hook, tmp_path):
     comms, run = subagent_hook
     run(forks.started, "SubagentStart")
-    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
+    refusal = json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))
+    assert refusal["decision"] == "block"
     assert comms.registry.status("claude-a1").receiving
-    found = tmp_path / "found.txt"
+    found = tmp_path / "finding with spaces.txt"
     found.write_text("The fork recorded its finding.")
-    assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
+    arguments = shlex.split(refusal["reason"].split('`')[1])
+    arguments[arguments.index('FILE')] = str(found)
+    posted = commander(*arguments[1:], caller=NoThreadCaller())
+    assert posted.returncode == 0, posted.stderr
     assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
 

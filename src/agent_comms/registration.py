@@ -394,6 +394,7 @@ class Registration:
     set_work_state = changing(RegistryDocument.set_work_state)
     observe_offered_tools = changing(RegistryDocument.observe_offered_tools)
     set_commander_project = changing(RegistryDocument.set_commander_project)
+    set_repository_head_reviewers = changing(RegistryDocument.set_repository_head_reviewers)
 
     unregister = changing(RegistryDocument.unregister)
     archive = changing(RegistryDocument.archive)

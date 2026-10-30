@@ -30,11 +30,24 @@ class RepositorySelection(ABC):
     @abstractmethod
     def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]: ...
 
-    @abstractmethod
-    def founding(self, commander: str) -> tuple[Repo, ...]: ...
+    def founding(self, commander: str) -> tuple[Repo, ...]:
+        return self.applied(())
 
     @abstractmethod
     def without_commander(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class AcquiredRepositories(RepositorySelection):
+    """Already acquired descriptors stay values, not instructions to rediscover them."""
+
+    repos: tuple[Repo, ...]
+
+    def applied(self, recorded: tuple[Repo, ...]) -> tuple[Repo, ...]:
+        return self.repos
+
+    def without_commander(self) -> None:
+        raise ValueError('Acquired repository descriptors require a configured commander.')
 
 
 class GitCommandError(RuntimeError, CommandFailure):

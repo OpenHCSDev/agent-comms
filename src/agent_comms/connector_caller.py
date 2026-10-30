@@ -12,6 +12,7 @@ from .comms import Comms
 from .field_codec import FieldCodec, MalformedRecord
 from .head_review import HeadReviewOrder, PullRequestHead
 from .thread_identity import ThreadIncarnation
+from .registry_document import RegistrySnapshot
 from .todos import DirectiveText
 from .tool_caller import CommanderForkCaller, NoThreadCaller, OperatorOutcomes, ThreadCaller, ToolCaller
 from .tool_request import ToolArgumentsRefusedError, ToolRequest
@@ -70,6 +71,10 @@ class DirectorCaller(OperatorOutcomes, ConnectorCaller):
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
         return order.director_identity(comms.goals, self.identity(comms))
+
+    def require_repository_head_review_grant(self, snapshot: RegistrySnapshot,
+                                             actor: ThreadIncarnation) -> None:
+        """The connector's owner-typed capability may select repository head reviewers."""
 
     def exposed(self) -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
         return super().exposed() | {

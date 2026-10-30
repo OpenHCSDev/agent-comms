@@ -17,6 +17,7 @@ from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
@@ -76,7 +77,7 @@ def author_arguments(command, todo):
 
 
 def assert_review_preconditions(rule, comms, request):
-    ctx = order.Commander.read_root(comms.root)
+    ctx = order.Commander.read_root(comms.root, ThreadCaller('lead'))
     todo = comms.goals.todos.get("P2")
     commands = re.findall(r"`([^`]+)`", rule.line())
     judged = []
@@ -212,13 +213,13 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     goal = comms.registry.require("worker").goal.require()
     command = next(command for command in re.findall(r"`([^`]+)`", rule.line())
                    if command.startswith("judge ok "))
-    judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
+    judge.main(author_arguments(command, released), order.Commander.read_root(comms.root, ThreadCaller('lead')))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
     assert comms.registry.require("worker").goal.require() == goal
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
-    reassigned = accepted.assigned(proposed, accepted.order.owner)
+    reassigned = accepted.assigned(proposed, accepted.order.owner, accepted.order)
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 

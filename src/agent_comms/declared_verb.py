@@ -45,6 +45,11 @@ class DeclaredVerb(DeclaredCommand, affix="Verb"):
         return cls.__module__.rpartition(".")[2].replace("_", "-")
 
     @classmethod
+    def command_arguments(cls, *arguments: str) -> tuple[str, ...]:
+        """Encode this declared verb at the command-line boundary."""
+        return (cls.tool(), str(cls.selection_key()), *arguments)
+
+    @classmethod
     def parse(cls, argv: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(
             prog=cls.tool(),

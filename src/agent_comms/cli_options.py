@@ -10,6 +10,16 @@ from typing import ClassVar, Self
 from .field_codec import DisclosedRecord, FieldCodec
 
 
+class SingleArgument(argparse.Action):
+    """A caller selection is one explicit value, never last-writer-wins authority."""
+
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
+                 values: object, option_string: object = argparse.SUPPRESS) -> None:
+        if self.dest in vars(namespace):
+            parser.error(f'{self.format_usage()} must be supplied only once')
+        setattr(namespace, self.dest, values)
+
+
 class JsonFlagRecord(DisclosedRecord):
     """A record supplies its JSON-value flag; FieldCodec owns its representation."""
 
@@ -35,12 +45,10 @@ class JsonFlagRecord(DisclosedRecord):
         )
 
     @classmethod
-    def from_arguments(cls, arguments: Sequence[str], default: Self | None = None) -> Self:
+    def from_arguments(cls, arguments: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
         cls.add_cli_arguments(parser, required=False, dest="record")
-        parser.set_defaults(record=default)
         namespace, _ = parser.parse_known_args(arguments)
-        record = namespace.record
-        if record is None:
+        if "record" not in vars(namespace):
             raise ValueError(f"Missing required {cls.value_flag}")
-        return record
+        return namespace.record

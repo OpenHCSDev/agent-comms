@@ -346,13 +346,13 @@ class UnitOwedAnswer(OwedAnswer, declared_name=None):
 
     unit: str
 
-    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
-        return (self.message,) if unit.name == self.unit else ()
-
 
 @dataclass(frozen=True)
 class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
     """Message debt shares its source read with unit observations."""
+
+    def questions_for(self, unit: ThreadIncarnation) -> tuple[Message, ...]:
+        return (self.message,) if unit.name == self.unit else ()
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
