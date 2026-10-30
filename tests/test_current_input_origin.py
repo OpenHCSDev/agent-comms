@@ -1,5 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 from pathlib import Path
+from agent_comms.field_codec import AcpSessionId
 from agent_comms.repo import Checkout
 from agent_comms.controller import Controller, SessionUpdateSink
 
@@ -63,7 +64,7 @@ async def test_queue_observation_owns_capture_and_rejects_malformed_available_sc
         LiveQueueScope, NoQueueScope, UnavailableQueueProjection,
     )
     comms, agent = live_owner
-    scope = await agent.inputs.queue_binding('beta')
+    scope = await agent.inputs.queue_binding(AcpSessionId('beta'))
     assert scope == LiveQueueScope(
         session_id='beta', claimed_identity=comms.registry.snapshot().claimed_identity('beta'),
         owner=comms.registry.require('beta').require_process(),

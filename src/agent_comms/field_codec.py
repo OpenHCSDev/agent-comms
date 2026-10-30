@@ -2075,6 +2075,10 @@ class AcpSessionId(NominalText):
     """A local ACP attachment/execution identifier, not a native Pi journal ID."""
 
 
+class AcpSessionIdText(NominalSpelling[AcpSessionId]):
+    spelling = re.compile(r"\S{1,4096}")
+
+
 class Id128(NominalText):
     """A 128-bit identity; subclasses declare the kind it belongs to."""
 

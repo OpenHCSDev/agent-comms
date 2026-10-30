@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 class AgentCommsUpdate(DeclaredFamily, affix="Update"):
     """One declared fact; member identity supplies its wire discriminator."""
 
-    def for_session(self, session_id: str) -> AgentCommsUpdate:
+    def for_session(self, session_id: AcpSessionId) -> AgentCommsUpdate:
         return self
 
     def matches_turn(self, turn: ReportedTurnState) -> bool:
@@ -186,13 +186,13 @@ class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
     def to_wire(self):
         return None
 
-    def for_session(self, session_id: str):
+    def for_session(self, session_id: AcpSessionId):
         return self
 
-    def matches_session(self, session_id: str) -> bool:
+    def matches_session(self, session_id: AcpSessionId) -> bool:
         return False
 
-    def foreign_session(self, session_id: str) -> bool:
+    def foreign_session(self, session_id: AcpSessionId) -> bool:
         return False
 
     def relation(self, other: AttachmentScope) -> AttachmentRelation:
@@ -213,7 +213,7 @@ class AttachmentScope(AcceptsNull, ExternalJsonShape, WireValue):
 
 class LiveAttachmentScope(AttachmentScope, ClaimScoped):
     """Logical ACP attachment and executor evidence have separate identities."""
-    session_id: str
+    session_id: AcpSessionId
     owner: ProcessIdentity
 
     @property
@@ -231,13 +231,13 @@ class LiveAttachmentScope(AttachmentScope, ClaimScoped):
     def to_wire(self):
         return FieldCodec.encode_record(self)
 
-    def for_session(self, session_id: str):
+    def for_session(self, session_id: AcpSessionId):
         return replace(self, session_id=session_id)
 
-    def matches_session(self, session_id: str) -> bool:
+    def matches_session(self, session_id: AcpSessionId) -> bool:
         return self.session_id == session_id
 
-    def foreign_session(self, session_id: str) -> bool:
+    def foreign_session(self, session_id: AcpSessionId) -> bool:
         return self.session_id != session_id
 
     def require_live(self):
@@ -312,7 +312,7 @@ class NoCursorScope(CursorScope):
 
 @dataclass(frozen=True)
 class LiveCursorScope(CursorScope, LiveAttachmentScope):
-    session_id: str
+    session_id: AcpSessionId
     wire_root_id: RootId
     owner: ProcessIdentity
 
@@ -416,7 +416,7 @@ class CursorAdvancedUpdate(AgentCommsUpdate):
     envelope: CursorEnvelope
     selected_status: str | None = None
 
-    def for_session(self, session_id: str) -> CursorAdvancedUpdate:
+    def for_session(self, session_id: AcpSessionId) -> CursorAdvancedUpdate:
         return replace(self, envelope=replace(
             self.envelope, scope=self.envelope.scope.for_session(session_id)))
 
@@ -454,7 +454,7 @@ class NoQueueScope(QueueScope):
 
 @dataclass(frozen=True)
 class LiveQueueScope(QueueScope, LiveAttachmentScope):
-    session_id: str
+    session_id: AcpSessionId
     owner: ProcessIdentity
 
     @property
@@ -579,7 +579,7 @@ class QueueChangedUpdate(AgentCommsUpdate):
     def __post_init__(self):
         self.scope.validate_scope(self.projection)
 
-    def for_session(self, session_id: str) -> QueueChangedUpdate:
+    def for_session(self, session_id: AcpSessionId) -> QueueChangedUpdate:
         return replace(self, scope=self.scope.for_session(session_id))
 
     @property
@@ -614,7 +614,7 @@ class InputStartedUpdate(AgentCommsUpdate, declared_name=None):
     def when_unidentified(self, action: Callable[[], None]) -> None:
         pass
 
-    def for_session(self, session_id: str) -> InputStartedUpdate:
+    def for_session(self, session_id: AcpSessionId) -> InputStartedUpdate:
         return replace(self, scope=self.scope.for_session(session_id))
 
 
