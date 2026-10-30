@@ -1326,10 +1326,6 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     ) -> tuple[MessageReference, ...]:
         return ()
 
-    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
-        """Only a body part of that message counts when read back from its export."""
-        return ()
-
 
 class MonitorProtocolFrame(MonitorFrame, declared_name=None):
     """A line the monitor writes itself; the transcript scan knows it by its protocol prefix."""
@@ -1374,7 +1370,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     @classmethod
     def naming(cls, directory: Path, reference: MessageReference) -> Self:
         return cls.model_validate(dict(
-            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl')))
+            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.txt')))
 
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
@@ -1383,7 +1379,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         if not seq.isdecimal():
             return ()
         try:
-            identity = FieldCodec.decode(MessageId, name.removesuffix('.jsonl'))
+            identity = FieldCodec.decode(MessageId, name.removesuffix('.txt'))
         except field_codec.MalformedRecord:
             return ()
         notice = cls.naming(directory, MessageReference(int(seq), identity))
@@ -1404,7 +1400,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
             os.close(directory)
 
     def export(self, lines: tuple[str, ...]) -> None:
-        """Publish every encoded part, one per line, once. A file already at this path must
+        """Publish the message's lines once. A file already at this path must
         hold exactly these bytes: the bus message stays the source, never the file."""
         data = ''.join(line + '\n' for line in lines).encode()
         path = Path(self.path)
@@ -1472,9 +1468,6 @@ class MonitorPart(MonitorFrame, declared_name='part'):
         if self.number > self.total:
             raise ValueError('Monitor part number exceeds total')
         return self
-
-    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
-        return (self,) if self.id == message_id else ()
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
@@ -1560,6 +1553,10 @@ class MonitorIncomingFrame(IncomingFrame):
     @abstractmethod
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
         """Put the whole message on the reader as one event."""
+
+    @abstractmethod
+    def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
+        """The parts a visible Read of this message's export showed."""
 
 
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
@@ -1650,21 +1647,19 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         """A visible Read of this session's own export confirms the parts it shows, through the
         same all-parts gate a Monitor event uses. The export names an exact reference: only the
         attempt at that reference takes its parts, so a file at another sequence with the same
-        message id confirms nothing. Any other file, or a read whose every line is not a part of
-        the exported message, confirms nothing either. The export goes once that attempt, reread,
+        message id confirms nothing. Any other file, or a read showing anything but the exported
+        message's own lines, confirms nothing either. The export goes once that attempt, reread,
         is consumed and no other Read of it is still running."""
         references: list[MessageReference] = []
         for notice in MonitorReadFile.exported_at(self.exports, read.path):
             identity = notice.reference.message_id
-            frames = read.frames()
-            parts = tuple(part for frame in frames for part in frame.exported_part(identity))
-            if len(parts) != len(frames):
-                continue
+            rows = read.rows()
             with self.uncertain_on_contention(identity):
                 attempted = await self.attempts(identity)
                 for exact in (attempt for attempt in attempted
                               if attempt.reference == notice.reference):
-                    for part in parts:
+                    message = await self.message(exact.reference)
+                    for part in self.incoming_frame(message).read_parts(rows):
                         references.extend(await part.confirm(self, read.record))
                     for unread in read.closing(notice):
                         for stored in await self.coordinator_read(exact.stored):
