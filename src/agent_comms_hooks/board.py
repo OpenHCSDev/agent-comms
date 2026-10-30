@@ -61,7 +61,7 @@ class SessionWire:
     @classmethod
     def decoded(cls, **fields: Sequence[str]) -> Self:
         """Decode this member's fields only after its discriminator matched."""
-        raise NotImplementedError
+        return cls(**{name: tuple(value) for name, value in fields.items()})
 
 
 @dataclass(frozen=True)
@@ -105,8 +105,10 @@ class BoardSummary:
 
     def line(self) -> str:
         shown = self.shown
-        return (f"BOARD: {len(self.entries)} unchanged, {len(self.flagged)} from Tristan: "
-                f"{shown.text[:self.shown_chars]} (seen {shown.minutes(self.now)} min)")
+        return (
+            f"BOARD: {len(self.entries)} unchanged, {len(self.flagged)} from Tristan: "
+            f"{shown.text[:self.shown_chars]} (seen {shown.minutes(self.now)} min)"
+        )
 
 
 @dataclass(frozen=True)
@@ -118,7 +120,9 @@ class SessionBoard(SessionWire):
     lines: tuple[str, ...]
 
     @classmethod
-    def presented(cls, due: Sequence[BoardEntry], unchanged: Sequence[BoardEntry], now: float) -> SessionBoard:
+    def presented(
+        cls, due: Sequence[BoardEntry], unchanged: Sequence[BoardEntry], now: float
+    ) -> SessionBoard:
         """Each change once, then exactly one summary of the current unchanged lines."""
         lines = tuple(entry.line(now) for entry in due)
         if unchanged:
@@ -128,10 +132,6 @@ class SessionBoard(SessionWire):
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:
         return cls.replied(**cls.exchanged(endpoint))
-
-    @classmethod
-    def decoded(cls, **fields: Sequence[str]) -> Self:
-        return cls(tuple(fields["lines"]))
 
 
 @dataclass(frozen=True)
@@ -145,7 +145,3 @@ class SessionOwnerSaid(SessionWire):
     @classmethod
     def asked(cls, endpoint: Path, transcript: Path) -> SessionOwnerSaid:
         return cls.replied(**cls.exchanged(endpoint, transcript=str(transcript)))
-
-    @classmethod
-    def decoded(cls, **fields: Sequence[str]) -> Self:
-        return cls(tuple(fields["words"]))

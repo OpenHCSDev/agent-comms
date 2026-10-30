@@ -153,8 +153,9 @@ class GatedCall(ClaudeToolHook, DealtRuleGate):
         """His last prompt as this call runs, not as the deal showed it. The bridge holds the
         transcript's decoder, which would cost this hook 3 s of imports; a session with no
         bridge has the deal's copy."""
-        return (WatchClaim(self.session_id).state().owner_said(Path(self.transcript_path))
-                or super().owner_said(due))
+        return WatchClaim(self.session_id).state().owner_said(
+            Path(self.transcript_path)
+        ) or super().owner_said(due)
 
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
