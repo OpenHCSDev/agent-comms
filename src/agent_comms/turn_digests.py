@@ -5,7 +5,7 @@ from __future__ import annotations
 from agent_comms.field_codec import ActivityExclude
 
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -189,6 +189,17 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
+class RecentTurnsSince(TurnsSince):
+    """Keep the recent turn window as well as every turn since an order's review cut."""
+
+    recent: LastTurns = field(kw_only=True)
+
+    def take(self, turns: Iterable[TurnDigest]) -> tuple[TurnDigest, ...]:
+        remaining = iter(turns)
+        return (*self.recent.take(remaining), *super().take(remaining))
+
+
+@dataclass(frozen=True)
 class ThreadRead[Result](ConversationPreparation):
     """The original native/external source selection, shared by typed readers."""
 
@@ -276,9 +287,12 @@ class OrderEditRead[Result](OrderRead[Result]):
     workplaces: EditWorkplaces
     progress: OrderProgress = NoCommitProgress()
 
-    def read(self) -> Result:
+    def when_readable(self, operation: Callable[[], Result]) -> Result:
         self.progress.require_read()
-        return super().read()
+        return operation()
+
+    def read(self) -> Result:
+        return self.when_readable(super().read)
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
@@ -318,6 +332,16 @@ class OrderEditRead[Result](OrderRead[Result]):
                      if edit.id not in judged
                      and self.workplaces.problems_for(edit.path) == frozenset((self.todo.id,)))
 
+    @abstractmethod
+    def project_edits(self, edits: tuple[EditCall, ...]) -> Result: ...
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> Result:
+        return self.when_readable(lambda: self.project_edits(self.edits_from_turns(turns)))
+
+    def from_external(self, source: StoreRead) -> Result:
+        return self.when_readable(lambda: self.project_edits(
+            self.owned(source.unjudged(self.todo, self.bound.at))))
+
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         since = self.bound.at
         edits = {edit.id: edit for turn in reversed(turns)
@@ -331,24 +355,18 @@ class OrderEditRead[Result](OrderRead[Result]):
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
-    def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
-        return self.edits_from_turns(turns)
-
-    def from_external(self, source: StoreRead) -> tuple[EditCall, ...]:
-        return self.owned(source.unjudged(self.todo, self.bound.at))
+    def project_edits(self, edits: tuple[EditCall, ...]) -> tuple[EditCall, ...]:
+        return edits
 
 
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
-    def read(self) -> int:
-        return self.progress.unjudged(super().read)
+    def when_readable(self, operation: Callable[[], int]) -> int:
+        return self.progress.unjudged(operation)
 
-    def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
-        return len(self.edits_from_turns(turns))
-
-    def from_external(self, source: StoreRead) -> int:
-        return len(self.owned(source.unjudged(self.todo, self.bound.at)))
+    def project_edits(self, edits: tuple[EditCall, ...]) -> int:
+        return len(edits)
 
 
 @dataclass(frozen=True)
