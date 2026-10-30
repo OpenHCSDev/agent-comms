@@ -22,6 +22,7 @@ from agent_comms.bus import Bus, BusSnapshot
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.channel_targets import NamedTarget
 from agent_comms.child_process import AsyncWork
+from agent_comms.native_build_inputs import GitLaunch
 from agent_comms.channels import AnyChannel
 from agent_comms.context_segments.awareness import AwarenessSegment
 from agent_comms.coordinator import Coordination
@@ -70,6 +71,7 @@ class Watch(AsyncWork, FreshIngress, DeclaredFamily, ABC):
 
     def enter_phase[Result](self, comms: Comms, operation: Callable[[], Result]) -> Result:
         """Refuse a new watch phase before its effects, without borrowing a store lock."""
+        GitLaunch.enter_phase()
         self.require_entry_open(comms.root)
         return operation()
 
@@ -97,7 +99,8 @@ class PreparedWatchPass[Prepared, Observed](Watch):
         with opened_wire() as comms:
             prepared = await comms.bus.when_open(partial(
                 self.enter_phase, comms, partial(self.prepare, comms)))
-            observed = await self.run_async(partial(self.observe, comms, prepared))
+            observed = await self.run_async(partial(
+                self.enter_phase, comms, partial(self.observe, comms, prepared)))
             await comms.bus.when_open(partial(
                 self.enter_phase, comms, partial(self.pass_body, comms, observed)))
 

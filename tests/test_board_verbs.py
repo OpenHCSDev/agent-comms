@@ -10,6 +10,11 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.commander import judge, order
+from agent_comms.channel_targets import CommandersTag
+from agent_comms.errors import TodoError
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
@@ -71,6 +76,7 @@ def author_arguments(command, todo):
         "ok": ["--why", REASON.text, "--serves", QUOTE],
         "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
         "reviewing": [],
+        "superseded": ["--why", REASON.text, "--by", todo.id],
     }
     return arguments[1:] + authored[verb]
 
@@ -106,7 +112,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
-    assert (UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)) == claim_it
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
@@ -166,7 +172,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
-        assert (UnderReviewHeadVerdict in verdicts) == (rule.todo.id == second.id)
+        assert UnderReviewHeadVerdict in verdicts
     frame = capture_frame(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
@@ -174,7 +180,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     timer, = timers
     assert timer.todo == timed
     assert timer.problem == first.id
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(timer, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(timer, comms, request)
 
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
@@ -203,7 +209,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert released.order.holds_head(request)
     assert comms.goals.todos.resolve_order(released.creator_identity, previous.owner, released.id) == released
     rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(rule, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
     ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(
@@ -262,3 +268,17 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
     NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
+
+
+def test_every_commander_of_the_project_may_review_its_heads(board_review):
+    """Review authority is the project's commanders, not its registered lead alone: a #commanders
+    peer judges the same heads, and a commanded unit still may not."""
+    comms, request, _, _ = board_review
+    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+                                  comms.registry.require("lead").worktree,
+                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
+                                  execution=ExternalThreadExecution))
+    NoHeadOrder().require_reviewer(comms.goals, request, comms.registry.require("peer").incarnation)
+    with pytest.raises(TodoError, match="Only a commander of this project"):
+        NoHeadOrder().require_reviewer(comms.goals, request,
+                                       comms.registry.require("worker").incarnation)

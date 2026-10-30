@@ -11,7 +11,7 @@ from . import turn_failure as failures
 from .field_codec import InputId
 
 if TYPE_CHECKING:
-    from .agent_backend import TurnInbox, TurnInboxItem
+    from .turn_inbox import TurnInbox, TurnInboxItem
     from .backend import NativeSession
     from .turn_inputs import InputForwarding
 
@@ -65,7 +65,7 @@ class DeferredSend(SendOutcome):
 class RefusedSend(SendOutcome):
     def apply(self, inputs: InputForwarding, session: NativeSession,
               item: TurnInboxItem, write: Callable[[], None]) -> Awaitable[bool]:
-        item.refuse(inputs, session)
+        session.refuse(item)
         return asyncio.sleep(0, result=True)
 
 

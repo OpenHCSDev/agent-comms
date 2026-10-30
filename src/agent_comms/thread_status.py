@@ -27,11 +27,12 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .registration import Registration
+    from .message_reference import MessageReference
+    from .messaging import Messaging
+    from .turn_item import SourceTurn
     from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
     from .threads import Thread
-    from .tool_caller import ToolCaller
     from .turn_lease import TurnCompletion, TurnLeaseFence
 
 
@@ -52,6 +53,15 @@ class SelfRenaming:
 class Visible:
     """A presence that can be addressed, started and pinned in channels."""
 
+    def reply(
+        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+    ) -> tuple[MessageReference, ...]:
+        return (messaging.send(
+            sender=sender, target=target, body=body,
+            answers=answers, source_turn=source_turn,
+        ).message.reference,)
+
     def allows_owner_control(self) -> bool:
         return True
 
@@ -70,15 +80,28 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     archived: ClassVar[bool] = False
     # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
     vacant: ClassVar[bool] = False
+    # Whether this row's session still runs in its recorded process, keeping that host alive.
+    holds_process: ClassVar[bool] = False
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
+    def reply(
+        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+    ) -> tuple[MessageReference, ...]:
+        """Unavailable recipients retain their answer in the transcript, not a new DM."""
+        return ()
+
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return self
 
     def declaration(self) -> ThreadStatus:
+        return self
+
+    def fenced(self) -> ThreadStatus:
+        """This stored status while its process still binds it; only a stop has a fence."""
         return self
 
     def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
@@ -122,9 +145,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
 
     def changes_owner(self, nxt: ThreadStatus) -> bool:
         return self.starts_owner(nxt) or nxt.starts_owner(self)
-
-    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
-        return True
 
     def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
@@ -179,7 +199,19 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=None):
+class HostBoundPresence:
+    """A session still running in the recorded process: it keeps that host alive, and a
+    restart retires and relaunches it while the process lives."""
+
+    holds_process: ClassVar[bool] = True
+
+    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return thread.role.executor(thread) if thread.process_alive else ()
+
+
+class ActiveThreadPresence(
+    HostBoundPresence, AlwaysListed, Visible, ThreadStatus, declared_name=None,
+):
     """Shared semantics of running and idle owners; not a second state family."""
 
     receiving = True
@@ -203,16 +235,10 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
     def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
         counter.advance(name)
 
-    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
-        return caller.matches_thread(registry, name)
-
     def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
         if not thread.process_alive:
             return super().native_owner_binding(snapshot, thread)
         return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
-
-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
-        return thread.role.executor(thread) if thread.process_alive else ()
 
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return ()
@@ -290,11 +316,29 @@ class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
     vacant = True
 
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        """Stopped never keeps a process binding, so a stored stop still bound is a fence
+        whose host has not completed the session."""
+        return thread.process_identity.stopped_seen(self)
+
+    def fenced(self) -> ThreadStatus:
+        return StoppingThreadStatus()
+
     def require_stopped(self) -> None:
         pass
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.stopped
+
+
+class StoppingThreadStatus(HostBoundPresence, StoppedThreadStatus):
+    """Fenced against new work while its host completes the session. The binding stays
+    until that completion, so a restart cannot race it; a stop sent again completes a
+    session the host no longer holds. It is stored as stopped: the kept binding is what
+    tells it apart, so the registry's stored format does not change."""
+
+    def declaration(self) -> ThreadStatus:
+        return StoppedThreadStatus()
 
 
 class CliInboxPresence(AlwaysListed):

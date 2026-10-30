@@ -4,6 +4,7 @@
 from agent_comms.repo import Checkout
 import asyncio
 import fcntl
+import json
 import os
 import sqlite3
 import subprocess
@@ -15,6 +16,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pydantic import JsonValue
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.rule_deal import ReadSpan
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
@@ -222,6 +225,12 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
 
 
 @pytest.fixture
+def undealt_gate(tmp_path: Path) -> PiRuleGate:
+    """A Pi rule gate never dealt any rules, so it lets every call run."""
+    return PiRuleGate(tmp_path / "scratch", tmp_path)
+
+
+@pytest.fixture
 def user_manager(monkeypatch: pytest.MonkeyPatch) -> type:
     """A test that stands in for systemd's own commands names the manager it plays; every
     other test home has no user manager (``ResidentManager.current``)."""
@@ -416,7 +425,6 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
@@ -428,16 +436,27 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
                 url=str(source.remote_path), vcs_info=CommitRecord(commit_id=source.main_commit),
             ),
         )
-    runtime = tmp_path / 'installed-runtime'
-    (runtime / 'bin').mkdir(parents=True)
-    (runtime / 'bin/python').symlink_to(sys.executable)
-    RuntimeResolution(
+    return record_installed_runtime(tmp_path / 'installed-runtime', RuntimeResolution(
         core_commit=repository.git(repository.checkout, 'rev-parse', 'HEAD').strip(),
         packages=packages,
-    ).save(runtime)
-    current = durable_home / '.local/share/agent-comms/current'
-    current.parent.mkdir(parents=True)
-    current.symlink_to(runtime, target_is_directory=True)
+    ))
+
+
+def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> LaunchRuntime:
+    """The one test writer of an installation: interpreter, resolution and HOME's pointer.
+
+    A later record re-points the pointer, as a reinstall does, so fixtures that each install
+    a build can share one HOME.
+    """
+    from agent_comms.launch_runtime import LaunchRuntime
+
+    (runtime / 'bin').mkdir(parents=True)
+    (runtime / 'bin/python').symlink_to(sys.executable)
+    resolution.save(runtime)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.unlink(missing_ok=True)
+    pointer.symlink_to(runtime, target_is_directory=True)
     return LaunchRuntime.installed()
 
 
@@ -528,16 +547,56 @@ def wired(comms: Comms) -> Comms:
 
 
 
+def declare_fleet(comms: Comms, commander: Thread) -> Comms:
+    """The bus's commander project, naming `commander`: the one test owner of a fleet, for a
+    test whose goals need a commander to assign them."""
+    comms.registry.declare(commander)
+    comms.registry.set_commander_project(RegisteredCommanderProject(
+        comms.registry.require(commander.name).incarnation, ()))
+    return comms
+
+
+def answer_rules(comms: Comms, name: str) -> None:
+    """Deal a Pi unit its fleet rules and answer them, as a unit does before its first tool:
+    every dealt file read in full, then an audit answering every rule and prompt."""
+    deal = PiRedeal.of(comms, comms.registry.require(name))
+    deal.redeal()
+    answer_deal(deal)
+
+
+def engaged(rule: str, source: Path) -> dict[str, str]:
+    """An audit entry answering one rule file with a greentext line it really holds."""
+    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.startswith("> "))
+    return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
+
+
+def answer_deal(deal: PiRedeal) -> None:
+    """Read every file of the current deal in full, answering each rule as it is read, and write
+    the audit answering the deal."""
+    record = deal.current()
+    answered = []
+    for source in record.dealt:
+        deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
+        if source.stem in record.due.rules:
+            answered.append(engaged(source.stem, source))
+        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
+    deal.audit.write_text(json.dumps({
+        "rules": answered,
+        "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
+    }))
+
+
 @pytest.fixture
 def commander_bus(tmp_path):
-    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`."""
-    bus = wire(tmp_path / "bus")
-    for name in ("claude-code", "unit-x"):
-        bus.registry.declare(Thread(
-            name, frozenset(), Checkout(tmp_path),
-            model=DeclaredModel("anthropic/claude-opus-4-6")))
-    bus.registry.set_commander_project(RegisteredCommanderProject(
-        bus.registry.require("claude-code").incarnation, ()))
+    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`. Its
+    storage rule keeps scratch under the bus root, so no deal reaches the developer's home
+    whatever HOME holds when the bus is built."""
+    bus = declare_fleet(installed_comms(tmp_path / "bus"), Thread(
+        "claude-code", frozenset(), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    bus.registry.declare(Thread(
+        "unit-x", frozenset(), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
     return bus
 
 

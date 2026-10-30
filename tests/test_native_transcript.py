@@ -2,16 +2,20 @@
 
 import json
 from dataclasses import fields
+from pathlib import Path
 
 import pytest
 
 from agent_comms.field_codec import (
     FieldCodec,
+    InputId,
     MalformedRecord,
     ToolCallId,
 )
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
+from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (
     AssistantTranscript,
@@ -22,7 +26,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId
+from agent_comms.turn_item import FreshNativeId, NativeItemId
 from conftest import transcript_records
 
 STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
@@ -135,5 +139,41 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
     assert list(transcript.tail(max_bytes=size)) == list(transcript.tail())
     # The caller-requested byte window remains a view limit, not a record quota.
     assert list(transcript.tail(max_bytes=512)) == [forward[-1].entry]
+
+
+@pytest.mark.parametrize(('stop_reason', 'body', 'parent', 'next_input', 'complete', 'answered'), (
+    ('stop', 'A committed final', 'opening-input', False, True, True),
+    ('toolUse', 'Before a tool', 'opening-input', False, True, False),
+    ('aborted', 'Interrupted output', 'opening-input', False, True, False),
+    ('error', 'Failed output', 'opening-input', False, True, False),
+    ('stop', '', 'opening-input', False, True, False),
+    ('stop', 'Another branch', 'older-input', False, True, False),
+    ('stop', 'Another turn', 'next-input', True, True, False),
+    ('stop', 'An unfinished record', 'opening-input', False, False, False),
+))
+def test_native_final_stays_inside_its_proved_input_and_ancestry(
+    tmp_path: Path, stop_reason: str, body: str, parent: str, next_input: bool, complete: bool, answered: bool,
+) -> None:
+    path = tmp_path / 'answer.jsonl'
+    session_id = PiSessionId.fresh()
+    input_id = InputId.mint()
+    prefix = encoded(dict(type='session', version=3, id=session_id, cwd=str(tmp_path),
+                          timestamp='2026-10-01T00:00:00.000Z'))
+    # Neither the forward answer read nor its bounded ancestry walk may decode old history.
+    prefix += b'{an unrelated older row that is outside this input}\n'
+    opening = encoded(dict(type='message', id='opening-input', parentId='older-input',
+        timestamp='2026-10-01T00:00:00.000Z', message=dict(role='user', content='The opening question',
+            inputId=input_id, inputDigest='b' * 64)))
+    following = encoded(dict(type='message', id='next-input', parentId='opening-input',
+        timestamp='2026-10-01T00:00:00.000Z', message=dict(role='user', content='A different question')))
+    final = encoded(dict(type='message', id='answer', parentId=parent,
+        timestamp='2026-10-01T00:00:00.000Z', message=dict(role='assistant',
+            content=[dict(type='text', text=body)], stopReason=stop_reason)))
+    path.write_bytes(prefix + opening + (following if next_input else b'') +
+                     (final if complete else final.removesuffix(b'\n')))
+    context = NativeContextProof(input_id=input_id, session_id=session_id,
+        session_entry_id=FreshNativeId('opening-input'), request_generation=1, llm_context_digest='a' * 64,
+        committed_at_ms=1761699600000, session_file=path, session_entry_start=len(prefix))
+    assert NativeTranscript(path).completed_input(context) is answered
 
 

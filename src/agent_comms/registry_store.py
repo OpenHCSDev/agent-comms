@@ -14,11 +14,11 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import DocumentBytes, LockedStore, RegistryFile
+from .locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -140,6 +140,25 @@ class RegistryCut(RegistrySelection):
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryEntriesCut(RegistryCut):
+    """A complete cut whose decisions read only these threads' entries.
+
+    Other threads' writes (every live owner's heartbeat) leave such a decision
+    intact, so they never stale it; any change to one of these entries does.
+    """
+
+    names: frozenset[str]
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
+        with self.store.guarded_read():
+            for name in self.names:
+                if self.store.entry_unlocked(name) != self.snapshot.entry(name):
+                    raise StaleFence(f"registry entry {name!r} changed after this decision read it")
+            yield
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryPairCut[Peer](RegistryCut):
     peer: Peer
 
@@ -198,6 +217,9 @@ class RegistryEdit:
     original: RegistryRevision
     superseded: list[StoredTurnRecord] = field(default_factory=list)
     """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
+    released: list[Callable[[], None]] = field(default_factory=list)
+    """Other stores' writes this edit causes; they run after the registry lock is released, so
+    no unit's registry read waits behind a second store's lock."""
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         restored = self.document.restore_stopped(source, names)
@@ -207,12 +229,12 @@ class RegistryEdit:
             ).prepare_participant(self.store)
         return restored
 
-    def fence_idle_owners(
+    def fence_restart_owners(
         self, selected: Sequence[tuple[Thread, int]]
     ) -> tuple[tuple[Thread, int], ...]:
-        """Commit all original idle owner fences together, or change none."""
+        """Commit all original restart fences together, or change none."""
         fenced = tuple(
-            (thread, self.document.fence_idle_owner(
+            (thread, self.document.fence_restart_owner(
                 thread, expected_claimed_generation=generation
             ))
             for thread, generation in selected
@@ -379,6 +401,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
 
+    def entries_cut(self, names: frozenset[str]) -> RegistryEntriesCut:
+        cut = self.snapshot_with_authority()
+        return RegistryEntriesCut(self, cut.revision, cut.snapshot, cut.privacy, names)
+
     def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.
 
@@ -444,6 +470,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
 
+    def entry_unlocked(self, name: str) -> RegistryEntry:
+        """This thread's current entry; the caller holds the registry guard."""
+        return self._decode_revision(self._capture_unlocked()).document.entry(name)
+
     def current_entry(self, name: str) -> AbstractContextManager[RegistryEntryRevision]:
         """Retain one current participant without materializing unrelated declarations."""
         return RegistryEntryRevision.captured(partial(self.read_entry, name))
@@ -481,7 +511,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         with self.guarded_write():
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
-            yield RegistryEdit(self, original.document.copy(), original)
+            edit = RegistryEdit(self, original.document.copy(), original)
+            yield edit
+        for write in edit.released:
+            write()
 
     def retire_processes(self) -> None:
         with self.editing() as edit:
@@ -531,6 +564,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         self.cache.guard = key, guard
         return guard
 
+    @PublishedProperty
+    def coordinator_reader(self) -> ReadableStore:
+        return ReadableStore(CoordinationStore.path_in(self.path.parent))
+
     def _check_guard_unlocked(self) -> RegistryPrivacy:
         if self.guard_path.exists() or self.guard_path.is_symlink():
             return PrivateRegistryGuard.load(self.path)
@@ -538,7 +575,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         if coordinator.exists() or coordinator.is_symlink():
             from .private_runtime_schema import PrivateCoordinatorTable
 
-            with CoordinationStore.opened_reader(coordinator) as db:
+            with self.coordinator_reader.reader_snapshot() as db:
                 if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
         return PublicRegistry()

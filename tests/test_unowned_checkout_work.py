@@ -163,7 +163,6 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     c.transcripts.external('idle').finish(
         turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
             'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
-    CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c
 
@@ -199,7 +198,8 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
             current.revision, c.registry.require('lead').incarnation, strike,
             'The cited failure was incorrect and the commander takes back this strike.'))
-        following = ServicePassFailing('following-rule', time.time(), 'independent source')
+        following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
+                                       failed_at=time.time())
         run_heartbeat_rules(c, (stale, following))
 
         assigned = c.goals.todos.get('P1')
@@ -225,8 +225,10 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
             raise TodoConflict(self.current)
 
     current = c.goals.todos.get('P1')
-    stale = ConflictingServicePass('stale-rule', time.time(), 'changed row', current)
-    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    stale = ConflictingServicePass(watch='stale-rule', since=time.time(), error='changed row',
+                                   failed_at=time.time(), current=current)
+    following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
+                                   failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
         update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
@@ -256,7 +258,8 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         previous.revision, c.registry.require('lead').incarnation, strike,
         'The cited failure was incorrect and the commander takes back this strike.'))
     stale = ChangingRow(previous, current)
-    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
+                                   failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():
         rejected = StandingRule.enforce_all(c, 'lead', (stale, following))
         error, = rejected.values()

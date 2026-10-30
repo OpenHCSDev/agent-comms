@@ -11,7 +11,9 @@ from functools import partial
 from pathlib import Path
 
 import pytest
-from debt_ratchet import UncarriedRecordFormat, git
+
+from agent_comms_project import AgentCommsProject
+from nominal_refactor_advisor import audit
 
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_verbs.stop import StopCliCommand
@@ -35,12 +37,12 @@ from agent_comms.installer.upgrade import (
     Stack,
     StepRun,
     TargetStack,
-    TargetTree,
     UnchangedInstall,
     UnchangedRehearsal,
     carried,
 )
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import (
@@ -118,16 +120,16 @@ SPELLED = "    root: Annotated[str, Id128Text]\n"
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, before, version, fields, step, uncarried):
     repo = Repository(tmp_path)
-    package = git(REPO, "archive", "HEAD", "--", "src/agent_comms")
-    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=package, check=True, timeout=60)
+    AgentCommsProject(REPO).extract("HEAD", tmp_path, "src/agent_comms", "tools/stored_formats.py")
     record = tmp_path / "src" / "agent_comms" / "record.py"
     record.write_text(record_source(1, before))
     base = repo.commit({})
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
     changed = {"src/agent_comms/record.py"}
-    assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
-        {UncarriedRecordFormat.total(): 0}, {UncarriedRecordFormat.total(): uncarried})
+    assert audit.project_measures.UncarriedRecordFormat.counted(AgentCommsProject(tmp_path), base, head, changed,
+                                         "src/agent_comms") == (
+        {audit.project_measures.UncarriedRecordFormat.total(): 0}, {audit.project_measures.UncarriedRecordFormat.total(): uncarried})
 
 
 def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
@@ -160,7 +162,7 @@ def stack(tmp_path):
 
 @pytest.fixture(scope="module")
 def noisy_step(tmp_path_factory):
-    tree = TargetTree(REPO, tmp_path_factory.mktemp("noisy-step"), "noisy-step")
+    tree = TargetTree(tmp_path_factory.mktemp("noisy-step"), "noisy-step", repo=REPO)
     (tree.path / "tools" / "cutover").mkdir(parents=True)
     (tree.path / "tools" / "cutover" / "__init__.py").touch()
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)
@@ -398,7 +400,7 @@ async def test_the_install_start_stops_owners_under_its_hold(
         with LaunchRoot.from_path(comms.root).selected():
             comms.registry.declare(Thread("unit", frozenset(), Checkout(tmp_path)))
             await Coordination.run_worker(partial(
-                comms.owners.start, "unit", agent_bin=GivenBinary("pi"),
+                comms.owners.start_many, ("unit",), agent_bin=GivenBinary("pi"),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
             original = comms.registry.require("unit")

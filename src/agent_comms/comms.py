@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import AbstractContextManager, aclosing, contextmanager
+from collections.abc import AsyncIterator
+from contextlib import AbstractContextManager, aclosing
 from functools import partial
 from pathlib import Path
 
 from .active_route import CommsRoute, resolve_comms_route
-from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .channel_management import ChannelManagement
 from .collaboration_ledger import CollaborationLedger
@@ -17,8 +16,6 @@ from .coordinator import Coordination
 from .errors import UnregisteredThreadError
 from .goal_management import Goals
 from .history_views import HistoryViews
-from .launch_runtime import LaunchRuntime
-from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .message_reference import InboxStart
@@ -26,33 +23,23 @@ from .agent_inbox import TakenInputStart
 from .messages import Message
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
-from .phase_evidence import PlanReadings
 from .publisher import OwnerPublisher
-from .registration import Registration
 from .relationships import ThreadRelationships
-from .root_runtime import RootRuntime
+from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
 from .transcripts import Transcripts
 from .watched import FileSource
 
 
-class Comms:
-    def __init__(
-        self, root: CommsRoute,
-        *, plans: PlanReadings = PlanReadings(),
-    ) -> None:
-        self.plans = plans
-        self.route = root
-        RootRuntime.require_attachable(self.route.root, LaunchRuntime.running())
-        self.route.observe_root()
-        self.registry = Registration(RegistryFile.path_in(self.root))
+class Comms(ActivityClient):
+    def __init__(self, root: CommsRoute) -> None:
+        super().__init__(root)
         self.bus = MessageBus(
             self.root,
             self.registry,
             OwnerPublisher,
         )
-        self.agents = AgentActivity(self.root, self.registry)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.messaging = Messaging(self.root, self.registry, self.bus, self.goals)
         self.ledger = CollaborationLedger.at(self.root, self.registry)
@@ -78,16 +65,6 @@ class Comms:
         )
         self.relationships = ThreadRelationships(self.root, self.registry, self.bus, self.views)
 
-    @property
-    def root(self) -> Path:
-        return self.route.root
-
-    @classmethod
-    @contextmanager
-    def client(cls, route: CommsRoute, *, plans: PlanReadings = PlanReadings()) -> Iterator[Comms]:
-        """One complete client call on this selected route."""
-        yield cls(route, plans=plans)
-
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),
     ) -> AsyncIterator[Message]:
@@ -112,19 +89,15 @@ class Comms:
                         break
 
 
-def wire(
-    root: Path | str | None = None,
-    *, plans: PlanReadings = PlanReadings(),
-) -> Comms:
+def wire(root: Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     route = resolve_comms_route(root)
-    return Comms(route, plans=plans)
+    return Comms(route)
 
 
-def client_wire(root: Path | str | None = None, *,
-                plans: PlanReadings = PlanReadings()) -> AbstractContextManager[Comms]:
+def client_wire(root: Path | str | None = None) -> AbstractContextManager[Comms]:
     """One client call: it borrows the published route until it retires and answers in full.
 
     Every reader observes committed bus rows without preparing another store.
     """
-    return Comms.client(resolve_comms_route(root), plans=plans)
+    return Comms.client(resolve_comms_route(root))

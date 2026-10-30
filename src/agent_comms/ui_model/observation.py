@@ -445,6 +445,7 @@ class ReadCommanderUnit(ReadRequest):
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
         hud = CommanderFrame.current(comms, self.commander.name)
+        hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
                 return card.detail(comms, self.commander, self.orders)
@@ -493,7 +494,7 @@ class OwnerRead(AwaitedRead):
         if owner.incarnation != self.owner:
             raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
         return OwnerReplyConnection(
-            comms, owner.name, socket_path(comms.root, owner.require_process().pid),
+            comms, owner.incarnation, socket_path(comms.root, owner.require_process().pid),
         )
 
     async def ask(self, comms: Comms) -> object:

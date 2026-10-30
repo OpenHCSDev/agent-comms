@@ -20,12 +20,11 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from subprocess import TimeoutExpired
-from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
-from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import GitCommandError, Repo
 
@@ -34,20 +33,48 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
+class MainModule:
+    """One Python module of main, parsed once per blob."""
+
+    file_path: str
+    source: str
+    module: ast.Module
+
+
+class Census(ABC):
+    """The installed NominalRefactorAdvisor's census, as evidence counts with it. Its
+    implementation owns the advisor, so declaring evidence never loads the advisor; only a
+    tree read for a plan carries one."""
+
+    @abstractmethod
+    def god_function(self, module: MainModule,
+                     function: ast.FunctionDef | ast.AsyncFunctionDef) -> bool: ...
+
+    @abstractmethod
+    def absence_probes(self, node: ast.AST) -> int: ...
+
+    @abstractmethod
+    def audit_package(self) -> Path: ...
+
+
+@dataclass(frozen=True)
 class MainTree:
-    """One commit of a repository's fetched ``origin/main``; evidence never reads a worktree."""
+    """One commit of a repository's fetched ``origin/main``, counted with ``census``; evidence
+    never reads a worktree."""
 
     repo: Repo
     commit: str
+    census: Census = field(compare=False, repr=False)
     branch: ClassVar[str] = "main"
     source: ClassVar[str] = ".py"
-    parsed: dict[str, tuple[str, ParsedModule]] = field(
+    parsed: dict[str, tuple[str, MainModule]] = field(
         default_factory=dict, compare=False, repr=False, kw_only=True,
     )
 
     @classmethod
-    def of(cls, repo: Repo) -> MainTree:
-        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"{repo.remote}/{cls.branch}").strip())
+    def of(cls, repo: Repo, census: Census) -> MainTree:
+        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"{repo.remote}/{cls.branch}").strip(),
+                   census)
 
     def advanced(self) -> MainTree:
         """An explicitly selected historical tree never moves."""
@@ -100,12 +127,11 @@ class MainTree:
             )
         )
 
-    def module(self, path: str) -> ParsedModule:
-        blob, = Repo.blobs(self.repo.checkout, f"{self.commit}:{path}")
-        source = blob.decode()
-        return ParsedModule(path, source, ast.parse(source, filename=path), path)
+    def module(self, path: str) -> MainModule:
+        module, = self.modules((path,))
+        return module
 
-    def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
+    def present_modules(self, paths: tuple[str, ...]) -> Iterator[MainModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
         a declared path main no longer holds has no module, and nothing it held is left."""
         missing = self.missing(paths)
@@ -113,7 +139,7 @@ class MainTree:
             if not absent:
                 yield self.module(path)
 
-    def modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
+    def modules(self, paths: tuple[str, ...]) -> Iterator[MainModule]:
         """Every Python module under ``paths``. Each path keeps its last parsed blob, so every
         evidence reading one commit parses it once, and the rest are read in one
         ``git cat-file --batch``."""
@@ -124,8 +150,7 @@ class MainTree:
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
         for (blob, name), content in zip(fresh, contents, strict=True):
             source = content.decode()
-            self.parsed[name] = blob, ParsedModule(name, source,
-                                                   ast.parse(source, filename=name), name)
+            self.parsed[name] = blob, MainModule(name, source, ast.parse(source, filename=name))
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
@@ -140,24 +165,24 @@ class LiveMainTree(MainTree):
     revisions: tuple[FileObservation, ...] = field(compare=False)
 
     @classmethod
-    def of(cls, repo: Repo) -> LiveMainTree:
+    def of(cls, repo: Repo, census: Census) -> LiveMainTree:
         loose, packed = Repo.git(
             repo.checkout, 'rev-parse', '--path-format=absolute',
             '--git-path', f'refs/remotes/{repo.remote}/{cls.branch}', '--git-path', 'packed-refs',
         ).splitlines()
         references = (Path(loose), Path(packed))
         revisions = tuple(FileRevision.capture(path) for path in references)
-        tree = MainTree.of(repo)
-        return cls(repo, tree.commit, references, revisions)
+        tree = MainTree.of(repo, census)
+        return cls(repo, tree.commit, census, references, revisions)
 
     def advanced(self) -> LiveMainTree:
         revisions = tuple(FileRevision.capture(path) for path in self.references)
         if revisions == self.revisions:
             return self
-        tree = MainTree.of(self.repo)
+        tree = MainTree.of(self.repo, self.census)
         # Capture before reading Git: a racing reference move is seen on the next read.
         return type(self)(
-            self.repo, tree.commit, self.references, revisions,
+            self.repo, tree.commit, self.census, self.references, revisions,
             parsed=self.parsed if tree.commit == self.commit else {},
         )
 
@@ -253,10 +278,13 @@ class PlanReading:
 
 
 class PlanReadings:
-    """A plan read's lifetime; ordinary commands take one explicit snapshot."""
+    """A plan read's lifetime; ordinary commands take one explicit snapshot. The member that
+    reads plans declares the census its trees are counted with."""
+
+    census: ClassVar[Census]
 
     def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
-        return PlanReading(todos, MainTree.of(repo))
+        return PlanReading(todos, MainTree.of(repo, self.census))
 
     def prepare_reading(self, repo: Repo, todos: tuple[Todo, ...],
                 evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
@@ -295,7 +323,7 @@ class RetainedPlanReadings(PlanReadings):
         for previous in plans:
             if previous.main.repo == repo:
                 return previous.following(todos)
-        return PlanReading(todos, LiveMainTree.of(repo))
+        return PlanReading(todos, LiveMainTree.of(repo, self.census))
 
     def retain(self, reading: PlanReading) -> None:
         retained = reading.following(reading.todos)
@@ -413,6 +441,21 @@ class PatternPresent(PatternEvidence):
 
 
 @dataclass(frozen=True)
+class AuditPatternPresent(PatternPresent):
+    """A pattern in the audit package of the installed NominalRefactorAdvisor: code this
+    repository runs from that repository, which main's lock pins by commit."""
+
+    def read(self, main: MainTree) -> bool:
+        package = main.census.audit_package()
+        found = re.compile(self.pattern, re.MULTILINE)
+        return self.satisfied(sum(len(found.findall(module.read_text(encoding="utf-8")))
+                                  for module in package.rglob("*.py")))
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in the installed NominalRefactorAdvisor audit package"
+
+
+@dataclass(frozen=True)
 class DocumentPatternPresent(PatternPresent):
     """A recorded document fact, rather than executable Python source."""
 
@@ -432,7 +475,7 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
     def read(self, main: MainTree) -> bool:
         scan = type(self)()
         for module in main.modules(("src",)):
-            scan.visit(module.tree)
+            scan.visit(module.module)
         return not scan.found
 
     def describe(self) -> str:
@@ -659,7 +702,7 @@ class NoExactCopies(MainEvidence):
         shapes = [
             ErasedBody.of(function)
             for module in main.present_modules(self.paths)
-            for function in NamedFunctions.of(self.names, module.tree)
+            for function in NamedFunctions.of(self.names, module.module)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -676,14 +719,13 @@ class NoGodFunction(MainEvidence):
 
     def read(self, main: MainTree) -> bool:
         return not any(
-            found
+            main.census.god_function(module, function)
             for module in main.present_modules((self.path,))
-            for function in NamedFunctions.of((self.name,), module.tree)
-            for found in GodFunction.from_node(function, module)
+            for function in NamedFunctions.of((self.name,), module.module)
         )
 
     def describe(self) -> str:
-        return f"{self.name} in {self.path} at most {GodFunction.threshold} lines on main"
+        return f"no god function {self.name} in {self.path} on main"
 
 
 @dataclass(frozen=True)
@@ -696,9 +738,9 @@ class NoAbsenceProbes(MainEvidence):
     def read(self, main: MainTree) -> bool:
         """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
-            ForeignAbsenceProbe.count(node)
+            main.census.absence_probes(node)
             for module in main.present_modules(self.paths)
-            for node in ast.walk(module.tree)
+            for node in ast.walk(module.module)
         )
 
     def describe(self) -> str:
@@ -728,7 +770,7 @@ class ClassFlagsAbsent(MainEvidence):
             statements = (
                 (path, statement.lineno)
                 for path in {path for path, _ in matched}
-                for declared in Classes.of((main.module(path).tree,))
+                for declared in Classes.of((main.module(path).module,))
                 for statement in declared.body
             )
         return not any(statement in matched for statement in statements)
@@ -907,8 +949,8 @@ class OwnClassChecksAbsent(MainEvidence):
     def checks(main: MainTree) -> ClassChecks:
         checks = ClassChecks()
         for module in main.modules(("src",)):
-            checks.path = module.path
-            checks.visit(module.tree)
+            checks.path = module.file_path
+            checks.visit(module.module)
         return checks
 
     def describe(self) -> str:
@@ -929,13 +971,13 @@ class ParentsShared(MainEvidence):
             *(
                 declared.name
                 for declared in Classes.of(
-                    module.tree for module in main.present_modules(self.paths)
+                    module.module for module in main.present_modules(self.paths)
                 )
             ),
         }
         members = Counter(
             base
-            for member in Classes.of(module.tree for module in main.modules(("src",)))
+            for member in Classes.of(module.module for module in main.modules(("src",)))
             for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
@@ -1104,10 +1146,10 @@ class DeclaredScopes:
         self.modules: dict[QualifiedName, ModuleBindings] = {}
         self.module_of: dict[str, QualifiedName] = {}
         for module in main.modules(paths):
-            name, package = self.dotted(module.path, paths)
-            bindings = self.modules[name] = ModuleBindings(self, module.path, name, package)
-            bindings.visit(module.tree)
-            self.module_of[module.path] = name
+            name, package = self.dotted(module.file_path, paths)
+            bindings = self.modules[name] = ModuleBindings(self, module.file_path, name, package)
+            bindings.visit(module.module)
+            self.module_of[module.file_path] = name
 
     @staticmethod
     def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:
@@ -1302,7 +1344,7 @@ class ClassRostersAbsent(MainEvidence):
         return {
             declared: frozenset(
                 name
-                for name, hint in get_type_hints(family).items()
+                for name, hint in FieldCodec._types(family).items()
                 if get_origin(hint) is ClassVar
                 and get_args(hint) == (tuple[type[family], ...],)  # type: ignore[valid-type]
             )

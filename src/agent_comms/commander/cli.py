@@ -37,9 +37,9 @@ def main() -> None:
 
     try:
         # Every comms process selects its root once at startup, as the comms CLI does.
-        LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
-                                          else ActiveRoute.published_launch()))
-        context = Commander.read_root(resolve_comms_route(options.root).root)
+        root = LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
+                                                 else ActiveRoute.published_launch()))
+        context = Commander.read_root(resolve_comms_route(root.path).root)
         tools[argv[0]].main(argv[1:], context)
     except CLI_FAILURES as refused:
         # The comms CLI's one failure set: a refusal the command raises prints, never a traceback.

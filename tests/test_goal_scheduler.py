@@ -1,5 +1,6 @@
 """Ledger readiness fences scheduling without rewriting the declared goal."""
 
+from agent_comms.field_codec import AcpSessionId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.goal_scope import OneGoal
@@ -11,7 +12,7 @@ from delivery_owner_fixture import canonical_agent
 async def test_reserved_goal_is_unchanged_and_schedules_after_operator_stop(comms, tmp_path):
     owner = canonical_agent(comms, auto_wake=False)
     thread = owner.sessions.declare_thread(str(tmp_path))
-    session = thread.name
+    session = AcpSessionId(thread.name)
     await owner.sessions.bind_owned(thread, session)
     try:
         goal = comms.goals.update_goal(thread.name, SetGoalAction(text="Finish the private work"))

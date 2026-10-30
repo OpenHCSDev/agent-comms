@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -36,7 +38,10 @@ class BoundSelectedWriteAuthority(SelectedWriteAuthority):
     ) -> None: ...
 
     @abstractmethod
-    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None: ...
+    def writing(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> AbstractContextManager[None]:
+        """The write's whole span: current on entry, applied on success, unbound on every end."""
 
 
 @dataclass
@@ -61,6 +66,14 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
         controller = bound[1]
         controller.require_current(self, self.session_id)
 
-    def applied(self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId) -> None:
-        self.plans.applied(assignment, owner, operation_id)
-        self.agent._selected_write_controllers.pop((owner.name, assignment.wire_seq), None)
+    @contextmanager
+    def writing(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> Iterator[None]:
+        self.require_current(assignment, owner, operation_id)
+        try:
+            yield
+            self.plans.applied(assignment, owner, operation_id)
+        finally:
+            # An accepted intent is never retried, so a failed write ends its binding too.
+            del self.agent._selected_write_controllers[(owner.name, assignment.wire_seq)]

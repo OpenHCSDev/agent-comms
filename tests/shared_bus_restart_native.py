@@ -37,7 +37,7 @@ from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.field_codec import AcpSessionId
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -214,7 +214,7 @@ async def configured_pure_channel(arguments):
         assert originals and len({row.message_id for row in originals}) == arguments.wave_size
         # All originals exist before dispatch. No coalescing timer or forced FULL
         # changes the channel policy; owners snapshot the already pending wave.
-        await asyncio.gather(*(asyncio.to_thread(service.owners.start, name) for name in names))
+        await asyncio.gather(*(asyncio.to_thread(service.owners.start_many, (name,)) for name in names))
         await asyncio.gather(*(attach(service, name) for name in names))
         await asyncio.gather(*(attachment.load_session(cwd=str(source.worktree), session_id=name)
             for name, source in zip(names, sources, strict=True)))
@@ -244,14 +244,14 @@ async def configured_pure_channel(arguments):
                         if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
-                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().by_lookup[row.owner_lookup].name,
+                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().born(row.owner_lookup).name,
                                 'stage':row.reference_stage.declared_name,'input_id':row.input_id}
                                 for row in dispatched],
                             'claims':[{'owner':row.recipient,'revision':row.revision,
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
                     if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
                         timeline.append(observed)
-                    overlap |= len({service.registry.snapshot().by_lookup[row.owner_lookup].name for row in dispatched}) == len(names)
+                    overlap |= len({service.registry.snapshot().born(row.owner_lookup).name for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
                     if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
@@ -307,8 +307,8 @@ async def configured_pure_channel(arguments):
                                         assert cursor.reference == native.reference
                                         assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
-                                        assert fact.envelope.scope.owner == service.registry.snapshot().by_lookup[native.owner_lookup].require_process()
-                                        published_coverage[service.registry.snapshot().by_lookup[native.owner_lookup].name] = fact.envelope
+                                        assert fact.envelope.scope.owner == service.registry.snapshot().born(native.owner_lookup).require_process()
+                                        published_coverage[service.registry.snapshot().born(native.owner_lookup).name] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual
                         # installed publisher within the existing journey budget;
@@ -511,7 +511,7 @@ async def configured_mixed_routes(arguments):
     failure, late = None, None
     proof = {}
     try:
-        await asyncio.to_thread(service.owners.start,name)
+        await asyncio.to_thread(service.owners.start_many, (name,))
         await attach(service,name)
         await attachment.load_session(cwd=str(project),session_id=name)
         async with asyncio.timeout(90):
@@ -684,7 +684,7 @@ async def attach(service, name):
     async with asyncio.timeout(30), AsyncExitStack() as lifetime:
         client = CommsAgent(service, auto_wake=False)
         lifetime.push_async_callback(client.shutdown)
-        proxy = RuntimeProxy(client, name, socket_path(service.root, owner.pid))
+        proxy = client._create_runtime_proxy(owner, AcpSessionId(name))
         lifetime.push_async_callback(proxy.close)
         await proxy.subscribe()
 
@@ -955,7 +955,7 @@ async def run(arguments):
                         assert child.poll() is None, (stage/(name+'-retained-owner.log')).read_text()
                         await asyncio.sleep(.03)
             else:
-                await asyncio.to_thread(service.owners.start,name,
+                await asyncio.to_thread(service.owners.start_many, (name,),
                     agent_args=GivenArguments(('--offline', '--no-extensions', '--no-skills', '--no-context-files', '--no-prompt-templates', '--no-tools',)))
             await attach(service,name)
         assert provider.posts == 0

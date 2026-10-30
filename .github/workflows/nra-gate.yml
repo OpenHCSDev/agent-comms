@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 # A superseded push to a pull request stops its old run; queue groups never share a group.
-# The draft state is part of the key: a draft run skips every job but the ratchets, so one that
+# The draft state is part of the key: a draft run skips every job but the NRA gate, so one that
 # starts in the same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost
 # every check).
 concurrency:
@@ -24,7 +24,7 @@ defaults:
 
 jobs:
   # Drafts cannot merge, so they hold no runner for the slow jobs, which need this one. The
-  # ratchets run on drafts too: units hold drafts for hours, and a merge from main that left a
+  # the NRA gate runs on drafts too: units hold drafts for hours, and a merge from main that left a
   # name undefined (#3107, partial at cli_protocol.py:177) went unseen until someone ran one.
   ready:
     if: github.event_name == 'merge_group' || !github.event.pull_request.draft
@@ -60,13 +60,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
       - name: Install agent-comms and test dependencies
-        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e '.[dev]'
+        run: python -m pip install -e '.[dev]'
       - name: Compile production and tools
         run: python -m compileall -q src tools
       - name: Import every Core and hook module
@@ -99,13 +98,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
       - name: Install Core
-        run: python -m pip install -e src/agent_comms/skills/refactor-audit -e .
+        run: python -m pip install -e .
       - name: Prepare pinned native Pi
         uses: ./.github/actions/prepare-native
       - name: Run every native script
@@ -130,7 +127,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
       # The rehearsal installs the package and runs its own tests; a change to neither
       # (tools, guards, docs) cannot change what it observes.
@@ -153,7 +149,7 @@ jobs:
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
       - name: Install non-editable Core and test dependencies
         if: steps.reach.outputs.reaches == 'true'
-        run: python -m pip install -e src/agent_comms/skills/refactor-audit '.[dev]'
+        run: python -m pip install '.[dev]'
       - name: Build the installer's private runtime and rehearse through its CLI
         if: steps.reach.outputs.reaches == 'true'
         run: python -m agent_comms.installer.test_runtime $REHEARSALS
@@ -164,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
-      statuses: read
+      statuses: write
       pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
@@ -172,6 +168,8 @@ jobs:
     steps:
       # A pull request is pushed before its verdict exists; the queue's group
       # is where the commander's verdict on the head must already be success.
+      # Main requires agent-comms/review directly, and a verdict names a pull request's
+      # head, so the group's own commit carries the status its verified head holds.
       - name: The commander's verdict on the queued head is success
         if: github.event_name == 'merge_group'
         shell: bash
@@ -182,8 +180,10 @@ jobs:
             --jq '[.statuses[] | select(.context == "agent-comms/review")][0].state // "none"')
           echo "PR #${BASH_REMATCH[1]} head $head: agent-comms/review=$verdict"
           [[ $verdict == success ]]
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success \
+            -f context=agent-comms/review -f "description=Verdict on head $head"
 
-  ratchet:
+  nra-gate:
     name: debt-${{ matrix.kind }}
     needs: base
     runs-on: ubuntu-latest
@@ -198,7 +198,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -214,24 +213,24 @@ jobs:
           uv pip install --python "$GITHUB_WORKSPACE/.venv/bin/python" -e '.[dev]'
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
-      # Saved by debt-ratchet-cache.yml on main; entries are keyed by content, so any
+      # Saved by nra-gate-cache.yml on main; entries are keyed by content, so any
       # older main's cache only misses where the code differs.
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ needs.base.outputs.base }}
-          restore-keys: debt-ratchet-${{ matrix.kind }}-
+          key: nra-gate-${{ matrix.kind }}-${{ needs.base.outputs.base }}
+          restore-keys: nra-gate-${{ matrix.kind }}-
 
       - name: No new structural debt against the base
         env:
           BASE: ${{ needs.base.outputs.base }}
         run: |
           set -o pipefail
-          ratchet_status=0
-          PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>ratchet-findings.txt | tee ratchet.txt || ratchet_status=$?
-          cat ratchet-findings.txt >&2
-          exit "$ratchet_status"
+          gate_status=0
+          PYTHONPATH=src:tools python tools/nra_gate.py \
+            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>gate-findings.txt | tee gate.txt || gate_status=$?
+          cat gate-findings.txt >&2
+          exit "$gate_status"
 
       # Hosted annotations stop at ten per step, so a unit never saw a long list (88 findings
       # on the bus batch, 2026-10-21). The whole list goes on the pull request, one comment per
@@ -246,7 +245,7 @@ jobs:
         run: |
           marker="<!-- $KIND findings -->"
           { echo "$marker"; echo "**$KIND** at $(git rev-parse --short HEAD), every finding:"; echo '```';
-            cat ratchet-findings.txt; echo '```'; } > body.md
+            cat gate-findings.txt; echo '```'; } > body.md
           old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
                 --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
           if [ -n "$old" ]; then

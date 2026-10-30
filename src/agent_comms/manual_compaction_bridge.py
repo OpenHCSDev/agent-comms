@@ -15,7 +15,7 @@ from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
-from .field_codec import TurnId
+from .field_codec import AcpSessionId, TurnId
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
 from .agent_backend import (
     CompactionOutcome,
@@ -68,7 +68,7 @@ class CompactionReply(MroDispatch):
 
 
 async def compact_context(
-    runner: TurnRunner, session_id: str, instructions: str | None = None
+    runner: TurnRunner, session_id: AcpSessionId, instructions: str | None = None
 ) -> CompactionOutcome:
     """Run the backend's own compaction now; called from a UI /compact only."""
     if instructions is not None and not isinstance(instructions, str):
@@ -106,15 +106,16 @@ async def _compact_started(runner, session_id, thread_name, instructions):
                 owner.thread, instructions.strip() if instructions else None,
             )
         finally:
-            completion = outcome.completion_event(events.CompactionEnd, ManualCompactionReason)
+            completion = outcome.completion_event(
+                events.CompactionEnd, events.CompactionAbort, ManualCompactionReason)
             await consumer.dispatch(completion)
-        if not completion.aborted:
-            await runner.runtime.publish_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta=encode_updates(TranscriptChangedUpdate(None)),
-                ),
-            )
+        await completion.transcript_changed(partial(
+            runner.runtime.publish_update,
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(TranscriptChangedUpdate(None)),
+            ),
+        ))
         return outcome

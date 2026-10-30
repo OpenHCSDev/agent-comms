@@ -1,8 +1,10 @@
 """Head decisions through the native boundary, real stores, and the external gh process."""
 
+import asyncio
 import subprocess
 import sys
 import time
+from contextlib import nullcontext
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,27 +13,35 @@ import pytest
 
 
 from agent_comms.commander import judge, order
+from agent_comms.closed_pull_requests import ClosedPullRequestWatch
+from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.goal_actions import CreateProblemGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReview, PullRequestHead, ReadPullRequestHead
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject
+from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, UnlandedHeadSubject
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import (
     HeadReviewTimerUp, IdlePullRequest, OrderlessPullRequest, OrderlessUnreviewedHead,
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
+from agent_comms.repository_name import RepositoryName
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import RecordProblems
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.work_branches import SourceGrowth, WorkBranches
+from agent_comms.work_branches import (
+    SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
+)
 from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.todos import (
-    CarriedHeadVerdict, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
+    CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, ProgressRead, PullRequestLink, RecordPullRequest, RejectedHeadVerdict,
     ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
 from source_revision_fixture import SourceRepository
 
@@ -272,6 +282,32 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
 
 
+def test_refused_carry_records_nothing_and_alarms_only_its_head(head_bus, reviewed_source):
+    """An archived repository answers 403 to the carried status: Core keeps no carry the
+    forge lacks, the frame survives, and the refusal is that head's merge block."""
+    comms, github, request = head_bus
+    source = reviewed_source
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
+    moved = opened(github, source, request.pr, merged)
+    github.refuse_status(request.repo, "gh: Repository was archived so is read-only. (HTTP 403)")
+
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    row = pulls.open(request.repo)[0]
+    assert not row.has_head_review
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
+    assert ("carried review status refused: gh: Repository was archived so is read-only. "
+            "(HTTP 403)") in [block.what() for block in row.merge_blocks]
+
+
 def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus):
     """An overdue source review must not prevent an independent recovery order."""
     comms, _, request = head_bus
@@ -342,10 +378,13 @@ def test_a_reviewing_mark_owes_the_judge_line_until_a_decision(head_bus):
 
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
-    assert not subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    assert not CommanderHistory.read(comms, frozenset()).action_at(subject).since(since)
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     assert owed() == []
-    assert subject.disposed(CommanderHistory.read(comms, frozenset()), since)
+    history = CommanderHistory.read(comms, frozenset())
+    assert history.action_at(subject).since(since)
+    assert subject.disposed(history, since)
+    assert not subject.disposed(history, time.time() + 1)
     invoke(comms, request, UnderReviewHeadVerdict())
     assert owed() == [request]
 
@@ -375,6 +414,25 @@ def test_linked_head_rejection_strikes_revises_and_notifies_its_holder(head_bus)
     assert REASON.text in changed.order.checked().edits
     assert comms.registry.require("worker").goal.require().revision > before.revision
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == todo.id
+
+
+def test_a_reviewing_mark_on_an_unclaimed_linked_order_is_recorded(head_bus):
+    """Every order that takes ok or back on its linked head also takes the reviewing mark."""
+    comms, _, request = head_bus
+    todo = comms.goals.todos.get("P2")
+    held = todo.held()
+    RecordPullRequest(todo.revision, held.owner_identity,
+                      PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
+    todo = comms.goals.todos.get(todo.id)
+    scope = OrderHeadReview.for_request(
+        (todo,), request, lambda linked: UnquotedHeadReview.of(linked, ()))
+    invoke(comms, request, UnderReviewHeadVerdict(), scope)
+    changed = comms.goals.todos.get(todo.id)
+    assert changed.order == todo.order
+    assert changed.revision == todo.revision + 1
+    review, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert type(review.verdict) is UnderReviewHeadVerdict
+    assert review.order.problem == todo.id
 
 
 def test_acceptance_over_the_growth_limit_needs_a_reason_naming_each_growing_file(
@@ -520,15 +578,75 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
-    assert "idle 60 min" in found[9] and found[9].endswith(" -> land or supersede it")
-    assert "idle 0 min" in found[7] and found[7].endswith(" -> merge main into it")
+    assert found[9].endswith(" -> land or supersede it")
+    assert found[7].endswith(" -> merge main into it")
+
+
+@pytest.mark.parametrize(('verdict', 'cleared'), (
+    (SupersededHeadVerdict(ACCEPTED, 'P2'), True),
+    (ReviewedHeadVerdict(ACCEPTED), False),
+    (RejectedHeadVerdict(VerdictReason('The declared owner still has a second competing decision.')), False),
+    (UnderReviewHeadVerdict(), False),
+))
+def test_retained_head_verdict_precedes_the_published_lost_packet(
+    head_bus, reviewed_source, installed_runtime, verdict, cleared,
+):
+    comms, github, request = head_bus
+    source = reviewed_source
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    github.put(request.repo, ClosedListedPullRequest(
+        request.pr, 'feature', request.head, closed_at=stamp, updated=stamp,
+        base='main', reviewable_times=(stamp,)))
+    asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
+    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    lost, = ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)
+    assert lost.request == request
+
+    invoke(comms, request, verdict)
+    reviewed, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    published = time.time()
+    assert reviewed.at.before(published)
+    # A retained stale observation can be published after its exact-head verdict.
+    # Publish the actual typed packet; no board rows or history records are rewritten.
+    CommanderHeartbeat.register(comms.registry)
+    owner = comms.registry.require('lead').incarnation
+    ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
+    packet = CommanderDecisions(owner, (ping,), (ping,), ())
+    original = packet.send(comms, published, ())
+    previous = CommanderUpdate.latest(comms, owner)
+    assert previous == (packet,)
+    assert isinstance(original.task, CommanderDecisions)
+    assert original.task == packet
+    history = CommanderHistory.read(comms, frozenset(('lead',)))
+    assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
+    assert (packet.open_pings(history) == ()) is cleared
+    if cleared:
+        subject, = ping.subjects
+        assert history.action_at(subject) == reviewed.at
+        assert history.action_at(subject).before(published)
+
+    for unrelated in (replace(request, head=source.main_commit),
+                      replace(request, repo=RepositoryName('other', request.repo.name)),
+                      replace(request, pr=request.pr + 1)):
+        assert not UnlandedHeadSubject(unrelated).disposed(history, published)
+    assert not HeadSubject(request).disposed(history, published)
+
+    # Derive the next real packet from that committed baseline and the same observation.
+    delivery = CommanderUpdate.derive(owner, (), (lost,), previous,
+                                      now=time.time(), history=history)
+    assert delivery.packet.handled[0].since == ping.since
+    assert (delivery.open_pings == ()) is cleared
+    delivery.packet.send(comms, time.time(), ())
+    assert CommanderUpdate.latest(comms, owner) == (delivery.packet,)
+    assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
+    assert original.task.handled == (ping,)
 
 
 def working_on(comms, source, tmp_path, name, branch):
     """A registered thread whose own worktree has ``branch`` checked out."""
     worktree = tmp_path / f"{name}-checkout"
     source.git(source.checkout, "worktree", "add", "-q", "-b", branch, str(worktree))
-    comms.registry.declare(Thread(name, frozenset(), Checkout(worktree)))
+    comms.registry.declare(Thread(name, frozenset(), Checkout(worktree)), StoppedThreadStatus())
 
 
 def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
@@ -567,6 +685,33 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
     stuck, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert stuck.request.pr == 12
     assert stuck.line().endswith(" -> fix debt-src at its owner at armer")
+
+    snapshot = comms.registry.snapshot()
+    assert snapshot.statuses["author"].stopped and not snapshot.statuses["author"].archived
+    reader = WorkBranches(reviewed_source.checkout)
+    worktrees = reader.worktrees()
+    path = str(snapshot.require("author").worktree.path)
+    assert reader.checkouts(snapshot, "fix/head-9", worktrees) == (
+        ThreadBranchCheckout(("author",), path),)
+    comms.registry.archive("author")
+    archived = comms.registry.snapshot()
+    assert archived.statuses["author"].archived
+    # The same real Git worktree remains: only its registered holder changed.
+    assert reader.checkouts(archived, "fix/head-9", worktrees) == (
+        UnregisteredBranchCheckout(path),)
+    pulls = ProgressRead(())
+    rules = {rule.request.pr: rule for rule in OrderlessPullRequest.scan_orderless(comms.goals, pulls)}
+    assert set(rules) == {9, 11}
+    assert rules[9].holders == ()
+    assert rules[9].line().startswith(
+        f"UNORDERED {ready.repo.to_wire()}#9 {'e' * 9} (no order, and no registered thread has"
+        " its branch checked out): required check debt-src failed")
+    assert rules[9].line().endswith(" -> order its author or close it with a reason")
+    row = next(row for row in pulls.open(ready.repo) if row.number == 9)
+    assert pulls.working_on(comms.goals, ready.repo, row) == ()
+    still_stuck, = StuckMerge.scan_pulls(comms.goals, pulls)
+    assert still_stuck.request.pr == 12
+    assert still_stuck.line().endswith(" -> fix debt-src at its owner at armer")
 
 
 def test_another_commanders_linked_request_stays_off_the_orderless_board(head_bus):

@@ -49,10 +49,11 @@ def start_source_owner(comms, name, runtime: RestoredRuntime):
     """
     thread = comms.registry.require(name)
     with comms.registry.storage_rule.room_for_start(thread, comms.root):
-        return comms.owners._launch_owner(
+        with comms.owners.launching_owner(
             thread, NativeArguments.default_binary,
             launch_runtime=runtime,
-        )
+        ) as owner:
+            return owner
 
 
 @pytest.mark.parametrize(
@@ -131,7 +132,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     assert original is not None
                     request_inputs.append({"input_id": original.input_id,
                                            "stage": original.stage.declared_name,
-                                           "owner": comms.registry.snapshot().by_lookup[original.owner_lookup].name})
+                                           "owner": comms.registry.snapshot().born(original.owner_lookup).name})
                 if broadcast and len(requests) <= 2:
                     # Both actual owners must reach the endpoint while the
                     # first request is still open. No model turn may retain

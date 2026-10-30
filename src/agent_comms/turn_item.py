@@ -3,24 +3,65 @@
 from __future__ import annotations
 
 import re
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import Id128, NominalSpelling, NominalText
+from .errors import RelationViolationError
+from .field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
+    from .channel_targets import NamedTarget
+    from .coordination_session import NativeCapture
+    from .external_transcript import ExternalTranscript
+    from .message_reference import MessageReference
     from .routing import Routing
     from .transcript_routes import _SessionRoutes
 
 
 class NativeTurnId(NominalText):
-    """A harness's own turn key: a Codex turn id, a Claude prompt id, an OpenCode message id
+    """A harness's own turn key: a Codex turn id, a Claude opening record UUID, an OpenCode message id
     or a Pi input id. Never one of our Id128 kinds; only equality is defined.
     """
 
 
 class NativeTurnIdText(NominalSpelling[NativeTurnId]):
     spelling = re.compile(r"\S{1,4096}")
+
+
+class SourceTurn(SubclassUnion, affix="SourceTurn"):
+    """A source-named turn, never a guess from the newest transcript row."""
+
+    def external_answers(
+        self, capture: NativeCapture, transcript: ExternalTranscript, route: NamedTarget,
+    ) -> tuple[MessageReference, ...]:
+        """An absent source opens neither the registry nor the external transcript."""
+        return ()
+
+    @abstractmethod
+    def require_id(self) -> NativeTurnId: ...
+
+
+@dataclass(frozen=True)
+class NoSourceTurn(NullMember, SourceTurn):
+    """No external turn was supplied; no external answer links may be inferred."""
+
+    def require_id(self) -> NativeTurnId:
+        raise RelationViolationError("Confirmed input has no source turn")
+
+
+@dataclass(frozen=True)
+class NamedSourceTurn(RecordMember, SourceTurn):
+    id: NativeTurnId
+
+    def require_id(self) -> NativeTurnId:
+        return self.id
+
+    def external_answers(
+        self, capture: NativeCapture, transcript: ExternalTranscript, route: NamedTarget,
+    ) -> tuple[MessageReference, ...]:
+        with capture as boundary, boundary.reading() as source:
+            return source.answering(transcript.opening_for(self.id), route, boundary.registry)
 
 
 class FreshNativeId(NominalText):

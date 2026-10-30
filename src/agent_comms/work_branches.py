@@ -8,6 +8,8 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import subprocess
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -112,9 +114,26 @@ class WorkBranch:
     links: tuple[BranchLink, ...]
     checkouts: tuple[BranchCheckout, ...]
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def linked(self) -> bool:
         return bool(self.links)
+
+
+@dataclass(frozen=True)
+class UnparsedSource:
+    """A changed src module whose pushed text Python cannot parse: conflict markers, or a
+    half-saved edit. It is that branch's fact on the board, never an error out of the pass."""
+
+    path: str
+    line: int
+    reason: str
+
+    @classmethod
+    def of(cls, path: str, error: SyntaxError) -> UnparsedSource:
+        return cls(path, error.lineno or 0, error.msg)
+
+    def listing(self) -> str:
+        return f"{self.path}:{self.line} ({self.reason})"
 
 
 @dataclass(frozen=True)
@@ -122,6 +141,7 @@ class SourceGrowth:
     """Code lines each changed src module gains between two commits."""
 
     files: tuple[tuple[str, int], ...]
+    unparsed: tuple[UnparsedSource, ...] = ()
     limit: ClassVar[int] = 40
     tree: ClassVar[str] = "src/"
 
@@ -138,6 +158,12 @@ class SourceGrowth:
 
     def listing(self) -> str:
         return ", ".join(f"{path} {lines:+d}" for path, lines in self.files if lines)
+
+    def require_parsed(self) -> None:
+        """A head is judged only when every changed module parses."""
+        if self.unparsed:
+            raise WorkBranchError("Changed src does not parse: "
+                                  + ", ".join(source.listing() for source in self.unparsed))
 
 
 @dataclass(frozen=True)
@@ -286,6 +312,10 @@ class NoUpstream(BranchUpstream):
     """This local branch declares no upstream."""
 
 
+class DetachedHead(BranchUpstream):
+    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
+
+
 @dataclass(frozen=True)
 class TrackedUpstream(BranchUpstream, declared_name=None):
     tracking: str
@@ -405,13 +435,16 @@ query($owner: String!, $name: String!, $after: String) {
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """One complete published-ref cut per remote for this reader, not one call per branch."""
-        if remote not in self._remote_heads:
-            self._remote_heads[remote] = {
+        if remote in self._remote_heads:
+            return self.selected_heads(remote, reference)
+        with Repo.acquiring():
+            heads = {
                 reference: head
                 for head, reference in (line.split() for line in self._git(
                     "ls-remote", "--refs", remote,
                 ).splitlines())
             }
+        self._remote_heads[remote] = heads
         return self.selected_heads(remote, reference)
 
     def selected_heads(self, remote: str, reference: str) -> tuple[str, ...]:
@@ -430,8 +463,9 @@ query($owner: String!, $name: String!, $after: String) {
         return base_head
 
     def prepare_pull_request(self, base: str, head: str) -> None:
-        self.remote_heads(Repo.remote, f"refs/heads/{base}")
-        Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
+        with Repo.acquiring():
+            self.remote_heads(Repo.remote, f"refs/heads/{base}")
+            Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
 
     def pull_request_base(self, base: str, head: str) -> str:
         base_head = self._pull_request_base(base)
@@ -441,23 +475,26 @@ query($owner: String!, $name: String!, $after: String) {
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            BranchUpstream.from_git(line) for line in self._git(
+            DetachedHead("HEAD"),
+            *(BranchUpstream.from_git(line) for line in self._git(
                 "for-each-ref",
                 "--format=%(refname:strip=2)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
                 "refs/heads/",
-            ).splitlines()
+            ).splitlines()),
         )}
 
     def prepare_upstreams(self) -> None:
         """Acquire all declared publications in one remote cut and one object batch per remote."""
-        references: dict[str, set[str]] = {}
-        for upstream in self.upstreams.values():
-            for remote, reference in upstream.publication_inputs():
-                references.setdefault(remote, set()).add(reference)
-        for remote, refs in references.items():
-            heads = tuple(dict.fromkeys(
-                head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
-            Repo.require_commits(self.checkout, remote, *heads)
+        with Repo.acquiring():
+            references: dict[str, set[str]] = {}
+            for upstream in self.upstreams.values():
+                for remote, reference in upstream.publication_inputs():
+                    references.setdefault(remote, set()).add(reference)
+            for remote, refs in references.items():
+                Repo.enter_phase()
+                heads = tuple(dict.fromkeys(
+                    head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
+                Repo.require_commits(self.checkout, remote, *heads)
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
@@ -589,9 +626,14 @@ query($owner: String!, $name: String!, $after: String) {
         contents = Repo.blobs(self.checkout, *(blob for _path, blob, _weight in sources),
                               timeout=self.timeout)
         growth = dict.fromkeys(paths, 0)
+        unparsed: list[UnparsedSource] = []
         for (path, _blob, weight), content in zip(sources, contents, strict=True):
-            growth[path] += weight * CodeLines.of(content.decode())
-        return SourceGrowth(tuple(growth.items()))
+            try:
+                growth[path] += weight * CodeLines.of(content.decode())
+            except SyntaxError as error:
+                # A pushed branch is foreign text: the parse refusal is the branch's fact.
+                unparsed.append(UnparsedSource.of(path, error))
+        return SourceGrowth(tuple(growth.items()), tuple(unparsed))
 
     def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:
         """A pull request head against its declared base branch, so a request stacked on
@@ -641,7 +683,8 @@ query($owner: String!, $name: String!, $after: String) {
             sorted(
                 thread.name
                 for thread in snapshot.threads.values()
-                if str(thread.worktree.path.expanduser().resolve()) == resolved
+                if not snapshot.statuses[thread.name].archived
+                and str(thread.worktree.path.expanduser().resolve()) == resolved
             )
         )
         if not threads:
@@ -651,16 +694,17 @@ query($owner: String!, $name: String!, $after: String) {
     def read(self, snapshot: RegistrySnapshot) -> tuple[WorkBranch, ...]:
         """Every branch with commits not on main, most recently committed first."""
         owner, name = self.repository
-        refs = {
-            ref.removeprefix("refs/heads/"): oid
-            for oid, ref in (
-                line.split() for line in self._git("ls-remote", "--heads", Repo.remote).splitlines()
-            )
-        }
+        with Repo.acquiring():
+            refs = {
+                ref.removeprefix("refs/heads/"): oid
+                for oid, ref in (
+                    line.split() for line in self._git("ls-remote", "--heads", Repo.remote).splitlines()
+                )
+            }
+            Repo.require_commits(self.checkout, Repo.remote, *refs.values())
         main = refs[self.main]
         # Git already owns commit ancestry. Ask it once for all locally named
         # commits, rather than asking GitHub to compare every branch separately.
-        Repo.require_commits(self.checkout, Repo.remote, *refs.values())
         commits = {
             oid: (int(ahead), date)
             for oid, date, ahead, _behind in (

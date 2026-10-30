@@ -40,6 +40,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -72,12 +73,14 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.nominal_census import NominalPlanReadings
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
     ClearingVerb,
@@ -89,6 +92,7 @@ from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
     CleanHunt,
+    CorrectLinkTodo,
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
@@ -368,8 +372,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().commanders(snapshot)
-        return thread.name
+        return snapshot.commander_project.require().lead(snapshot).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -385,7 +388,7 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReadings().prepare_reading(repository, todos, tuple(
+        return NominalPlanReadings().prepare_reading(repository, todos, tuple(
             phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
@@ -424,7 +427,19 @@ class CommanderContext(BaseModel):
                   answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            answerer=self.receipts).message
+
+    @property
+    def receipts(self) -> CommanderReceipts:
+        """Whose receipts this actor answers: its commander's, and those of every commander of
+        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
+        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
+        a retired commander's directives included."""
+        actor = self.actor_identity
+        owners = (self.incarnation, *(request.commander for request
+                                      in self.comms.goals.todos.open_requests(actor)))
+        return CommanderReceipts(actor, tuple(dict.fromkeys(owners)))
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -685,6 +700,7 @@ class Commander(CommanderContext):
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
+        self.comms.registry.status(unit).require_visible(f"{unit} cannot take an order.")
         document = document.resolved(finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
@@ -802,10 +818,9 @@ class Commander(CommanderContext):
             superseded_by)))
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo))
-        self.post(VerdictAudience((unit,)),
-             f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
+        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} Withdrawn: {withdrawal}. '
+                       'Stop that work; it counts against no one.', 'Withdrawal',
+                       VerdictAudience.of(unit, todo))
         print(withdrawal)
 
     def fire(self, unit: str, why: str) -> None:
@@ -851,18 +866,12 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(ctx.commander).require_commander()
-        self.actor.commanding(ctx.comms, ctx.commander)
+        self.actor.commanding(ctx.comms)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:
-        """Gate, then run."""
-        self.gate(ctx)
         self.run(ctx)
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).require_commander()
 
 
 
@@ -894,7 +903,11 @@ class DirectiveVerb(CommanderVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        # A peer acting for the commander owes that commander's asks too: debts follow the
+        # live commanders, so a retired creator's asks are never orphaned.
+        owers = tuple(dict.fromkeys((self.who(ctx), ctx.commander)))
+        opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
+        owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
         with ctx.comms.bus.bus.reading() as source:
@@ -903,6 +916,11 @@ class DirectiveVerb(CommanderVerb):
                     source.message_reference(identity)
                 except RowNotFoundError:
                     problems[f'--answers {identity}'] = 'unknown message id'
+                    continue
+                if identity not in owed:
+                    problems[f'--answers {identity}'] = (
+                        f'not an open ask owed by {" or ".join(owers)}; recording it would '
+                        'answer nothing')
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
@@ -1147,6 +1165,9 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
+        if not source.holds(todo):
+            sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
+                     f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
             todo, source.checkout, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
@@ -1164,7 +1185,7 @@ class ExistingPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
-        link = PullRequestLink.existing(todo.repo, self.number)
+        link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest(
             todo.revision, ctx.incarnation, link, todo.held().generation))
         return link.url
@@ -1172,7 +1193,8 @@ class ExistingPullRequestSelection(PullRequestSelection):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "create or adopt a PR and record its GitHub identity on this order"
+    help = ("create a PR in the order's repository, or adopt an existing one in it or a "
+            "registered companion, and record its GitHub identity on this order")
     pid: Annotated[str, Argument(flags=("pid",))]
     title: Annotated[str, Argument(flags=("--title",))] = ""
     body_file: Annotated[str, Argument(flags=("--body-file",))] = ""
@@ -1196,9 +1218,6 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         storage = ctx.comms.registry.storage_rule
         if not storage.owns_checkout(holder, source.checkout, source.github):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
-        if not source.holds(todo):
-            sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
-                     f'not {todo.repo.to_wire()}.')
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 
@@ -1239,6 +1258,23 @@ class RunVerb(OrderVerb):
     def run(self, ctx: Commander) -> None:
         ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
         print(f'{self.pid}: order now works when {self.text}')
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnlinkVerb(Reasoned, OrderVerb):
+    help = ("take a pull request off an open order that never held its work; keeps its holder, "
+            "review timer and strikes")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    repo: Annotated[RepositoryName, Argument(flags=("repo",), options={"metavar": "OWNER/NAME"})]
+    number: Annotated[int, Argument(flags=("number",), options={"metavar": "PR"})]
+
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.get(self.pid)
+        link = PullRequestLink(self.repo, self.number)
+        ctx.call(CommsChangeProblemTool(problem=self.pid, operation=CorrectLinkTodo(
+            todo.revision, ctx.incarnation, self.why,
+            previous=todo.order.pull_requests, link=link)))
+        print(f'{self.pid}: order no longer links {link.url}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1284,15 +1320,20 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class JoinVerb(OrderVerb):
-    help = "register a commander fork before its first record"
+class EndsForkVerb(OrderVerb):
+    """Ends a fork the registry already declared. Declaring a fork only to end it held the
+    registry write lock for a whole registration, past every unit's 5 s lock budget."""
 
-    def run(self, ctx: Commander) -> None:
-        print(f'{ctx.actor_name} registered')
+    def apply(self, ctx: Commander) -> None:
+        ctx = ctx.model_copy(update={'actor': self.actor})
+        if ctx.actor_name not in ctx.comms.registry:
+            print(f'{ctx.actor_name} never joined; nothing to end')
+            return
+        self.act(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetireVerb(OrderVerb):
+class RetireVerb(EndsForkVerb):
     help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
@@ -1301,7 +1342,7 @@ class RetireVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class EndVerb(OrderVerb):
+class EndVerb(EndsForkVerb):
     help = "archive a commander fork that has stopped, reporting the work it left unrecorded"
 
     def run(self, ctx: Commander) -> None:

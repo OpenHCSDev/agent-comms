@@ -9,6 +9,7 @@ from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 from threading import Event, RLock
 from typing import TYPE_CHECKING, ClassVar, Annotated
@@ -20,7 +21,7 @@ from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
-from .native_transcript import SessionCut, reverse_records
+from .native_transcript import SessionCut, record_end, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
@@ -42,7 +43,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
-_INDEX_VERSION = 7
+_INDEX_VERSION = 8
 
 
 class ReplyIndexTable:
@@ -55,6 +56,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
     records: int = 0
     source: Annotated[str, Column(primary_key=True, check="source<>''")] = ""
     start: int = 0
+    complete: int = 0
     limit: ClassVar[int] = 32
 
     @classmethod
@@ -71,9 +73,23 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
 
     def counts(self, revision: FileRevision, seen: int) -> bool:
         """The read reached this mark or exhausted the record allowance."""
-        return seen == revision.size or (
-            self.revision == revision and (self.start <= seen or self.records >= self.limit)
-        )
+        return seen == revision.size or (self.revision == revision and self._covers(seen))
+
+    def _covers(self, seen: int) -> bool:
+        return self.start <= seen or self.records >= self.limit
+
+    def appended_cut(self, revision: FileRevision) -> tuple[int, ...]:
+        """The end of the last complete record indexed, when ``revision`` only appended
+        past it: records before the cut are indexed, a half-written tail after it is not."""
+        return tuple(
+            self.complete for indexed in self.revision.revisions()
+            if indexed.holds_cut(revision, self.complete))
+
+    def presents(self, revision: FileRevision, seen: int) -> bool:
+        """Whether the stored replies answer this revision while its delta prepares: it is
+        counted, or it only appended past the indexed cut, whose replies all remain."""
+        return self.counts(revision, seen) or any(
+            seen == cut or self._covers(seen) for cut in self.appended_cut(revision))
 
     def continues(self, revision: FileRevision) -> bool:
         return self.revision == revision
@@ -83,29 +99,45 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         return CappedCount(total) if self.start > seen else Counted(total)
 
     def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
-        """Visit at most limit newest records, stopping earlier at the read mark."""
-        resume = self.continues(revision)
-        start, visited = (self.start, self.records) if resume else (revision.size, 0)
-        replies: list[TranscriptReply] = []
+        """Visit at most limit newest records, stopping earlier at the read mark. An append
+        visits only the appended records and keeps the indexed prefix, so a growing
+        transcript never re-reads records it already indexed."""
         with Path(self.source).open("rb") as stream:
             if not revision.opened_by(stream):
                 return RevisionMoved()
-        records = reverse_records(Path(self.source), start, floor=max(0, seen - 1))
-        with closing(records):
-            while visited < self.limit and start > seen:
+        if self.continues(revision):
+            return self._scan(revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
+        fresh = partial(self._scan, revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
+        for cut in self.appended_cut(revision):
+            # Only appended: visit the new records, keep the indexed prefix and replies.
+            boundary = max(seen, cut)
+            return self._scan(
+                revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
+            ).extending(self, boundary, fresh)
+        return fresh()
+
+    def _scan(self, revision: FileRevision, seen: int, start: int, visited: int,
+              cancelled: Event, result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
+        replies: list[TranscriptReply] = []
+        source = Path(self.source)
+        with source.open("rb") as stream, closing(
+            reverse_records(source, start, floor=max(0, seen - 1), stream=stream)
+        ) as records:
+            complete = record_end(stream, revision.size)
+            for begin, end, raw in records:
+                if visited >= self.limit or start <= seen:
+                    break
                 if cancelled.is_set():
                     return CancelledRead()
-                record = next(records, None)
-                if record is None:
-                    start = seen
-                    break
-                begin, end, raw = record
                 visited += 1
                 start = begin
                 if raw.endswith(b"\n") and NativeEntry.read(raw).unread_reply:
                     replies.append(TranscriptReply(self.source, end))
-        index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start)
-        return ReplyIndexUpdate(self, index, tuple(replies))
+            else:
+                start = min(start, seen)
+        index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start,
+                           complete=complete)
+        return result(self, index, tuple(replies))
 
 
 @dataclass(frozen=True)
@@ -215,6 +247,11 @@ class ReplyIndexResult(ABC):
     @abstractmethod
     def commit(self, database: sqlite3.Connection) -> None: ...
 
+    def extending(self, before: ReplyIndex, boundary: int,
+                  fresh: Callable[[], ReplyIndexResult]) -> ReplyIndexResult:
+        """A read that published nothing extends nothing."""
+        return self
+
 
 class NoReplyUpdate(ReplyIndexResult):
     def commit(self, database: sqlite3.Connection) -> None:
@@ -231,7 +268,8 @@ class RevisionMoved(NoReplyUpdate):
 
 @dataclass(frozen=True)
 class ReplyIndexUpdate(ReplyIndexResult):
-    """A native-only prepared delta, authorized against one stored suffix."""
+    """A native-only prepared delta, authorized against one stored suffix. A fresh scan
+    replaces every reply the source had indexed."""
 
     before: ReplyIndex
     after: ReplyIndex
@@ -243,13 +281,33 @@ class ReplyIndexUpdate(ReplyIndexResult):
         )
         if current != self.before:
             return  # Another observer changed this suffix; discard the stale delta.
-        if not self.before.continues(self.after.revision):
-            database.execute(
-                f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
-            )
+        self.replace_earlier(database)
         for reply in self.replies:
             reply.insert(database)
         self.after.upsert(database)
+
+    def replace_earlier(self, database: sqlite3.Connection) -> None:
+        database.execute(
+            f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
+        )
+
+
+@dataclass(frozen=True)
+class ContinuedReplyIndex(ReplyIndexUpdate):
+    """A delta over records the stored index has not visited; its replies stand."""
+
+    def replace_earlier(self, database: sqlite3.Connection) -> None:
+        pass
+
+    def extending(self, before: ReplyIndex, boundary: int,
+                  fresh: Callable[[], ReplyIndexResult]) -> ReplyIndexResult:
+        """Appended records scanned through the boundary join the stored coverage; more
+        than the record allowance leaves a gap, so the fresh scan replaces it."""
+        if self.after.start > boundary:
+            return fresh()
+        return ContinuedReplyIndex(before, replace(
+            self.after, start=before.start, records=before.records + self.after.records,
+        ), self.replies)
 
 
 class ReplyPreparation:
@@ -624,7 +682,7 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             for source, revision in present.items():
                 if seen[source] == revision.size:
                     per_file[source] = Counted(0)
-                elif not indexes[source].counts(revision, seen[source]):
+                elif not indexes[source].presents(revision, seen[source]):
                     per_file[source] = Indexing()
                 else:
                     ends[source] = seen[source]

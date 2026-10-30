@@ -323,8 +323,8 @@ def _require_cohort_assignments(
     snapshot.require_wire_responses()
     wire_root_id = privacy.namespace
     with bus.bus.reading() as source:
-        originals = {seq: source.delivery(seq) for seq in
-                     frozenset(assignment.wire_seq for assignment in snapshot.assignments)}
+        sequences = tuple(frozenset(assignment.wire_seq for assignment in snapshot.assignments))
+        originals = dict(zip(sequences, source.deliveries_at(sequences)))
     for assignment in snapshot.assignments:
         initial = originals.get(assignment.wire_seq)
         routes_read = SelectedResponseRoute.read(
@@ -426,7 +426,7 @@ def prepare_fenced_response(
             if existing is not None:
                 snapshot.require_existing_preparation(
                     Message(
-                        registry_snapshot.by_lookup[execution.owner_lookup].name,
+                        registry_snapshot.born(execution.owner_lookup).name,
                         target,
                         payload,
                         message_type,
@@ -438,7 +438,7 @@ def prepare_fenced_response(
                 return AlreadyApplied(existing)
             obligation = snapshot.require_preparation(target)
             candidate = Message(
-                registry_snapshot.by_lookup[execution.owner_lookup].name,
+                registry_snapshot.born(execution.owner_lookup).name,
                 target,
                 payload,
                 message_type,

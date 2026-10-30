@@ -11,6 +11,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.repo import Checkout, DetachedStart, Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
@@ -52,6 +53,22 @@ def test_resource_checker_reads_root_override(tmp_path):
     floor = StorageRule.load(tmp_path).floor_gib
     (tmp_path / 'storage.json').write_text(json.dumps({'floor_gib': floor + 1}))
     assert checker['limits_for'](tmp_path)['/home'][1] == StorageRule.load(tmp_path).floor_gib
+
+
+@pytest.mark.parametrize("separator", ("--", "__"))
+def test_allocation_names_invert_every_declared_checkout_name(tmp_path, monkeypatch, separator):
+    """The checkout name format has one declaration: renaming its separator renames every
+    checkout and its inverse together."""
+    monkeypatch.setattr(StorageRule, "checkout_separator", separator)
+    rule = StorageRule(checkout_base=tmp_path / "wt")
+    for allocation in ("pi-unit", f"pi{separator}unit"):
+        roots = StorageRoots(tmp_path / "scratch" / allocation)
+        checkout = rule.order_checkout(roots, "P7")
+        companion = rule.repository_checkout(roots, "P7", RepositoryName("openhcsdev", "toad"))
+        assert separator in checkout.name
+        for named in (checkout, companion):
+            assert allocation in tuple(rule.allocation_names(named))
+    assert tuple(rule.allocation_names(tmp_path / f"pi-unit{separator}P7")) == ()
 
 
 def test_storage_paths_round_trip_inside_collections(tmp_path):
@@ -122,22 +139,23 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert rule.owns_present_checkout(thread, home)
     assert not rule.owns_present_checkout(other, old)
     with pytest.raises(StorageDenied):
-        StorageProjection(rule, other).check((
+        StorageProjection(rule, other, comms).check((
             CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
-    StorageProjection(rule, thread).check((
+    StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
-    StorageProjection(rule, thread).check((RemoveCheckoutStorageEffect(old),))
+    StorageProjection(rule, thread, comms).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread) == (home,)
-    StorageProjection(rule, thread).check((
+    StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
 def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
-    rule = checkout_comms.registry.storage_rule
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
     thread = checkout_comms.registry.require('worker')
-    projection = StorageProjection(rule, thread)
+    projection = StorageProjection(rule, thread, comms)
     for problem in ('P1', 'P2', 'P3'):
         path = rule.order_checkout(rule.roots_of(thread), problem)
         start = DetachedStart('HEAD')
@@ -179,10 +197,10 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     assert thread.project_path == current
     assert UnitStorage.read(comms.registry.storage_rule, thread).home == Checkout(current)
     with pytest.raises(StorageDenied):
-        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+        StorageProjection(comms.registry.storage_rule, comms.registry.require('worker'), comms).check((
             RemoveCheckoutStorageEffect(project_link.resolve()),))
     assert current.is_dir()
-    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker')).check((
+    StorageProjection(comms.registry.storage_rule, comms.registry.require('worker'), comms).check((
         RemoveCheckoutStorageEffect(other),))
     subprocess.run(('git', '-C', str(repository), 'worktree', 'remove', str(other)), check=True)
     assert not other.exists()
@@ -194,11 +212,11 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
                                      'git worktree remove --force target',
                                      'python -m venv env', 'uv sync',
                                      'git -C ~/wt/other--P3 reset --hard', 'touch ~/wt/x-check/file'])
-def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
+def test_forbidden_shell_operations_use_declared_rule(tmp_path, command, comms):
     rule = StorageRule()
     thread = Thread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
-        StorageProjection(rule, thread).check(shell_storage_effects(command, tmp_path))
+        StorageProjection(rule, thread, comms).check(shell_storage_effects(command, tmp_path))
 
 
 def test_programs_do_not_claim_to_be_effect_values():

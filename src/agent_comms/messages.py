@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKey
 
 from .class_fact import ClassFact
@@ -20,7 +22,7 @@ from inspect import get_annotations
 from itertools import accumulate
 from typing import (
     TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
-    get_origin, get_type_hints,
+    get_origin,
 )
 
 from agent_comms.response_policy import (
@@ -136,6 +138,29 @@ class CommanderUpdatePosition(BusProjectionTables):
             cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
                      'ORDER BY {seq} DESC LIMIT 1'),
             (FieldCodec.encode(commander),))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
+class EscalationPosition(BusProjectionTables):
+    """Where each escalation line sits, by the commander birth it addresses and when it was sent.
+    It shares the owner's thread with every message he types, so this rebuildable projection, not
+    the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    at: float
+    indexes = (Index(("commander_lookup", "at")),)
+
+    @classmethod
+    def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
+             before: float) -> tuple[BusRecord, ...]:
+        """Every escalation line to that commander birth in [since, before], newest first."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),
+            (FieldCodec.encode(commander), since, before))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
@@ -349,7 +374,7 @@ class _CapabilityTable(ProjectionSource):
 
     @cache
     def for_class(self, owner: type[BusCapability]) -> type[CapabilityRow]:
-        hints = get_type_hints(owner, include_extras=True)
+        hints = FieldCodec._types(owner)
         return make_dataclass(
             BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
             [*((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),
@@ -425,14 +450,36 @@ class BusCapability(TypedRow, ProjectionSource):
         *, after: int = 0,
     ) -> Iterator[BusCapability]:
         """Records after one sequence, using the same joined cursor for full and tail replay."""
-        tables = TypedTable.members_with(CapabilityRow)
-        offsets = dict(zip(tables, accumulate(
-            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
         predicate, parameters = ("", ()) if kinds is None else (
             f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
+        return (record for _, record in BusCapability.stored_records(
+            db, f"{header}>?" + predicate + f" ORDER BY {header}", (after, *parameters)))
+
+    @staticmethod
+    def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusRecord, ...]:
+        """Exactly these records, in the given order, from one joined read; a sequence with no
+        stored row is refused, as a single lookup refuses it."""
+        if not sequences:
+            return ()
+        header = BusRow.qualified("seq")
+        found = {row.seq: record for row, record in BusCapability.stored_records(
+            db, f"{header} IN ({','.join('?' for _ in sequences)})", sequences)}
+        if missing := [seq for seq in sequences if seq not in found]:
+            raise RelationViolationError(f"Unknown bus sequences: {missing}")
+        return tuple(found[seq] for seq in sequences)
+
+    @staticmethod
+    def stored_records(
+        db: sqlite3.Connection, where: str, parameters: tuple[object, ...],
+    ) -> Iterator[tuple[BusRow, BusRecord]]:
+        """Each selected header with the record its capability rows assemble, decoded once."""
+        tables = TypedTable.members_with(CapabilityRow)
+        offsets = dict(zip(tables, accumulate(
+            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        header = BusRow.qualified("seq")
         columns = [BusRow.qualified(*BusRow.column_projection())]
         columns.extend(table.qualified(*table.column_projection()) for table in tables)
         with closing(db.execute(
@@ -440,12 +487,13 @@ class BusCapability(TypedRow, ProjectionSource):
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
-            + f" WHERE {header}>?" + predicate + f" ORDER BY {header}",
-            (after, *parameters),
+            + f" WHERE {where}",
+            parameters,
         )) as cursor:
             for stored in cursor:
-                kind = BusRow.decode_at(stored, 0).kind
-                yield kind.assembled(table.decode_at(stored, offsets[table]) for table in kind.tables())
+                row = BusRow.decode_at(stored, 0)
+                yield row, row.kind.assembled(
+                    table.decode_at(stored, offsets[table]) for table in row.kind.tables())
 
     def projections(self) -> Iterator[TypedTable]:
         return iter(())
@@ -503,6 +551,11 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
     def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
 
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        """Human inputs need a reply even when their committed kind is informational."""
+        return message.sender_role.allows_automatic_reply()
+
 
 class SendableMessageKind(MessageKind, declared_name=None):
     """The declared kinds accepted by generic message commands."""
@@ -545,6 +598,10 @@ class InfoKind(SendableMessageKind):
 
 class NeedsAnswerKind(SendableMessageKind, declared_name=None):
     """Questions, alerts and handoffs ask their recipient to act."""
+
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        return True
 
 
 class QuestionKind(NeedsAnswerKind):
@@ -939,6 +996,11 @@ class Message(MessageInput, TurnOrigin):
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
+    @property
+    def category(self) -> type[MessageCategory]:
+        """The filter category this message files under, answered by what it carries."""
+        return self.task.category(self.role.category)
+
     def require_decision(self) -> Decision:
         return self.task.require_decision()
 
@@ -991,7 +1053,7 @@ class Message(MessageInput, TurnOrigin):
     def view_order(self) -> tuple[int, int, int]:
         return 1, 0, self.seq
 
-    @projected(view="wire", name="id")
+    @projected(view=WireExclude, name="id")
     def message_id(self) -> MessageId:
         return MessageId.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
@@ -1054,6 +1116,17 @@ class Message(MessageInput, TurnOrigin):
     def exact_reply_target(self) -> str:
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
+
+    def automatic_reply_targets(self) -> tuple[str, ...]:
+        """An owed answer uses the destination's existing automatic-reply route."""
+        if not self.type.allows_automatic_reply(self):
+            return ()
+        return CommandTarget.named(self.target).automatic_reply_targets(self.sender)
+
+    def opening_references(self, recipient: str) -> tuple[MessageReference, ...]:
+        """A confirmed delivery may open its intended reader's turn without owing a reply."""
+        return ((self.reference,)
+                if self.role.response_policy(self).starts_turn_for(self, recipient) else ())
 
     autonomous: ClassVar[bool] = False
 

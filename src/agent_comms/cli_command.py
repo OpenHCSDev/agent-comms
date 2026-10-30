@@ -527,15 +527,18 @@ class TargetBatch(TargetSelection):
         return TargetBatchResult(tuple(outcome for _, outcome in sorted(outcomes, key=lambda item: item[0])))
 
 
-class AppliedTogether(CliCommand):
+class AppliedTogether(CliCommand[Answer]):
     """A command whose bindings in one target batch are applied as one operation."""
+
+    def apply(self, ctx: Comms) -> Answer:
+        return self.apply_together(ctx, (self,))[0]
 
     def schedule(self, batch: TargetBatchSchedule, comms: Comms) -> None:
         batch.together.setdefault(type(self), []).append((batch.position, batch.target, self))
 
     @classmethod
     @abstractmethod
-    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[CliResult, ...]: ...
+    def apply_together(cls, ctx: Comms, commands: tuple[Self, ...]) -> tuple[Answer, ...]: ...
 
 
 @dataclass(frozen=True)

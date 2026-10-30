@@ -14,7 +14,7 @@ import pkgutil
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
@@ -86,39 +86,25 @@ class ClaudeTranscriptHook(ClaudeHook):
     window: ClassVar[int] = 1_000_000
     """Transcript bytes read from the end."""
 
-    @property
-    def calls(self) -> Path:
-        """One byte per completed or refused tool call since this deal; atomic append
-        counts parallel calls once without another counter or history scan."""
-        return Path(self.transcript_path).with_suffix(".calls")
-
-    def count_call(self) -> int:
-        with self.calls.open("ab", buffering=0) as calls:
-            calls.write(b".")
-            return calls.tell()
+    @staticmethod
+    def raised_by_subagent(record: Mapping[str, object]) -> bool:
+        """The boundary test: Claude Code names a subagent's event by its agent_id."""
+        return "agent_id" in record
 
     @property
-    def dealt_files(self) -> Path:
-        """The packaged rule files dealt to a bound session, one path per line, written by the
-        session start hook beside the transcript; it exists only in a session bound to a bus.
-        It names the files themselves: a copy of a rule is a paraphrase the session reads
-        instead of the rule."""
-        return Path(self.transcript_path).with_suffix(".dealt")
+    def session_stem(self) -> Path:
+        """The main agent's transcript, which every event names, its subagents' included."""
+        return Path(self.transcript_path)
 
     @property
-    def dealt_read(self) -> Path:
-        """The dealt files read in full since the last deal, one path per line."""
-        return Path(self.transcript_path).with_suffix(".dealt-read")
+    def stem(self) -> Path:
+        """A session's deal and deck files sit beside its transcript, each with its own suffix."""
+        return self.session_stem
 
     @property
-    def audit(self) -> Path:
-        """The session's audit of the dealt rules and the owner's words, written after reading."""
-        return Path(self.transcript_path).with_suffix(".audit.json")
-
-    @property
-    def audit_due(self) -> Path:
-        """What the audit must answer: every dealt rule and each owner prompt shown."""
-        return Path(self.transcript_path).with_suffix(".audit-due.json")
+    def subagent_transcripts(self) -> Path:
+        """Claude Code keeps each subagent's transcript in this directory beside the session's."""
+        return self.session_stem.with_suffix("") / "subagents"
 
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
@@ -126,6 +112,19 @@ class ClaudeTranscriptHook(ClaudeHook):
             start = max(0, transcript.seek(0, 2) - self.window)
             transcript.seek(start)
             return transcript.read().splitlines()[1 if start else 0 :]
+
+
+@dataclass(frozen=True)
+class ClaudeSubagentHook(ClaudeTranscriptHook):
+    """An event a subagent raised. It shares its session's id and transcript path, but its
+    deal and deck sit beside its own transcript, so its reads, its audit and its compactions
+    never touch the main agent's."""
+
+    agent_id: SubagentId = field(kw_only=True)
+
+    @property
+    def stem(self) -> Path:
+        return self.subagent_transcripts / f"agent-{self.agent_id}.jsonl"
 
 
 @dataclass(frozen=True)

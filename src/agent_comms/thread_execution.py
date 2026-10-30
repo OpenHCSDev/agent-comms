@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
+from .channel_targets import DeclaredTag
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
@@ -107,6 +108,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         """The thread when it can hold an order: a turn executor whose work state is ready."""
         return tuple(candidate for executor in thread.role.executor(thread)
                      for candidate in thread.work_state.candidates(executor))
+
+    @classmethod
+    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread receives channel messages independently of its parent."""
+        return (thread,)
 
     @classmethod
     def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
@@ -227,7 +233,7 @@ class SubagentExecution(ExternalThreadExecution):
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return replace(child, tags=parent.tags)
+        return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:
@@ -251,8 +257,15 @@ class CommanderForkExecution(SubagentExecution):
         return (thread,)
 
     @classmethod
+    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A fork answers on its commander's records, so a channel never reaches it directly."""
+        return ()
+
+    @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return parent.commanded_child(child)
+        """A fork acts for its commander, so it carries every tag the commander carries,
+        #commanders included: it is seen where its commander is."""
+        return replace(child, tags=parent.tags)
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

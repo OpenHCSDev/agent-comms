@@ -6,6 +6,7 @@ import sys
 from contextlib import ExitStack
 from pathlib import Path
 
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import Platform, ProcessIdentity, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
@@ -46,7 +47,7 @@ def test_runtime_process_family(tmp_path, monkeypatch):
         with SpawnedProcess.launch(
             (str(old.interpreter), str(Path(__file__).with_name("runtime_process_parent.py")),
              str(target.interpreter)),
-            output=subprocess.PIPE, stderr=subprocess.PIPE,
+            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
             env=LaunchRuntime.running().child_environment(os.environ),
         ).process as observer_parent:
             observed, errors = observer_parent.communicate(timeout=30)

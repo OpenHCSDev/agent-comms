@@ -27,9 +27,10 @@ from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import CodingCall, NativeToolMode, ToolNotExecuting
-from .native_tool_transport import ToolListener, ToolTransport, UnboundToolTransport
+from .native_tool_transport import GatedToolTransport, ToolListener, UnboundToolTransport
 from .native_tools import NativeToolDeclaration
 from .pi_payloads import StorageDenialToolDetails
+from .pi_rule_gate import PiRuleGate
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
@@ -69,7 +70,7 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = self.thread
-        projection = StorageProjection(registry.storage_rule, thread)
+        projection = StorageProjection(registry.storage_rule, thread, self.comms)
         effects = await asyncio.to_thread(projection.check_call, call)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
@@ -157,12 +158,13 @@ class CodingToolMode(NativeToolMode):
         declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *NativeToolDeclaration.extension_arguments(package))
-        return self.owner.thread.native_launch_arguments(
-            NativeArguments.parse(arguments), package, self.owner.comms.root,
+        return self.owner.comms.threads.native_launch_arguments(
+            self.owner.thread, NativeArguments.parse(arguments), package,
         )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
-        return await CodingToolSocket.open(turn, ownership, self.owner)
+        return await CodingToolSocket.open(
+            turn, ownership, self.owner, PiRuleGate.of(self.owner.comms, self.owner.thread))
 
 @dataclass(frozen=True)
 class CodingToolRequest:
@@ -179,11 +181,12 @@ class CodingToolRequest:
         return CodingCall.decode(self.call_id, self.name, self.arguments)
 
 
-class CodingToolSocket(ToolTransport[CodingCall]):
+class CodingToolSocket(GatedToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
 
-    def __init__(self, listener: ToolListener, owner: CodingToolOwner, *, pid: int) -> None:
-        super().__init__(listener, pid=pid)
+    def __init__(self, listener: ToolListener, owner: CodingToolOwner, gate: PiRuleGate,
+                 *, pid: int) -> None:
+        super().__init__(listener, gate, pid=pid)
         self.owner = owner
         self.completions = set()
 
@@ -214,6 +217,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         )
         if not event.is_error.value_or(False):
             self.owner.tool_completed(call, event.result)
+            call.completed_under(self.rule_gate)
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

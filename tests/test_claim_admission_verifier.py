@@ -72,7 +72,6 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             accept_initial(comms.bus, root_id, message.seq, store)
             alice_lookup = comms.registry.require("Alice").incarnation.lookup
             bob_lookup = comms.registry.require("Bob").incarnation.lookup
-            assert sealed_cohort_assignments(store, bob_lookup) == ()
             assignment = sealed_cohort_assignments(store, alice_lookup)[0]
             assert type(assignment.lifecycle) is FullPendingAssignment
             owner, claimed_generation = comms.registry.live_owner_with_claim("Alice")

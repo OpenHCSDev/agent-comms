@@ -65,7 +65,7 @@ class ResponseConversation:
         if any(source.message.exact_reply_target != obligation.exact_target for source in sources):
             raise IdentityConflict("Response obligation differs from its original routes")
         return cls(
-            FrozenRecipient(snapshot.execution.owner_lookup, registry.by_lookup[snapshot.execution.owner_lookup].name),
+            FrozenRecipient(snapshot.execution.owner_lookup, registry.born(snapshot.execution.owner_lookup).name),
             obligation,
             sources,
             privacy,

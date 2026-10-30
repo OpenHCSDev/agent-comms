@@ -30,7 +30,9 @@ from agent_comms.phase_evidence import (
     RulesetGates,
     UnreadableEvidenceError,
 )
-from agent_comms.pinned_audit import GodFunction
+from nominal_refactor_advisor.audit.findings import GodFunction
+
+from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -52,7 +54,7 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
     git(tmp_path, "update-ref", "refs/remotes/origin/main", sha)
     (tmp_path / "src/kept.py").unlink()
     reading = PlanReading((), MainTree.of(
-        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms")), NominalCensus()))
 
     assert reading.holds(CommitMerged(sha))
     assert reading.holds(PathsAbsent(("src/gone.py",)))
@@ -76,14 +78,14 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
     sha = git(tmp_path, "rev-parse", "HEAD")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", sha)
     reading = PlanReading((), MainTree.of(
-        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms")), NominalCensus()))
     assert reading.holds(ExternalBoundariesPhase.evidence)
 
     source.write_text("try:\n    pass\nexcept Exception:\n    raise\n")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-qm", "broad")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-    changed = PlanReading((), MainTree.of(reading.main.repo))
+    changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
     assert not changed.holds(ExternalBoundariesPhase.evidence)
 
 
@@ -102,7 +104,7 @@ def main_of(tmp_path, files):
     git(tmp_path, "commit", "-qm", "main")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
     return PlanReading((), MainTree.of(
-        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
+        Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms")), NominalCensus()))
 
 
 def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry(tmp_path):
@@ -133,7 +135,7 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         git(tmp_path, "add", ".")
         git(tmp_path, "commit", "-qm", "registry")
         git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-        changed = PlanReading((), MainTree.of(reading.main.repo))
+        changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
         assert not changed.holds(RostersPhase.evidence), remaining
         remaining_file.unlink()
 
@@ -141,7 +143,7 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-qm", "unrelated same-named class")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-    changed = PlanReading((), MainTree.of(reading.main.repo))
+    changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
     assert changed.holds(RostersPhase.evidence)
     (tmp_path / "src/remaining.py").unlink()
 
@@ -160,7 +162,7 @@ def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_p
     git(checkout, "config", "submodule.recurse", "true")
     assert "src/dependency" in git(checkout, "grep", "--recurse-submodules", "-n",
                                    "-e", "declared", "HEAD", "--", "src")
-    current = PlanReading((), MainTree.of(reading.main.repo))
+    current = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
     assert current.holds(RostersPhase.evidence)
     assert not current.main.matching_lines(r"declared", ("src",))
     assert len(tuple(current.main.modules(("src",)))) == 1
@@ -191,7 +193,7 @@ def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(t
         git(tmp_path, "add", ".")
         git(tmp_path, "commit", "-qm", "use")
         git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-        changed = PlanReading((), MainTree.of(reading.main.repo))
+        changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
         assert not changed.holds(BusDeletionPhase.evidence), source
 
 
@@ -200,7 +202,7 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     reading = main_of(tmp_path, {
         "src/a.py": "class Store:\n" + copy + "\nclass Child(Store):\n    pass\n",
         "src/b.py": "class Other:\n" + copy.replace("path", "root") + "\n"
-                    "def long():\n" + "    x = 1\n" * GodFunction.threshold + "\n"
+                    "def long():\n" + "    x = 1\n" * GodFunction.threshold() + "\n"
                     "def probe(other):\n    return other.value is None\n"
                     "def check(value):\n    return isinstance(value, (int, Store))\n",
         "src/caps.py": "class Shared:\n    pass\n\nclass Lonely:\n    pass\n",
@@ -417,4 +419,4 @@ def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp
     git(tmp_path, "add", document)
     git(tmp_path, "commit", "-qm", "remove landing")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-    assert not PlanReading((), MainTree.of(reading.main.repo)).holds(evidence)
+    assert not PlanReading((), MainTree.of(reading.main.repo, NominalCensus())).holds(evidence)

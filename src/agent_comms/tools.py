@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
 
@@ -38,7 +40,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError, ToolRefusedError
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
@@ -52,8 +54,7 @@ from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
-from .owner_connection import OwnerConnection
-from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
+from .owner_launch import HostResources
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -142,7 +143,7 @@ class OwnGoalPublication(ToolResult):
 
     __slots__ = ()
 
-    @projected(view="wire", name="agentCommsKind")
+    @projected(view=WireExclude, name="agentCommsKind")
     def publication_kind(self) -> object:
         return FieldCodec.encode(PublishedGoalToolDetails)
 
@@ -338,10 +339,6 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
-        if not caller.may_reconfigure(comms, thread_name):
-            raise RelationViolationError(
-                f"{thread_name} is running; change its settings through its own session"
-            )
         thread = comms.threads.set_thread_configuration(original, self)
         return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
 
@@ -739,11 +736,7 @@ class CommsResourcesTool(ThreadReadTool):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
-        thread = comms.registry.require(caller.subject(self.thread))
-        return FieldCodec.decode(HostResources, OwnerConnection.exchange(
-            comms.root, thread.require_process(),
-            ReadHostResourcesRuntimeRequest(thread=thread.name),
-        ))
+        return HostResources.read(comms.root, comms.registry.require(caller.subject(self.thread)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -846,7 +839,9 @@ class SendTool(PublishingTool[ThreadCaller]):
     description = (
         "Send a message to another thread or channel. Address specific threads with "
         "@thread-name in the body: the named threads are told they are the intended "
-        "readers, and others dismiss quietly. Unknown names stay plain text."
+        "readers, and others dismiss quietly. Unknown names stay plain text. "
+        "External sends may name received originals in answers; "
+        "source-turn identity is not a model argument."
     )
     target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: Annotated[str, *tool_field("Message text")]
@@ -861,6 +856,11 @@ class SendTool(PublishingTool[ThreadCaller]):
         *tool_field("Change report fields; required for the change-report kind"),
     ] = NoChangeReport()
 
+    answers: Annotated[
+        tuple[MessageReference, ...],
+        *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
+    ] = ()
+
     def publish(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         sender = caller.own_thread()
         target = CommandTarget.named(self.target)
@@ -869,7 +869,8 @@ class SendTool(PublishingTool[ThreadCaller]):
             body = target.addressed(self.audience, self.body)
             result = comms.messaging.send(
                 sender, target.name, body, self.type, report=self.report,
-                task=self.attachment(comms, target), origin=caller.origin())
+                task=self.attachment(comms, target), origin=caller.origin(),
+                answers=self.answers)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,

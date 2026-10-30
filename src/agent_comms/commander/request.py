@@ -33,7 +33,7 @@ class RequestAddVerb(RequestMutation, declared_name="add"):
     text: Annotated[str, field_codec.Argument(flags=("text",))]
 
     def run(self, ctx: Commander) -> None:
-        commander = ctx.comms.registry.require(self.who(ctx)).incarnation
+        commander = ctx.comms.registry.require(self.who(ctx)).acting_identity
         request = ctx.comms.goals.todos.add_request(commander, self.text)
         print(request.id.value)
 
@@ -44,7 +44,7 @@ class RequestCompleteVerb(Reasoned, RequestMutation, declared_name="complete"):
     id: Annotated[OwnerRequestId, field_codec.Argument(flags=("id",))]
 
     def run(self, ctx: Commander) -> None:
-        commander = ctx.comms.registry.require(self.who(ctx)).incarnation
+        commander = ctx.comms.registry.require(self.who(ctx)).acting_identity
         ctx.comms.goals.todos.complete_request(commander, self.id, self.why)
         print(f"{self.id.value} done")
 
@@ -53,7 +53,7 @@ class RequestListVerb(RequestVerb, declared_name="list"):
     help = "every open request and its pending orders"
 
     def run(self, ctx: Commander) -> None:
-        commander = ctx.comms.registry.require(self.who(ctx)).incarnation
+        commander = ctx.comms.registry.require(self.who(ctx)).acting_identity
         store = ctx.comms.goals.todos
         requests = store.open_requests(commander)
         if not requests:

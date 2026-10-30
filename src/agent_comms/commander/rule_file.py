@@ -69,7 +69,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     path: Path
     """The packaged file this rule is read from: the deal points a session at it."""
     opening: ClassVar[re.Pattern[str]] = re.compile(
-        r"\A(?P<wakeup>(?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(?P<why>\S[^\n]*)$", re.M
+        r"\A((?:>[^\n]*\n)+)\n\*\*Why:\*\*[ \t]*(\S[^\n]*)$", re.M
     )
     """A rule opens with its wake-up, the greentext read before anything else, then its one
     Why line; the bullets follow."""
@@ -104,24 +104,60 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         opening = cls.opening.match(body)
         if opening is None:
             raise ValueError(f"{path.name}: does not open with its wake-up greentext, then **Why:**")
-        return FieldCodec.decode(cls, {**metadata, "wakeup": opening["wakeup"].rstrip(),
-                                       "why": opening["why"], "body": body[opening.end():].strip(),
-                                       "path": str(path)})
+        wakeup, why = opening.groups()
+        return FieldCodec.decode(cls, {**metadata, "wakeup": wakeup.rstrip(), "why": why,
+                                       "body": body[opening.end():].strip(), "path": str(path)})
+
+    reading_order: ClassVar[tuple[str, ...]] = (
+        "spine",
+        "self-protection",
+        "unnecessary",
+        "correct-maintenance",
+        "slop-and-polymorphism",
+        "owner-authority",
+        "evidence-not-claims",
+        "plain-reporting",
+        "refactor-game",
+        "no-blocking",
+        "fork-orders",
+        "tests-and-commands",
+        "ship-and-install",
+        "hotfix",
+        "storage-and-cleanup",
+        "send-backs-and-strikes",
+        "blunt-reviews",
+        "coordination",
+        "commander-self-correction",
+        "deadlines",
+        "ally",
+    )
+    closing: ClassVar[frozenset[str]] = frozenset({"ally"})
+    """The rules a deal holds back until everything else is read, the indictment included: read
+    after the record of every failure, they say how to work with him once it lands."""
+    """The one declaration of the order every deal and unit prompt presents the rules in. The
+    papers are dealt before all of them; the spine comes next and kills the hedge on what they
+    proved, then the price of calling an abstraction unnecessary; each rule after it is set up by
+    the one before: the verdict index, the slop it defines, the owner whose positions they are,
+    evidence, reporting, the work, then how the commander enforces it. A rule this tuple does not name still loads, after the named ones; the package test
+    holds the tuple to exactly the packaged rules."""
 
     @classmethod
     def packaged(cls) -> tuple[Self, ...]:
         return tuple(
             sorted(
                 (cls.read(path) for path in CommanderPackage.rules_files()),
-                key=lambda rule: (cls.kinds().index(type(rule)), rule.name),
+                key=lambda rule: (cls.position(rule.name), rule.name),
             )
         )
 
     @classmethod
-    def kinds(cls) -> tuple[type[RuleFile], ...]:
-        """Every rule kind in reading order, derived from the hierarchy: a kind that refines
-        another comes before it, and sibling kinds keep their declaration order."""
-        return (*(kind for member in cls.__subclasses__() for kind in member.kinds()), cls)
+    def position(cls, name: str) -> int:
+        """Where a rule stands in the reading order; an undeclared rule reads last."""
+        return cls.reading_order.index(name) if name in cls.reading_order else len(cls.reading_order)
+
+    @property
+    def closes_deal(self) -> bool:
+        return self.name in self.closing
 
     @property
     def summary(self) -> str:
@@ -141,7 +177,7 @@ class FeedbackRuleFile(RuleFile):
 
 
 class HardRuleFile(FeedbackRuleFile, declared_name="hard-rule"):
-    """A feedback rule that is never waived; refining FeedbackRuleFile puts it first."""
+    """A feedback rule that is never waived."""
 
 
 class ReferenceRuleFile(RuleFile):

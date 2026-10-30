@@ -10,9 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import Tag
+from .channel_targets import CommandersTag, DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -32,12 +31,10 @@ from .goals import (
     GoalDeclaration,
     NoGoal,
 )
-from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
-from .native_arguments import NativeArguments
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -51,7 +48,6 @@ from .registration_inheritance import (
 )
 from .repo import Checkout
 from .session_file import NoSessionFile, SessionFile
-from .store_files import AtomicFile
 from .task_sources import TaskScope
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
 from .thread_execution import NativeThreadExecution, ThreadExecution
@@ -82,7 +78,6 @@ from .thread_storage import (
     UnassignedThreadStorage,
 )
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .tool_declaration import NativeRequestTools
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
@@ -252,9 +247,18 @@ class ThreadProvenance:
         """The declaration's birth member, created once and shared by its readers."""
         return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
 
+    @property
+    def acting_identity(self) -> ThreadIncarnation:
+        """Who this thread's own tool calls act as: a #commanders member holds commander
+        authority over every order on its bus, so no order outlives its creator's command."""
+        if CommandersTag.declared_name not in self.tags:
+            return self.incarnation
+        own = self.incarnation.require_recorded()
+        return own.peer_for(own)
 
-class ThreadCatalog(DurableFile, PatternFile):
-    """The tool catalog a native launch reads from its thread's session directory."""
+
+class ThreadCatalogFile(DurableFile, PatternFile):
+    """The catalog's path declaration, usable without importing the registry reader."""
 
     __slots__ = ()
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
@@ -263,6 +267,10 @@ class ThreadCatalog(DurableFile, PatternFile):
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
+
+    def answering_thread(self, reader: Thread) -> Thread:
+        """A live declaration answers what it owes in its own transcript, whoever reads the debt."""
+        return self
 
     parent: ThreadParent = field(default_factory=NoParent)
     work_state: Annotated[
@@ -279,7 +287,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
     service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
-        field(default=ServiceTier.PRIORITY, kw_only=True)
+        field(default_factory=ServiceTier.default, kw_only=True)
     )
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
         field(default_factory=NoGoal)
@@ -335,18 +343,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         return replace(self, offered=UnobservedTools(),
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
 
-    def require_commander(self) -> None:
-        """The thread's declared provider owns eligibility to command."""
-        if not self.model.native(NativeArguments(())).provider_type.may_command:
-            raise RelationViolationError(
-                f"Thread {self.name!r} with declared model {self.model.otherwise(None)!r} "
-                "cannot command: no Codex commander."
-            )
-
     def commanded_child(self, child: Thread) -> Thread:
-        """A commanded declaration inherits its initial audience from its commander."""
-        self.require_commander()
-        return replace(child, tags=self.tags)
+        """A commanded declaration inherits its initial audience from its commander, never its
+        commander's role."""
+        return replace(child, tags=DeclaredTag.for_child(self.tags))
 
     def inherited_history(self, registry, visited):
         if self.name in visited:
@@ -376,6 +376,16 @@ class Thread(ThreadProvenance, CatalogSelection):
         """The current project or one this conversation moved away from."""
         selected = worktree.resolved()
         return selected == self.worktree.resolved() or selected in self.earlier_projects
+
+    def relocated_checkout(self, source: Checkout, destination: Checkout) -> Thread:
+        """Replace only references to a physically relocated checkout; keep turn/history facts."""
+        original = source.resolved()
+        return replace(
+            self,
+            worktree=destination if self.worktree.resolved() == original else self.worktree,
+            earlier_projects=tuple(destination if project.resolved() == original else project
+                                   for project in self.earlier_projects),
+        )
 
     def moved_to_project(self, project: Checkout) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
@@ -428,27 +438,12 @@ class Thread(ThreadProvenance, CatalogSelection):
             **project.environment(root),
         }
 
-    def native_launch_arguments(
-        self, arguments: NativeArguments, package: Path, root: Path,
-    ) -> tuple[str, ...]:
-        """The existing native session directory owns this root's launch catalog."""
-        if not arguments.loads(NativeRequestTools.native_extension(package)):
-            return arguments.argv
-        launch = LaunchRoot.from_path(root)
-        path = self.catalog_path(launch.path)
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        catalog = ThreadToolCatalogResult(
-            tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
-        )
-        AtomicFile(path).write_text(FieldCodec.compact(catalog.to_wire()))
-        return (*arguments.argv, "--comms-catalog", str(path))
-
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
         return ThreadLaunch.from_thread(self)
 
     def catalog_path(self, root: Path) -> Path:
-        return ThreadCatalog.path_in(root, lookup=self.incarnation.require_recorded().lookup)
+        return ThreadCatalogFile.path_in(root, lookup=self.incarnation.require_recorded().lookup)
 
     def native_session_directory(self, root: Path) -> Path:
         return self.catalog_path(root).parent
@@ -508,6 +503,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         self.role.require_executable(RelationViolationError("A human thread owns no local process"))
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
+
+    def require_restartable(self) -> None:
+        """Idle, or wedged: its turn wrote nothing to its transcript for too long."""
+        self.turn_record.read().require_restartable(self.runtime.last_written())
 
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable(

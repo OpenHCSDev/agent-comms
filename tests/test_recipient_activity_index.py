@@ -35,14 +35,14 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         RegistrySnapshot.capture(replace(comms.registry.store.read(), threads=ThreadRows.from_threads({
             **source.threads,
             "second": replace(source.threads["second"], created_at=1700.0),
-        }))).by_lookup
+        }))).lookup_names
     recorded = RegistryProvenance.capture(source)
     archived = replace(recorded, threads={
         **recorded.threads,
         "second": replace(recorded.threads["second"], created_at=1700.0),
     })
     lookup = source.threads["old"].incarnation.lookup
-    assert type(archived) is RegistryProvenance and not hasattr(archived, "by_lookup")
+    assert type(archived) is RegistryProvenance and not hasattr(archived, "lookup_names")
     ledger = ReadLedger(tmp_path / "archive-reads.json")
     message = Message('old', '#archive', 'seen', InfoKind, seq=7, timestamp=1700.0)
     conversation = ledger.conversation(message, archived)

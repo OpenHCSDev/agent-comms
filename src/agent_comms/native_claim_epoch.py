@@ -109,7 +109,7 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending claim_scope")
         if snapshot.claim_generation(current.name) == acknowledgement.after:
-            acknowledgement.completion.require_retired(snapshot, current, acknowledgement.require_process())
+            acknowledgement.require_retired_for(snapshot)
             snapshot.status(current.name).require_stopped()
 
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:

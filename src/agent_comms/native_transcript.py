@@ -4,18 +4,18 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Generator, Sequence
 from contextlib import closing, contextmanager, nullcontext
+from itertools import takewhile
 from dataclasses import dataclass
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO
+from typing import TYPE_CHECKING, BinaryIO, Never
 
 from .errors import RelationViolationError
-from .native_pi import NativeContextJournal
+from .native_pi import NativeContextJournal, NativeContextProof
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
     from .native_output import NativeRecordLocation
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
@@ -64,9 +64,11 @@ def reverse_records(
                 stream.seek(start)
                 yield start, end, stream.read(end - start)
                 end = start
-        if floor == 0 and end:
-            stream.seek(0)
-            yield 0, end, stream.read(end)
+        if end > floor:
+            stream.seek(max(0, floor - 1))
+            if floor == 0 or stream.read(1) == b"\n":
+                stream.seek(floor)
+                yield floor, end, stream.read(end - floor)
 
 
 def record_end(stream: BinaryIO, size: int) -> int:
@@ -190,13 +192,32 @@ class NativeRecord(TranscriptRecord):
     def events(self):
         return self.project(lambda original: original.entry.events(TranscriptProjection(position=original.start)))
 
-    def publication_producer(self) -> NativeEntry | None:
+    @property
+    def input_reported(self) -> bool:
+        return any(message.input_id.reported
+                   for message in self.project(lambda original: original.entry.messages))
+
+    def require_entry(self) -> RecordedEntry:
         if not self.complete or self.entry is None:
             raise MalformedRecord("Native publication has incomplete evidence")
-        if self.entry.final_reply:
-            self.entry.require_entry_id()
-            return self.entry
-        return None
+        return self.entry
+
+    def is_final_publication(self) -> bool:
+        entry = self.require_entry()
+        if entry.final_reply:
+            entry.require_entry_id()
+            return True
+        return False
+
+
+class NoNativeInput(NativeRecord):
+    """A parent chain that reached its root without an input record."""
+
+    def __init__(self) -> None:
+        super().__init__(0, 0, None, False)
+
+    def require_entry(self) -> Never:
+        raise RelationViolationError("Native publication has no tracked input ancestry")
 
 
 class StoredRecord(NativeRecord):
@@ -208,6 +229,23 @@ class StoredRecord(NativeRecord):
 class NativeTranscript(TranscriptSource):
     def __init__(self, path: Path):
         self.path = path
+
+    def completed_input(self, context: NativeContextProof) -> bool:
+        """Start at the proved input byte offset; never borrow the following input's final."""
+        cut = self.cut()
+        with closing(self.forward(context.session_entry_start, cut.offset)) as records:
+            anchor = next(records)
+            if not anchor.project(lambda original: original.entry.require_entry_id() == context.session_entry_id):
+                raise TranscriptChanged("Native answer input changed after its proof was read")
+            own_turn = takewhile(
+                lambda record: not record.project(lambda original: original.entry.input_boundary), records)
+            finals = tuple(record for record in own_turn if record.project(lambda original:
+                original.entry.final_reply and any(
+                    text for event in original.events for text in event.assistant_parts())))
+            answered = anchor in self.inputs_for(finals, floor=context.session_entry_start)
+        if not cut.holds(self.cut(), cut.offset):
+            raise TranscriptChanged("Native answer source changed during its read")
+        return answered
 
     def _tool_call_times(self, since: float = -inf) -> Generator[float]:
         try:
@@ -353,7 +391,7 @@ class NativeTranscript(TranscriptSource):
                 self.path.absolute(), header, user, session_entry_start=session_entry_start,
             )
 
-    def inputs_for(self, records) -> tuple:
+    def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord, ...]:
         """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
@@ -361,7 +399,7 @@ class NativeTranscript(TranscriptSource):
         chain reaches a user boundary or a root. Tool rounds and branches cannot
         lend another input's publication proof.
         """
-        found = [None] * len(records)
+        found: list[NativeRecord] = [NoNativeInput()] * len(records)
         waiting: dict[str | RootEntry, list[int]] = defaultdict(list)
         latest = 0
         for position, record in enumerate(records):
@@ -376,7 +414,7 @@ class NativeTranscript(TranscriptSource):
         # A chain that reaches a root (no parent) has no input.
         waiting.pop(RootEntry(), [])
         if waiting:
-            for ancestor in self.reverse(latest):
+            for ancestor in self.reverse(latest, floor=floor):
                 entry = ancestor.entry
                 if entry is None or entry.id not in waiting:
                     continue
@@ -391,7 +429,7 @@ class NativeTranscript(TranscriptSource):
                     break
         return tuple(found)
 
-    def input_for(self, record: NativeRecord):
+    def input_for(self, record: NativeRecord) -> NativeRecord:
         """Follow the native record's parents to find the user input that started it."""
         return self.inputs_for((record,))[0]
 
@@ -404,13 +442,10 @@ class NativeTranscript(TranscriptSource):
         for record in self.reverse(through):
             if record.start < after:
                 break
-            producer = record.publication_producer()
-            if producer is None:
+            if not record.is_final_publication():
                 continue
             user = self.input_for(record)
-            if user is None:
-                raise RelationViolationError("Native publication has no tracked input ancestry")
-            entry = user.entry.require_tracked_user()
+            entry = user.require_entry().require_tracked_user()
             self.require_publication_context(entry, session_entry_start=user.start, files=files)
             return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
@@ -433,6 +468,6 @@ class NativeTranscript(TranscriptSource):
                     return
                 yield NativeRecord.read(start, stream.tell(), raw)
 
-    def reverse(self, before: int):
-        for start, end, raw in reverse_records(self.path, before):
+    def reverse(self, before: int, *, floor: int = 0) -> Generator[NativeRecord]:
+        for start, end, raw in reverse_records(self.path, before, floor=floor):
             yield NativeRecord.read(start, end, raw)
