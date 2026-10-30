@@ -208,11 +208,11 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
             "Expand in Toad: F2 or /commander · units: original orders, story, commits, activity · board: every alert",
         ))
 
-    def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """This packet's lines the commander disposes of, through the same recorded actions the
-        gate reads: a verdict drops its line on the next read, not the next packet."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+    def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
+        """This packet's lines a commander disposes of, through the same recorded actions the
+        gate reads: any commander's verdict drops its line on the next read, not the next
+        packet."""
+        history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot()))
         return tuple(ping.board_entry() for ping in self.handled
                      if ping.on_board(history))
 
@@ -223,10 +223,8 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
         """What reaches the session itself once its bridge has put this packet on its board."""
 
-    def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
+    def undisposed(self, history: CommanderHistory, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
@@ -243,16 +241,10 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
                      for packet in message.task.commander_update(commander))
 
     @classmethod
-    def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """The newest packet's lines still undisposed past ``cut``."""
-        return tuple(ping for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for ping in latest.undisposed(comms, commander, cut))
-
-    @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """The newest packet's board, derived at the moment of asking."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for entry in latest.board(comms, commander))
+                     for entry in latest.board(comms))
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
