@@ -26,8 +26,9 @@ from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTimin
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
-from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, TargetTree, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
+from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
 from agent_comms.installer.refusals import InstallRolledBack
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
@@ -172,7 +173,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     comms = declare_test_bus(private_comms, channels=("comms",))
     source = SourceRepository.create(tmp_path / "source")
     target = source.main_commit
-    tree = TargetTree(source.checkout, tmp_path / "scratch", target)
+    tree = TargetTree(tmp_path / "scratch", target, repo=source.checkout)
     tree.add()
     # This source test selects its source interpreter explicitly. The installed journey
     # separately qualifies artifact-only imports and the predecessor runtime.

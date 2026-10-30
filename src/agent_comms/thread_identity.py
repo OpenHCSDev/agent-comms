@@ -234,6 +234,10 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         A birthless member (Core's watcher) carries its own authority."""
         return self
 
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        """Whether this actor may change an order ``creator`` made: its own orders only."""
+        return creator == self.commanding_identity
+
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
@@ -303,6 +307,9 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
         return CommanderForkIdentity(self.name, self.created_at, authority)
 
+    def peer_for(self, authority: ThreadIncarnation) -> CommanderPeerIdentity:
+        return CommanderPeerIdentity(self.name, self.created_at, authority)
+
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
 
@@ -331,6 +338,15 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
     @property
     def commanding_identity(self) -> ThreadIncarnation:
         return self.authority
+
+
+@dataclass(frozen=True, eq=False)
+class CommanderPeerIdentity(CommanderForkIdentity):
+    """A #commanders member: membership declares commander authority over every order on
+    the bus, so a retired or absent creator never orphans its orders. Records name the peer."""
+
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        return True
 
 
 class BirthlessIncarnation(
