@@ -150,7 +150,7 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
 
 
-def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
+def test_deleted_branch_marks_one_card_unreadable(held_bus):
     """Delete after unit reads, before HUD rendering, then complete another heartbeat."""
     comms = held_bus
     checkout = comms.goals.todos.get('P1').order.checked().check.directory

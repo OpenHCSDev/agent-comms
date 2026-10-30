@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -288,6 +288,12 @@ class Blocked(ToolGateState):
     def permits_read(self, path: Path) -> bool:
         return self.cause.permits_read(path)
 
+    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
+        """A refresh waits for the deal still being answered: dealing again now would drop the
+        reads it holds and the audit being written, so the session reads its rules twice and
+        loses the answers. The first observation after the gate opens deals it."""
+        return
+
 
 @dataclass(frozen=True)
 class DealRecord:
@@ -302,6 +308,11 @@ class DealRecord:
         log = deal.dealt_read.read_text(encoding="utf-8").splitlines()
         return tuple(dict.fromkeys(path for path in map(Path, log) if path in self.dealt))
 
+    def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
+        """A resume keeps the context it had, and the deal it still answers: its reads and
+        audit stay."""
+        return kept
+
     def answer(self, deal: RuleDeal) -> ToolGateState:
         """The first requirement still owed holds the gate; with none owed it is open."""
         owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self))
@@ -310,6 +321,10 @@ class DealRecord:
 
 class UndealtRecord(DealRecord):
     """The record of a session with no deal on disk: nothing dealt, nothing due."""
+
+    def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
+        """A session never dealt is dealt at its first start, whatever started it."""
+        return deal()
 
     def answer(self, deal: RuleDeal) -> ToolGateState:
         return Undealt()
