@@ -705,7 +705,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         original = c.goals.todos.apply(original.id, OrderMessage(
             original.revision, lead.incarnation, sent.message_id, at=RecordedEventTime(time.time())))
         claim = OrderClaim.for_order(
-            original, worker.incarnation, 1, merged, "The repair is ready for review",
+            original, worker.incarnation, PullRequestLink(original.repo, 1), merged, "The repair is ready for review",
             sent.reference, store=c.goals.todos,
         )
         claim = replace(claim, message=replace(
