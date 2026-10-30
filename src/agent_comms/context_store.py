@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import IdentityExclude
+
 import json
 import sqlite3
 from abc import ABC, abstractmethod
@@ -224,7 +226,7 @@ class ContextRequest(ContextStoreRows, RowidSequenced):
     def append(cls, db: sqlite3.Connection, record: RecordedContextManifest) -> int:
         versions = tuple(ContextSegmentVersion.append(db, part) for part in record.segments)
         identity = FieldCodec.decode(
-            RecordedContextIdentity, FieldCodec.project(record, "identity")
+            RecordedContextIdentity, FieldCodec.project(record, IdentityExclude)
         )
         identity.thread.require_recorded()
         return cls.insert_sequence(

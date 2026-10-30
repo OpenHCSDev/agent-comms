@@ -49,10 +49,11 @@ def start_source_owner(comms, name, runtime: RestoredRuntime):
     """
     thread = comms.registry.require(name)
     with comms.registry.storage_rule.room_for_start(thread, comms.root):
-        return comms.owners._launch_owner(
+        with comms.owners.launching_owner(
             thread, NativeArguments.default_binary,
             launch_runtime=runtime,
-        )
+        ) as owner:
+            return owner
 
 
 @pytest.mark.parametrize(

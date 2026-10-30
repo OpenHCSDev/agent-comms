@@ -40,6 +40,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -423,7 +424,8 @@ class CommanderContext(BaseModel):
                   answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            answerer=CommanderReceipts(self.actor_identity, (self.incarnation,))).message
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.

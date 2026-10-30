@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
+from .field_codec import ThreadLookup
+from .thread_identity import ThreadIncarnation
 from .errors import (
     CommittedMessageError,
     RelationViolationError,
@@ -44,6 +48,32 @@ from .errors import TodoError
 from .todos import TodoStore
 
 
+class AnswerAuthority(ABC):
+    """Whose receipts a send may answer."""
+
+    @abstractmethod
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]: ...
+
+
+class SenderReceipts(AnswerAuthority):
+    """An ordinary send answers only what its sender received."""
+
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]:
+        return owner.incarnation.require_recorded().answerable(())
+
+
+@dataclass(frozen=True)
+class CommanderReceipts(AnswerAuthority):
+    """A commander verb answers what its actor received, and what each commander it acts
+    for received; ``ThreadIncarnation.commands`` decides which, as it does for orders."""
+
+    actor: ThreadIncarnation
+    commanders: tuple[ThreadIncarnation, ...]
+
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]:
+        return self.actor.answerable(self.commanders)
+
+
 class Messaging:
     def __init__(self, root: Path, registry: Registration, bus: MessageBus, goals: Goals):
         self.root = root
@@ -75,6 +105,7 @@ class Messaging:
         answers: Sequence[MessageReference] = (),
         origin: AgentOrigin = AgentOrigin(),
         source_turn: SourceTurn = NoSourceTurn(),
+        answerer: AnswerAuthority = SenderReceipts(),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -88,11 +119,11 @@ class Messaging:
         with todos.snapshot():
             pass  # The store validates its schema before any envelope is committed.
         self.bus.bus.messages_for_references(answers)
-        unreceived = self.bus.bus.unreceived(owner.incarnation.require_recorded().lookup, answers)
+        unreceived = self.bus.bus.unreceived(answerer.lookups(owner), answers)
         if unreceived:
             raise UnreceivedAnswerError(
                 f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
-                " and cannot answer it")
+                " and acts for no commander who did, so it cannot answer it")
         message = Message(
             sender=owner.name,
             target=target,

@@ -319,7 +319,7 @@ class RestartQueue(DurableStore):
             snapshot = comms.registry.snapshot()
             try:
                 owner = record.selection.require_current(snapshot)
-                comms.owners.require_restart_idle(owner)
+                comms.owners.require_restartable(owner)
             except RestartRefusal as refusal:
                 record = record.transition(refusal.queue_state())
             except RelationViolationError:

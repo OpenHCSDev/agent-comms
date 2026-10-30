@@ -121,6 +121,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "fork-orders",
         "tests-and-commands",
         "ship-and-install",
+        "hotfix",
         "storage-and-cleanup",
         "send-backs-and-strikes",
         "blunt-reviews",

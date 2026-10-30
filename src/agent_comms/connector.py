@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 
 import asyncio
 import base64
@@ -49,6 +51,7 @@ from pydantic import JsonValue
 from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
+from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .comms import Comms, client_wire, wire
 from .repo import Checkout
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -274,7 +277,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def code(self) -> int:
         return Refused.METHOD_NOT_FOUND
 
@@ -509,14 +512,14 @@ class Connector:
     ] = field(
         default_factory=dict, init=False, repr=False, compare=False,
     )
-    closing: asyncio.Event = field(default_factory=asyncio.Event, init=False, repr=False, compare=False)
+    git_children: GitChildren = field(default_factory=GitChildren, init=False, repr=False, compare=False)
+
     watch_tasks: set[asyncio.Task[None]] = field(
         default_factory=set, init=False, repr=False, compare=False,
     )
 
     def log_pending(self) -> None:
         """The existing task owners name pending work; idle watches may also be listed."""
-        self.closing.set()
         logging.info("Connector stopping; pending tools: %s; pending watches: %s",
                      ", ".join(tool.declared_name for task, tool in self.calls.items()
                                if not task.done()) or "none",
@@ -528,16 +531,23 @@ class Connector:
         arguments: Mapping[str, object], caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
         """Start once; a disconnected HTTP client cannot abandon its write."""
-        if self.closing.is_set():
+        if self.git_children.closing.is_set():
             raise web.HTTPServiceUnavailable(text="Connector is stopping")
-        pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
+        with OwnedGitOpening(self.git_children).bound():
+            pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
         self.calls[pending] = tool
         pending.add_done_callback(self.calls.pop)
         return await asyncio.shield(pending)
 
+    async def begin_shutdown(self, app: web.Application) -> None:
+        """Close acquisition launches before any shutdown hook can join entered work."""
+        retirement = self.git_children.start_shutdown()
+        for task in self.watch_tasks:
+            task.cancel()
+        await join_retirement(retirement)
+
     async def stop_calls(self, app: web.Application) -> None:
         """The runner has stopped accepting: drop readers and join declared mutations."""
-        self.closing.set()
         pending = tuple(self.calls.items())
         for call, tool in pending:
             tool.cancel_on_shutdown(call)
@@ -581,6 +591,7 @@ class Connector:
         self.store.read()  # Refuse an unreadable store before binding any port.
         app = web.Application(middlewares=[self.log_route])
         app.cleanup_ctx.append(self.watch_orders)
+        app.on_shutdown.append(self.begin_shutdown)
         app.on_shutdown.append(self.stop_calls)
         app.add_routes(
             [
@@ -627,11 +638,12 @@ class Connector:
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         passes = ServicePassStore.at(self.root)
-        self.watch_tasks.update(
-            asyncio.create_task(Coordination.watch_worker(
-                watch, self.service_wire, passes), name=type(watch).__name__)
-            for watch in self.watches.values()
-        )
+        with OwnedGitOpening(self.git_children).bound():
+            self.watch_tasks.update(
+                asyncio.create_task(Coordination.watch_worker(
+                    watch, self.service_wire, passes), name=type(watch).__name__)
+                for watch in self.watches.values()
+            )
         try:
             yield
         finally:

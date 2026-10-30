@@ -520,6 +520,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
 
+    def require_restartable(self) -> None:
+        """Idle, or wedged: its turn wrote nothing to its transcript for too long."""
+        self.turn_record.read().require_restartable(self.runtime.last_written())
+
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable(
             RelationViolationError(f"Thread {self.name!r} is human; it owns no process")

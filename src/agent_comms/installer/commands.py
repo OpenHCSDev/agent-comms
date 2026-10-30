@@ -13,6 +13,7 @@ from pathlib import Path
 from threading import Lock
 from typing import BinaryIO
 
+from agent_comms.native_build_inputs import ConfiguredChildStdio
 from agent_comms.child_process import SpawnedProcess, SynchronousProcess
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.interpreter_operation import (
@@ -73,7 +74,8 @@ class InterpreterWorker:
                     (str(key.python), "-P", *map(str, key.program.entry())), cwd=key.cwd,
                     env=dict(key.environment), runtime=LaunchRuntime(key.python),
                     pass_fds=key.program.descriptors,
-                    stdin=request_read, output=answer_write, stderr=diagnostics,
+                    stdio=ConfiguredChildStdio(
+                        stdin=request_read, stdout=answer_write, stderr=diagnostics),
                 )
             finally:
                 os.close(request_read)
