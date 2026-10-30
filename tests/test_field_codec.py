@@ -1192,3 +1192,9 @@ def test_an_annotation_lambda_sees_the_module_that_declared_it():
     )
     hint = FieldCodec._types(module.Declared)["sep"]
     assert hint.__metadata__[0]() == __import__("os").sep
+
+
+def test_a_declaration_evaluates_its_annotations_once():
+    """Pi payloads call _types on every decode. Uncached, a real journal entry cost 2.21 ms
+    instead of 0.16 ms and the resident worker burned 112% CPU (2026-10-30)."""
+    assert FieldCodec._types(SecretMember) is FieldCodec._types(SecretMember)

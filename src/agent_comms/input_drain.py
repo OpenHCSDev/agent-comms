@@ -577,6 +577,7 @@ class RunningTurnTask(RunningBackgroundTask, TurnTask):
 class DrainedSession:
     """One drained session's state, from its first use until the session ends."""
 
+    identifier: AcpSessionId = field(kw_only=True)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_task: TurnTask = field(default_factory=TurnTask)
@@ -606,6 +607,7 @@ class DrainedSession:
         """This host holds no session for the fenced owner: nothing is left to join, so
         completing it releases the row's binding to this host."""
         await sessions.complete_unheld(request.owner, request.claim)
+        sessions.effects.inputs.end_session(self.identifier)
         return OwnerRetiredReply(request.owner)
 
     def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
@@ -725,7 +727,6 @@ class DrainedSession:
 class OwnerSession(DrainedSession):
     """Local execution retains its original configuration, never copies its fields."""
 
-    identifier: AcpSessionId = field(kw_only=True)
     configuration: ConfigOptions = field(kw_only=True)
     owner: OwnerIdentity = field(kw_only=True)
     stop: OwnerStop = field(kw_only=True)
@@ -802,7 +803,7 @@ class InputDrain(InputObservation):
         """This session's state, created on its first use."""
         state = self.drained.get(session_id)
         if state is None:
-            state = self.drained[session_id] = DrainedSession()
+            state = self.drained[session_id] = DrainedSession(identifier=session_id)
         return state
 
     def acquire_owner(
