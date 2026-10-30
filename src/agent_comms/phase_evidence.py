@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from subprocess import TimeoutExpired
-from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
+from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -1344,7 +1344,7 @@ class ClassRostersAbsent(MainEvidence):
         return {
             declared: frozenset(
                 name
-                for name, hint in get_type_hints(family).items()
+                for name, hint in FieldCodec._types(family).items()
                 if get_origin(hint) is ClassVar
                 and get_args(hint) == (tuple[type[family], ...],)  # type: ignore[valid-type]
             )

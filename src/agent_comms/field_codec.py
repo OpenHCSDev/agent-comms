@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
@@ -1761,7 +1762,7 @@ class JsonShapeFamily(AcceptsNull, ExternalJsonShape, SingleValueEncoding):
 
     @classmethod
     def _json_shape(cls) -> tuple[type, object]:
-        hints = {name: hint for name, hint in get_type_hints(cls, include_extras=True).items()
+        hints = {name: hint for name, hint in FieldCodec._types(cls).items()
                  if hint is not ClassVar and get_origin(hint) is not ClassVar}
         if tuple(hints) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
@@ -2449,9 +2450,21 @@ class FieldCodec(MroDispatch, Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
-    @cache
-    def _types(declaration: type) -> dict[str, object]:
-        return get_type_hints(declaration, include_extras=True)
+    def _types(declaration: type) -> dict[str, type[object]]:
+        """Every field annotation a declaration has, each evaluated in the module that wrote it.
+        get_type_hints on a class swaps the class dict in as the eval globals, so a lambda in an
+        annotation could not see its own module (WireRevision.goal_execution, 2026-10-30); each
+        base's own annotations are evaluated here with its module as globals and its type
+        parameters and dict as locals, keeping typing's None-to-NoneType and extras."""
+        hints: dict[str, type[object]] = {}
+        for base in reversed(declaration.__mro__):
+            own = types.ModuleType(base.__qualname__)
+            own.__annotations__ = annotationlib.get_annotations(
+                base, format=annotationlib.Format.FORWARDREF)
+            hints |= get_type_hints(own, globalns=vars(sys.modules[base.__module__]),
+                                    localns={param.__name__: param for param in base.__type_params__}
+                                    | dict(vars(base)), include_extras=True)
+        return hints
 
     @overload
     @classmethod
@@ -2615,7 +2628,7 @@ class FieldCodec(MroDispatch, Sealed):
     @staticmethod
     @cache
     def field_types(target: type[DataclassInstance]) -> tuple[tuple[str, type[object]], ...]:
-        hints = get_type_hints(target, include_extras=True)
+        hints = FieldCodec._types(target)
         return tuple((item.name, hints[item.name]) for item in fields(target) if item.init)
 
     @staticmethod
