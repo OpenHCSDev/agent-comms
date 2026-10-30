@@ -994,17 +994,35 @@ class CheckoutHistory:
         return (commit for commit in self.walk(CommitSelection(refs, excluded, first_parent))
                 if matching.search(commit.message))
 
+    @cached_property
+    def children(self) -> dict[str, tuple[str, ...]]:
+        """Each captured commit's children, inverted once from the parent edges."""
+        children: dict[str, list[str]] = {sha: [] for sha in self.graph}
+        for commit in self.records:
+            for parent in commit.parents:
+                if parent in children:
+                    children[parent].append(commit.sha)
+        return {sha: tuple(shas) for sha, shas in children.items()}
+
     def merge_base(self, left: str, right: str) -> tuple[str, ...]:
-        """Best common ancestors: a common ancestor of another candidate is not best."""
-        common = self.ancestors(left) & self.ancestors(right)
+        """Best common ancestors: common commits with no child in common.
+
+        The common set is ancestor-closed, so a best base is either a tip or the parent of a
+        commit only one side reaches; only those few candidates are tested, never the whole
+        shared history.
+        """
+        tips = (self.resolve(left), self.resolve(right))
+        common = self.ancestors(tips[0]) & self.ancestors(tips[1])
         if common not in self._bases:
-            best = common
-            for commit in self.selected(common):
-                for parent in commit.parents:
-                    if parent in self.graph:
-                        best &= ~self.bit(parent)
+            candidates = dict.fromkeys((*tips, *(
+                parent for commit in self.selected(
+                    self.ancestors(tips[0]) ^ self.ancestors(tips[1]))
+                for parent in commit.parents if parent in self.graph)))
+            best = tuple(self.graph[sha] for sha in candidates
+                         if common & self.bit(sha)
+                         and not any(common & self.bit(child) for child in self.children[sha]))
             self._bases[common] = tuple(commit.sha for commit in sorted(
-                self.selected(best), key=lambda commit: commit.at, reverse=True))
+                best, key=lambda commit: commit.at, reverse=True))
         return self._bases[common]
 
     def count(self, head: str, *excluded: str) -> int:
