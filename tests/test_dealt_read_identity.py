@@ -9,7 +9,9 @@ import sys
 from pathlib import Path
 
 from agent_comms.context_reading import ContextUsage
-from agent_comms.rule_deal import DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, Unread
+from agent_comms.rule_deal import (
+    DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
+)
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms_hooks.skill import FleetReader
@@ -18,7 +20,7 @@ from conftest import answer_deal
 
 def test_identical_content_under_a_new_runtime_needs_no_reread(commander_bus):
     deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    deal.redeal()
+    deal.redeal(StartedDeal())
     answer_deal(deal)
     record = deal.current()
     moved = tuple(
@@ -32,18 +34,18 @@ def test_identical_content_under_a_new_runtime_needs_no_reread(commander_bus):
 
 def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
     deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    deal.redeal()
+    deal.redeal(StartedDeal())
     answer_deal(deal)
     read = deal.current().read_by(deal)
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
-    deal.deal(FleetReader, ())
+    deal.deal(FleetReader, (), StartedDeal())
     assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
 
 
 def test_a_changed_file_is_owed_again_and_only_that_file(commander_bus):
     deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    deal.redeal()
+    deal.redeal(StartedDeal())
     record = deal.current()
     changed, *kept = record.paths
     for path in kept:
@@ -58,7 +60,7 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus
     """bus 45261: the first tool call after a Pi unit finished its deal (a comms_send) dealt 16
     files again, because reading them had filled the context past the 66%-left refresh."""
     deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-x"))
-    deal.redeal()
+    deal.redeal(StartedDeal())
     deal.observe_context(ContextUsage(40, 100))
     answer_deal(deal)
     dealt = deal.current().dealt

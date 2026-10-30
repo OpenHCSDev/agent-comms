@@ -82,7 +82,7 @@ if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
-    from .rule_deal import DealtSources, RuleDeal
+    from .rule_deal import DealTrigger, DealtSources, RuleDeal
 
 
 @dataclass(frozen=True, slots=True)
@@ -603,9 +603,10 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
     def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
                    commander: type[DealtSources], commanded: type[DealtSources],
-                   prompts: tuple[str, ...]) -> None:
+                   prompts: tuple[str, ...], trigger: DealTrigger) -> None:
         """The fleet's rules are dealt by the role this project gives the thread."""
-        deal.deal(self.by_role(incarnation, commander=commander, commanded=commanded), prompts)
+        deal.deal(self.by_role(incarnation, commander=commander, commanded=commanded), prompts,
+                  trigger)
 
 
 class NoCommanderProject(CommanderProject):
