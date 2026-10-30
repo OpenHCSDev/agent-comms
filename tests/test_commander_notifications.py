@@ -160,7 +160,7 @@ def failed_pass(comms, error):
 
 def retained_failure(comms):
     stored = ServicePassStore.at(comms.root).read().failing[BrokenHeartbeat.__name__]
-    return ServicePassFailing(BrokenHeartbeat.__name__, stored.since, stored.error)
+    return ServicePassFailing(watch=BrokenHeartbeat.__name__, since=stored.since, error=stored.error)
 
 
 def aged(pings):
@@ -193,7 +193,7 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
     recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
     rules = (RefusedRule("refused", 1.0, "review pending"),
-             ServicePassFailing("independent", 1.0, "another source"))
+             ServicePassFailing(watch="independent", since=1.0, error="another source"))
     beat(comms, rules, states=states)
     board, = notifications(comms)
     assert board.task.not_applied and len(board.task.handled) == 2
@@ -255,7 +255,7 @@ def everything_to_lead(comms):
 
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,))
     board, = notifications(comms)
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
@@ -271,8 +271,8 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
 
 def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notification_bus):
     comms = notification_bus
-    kept = ServicePassFailing("kept-rule", time.time(), "still failing")
-    cleared = ServicePassFailing("cleared-rule", time.time(), "now fixed")
+    kept = ServicePassFailing(watch="kept-rule", since=time.time(), error="still failing")
+    cleared = ServicePassFailing(watch="cleared-rule", since=time.time(), error="now fixed")
     beat(comms, (kept, cleared))
     decisions, = notifications(comms)
     beat(comms, (kept,))
@@ -286,7 +286,7 @@ def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notifica
 
 def test_a_raw_message_between_failures_does_not_restate_the_board(notification_bus):
     comms = notification_bus
-    rules = (ServicePassFailing("independent", 1.0, "another source"),)
+    rules = (ServicePassFailing(watch="independent", since=1.0, error="another source"),)
     beat(comms, rules)
     board, = notifications(comms)
     failed_pass(comms, RuntimeError("down"))
@@ -303,7 +303,7 @@ def test_a_raw_message_between_failures_does_not_restate_the_board(notification_
 
 def test_a_recreated_commander_inherits_no_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,))
     board, = notifications(comms)
     worktree = comms.registry.require("lead").worktree
@@ -363,15 +363,16 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     comms = notification_bus
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
-    hud = CommanderHud(lead, (), (
+    hud = CommanderHud(commander=lead, units=(), phases=(
         CommanderPhase(RetainedStorePhase, True, False, ()),
         CommanderPhase(OneOrderOwnerPhase, True, False, ()),
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
+    ), load=OverloadDegradation.from_orders((), 0, 0), forks=(worker,),
+        usage=CodexUsage(UnreadableUsage(reason='not requested')))
     assert hud.frame == (
-        str(hud.load),
+        *hud.header,
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
         "commander_native/design_reconciled done=False ready=False holders=worker",
@@ -396,9 +397,9 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
         BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
     )
     hud = CommanderHud(
-        RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
-        OverloadDegradation.from_orders((), 0, 0), (),
-        CodexUsage(UnreadableUsage(reason="not requested")), board,
+        commander=RecordedThreadIncarnation("lead", 3.0), units=(awaiting, stuck), phases=(),
+        load=OverloadDegradation.from_orders((), 0, 0), forks=(),
+        usage=CodexUsage(UnreadableUsage(reason="not requested")), board=board,
     )
 
     CommanderFrame.replace_all(tmp_path, (hud,))
@@ -422,7 +423,7 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     frame = capture_frame(comms, "lead", ProgressRead())
     frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
@@ -451,7 +452,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     comms = notification_bus
     states = state_cards(comms, UnitState)
     assert states and not any(state.attention() for state in states)
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,), states=states)
     first, = notifications(comms)
     assert failing.line() in first.body
@@ -497,7 +498,7 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
 
 def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
     comms = notification_bus
-    rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
+    rules = tuple(ServicePassFailing(watch=f"watch-{index}", since=1.0, error="failed source read")
                   for index in range(7))
     beat(comms, rules)
     first, = notifications(comms)
@@ -537,7 +538,7 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
 
 def test_latest_observation_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
-    beat(comms, (ServicePassFailing("watch", 1.0, "failed source read"),))
+    beat(comms, (ServicePassFailing(watch="watch", since=1.0, error="failed source read"),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
