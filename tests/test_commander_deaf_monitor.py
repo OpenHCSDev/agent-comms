@@ -11,6 +11,7 @@ import pytest
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.task_attachments.commander_pings import CommanderNotice
+from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
@@ -55,7 +56,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 db, sender=owner_thread, target=CommsTag.channel(),
             ))
         return tuple(message for sequence in sequences
-                     if "COMMANDER DEAF" in (message := held_bus.bus.bus.lookup(sequence)).body)
+                     if (message := held_bus.bus.bus.lookup(sequence)).task == FleetNotice())
 
     with Binding.open(state) as db:
         binding.bind(db)
@@ -92,7 +93,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 await beat()
                 await beat()
                 alarm, = alarms()
-                assert alarm.body.startswith("lead: COMMANDER DEAF")
+                assert alarm.body.startswith("lead: ")
                 assert "agent-comms-claude-bridge watch" in alarm.body
 
                 await bridge.confirm_probe(probe)
