@@ -12,7 +12,6 @@ from agent_comms.test_lease import (
     InheritedTestRun,
     LeaseStart,
     TestLease,
-    TestLeaseBusy,
 )
 
 
@@ -33,11 +32,7 @@ class TestSession(ExitStack):
         return cls(start, lease)
 
     def acquire(self) -> None:
-        try:
-            self.enter_context(self.lease.held(self.start))
-        except TestLeaseBusy as error:
-            self.close()
-            raise pytest.UsageError(str(error)) from error
+        self.enter_context(self.lease.held(self.start))
 
     def prepare(self) -> None:
         self.acquire()

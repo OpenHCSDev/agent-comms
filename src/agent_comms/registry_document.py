@@ -339,16 +339,17 @@ class ThreadRow(DeclaredWireType):
 
     @classmethod
     def from_thread(cls, thread: Thread, binding: Callable[[Thread], Thread]) -> Self:
-        row = cls.from_wire(FieldCodec.encode_fields(thread)).bound(binding)
-        row.__dict__["decoded"] = binding(thread)
+        row = cls.from_wire(thread.to_wire()).bound(binding)
+        row.__dict__[cls.decoded.func.__name__] = binding(thread)
         return row
 
     def bound(self, binding: Callable[[Thread], Thread]) -> Self:
         if self.binding == binding:
             return self
         row = replace(self, binding=binding)
-        if "decoded" in self.__dict__:
-            row.__dict__["decoded"] = binding(self.decoded)
+        decoded = type(self).decoded.func.__name__
+        if decoded in self.__dict__:
+            row.__dict__[decoded] = binding(self.decoded)
         return row
 
     def to_wire(self) -> dict[str, JsonValue]:

@@ -120,7 +120,7 @@ class VerifiedOwnerLoss(ABC):
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         release = cls._released(releases, boundary, identity.owner_lookup)
         release = release.require_owner_loss(boundary.registry, identity)
-        release.require_retired_for(boundary.registry, owner)
+        release.require_retired_for(boundary.registry)
         proof = ReleasedOwnerLoss(release, store, boundary)
         with proof.observed():
             yield proof
@@ -446,7 +446,7 @@ class RecoveryMonitorCapability:
                 if current.reference.recorded:
                     continue
                 loss.require_input_loss(current)
-                with boundary.registry_cut.current(), store.session.writing() as db:
+                with boundary.registry_cut.entry_current(owner.name), store.session.writing() as db:
                     stage.fail_claims(store, db)
 
     @classmethod

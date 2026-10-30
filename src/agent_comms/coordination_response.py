@@ -323,8 +323,8 @@ def _require_cohort_assignments(
     snapshot.require_wire_responses()
     wire_root_id = privacy.namespace
     with bus.bus.reading() as source:
-        originals = {seq: source.delivery(seq) for seq in
-                     frozenset(assignment.wire_seq for assignment in snapshot.assignments)}
+        sequences = tuple(frozenset(assignment.wire_seq for assignment in snapshot.assignments))
+        originals = dict(zip(sequences, source.deliveries_at(sequences)))
     for assignment in snapshot.assignments:
         initial = originals.get(assignment.wire_seq)
         routes_read = SelectedResponseRoute.read(
