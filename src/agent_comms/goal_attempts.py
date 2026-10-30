@@ -145,11 +145,11 @@ class Generation(GoalLedgerTable, TypedTable):
 
     def failure_evidence(self, store: GoalAttemptStore) -> GoalFailureEvidence:
         identity = self.failure_identity()
-        with closing(store._connect()) as conn, closing(FailedTurnEvidence.stream(
-            conn, attempt_id=identity.attempt_id,
-            goal_id=identity.goal_id, generation=identity.generation,
-        )) as records:
-            return next(records, NoFailedTurnEvidence())
+        with closing(store._connect()) as conn:
+            return next(FailedTurnEvidence.stream(
+                conn, attempt_id=identity.attempt_id,
+                goal_id=identity.goal_id, generation=identity.generation,
+            ), NoFailedTurnEvidence())
 
     def has_ready_grant(self, number: int, digest: str) -> bool:
         return self.lifecycle.ready and self.number == number and self.ready_digest == digest
