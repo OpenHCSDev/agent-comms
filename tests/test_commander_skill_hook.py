@@ -19,6 +19,7 @@ import pytest
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
+from agent_comms.channel_targets import CommandersTag
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, RuleFile
 from agent_comms.commander.standing import PlanIdle
@@ -470,22 +471,32 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     assert transcript.with_suffix(".deck.json").exists()
 
 
-def test_a_commander_fork_registers_in_the_hook_with_its_commanders_tags(
+def test_a_commander_fork_registers_under_the_session_that_spawned_it(
         tmp_path, capsys, commanding_session):
-    """No CLI subprocess: the hook declares the fork in its own process, carrying every tag its
-    commander carries, while the commander role stays with the commander."""
+    """No CLI subprocess: the hook declares the fork in its own process as a child of the
+    session's own bus thread, carrying every tag that thread carries (#commanders included),
+    even when that thread is a co-commander and not the registry's lead."""
+    commanding_session.registry.declare(Thread(
+        "claude-nra", frozenset({CommandersTag.declared_name}), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    WatchClaim("s2").enrol(WatchRecord(
+        "claude-nra", str(commanding_session.root), (), tmp_path / "state2"))
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
-    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
-                         "transcript_path": str(transcript), "agent_id": "a7",
-                         "agent_type": "fork"}).register()
-    assert "commander fork claude-a7" in capsys.readouterr().out
+    for session, agent in (("s", "a7"), ("s2", "a8")):
+        SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": session,
+                             "transcript_path": str(transcript), "agent_id": agent,
+                             "agent_type": "fork"}).register()
+        assert f"commander fork claude-{agent}" in capsys.readouterr().out
     snapshot = commanding_session.registry.snapshot()
-    fork = snapshot.require("claude-a7")
-    fork.execution.require_commander_fork()
-    assert fork.tags == snapshot.require("claude-code").tags
-    assert "claude-a7" not in {
-        thread.name for thread in snapshot.commander_project.commanders(snapshot)}
+    for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
+        fork = snapshot.require(f"claude-{agent}")
+        fork.execution.require_commander_fork()
+        assert tuple(fork.parent.names()) == (parent,)
+        assert fork.tags == snapshot.require(parent).tags
+    assert CommandersTag.declared_name in snapshot.require("claude-a8").tags
+    assert {"claude-a7", "claude-a8"}.isdisjoint(
+        thread.name for thread in snapshot.commander_project.commanders(snapshot))
 
 
 def gated(transcript, tool, tool_input, **extra):
