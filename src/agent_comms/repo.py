@@ -670,8 +670,8 @@ class PublishedUpstream(TrackedUpstream):
     def unpushed(self, history: CheckoutHistory, head: str,
                  published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
         if published:
-            (remote_head,) = published
-            count = history.count(head, remote_head)
+            # Ahead of the upstream is not unpushed: only a commit on no remote exists only locally.
+            count = history.unpublished(head, "")
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(history, head, published)
 
