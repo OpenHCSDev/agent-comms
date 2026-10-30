@@ -429,7 +429,6 @@ class OwnerLifecycle:
         refusal = RelationViolationError("Explicit start is required for a stopped agent.")
         thread.role.require_executable(refusal)
         self.registry.status(thread.name).require_active(str(refusal))
-<<<<<<< HEAD
         if thread.process_alive:
             return thread
         with self.launching_owner(
@@ -451,7 +450,7 @@ class OwnerLifecycle:
                 refusal = RelationViolationError("Only visible agent threads can be started.")
                 thread.role.require_executable(refusal)
                 status.require_visible(str(refusal))
-                if thread.process_alive:
+                if status.holds_process and thread.process_alive:
                     status.require_active("Stopped owner session has not retired yet.")
                     results.append(OwnerStartResult(thread.name, thread.require_process().pid, False))
                     continue
@@ -460,30 +459,6 @@ class OwnerLifecycle:
                 ))
                 results.append(OwnerStartResult(owner.name, owner.require_process().pid, True))
         return tuple(results)
-=======
-        return (
-            thread if thread.process_alive else self._launch_owner(
-                thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running())
-        )
-
-    def start(
-        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
-        agent_args: LaunchArguments = InheritedArguments(),
-    ) -> OwnerStartResult:
-        thread = self.registry.require(name)
-        thread.execution.require_native()
-        status = self.registry.status(thread.name)
-        refusal = RelationViolationError("Only visible agent threads can be started.")
-        thread.role.require_executable(refusal)
-        status.require_visible(str(refusal))
-        if status.holds_process and thread.process_alive:
-            status.require_active("Stopped owner session has not retired yet.")
-            return OwnerStartResult(thread.name, thread.require_process().pid, False)
-        owner = self._launch_owner(
-            thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
-        )
-        return OwnerStartResult(owner.name, owner.require_process().pid, True)
->>>>>>> origin/main
 
     @cached_property
     def launch_authority(self) -> RootLaunch:
