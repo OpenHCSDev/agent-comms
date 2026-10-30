@@ -1,5 +1,5 @@
 version = 1
-revision = 5
+revision = 3
 requires-python = ">=3.14.8, <3.15"
 
 [[package]]
@@ -23,6 +23,7 @@ dependencies = [
     { name = "metaclass-registry" },
     { name = "packaging" },
     { name = "pydantic" },
+    { name = "python-introspect" },
 ]
 
 [package.optional-dependencies]
@@ -54,6 +55,7 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
+    { name = "python-introspect", git = "https://github.com/OpenHCSDev/python-introspect?rev=main" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
     { name = "uv", marker = "extra == 'dev'", specifier = "==0.13.1" },
 ]
@@ -727,6 +729,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/78/b4/439b179d1ff526791eb921115fca8e44e596a13efeda518b9d845a619450/pytest_xdist-3.8.0.tar.gz", hash = "sha256:7e578125ec9bc6050861aa93f2d59f1d8d085595d6551c2c90b6f4fad8d3a9f1", size = 88069, upload-time = "2025-07-01T13:30:59.346Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ca/31/d4e37e9e550c2b92a9cbc2e4d0b7420a27224968580b5a447f420847c975/pytest_xdist-3.8.0-py3-none-any.whl", hash = "sha256:202ca578cfeb7370784a8c33d6d05bc6e13b4f25b5053c30a152269fd10f0b88", size = 46396, upload-time = "2025-07-01T13:30:56.632Z" },
+]
+
+[[package]]
+name = "python-introspect"
+version = "0.3.0"
+source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#0aff2a73bd24594d377d3f0ffa1464e12447c487" }
+dependencies = [
+    { name = "annotated-types" },
+    { name = "metaclass-registry" },
 ]
 
 [[package]]

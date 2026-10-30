@@ -29,6 +29,7 @@ dependencies = [
     "metaclass-registry @ git+https://github.com/OpenHCSDev/metaclass-registry@main",
     "packaging>=24",
     "pydantic>=2.13",
+    "python-introspect @ git+https://github.com/OpenHCSDev/python-introspect@main",
 ]
 
 [project.optional-dependencies]

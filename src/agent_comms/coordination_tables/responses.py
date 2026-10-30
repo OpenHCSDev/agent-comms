@@ -97,15 +97,15 @@ class ResponseObligation(
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
     revision: Annotated[int, Column(check="revision > 0")]
 
-    @projected(view="snapshot", name="state")
+    @projected(view=SnapshotExclude, name="state")
     def snapshot_state(self):
         return type(self.lifecycle)
 
-    @projected(view="snapshot", name="receipt_message_id")
+    @projected(view=SnapshotExclude, name="receipt_message_id")
     def snapshot_receipt_message_id(self):
         return self.lifecycle.published_message_id
 
-    @projected(view="snapshot", name="receipt_seq")
+    @projected(view=SnapshotExclude, name="receipt_seq")
     def snapshot_receipt_seq(self):
         return self.lifecycle.publication_seq
 

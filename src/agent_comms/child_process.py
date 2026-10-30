@@ -44,7 +44,7 @@ from typing import TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, 
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
+from .field_codec import DisclosedRecord, FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
@@ -1380,7 +1380,7 @@ class OrderCheckFailedError(ValueError):
     """A completed order check did not prove its expected result."""
 
 
-class CheckPrinted(DeclaredFamily, affix="Printed"):
+class CheckPrinted(DisclosedRecord, DeclaredFamily, affix="Printed"):
     """The count printed by a child, or the absence of an integer."""
 
     @staticmethod

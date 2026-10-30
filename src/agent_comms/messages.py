@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKey
 
 from .class_fact import ClassFact
@@ -1012,7 +1014,7 @@ class Message(MessageInput, TurnOrigin):
     def view_order(self) -> tuple[int, int, int]:
         return 1, 0, self.seq
 
-    @projected(view="wire", name="id")
+    @projected(view=WireExclude, name="id")
     def message_id(self) -> MessageId:
         return MessageId.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 

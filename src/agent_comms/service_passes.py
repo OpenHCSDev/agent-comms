@@ -10,7 +10,7 @@ from typing import Annotated, ClassVar, Self
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
 from .errors import ToolRefusedError
-from .field_codec import WireTransient, projected
+from .field_codec import WireExclude, WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
@@ -67,7 +67,7 @@ class ServiceReading(ToolResult):
     def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
         return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def service_status(self) -> tuple[str, ...]:
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
         failures = self.services.failure_lines()

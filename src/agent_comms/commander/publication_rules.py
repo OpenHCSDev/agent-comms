@@ -62,7 +62,7 @@ class EmptyPullRequest(HeldBranchRule):
         for held in branches:
             reader = held.repository.branches
             todo = held.todo
-            for pull in held.source.pulls.open_for(todo):
+            for pull in held.source.frame.pulls.open_for(todo):
                 for compared in pull.empty_changes(reader):
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,
                                      PullRequestLink(todo.repo, pull.number),

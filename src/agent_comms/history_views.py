@@ -1,6 +1,8 @@
 """History, display snapshots and viewer read-state ownership."""
 
 from __future__ import annotations
+
+from agent_comms.field_codec import PresenceExclude
 from agent_comms.repo import Checkout
 
 from .activity import ActivityCapture, ObservedActivity
@@ -113,7 +115,7 @@ class ThreadPoll(CliResult):
     peers: tuple[ThreadView, ...]
 
     def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+        return FieldCodec.project(self, PresenceExclude)
 
 
 @dataclass(frozen=True)

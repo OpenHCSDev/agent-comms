@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ActivityExclude
+
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -15,7 +17,7 @@ from .context_store import ContextStore
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec, WireTransient, projected
+from .field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
@@ -52,7 +54,7 @@ class ActivityTurnView(TurnView):
     def project(cls, answer: ThreadTurns) -> JsonValue:
         selected = answer.turns[:cls.turn_limit]
         page = replace(answer, turns=selected, older=answer.older.older(selected))
-        return FieldCodec.project(page, "activity")
+        return FieldCodec.project(page, ActivityExclude)
 
 
 class OriginalTurnView(TurnView):
@@ -80,7 +82,7 @@ class UnavailableOrderEdits(ToolResult):
     owner: ThreadIncarnation
     cause: Annotated[WorkBranchError | OSError, WireTransient()]
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def error(self) -> str:
         return str(self.cause)
 
@@ -90,7 +92,7 @@ class UnjudgedEdits(ServiceReading):
     edits: tuple[EditCall, ...]
     unavailable: tuple[UnavailableOrderEdits, ...] = ()
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def complete(self) -> bool:
         return not self.unavailable
 
