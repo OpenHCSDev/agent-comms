@@ -16,7 +16,6 @@ Code hooks deny a PreToolUse event, Core's Pi tool owner raises a tool denial.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 from abc import ABC, abstractmethod
@@ -30,7 +29,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
-from .store_files import AtomicFile
+from .store_files import AtomicFile, StoreLockOwner
 
 if TYPE_CHECKING:
     from .commander.rule_file import RuleFile
@@ -87,6 +86,36 @@ class DealtSource:
 
     def digest(self) -> str:
         return hashlib.sha256(self.path.read_bytes()).hexdigest()
+
+
+@dataclass(frozen=True)
+class DealtOpenedLog(StoreLockOwner):
+    """The dealt files the gate let a read open since context was last lost, one DealtSource
+    per line, written before the read runs. Parallel hooks run concurrently, so each judges
+    under this file's store lock and sees every read the one before it opened."""
+
+    path: Path
+
+    def sources(self) -> tuple[DealtSource, ...]:
+        if not self.path.exists():
+            return ()
+        return tuple(
+            FieldCodec.decode(DealtSource, FieldCodec.parse(line.encode()))
+            for line in self.path.read_text(encoding="utf-8").splitlines()
+        )
+
+    def clear(self) -> None:
+        self.path.write_text("", encoding="utf-8")
+
+    @contextmanager
+    def judging(self) -> Iterator[Callable[[Path], None]]:
+        """Hold the lock while one read is judged; yields how to record it as opened."""
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.guarded_write():
+            def opened(path: Path) -> None:
+                with self.path.open("a", encoding="utf-8") as log:
+                    log.write(json.dumps(FieldCodec.encode(DealtSource.of(path))) + "\n")
+            yield opened
 
 
 @dataclass(frozen=True)
@@ -352,8 +381,8 @@ class Blocked(ToolGateState):
 @dataclass(frozen=True)
 class DealRecord:
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
-    the audit hang off it; a deal that follows lost context empties the read log, and no deal
-    deletes the audit, whose entries answer the dealt content or say why they do not."""
+    the audit hang off it; a deal that follows lost context empties the read log and deletes
+    the audit, so every rule is answered again by the instance that just read it."""
 
     dealt: tuple[Path, ...]
     due: AuditDue
@@ -380,7 +409,7 @@ class DealRecord:
         sources = frozenset(self.sources())
         return tuple(dict.fromkeys((
             *self.read_by(deal),
-            *(source.path for source in deal.opened_sources() if source in sources),
+            *(source.path for source in deal.dealt_opened.sources() if source in sources),
         )))
 
     def widen[Said](self, deal: RuleDeal, dealt: type[DealtSources],
@@ -569,30 +598,8 @@ class RuleDeal(State):
         return self.stem.with_suffix(".dealt-reads")
 
     @property
-    def dealt_opened(self) -> Path:
-        """The dealt files the gate let a read open since context was last lost, one
-        DealtSource per line, written before the read runs; its lock orders parallel reads."""
-        return self.stem.with_suffix(".dealt-opened")
-
-    def opened_sources(self) -> tuple[DealtSource, ...]:
-        if not self.dealt_opened.exists():
-            return ()
-        return tuple(
-            FieldCodec.decode(DealtSource, FieldCodec.parse(line.encode()))
-            for line in self.dealt_opened.read_text(encoding="utf-8").splitlines()
-        )
-
-    @contextmanager
-    def opening(self) -> Iterator[Callable[[Path], None]]:
-        """One read judged at a time: parallel hooks run concurrently, and each must see the
-        reads the one before it let open. Yields the way to record a read as opened."""
-        self.stem.parent.mkdir(parents=True, exist_ok=True)
-        with self.dealt_opened.open("a", encoding="utf-8") as log:
-            fcntl.flock(log, fcntl.LOCK_EX)
-            def record(path: Path) -> None:
-                log.write(json.dumps(FieldCodec.encode(DealtSource.of(path))) + "\n")
-                log.flush()
-            yield record
+    def dealt_opened(self) -> DealtOpenedLog:
+        return DealtOpenedLog(self.stem.with_suffix(".dealt-opened"))
 
     def reads(self) -> tuple[DealtRead, ...]:
         if not self.dealt_read.exists():
@@ -629,13 +636,14 @@ class RuleDeal(State):
 
     def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
         """A start or compaction drops what was read: the read log resets first, then the record
-        is published whole, so no reader sees a half-written deal. The audit stays: each entry
-        still answers its rule exactly when its quote is in the dealt content, and the owner's
-        new words are owed in it by the new record."""
+        is published whole, so no reader sees a half-written deal. The audit goes with the reads:
+        a fresh instance owes a fresh confession, never one carried over from the context it
+        lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
         self.dealt_read.write_text("", encoding="utf-8")
-        self.dealt_opened.write_text("", encoding="utf-8")
+        self.dealt_opened.clear()
+        self.audit.unlink(missing_ok=True)
         self.publish(
             DealRecord(
                 tuple(source.resolve() for source in dealt.sources()),
@@ -675,7 +683,7 @@ class ToolGate(RuleDeal):
         if path not in self.current().paths:
             self.state().enforce(self, tool)
             return
-        with self.opening() as opened:
+        with self.dealt_opened.judging() as opened:
             state = self.state()
             if not state.permits_read(path):
                 state.enforce(self, tool)

@@ -786,7 +786,7 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     assert start.audit.exists()
     assert start.current().read_by(start) == (first,)
     assert session_start(transcript, "compact").returncode == 0
-    assert start.audit.exists()  # a compaction drops the reads, never the answers
+    assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
     assert start.current().read_by(start) == ()
 
 
