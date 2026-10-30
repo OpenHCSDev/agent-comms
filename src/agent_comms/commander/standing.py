@@ -533,7 +533,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     def scan_orders(cls, comms: Comms, commander: str,
                     scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
         actor = comms.registry.require(commander).incarnation
-        return cls.paired(comms, commander, comms.goals.todos.for_commander(actor), scan, pulls)
+        return cls.paired(comms, commander, comms.goals.todos.board(), scan, pulls)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
@@ -770,7 +770,7 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         actor = comms.registry.require(commander).incarnation
         return tuple(cls(held, todo, count)
-                     for todo in comms.goals.todos.held_for_commander(actor)
+                     for todo in comms.goals.todos.board_held()
                      for held in todo.current_holder.current_assignments()
                      for count in (todo.strikes_against(held.owner_identity),)
                      if count >= cls.threshold)

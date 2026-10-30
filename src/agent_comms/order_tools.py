@@ -303,7 +303,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
-        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
+        orders = [todo.id for todo in comms.goals.todos.board()
                   if todo.holder == self.unit]
         if not orders:
             raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
@@ -326,7 +326,7 @@ class CommsTodoListTool(BoardReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         snapshot = comms.registry.snapshot()
         actor = snapshot.require(caller.subject(self.thread)).incarnation
-        listed = tuple(comms.goals.todos.for_commander(actor))
+        listed = tuple(comms.goals.todos.board())
         pulls = ProgressRead(listed)
         # An orphaned hold has no unit checkout to read; HolderGone reports it.
         held = HeldOrders.split(tuple(todo for todo in listed if todo.holder), snapshot)

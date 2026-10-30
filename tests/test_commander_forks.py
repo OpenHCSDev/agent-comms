@@ -366,7 +366,7 @@ def edit_sources(fork_bus, tmp_path, configured_repository):
 def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
     holds = HeldOrders.of(comms.goals.todos, snapshot, "lead").live
-    history = comms.goals.todos.history_for_commander(snapshot.require("lead").incarnation)
+    history = comms.goals.todos.board_history()
     return holds, EditWorkplaces.capture(comms, snapshot, holds, ProgressRead(history))
 
 
@@ -570,8 +570,7 @@ def test_ambiguous_pre_pr_work_never_picks_latest(edit_sources, tmp_path):
     assert shown.returncode == 0, shown.stderr
     assert calls[0][0] not in shown.stdout and calls[1][0] in shown.stdout
     assert shown.stdout.splitlines()[-1] == "1 unjudged"
-    assert all(not todo.judged_calls for todo in comms.goals.todos.history_for_commander(
-        comms.registry.require("lead").incarnation))
+    assert all(not todo.judged_calls for todo in comms.goals.todos.board_history())
 
 
 def test_missing_unknown_allocation_still_overrides_an_enclosing_source(edit_sources):
@@ -666,7 +665,7 @@ def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path)
     assert all(result.returncode == 0 for result in results), [result.stderr for result in results]
     todos = tuple(
         todo
-        for todo in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation)
+        for todo in comms.goals.todos.board_held()
         if todo.id != "P40"
     )
     assert {todo.id for todo in todos} == {"P41", "P42"}
@@ -698,7 +697,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     assert sum(result.returncode == 0 for result in results) == 1, [r.stderr for r in results]
     held = tuple(
         todo
-        for todo in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation)
+        for todo in comms.goals.todos.board_held()
         if todo.id != "P40"
     )
     assert len(held) == 1 and held[0].holder == "worker"
@@ -741,8 +740,7 @@ def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_
                              "--to", "worker", "--where", "owner.py:2", "--fork", name)
                      for name in ("fork-a", "fork-b"))
     assert first.returncode == 0, first.stderr
-    held, = (todo for todo in comms.goals.todos.held_for_commander(
-        comms.registry.require("lead").incarnation) if todo.holder == "worker")
+    held, = (todo for todo in comms.goals.todos.board_held() if todo.holder == "worker")
     assert second.returncode != 0 and occupied("worker", held) in second.stderr
 
 
