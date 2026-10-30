@@ -444,7 +444,10 @@ def test_transfer_refuses_before_moving_retained_work(retained_transfer, refusal
                                       execution=ExternalThreadExecution))
     else:
         current = comms.goals.todos.get('P1')
-        stale = OrderCheckoutGrant(worker, replace(current, revision=current.revision - 1))
+        stale = OrderCheckoutGrant(worker, current)
+        comms.goals.todos.apply('P1', WithdrawTodo(
+            current.revision, comms.registry.require('lead').incarnation, current.held(),
+            'The target assignment ends before the prepared transfer runs.'))
         with pytest.raises(ValueError, match='changed before checkout transfer'):
             stale.require_transfer(comms, repository)
         assert source.path.exists() and not destination.exists()

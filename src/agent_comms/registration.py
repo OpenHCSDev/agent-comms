@@ -117,10 +117,8 @@ class Registration:
             if not source.path.exists() and destination.exists():
                 # No move to replay. Only recognize the caller's current physical allocation,
                 # never an occupied destination while the original tree still exists.
-                prefix = f'{rule.roots_of(current).allocation_name}--'
-                if source.path.parent != rule.checkout_base or not source.path.name.startswith(prefix):
-                    raise RelationViolationError('Missing source is outside the caller\'s allocations')
-                rule.require_transfer_source(current, destination, edit.document.threads.values(), repository)
+                rule.require_completed_transfer(
+                    current, source.path, destination, edit.document.threads.values(), repository)
                 return CheckoutTransfer(source.path, destination,
                     Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
                     Repo.git(destination, 'rev-parse', 'HEAD').strip())
