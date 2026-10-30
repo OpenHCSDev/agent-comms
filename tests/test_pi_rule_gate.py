@@ -163,3 +163,18 @@ def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, 
     deal = PiRedeal.of(comms, unit)
     deal.start()
     assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+
+
+def test_a_refresh_waits_for_the_deal_being_answered(unit_deal):
+    """A refresh never lands mid-gate: dealing again would drop the reads made and the audit
+    being written (allocation-repair, 2026-10-30). It deals once the gate opens."""
+    events.CompactionEnd().deal_rules(unit_deal)
+    unit_deal.audit.write_text("{}")
+    dealt = unit_deal.current().dealt
+    unit_deal.observe_context(ContextUsage(35, 100))
+    assert unit_deal.audit.exists()
+    assert unit_deal.current().dealt == dealt
+    answer_deal(unit_deal)
+    unit_deal.observe_context(ContextUsage(36, 100))
+    assert refused(unit_deal)
+    assert unit_deal.current().dealt != dealt
