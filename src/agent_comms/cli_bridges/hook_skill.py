@@ -260,14 +260,13 @@ class DeckStart(DealtDeck):
                 stream, transcript.stat().st_size, self.owner_prompts)
 
     def held(self, comms: Comms, snapshot: RegistrySnapshot,
-             commanders: tuple[Thread, ...]) -> str:
-        """The held orders and header use the same bus and registry cut as the reader."""
-        return "\n".join((
-            "FUCK YOUR COMPACTION. Your summary is a paraphrase. What your units actually hold:",
-            *(hold.recalled()
-              for commander in commanders
-              for hold in HeldOrders.of(TodoStore(comms.root), snapshot, commander.name).live),
-        ))
+             commanders: tuple[Thread, ...]) -> tuple[str, ...]:
+        """Complete held-order lines; the reader owns their header and rendering."""
+        return tuple(
+            hold.recalled()
+            for commander in commanders
+            for hold in HeldOrders.of(TodoStore(comms.root), snapshot, commander.name).live
+        )
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...]) -> None:
         """A start or compaction drops what was read: the deck is dealt again from its start,
