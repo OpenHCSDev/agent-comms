@@ -1202,14 +1202,20 @@ def test_every_declared_field_type_resolves() -> None:
 
     import agent_comms
 
-    records: set[type] = set()
+    declarations: set[type] = set()
+    pending: list[object] = []
     for module_info in pkgutil.walk_packages(agent_comms.__path__, agent_comms.__name__ + "."):
         module = importlib.import_module(module_info.name)
-        records.update(
-            value for value in vars(module).values()
-            if isinstance(value, type) and is_dataclass(value)
-            and value.__module__.startswith(agent_comms.__name__ + ".")
-        )
+        pending.extend(vars(module).values())
+    while pending:
+        value = pending.pop()
+        if not isinstance(value, type) or value in declarations:
+            continue
+        if not value.__module__.startswith(agent_comms.__name__ + "."):
+            continue
+        declarations.add(value)
+        pending.extend(vars(value).values())
+    records = {declaration for declaration in declarations if is_dataclass(declaration)}
     assert records, "No codec records were discovered"
     failures: list[str] = []
     for record in sorted(records, key=lambda item: (item.__module__, item.__qualname__)):
