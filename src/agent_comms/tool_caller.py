@@ -14,6 +14,7 @@ from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .read_basis import OperatorOutcomes, ReadAuthority
+from .registration import Registration
 from .notification_evidence import OutcomeViewer, OwnerOutcomes
 from .presentation import SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
@@ -24,7 +25,6 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
-    from .registration import Registration
     from .threads import Thread
     from .tool_request import ToolRequest
 
