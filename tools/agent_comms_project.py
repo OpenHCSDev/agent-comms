@@ -14,6 +14,7 @@ import inspect
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
@@ -42,7 +43,7 @@ from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.phase_evidence import MainTree, PlanReading
-from agent_comms.pinned_audit import audit
+from agent_comms.pinned_audit import SKILL, audit
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from module_layers import PACKAGE, StackClient
@@ -50,6 +51,24 @@ from module_layers import PACKAGE, StackClient
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent
 READER = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
+AUDIT = SKILL.relative_to(REPOSITORY)
+
+
+class PinnedAudit(audit.repository.Repository):
+    """This checkout's clone of the audit submodule, which every agent-comms revision pins by
+    commit. git archive leaves a submodule out of a revision's tree, so a revision run from an
+    archive would import this checkout's audit instead of the one it pinned."""
+
+    def place(self, pin: str, into: Path) -> None:
+        """The audit at the pin, fetched into this clone first when the clone lacks it."""
+        if not self.has(pin):
+            self._run("fetch", "--quiet", "origin", pin)
+        into.mkdir(parents=True, exist_ok=True)
+        self.extract(pin, into)
+
+    def has(self, commit: str) -> bool:
+        return not subprocess.run(["git", "-C", str(self.path), "cat-file", "-e", f"{commit}^{{commit}}"],
+                                  capture_output=True, timeout=20).returncode
 
 
 class StoredFormatReader(ABC):
@@ -64,10 +83,12 @@ class StoredFormatReader(ABC):
 class RevisionReader(StoredFormatReader):
     """agent-comms measuring itself: each revision runs its own reader, because a head's
     reader may import modules only that head declares (#3576 moved field_codec under
-    nominal). A revision without one fails loud."""
+    nominal), beside the audit that revision pinned, which its modules import through
+    pinned_audit. A revision without a reader fails loud."""
 
     def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
         project.extract(ref, tree, str(READER))
+        PinnedAudit(REPOSITORY / AUDIT).place(project.identity(ref, str(AUDIT)), tree / AUDIT)
 
 
 class CheckoutReader(StoredFormatReader):
