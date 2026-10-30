@@ -40,7 +40,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError, ToolRefusedError
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
@@ -340,10 +340,6 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
-        if not caller.may_reconfigure(comms, thread_name):
-            raise RelationViolationError(
-                f"{thread_name} is running; change its settings through its own session"
-            )
         thread = comms.threads.set_thread_configuration(original, self)
         return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
 

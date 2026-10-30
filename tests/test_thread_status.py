@@ -14,7 +14,6 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.cli_verbs.configure import ConfigureCliCommand
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
@@ -33,7 +32,7 @@ from agent_comms.thread_status import (
     ThreadStatus,
 )
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
 
 
@@ -199,32 +198,38 @@ def test_presence_owns_roster_membership_and_self_rename(status, listed, rename)
             status.require_self_rename()
 
 
-@pytest.mark.parametrize(("status", "allows_other_caller"), [
-    (RunningThreadStatus(), False),
-    (IdleThreadStatus(), False),
-    (StoppedThreadStatus(), True),
-    (ArchivedThreadStatus(), True),
-])
-def test_reconfiguration_keeps_caller_authority_across_renaming(tmp_path, status, allows_other_caller):
-    comms = wire(tmp_path)
-    comms.registry.declare(Thread("subject", frozenset(), Checkout(tmp_path),
-                                  process_identity=ProcessIdentity.capture(os.getpid())))
-    comms.registry.declare(Thread("other", frozenset(), Checkout(tmp_path)))
-    comms.registry.rename("subject", "renamed")
-    comms.registry.register(comms.registry.require("renamed"), status)
-    assert ThreadCaller("subject").may_reconfigure(comms, "renamed")
-    assert ThreadCaller("renamed").may_reconfigure(comms, "subject")
-    assert NoThreadCaller().may_reconfigure(comms, "subject") == allows_other_caller
-    assert ThreadCaller("other").may_reconfigure(comms, "renamed") == allows_other_caller
-
-
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
-def test_configure_command_keeps_active_configuration_in_its_session(tmp_path, status):
+def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp_path, status):
+    from agent_comms.cli_verbs.tools import ToolsCliCommand
+    from agent_comms.pi_vocabulary import ServiceTier
+    from agent_comms.thread_model import DeclaredModel
+    from agent_comms.tools import invoke_tool
+
     comms = wire(tmp_path)
-    comms.registry.register(Thread("subject", frozenset(), Checkout(tmp_path),
-                                   process_identity=ProcessIdentity.capture(os.getpid())), status)
-    with pytest.raises(RelationViolationError, match="change its settings through its session"):
-        ConfigureCliCommand(name="subject").apply(comms)
+    comms.registry.declare(Thread("commander", frozenset(), Checkout(tmp_path)))
+    comms.registry.register(Thread(
+        "subject", frozenset(), Checkout(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+        model=DeclaredModel("openai/test"), service_tier=ServiceTier.PRIORITY,
+    ), status)
+    comms.registry.rename("subject", "renamed")
+    original = comms.registry.require("renamed")
+    active_request = ToolsCliCommand(name=ThreadCaller("renamed")).apply(comms)
+
+    result = invoke_tool(comms, "comms_model", {
+        "thread": "subject", "service_tier": "standard",
+    }, caller=ThreadCaller("commander"))
+
+    updated = comms.registry.require("renamed")
+    next_request = ToolsCliCommand(name=ThreadCaller("renamed")).apply(comms)
+    assert result["service_tier"] == "standard"
+    assert updated.service_tier is ServiceTier.STANDARD
+    assert updated.model == original.model
+    assert updated.thinking_level == original.thinking_level
+    assert updated.process_identity == original.process_identity
+    assert updated.turn_record == original.turn_record
+    assert active_request.service_tier is ServiceTier.PRIORITY
+    assert next_request.service_tier is ServiceTier.STANDARD
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
