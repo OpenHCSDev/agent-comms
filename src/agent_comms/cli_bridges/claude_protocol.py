@@ -58,6 +58,7 @@ from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
 from agent_comms.thread_model import ThreadModel
 from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
+from agent_comms.tool_declaration import one_line
 from agent_comms.transcript_events import (
     AssistantTranscript,
     NoticeTranscript,
@@ -377,6 +378,52 @@ class ClaudeSession:
         return (ending,)
 
 
+class SubagentProgress(ABC):
+    """Where a Claude subagent stands, read from the newest transcript record that says it."""
+
+    def owing(self) -> tuple[OwedProgress, ...]:
+        """An agent that answered, or was interrupted, owes no next call."""
+        return ()
+
+
+@dataclass(frozen=True)
+class AnsweredSubagent(SubagentProgress):
+    """Its newest deciding record is a final answer or an interruption: it has stopped."""
+
+
+@dataclass(frozen=True)
+class OwedProgress(SubagentProgress, ABC):
+    """It is mid-turn: its next record is owed since ``at``."""
+
+    at: float
+
+    def owing(self) -> tuple[OwedProgress, ...]:
+        return (self,)
+
+    @abstractmethod
+    def doing(self, now: float) -> str:
+        """What it last did, as the board names it."""
+
+
+@dataclass(frozen=True)
+class CallingSubagent(OwedProgress):
+    """Its newest deciding record is a tool call: the call or the model after it is running."""
+
+    call: ToolCall
+
+    def doing(self, now: float) -> str:
+        return (f"its last tool call was {(now - self.at) / 60:.0f} min ago:"
+                f" {one_line(self.call.title, 200)}")
+
+
+@dataclass(frozen=True)
+class PromptedSubagent(OwedProgress):
+    """Its newest deciding record is a prompt: it has made no tool call since."""
+
+    def doing(self, now: float) -> str:
+        return f"it was prompted {(now - self.at) / 60:.0f} min ago and has made no tool call since"
+
+
 class TimedRecord(TimestampedWire):
     position: int = Field(exclude=True)
     uuid: TranscriptRecordId
@@ -443,11 +490,19 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the person typed in this record; most records carry none."""
         return ()
 
+    def subagent_progress(self) -> tuple[SubagentProgress, ...]:
+        """Where this record says its agent stands; metadata and notices say nothing."""
+        return ()
+
 
 class AssistantBlock(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+    def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
+        """Reasoning decides nothing: the text or call it precedes does."""
+        return ()
 
 
 class TextContent(WireModel):
@@ -463,6 +518,10 @@ class ImageContent(WireModel):
 
 
 class AssistantText(TextWire, AssistantBlock, TextContent, declared_name='text'):
+
+    def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
+        """Text with no call after it in its message is the answer."""
+        return (AnsweredSubagent(),)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
@@ -504,6 +563,9 @@ class ToolUse(AssistantBlock, declared_name='tool_use'):
     def call(self) -> ToolCall:
         return CliToolArguments.decode(ToolCall(self.id, self.name, self.input), self.input)
 
+    def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
+        return (CallingSubagent(record.timestamp, self.call()),)
+
 
 class ClaudeUsage(WireModel):
     """Tokens one model call read; their sum is the context the next call starts from."""
@@ -531,6 +593,11 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (*(update for block in self.message.content for update in block.updates(self, session)),
                 *session.answered(self.message))
+
+    def subagent_progress(self) -> tuple[SubagentProgress, ...]:
+        """Its last deciding block, so text before a call reads as the call."""
+        return tuple(progress for block in reversed(self.message.content)
+                     for progress in block.subagent_progress(self))
 
 
 class ResultPart(TaggedWire, ABC, affix=""):
@@ -658,6 +725,10 @@ class UserBlock(TaggedWire, ABC, affix=""):
     def prompt_text(self) -> str:
         return ''
 
+    def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
+        """A tool result or an image decides nothing: the call before it does."""
+        return ()
+
 
 class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
@@ -666,6 +737,10 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
 
     def ends_turn(self) -> bool:
         return self.text.startswith('[Request interrupted by user')
+
+    def subagent_progress(self, record: TimedRecord) -> tuple[SubagentProgress, ...]:
+        """A prompt owes the agent's next call; an interruption ended its turn."""
+        return (AnsweredSubagent(),) if self.ends_turn() else (PromptedSubagent(record.timestamp),)
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.ends_turn():
@@ -842,6 +917,10 @@ class UserRecord(PromptRecord, Originated, declared_name='user'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.origin.owner_words(self.message.text())
+
+    def subagent_progress(self) -> tuple[SubagentProgress, ...]:
+        return tuple(progress for block in reversed(self.message.content)
+                     for progress in block.subagent_progress(self))
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):

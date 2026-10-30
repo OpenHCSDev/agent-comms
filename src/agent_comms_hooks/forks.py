@@ -106,7 +106,7 @@ class SessionSubagents(SubagentSeats):
 
     def subagents(self) -> tuple[SubagentId, ...]:
         """Claude Code keeps each subagent's transcript beside the session's own."""
-        return tuple(SubagentId(path.stem.removeprefix("agent-"))
+        return tuple(SubagentId.of_transcript(path)
                      for path in sorted(self.subagent_transcripts.glob("agent-*.jsonl")))
 
     def end_subagents(self) -> tuple[str, ...]:

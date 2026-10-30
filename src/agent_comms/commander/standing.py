@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
@@ -19,8 +20,11 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.cli_bridges.claude_protocol import OwedProgress
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
+from agent_comms.cli_bridges.shared import Serve
 from agent_comms.goal_actions import ReissuedOrderGoalAction
-from agent_comms.field_codec import GoalId
+from agent_comms.field_codec import FieldCodec, GoalId, Id128
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
@@ -28,8 +32,9 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
 from agent_comms.installer.request import InstallRequest
-from agent_comms.installer.interpreter_operation import LauncherPhase
+from agent_comms.installer.interpreter_operation import InstallPhase, LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.upgrade import RehearsedUpgrade
 from agent_comms.message_bus import WatchPass
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
@@ -65,6 +70,7 @@ from agent_comms.todos import (
 from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
+from agent_comms_hooks import SubagentId
 from agent_comms_hooks.watch import DeafWatch
 
 if TYPE_CHECKING:
@@ -757,6 +763,85 @@ class UnitDeaf(InboxUnavailable):
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, so every order to it"
                 " sits unread. who's it supposed to hear? -> read its drain diagnostic and fix"
                 " that owner")
+
+
+@dataclass(frozen=True)
+class ForkStalled(IndependentStandingRule, DatedStandingRule):
+    """A Claude fork of a live commander session wrote nothing to its transcript for the quiet
+    window and still owes a next record: its newest deciding record is a tool call or a
+    prompt, never an answer. A bus unit's silence shows on its card; a fork has no card, so
+    its own transcript, beside its parent session's, is the measure."""
+
+    fork: ThreadIncarnation
+    owed_since: float
+    parent: str = field(compare=False)
+    written: float = field(compare=False)
+    progress: OwedProgress = field(compare=False)
+    seconds: ClassVar[int] = 300
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """Each live commander session's registered, unarchived forks. Claude runs a fork
+        inside its session's process, so only a session whose process is alive has any."""
+        snapshot = comms.registry.snapshot()
+        commanders = frozenset(thread.name for thread in
+                               CommanderService.live(snapshot.commander_project.commanders(snapshot)))
+        now = time.time()
+        return tuple(
+            cls(fork.incarnation, owed.at, record.bus, written, owed)
+            for bridge in Serve.running(Path.home()) if bridge.observed.owner.alive()
+            for record in bridge.claim.state().bindings() if record.bus in commanders
+            for forks in ({thread.name: thread for thread in snapshot.visible_threads(
+                DEFAULT_ROSTER, names=(fork.name for fork in CommanderService.forks(snapshot, record.bus)))},)
+            for path in ClaudeTranscript.subagents(bridge.observed.transcript)
+            for name in (SubagentId.of_transcript(path).fork,) if name in forks
+            for fork in (forks[name],)
+            for written in (path.stat().st_mtime,) if now - written >= cls.seconds
+            for owed in ClaudeTranscript(path).progress().owing()
+        )
+
+    def began(self) -> float:
+        return self.written + self.seconds
+
+    def line(self) -> str:
+        now = time.time()
+        return (f"STALLED fork {self.fork.name} of {self.parent} has written nothing for"
+                f" {(now - self.written) / 60:.0f} min; {self.progress.doing(now)}. who's driving it?"
+                " -> read its tool calls and send its next step (a dead one:"
+                f" `agent-comms-commander end --fork {self.fork.name}`)")
+
+
+@dataclass(frozen=True)
+class SlowInstallPhase(IndependentStandingRule, UndatedStandingRule):
+    """A phase of the install that built the running runtime took longer than the healthy
+    line (rules/ship-and-install.md). The install's own result record holds every phase's
+    exclusive seconds; its stderr and bus summary are renderings of the same clock."""
+
+    install: Id128
+    phase: InstallPhase
+    seconds: float = field(compare=False)
+    healthy: ClassVar[float] = 60
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        """The newest finished run whose target is the installed Core commit: a rehearsal of
+        a newer tree writes phases this runtime may not declare, so only its own run is read."""
+        installed = frozenset(record.commit for record in RecordedBuildIdentity.installed().commits)
+        finished = sorted((unit for unit in InstallLogs(comms.root).units()
+                           if InstallRun.read(unit).target in installed
+                           and unit.result.stat().st_size),
+                          key=lambda unit: unit.result.stat().st_mtime)
+        return tuple(
+            cls(unit.identity, timed.phase, timed.seconds)
+            for unit in finished[-1:]
+            for timed in FieldCodec.decode(RehearsedUpgrade, FieldCodec.parse(unit.result.read_text())).phases
+            if timed.seconds > cls.healthy
+        )
+
+    def line(self) -> str:
+        return (f"SLOW install phase {self.phase.label()} took {self.seconds:.0f} s in the install that"
+                f" built this runtime ({self.install}), healthy line {self.healthy:.0f} s. whose phase is"
+                " eating the install? -> order the fix to that phase's owner")
 
 
 @dataclass(frozen=True)

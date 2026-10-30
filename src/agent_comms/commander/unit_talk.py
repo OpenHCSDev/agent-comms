@@ -1,13 +1,13 @@
 """Standing rules on what a commanded unit says, read from its own published messages.
 
-Waste has to flag itself: a unit that announces a wait nobody owns, or talks far more than
-it commits, gets a named board row without anyone reading #comms by hand. The rule text these
-rows enforce is rules/no-blocking.md.
+Waste has to flag itself: a unit that talks far more than it commits gets a named board row
+without anyone reading #comms by hand. A stall is never read from prose: a phrase match over
+"blocked on" flagged descriptions as stalls, so a stall row comes only from a measured fact
+(a Claude fork's transcript gone quiet is ForkStalled in agent_comms.commander.standing).
 """
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
@@ -15,9 +15,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.field_codec import MessageId
 from agent_comms.standing_rules import (
-    DatedStandingRule,
     FamilyScan,
     HolderLine,
     UndatedStandingRule,
@@ -92,76 +90,6 @@ class UnitTalkRule(HolderLine, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def derive(cls, talk: UnitTalk) -> Iterator[Self]: ...
-
-
-@dataclass(frozen=True)
-class BlockedTalk(UnitTalkRule, DatedStandingRule):
-    """A unit says it is waiting, frozen or holding and names neither an owner nor a line.
-
-    no-blocking.md: every wait names its owner and is announced; a wait nobody can act on is
-    a deadlock nobody can see. A named thread or a file:line is what makes it actionable."""
-
-    holder: ThreadIncarnation
-    message_id: MessageId
-    at: float = field(compare=False)
-    quote: str = field(compare=False)
-    words: ClassVar[tuple[str, ...]] = (
-        "waiting on",
-        "waiting for",
-        "waits on",
-        "awaiting",
-        "blocked on",
-        "blocked by",
-        "blocked until",
-        "frozen until",
-        "frozen for",
-        "head frozen",
-        "holding until",
-        "holding for",
-        "on hold",
-        "deferred to",
-        "deferring to",
-        "parked until",
-        "until root",
-        "pending root",
-        "pending review",
-    )
-    """Phrases that announce a stop, not words that merely occur in one: "freeze is
-    superseded" or "preserving behaviour" stop nothing."""
-    stall: ClassVar[re.Pattern[str]] = re.compile(
-        r"(?<!not )(?<!n't )(?<!n’t )\b(" + "|".join(re.escape(word) for word in words) + r")\b",
-        re.IGNORECASE,
-    )
-    """A negated phrase ("not waiting on", "wasn't waiting for") announces the opposite."""
-    located: ClassVar[re.Pattern[str]] = re.compile(r"[\w./-]+\.\w+:\d+")
-    named_owner: ClassVar[re.Pattern[str]] = re.compile(r"@[\w-]+")
-
-    @classmethod
-    def derive(cls, talk: UnitTalk) -> Iterator[Self]:
-        for message in talk.messages:
-            said = cls.stall.search(message.body)
-            if said and not (
-                cls.located.search(message.body)
-                or cls.named_owner.search(message.body)
-                or message.mentions
-            ):
-                start = max(0, said.start() - 60)
-                yield cls(
-                    talk.unit,
-                    message.message_id,
-                    message.timestamp,
-                    " ".join(message.body[start : said.end() + 60].split()),
-                )
-
-    def began(self) -> float:
-        return self.at
-
-    def line(self) -> str:
-        return (
-            f'BLOCKED-TALK {self.holder.name} said "…{self.quote}…" ({self.message_id})'
-            " with no owner and no file:line. waiting on whom, exactly? -> name the owner"
-            " and the file:line, or do the next step now"
-        )
 
 
 @dataclass(frozen=True)
