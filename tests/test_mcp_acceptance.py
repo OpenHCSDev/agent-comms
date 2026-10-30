@@ -33,6 +33,7 @@ from agent_comms.acp_extension import (
     TurnChangedUpdate,
     decode_updates,
 )
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
@@ -57,7 +58,8 @@ def _node_run(native_package, node, env, script, cwd, artifact):
     stdout = stderr = b""
     error = None
     try:
-        with SpawnedProcess.launch(tuple(command), cwd=cwd, env=env, output=subprocess.PIPE) as child:
+        with SpawnedProcess.launch(tuple(command), cwd=cwd, env=env,
+                                   stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as child:
             try:
                 stdout, stderr = child.process.communicate(timeout=15)
                 outcome = child.reap()

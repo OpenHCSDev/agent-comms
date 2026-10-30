@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, TextIO
 
 from .bus import Bus
+from .native_build_inputs import DetachedChildStdio
 from .child_process import NoProcess, ObservedProcess, OutlivesLauncherLifetime, ProcessIdentity, ProcessState, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -173,7 +174,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
                 listener = resources.enter_context(socket.socket(socket.AF_UNIX))
                 child = resources.enter_context(SpawnedProcess.launching(
                     (*command, "--listener-fd", str(listener.fileno())),
-                    env=environment, cwd=cwd, output=capture, runtime=runtime,
+                    env=environment, cwd=cwd, stdio=DetachedChildStdio(stdout=capture), runtime=runtime,
                     pass_fds=(listener.fileno(),), lifetime=OutlivesLauncherLifetime,
                 ))
                 path = socket_path(self.path.parent, child.identity.pid)
