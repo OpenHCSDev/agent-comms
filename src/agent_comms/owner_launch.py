@@ -5,14 +5,11 @@ from __future__ import annotations
 import os
 import asyncio
 import sys
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .child_process import (
-    Platform, ProcessIdentity, ProportionalMemory, ResidentMemory, TracedResidentMemory,
-)
+from .child_process import Platform, ProcessIdentity, ProportionalMemory, ResidentMemory
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from . import launch_runtime
@@ -108,7 +105,7 @@ class HostResources(ToolResult):
     process: ProcessIdentity
     owners: int
     modules: int
-    memory: TracedResidentMemory
+    memory: ResidentMemory
     proportional_bytes: int
     registry: RegistryReadCounts
     budget_bytes: int
@@ -123,38 +120,6 @@ class HostResources(ToolResult):
         ))
 
 
-class HostAllocations(ABC):
-    """What the alarm can say about which source lines hold the host's memory."""
-
-    @classmethod
-    def read(cls, root: Path, owners: tuple[Thread, ...]) -> HostAllocations:
-        for owner in owners[:1]:
-            try:
-                return TracedAllocations(HostResources.read(root, owner).memory)
-            except ConnectionError as error:  # The host may exit between sample and request.
-                return UnreadAllocations(f"host unreachable: {error}")
-        return UnreadAllocations("no owner thread addresses the host")
-
-    @abstractmethod
-    def text(self) -> str: ...
-
-
-@dataclass(frozen=True)
-class TracedAllocations(HostAllocations):
-    memory: TracedResidentMemory
-
-    def text(self) -> str:
-        return f"top holders {self.memory.holders_text()}"
-
-
-@dataclass(frozen=True)
-class UnreadAllocations(HostAllocations):
-    reason: str
-
-    def text(self) -> str:
-        return f"holders unread ({self.reason})"
-
-
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> HostResources:
@@ -164,7 +129,7 @@ class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
             process = ProcessIdentity.capture(os.getpid())
             return HostResources(
                 process, owners, len(sys.modules),
-                TracedResidentMemory.own(), ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
+                process.memory(), ProportionalMemory.read(Path("/proc") / str(process.pid)).bytes,
                 comms.registry.store.cache.read_counts(),
                 comms.registry.storage_rule.host_memory_bytes,
                 sum(row.resident for row in ResidentMemory.tree(process, Path("/proc")).values()),

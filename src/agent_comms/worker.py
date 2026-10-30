@@ -5,7 +5,6 @@ import asyncio
 import os
 import signal
 import sys
-import tracemalloc
 from contextlib import suppress
 
 from .acp import CommsAgent
@@ -27,8 +26,6 @@ async def run() -> None:
 
 async def run_host(comms: Comms, listener_fd: int) -> None:
     """Own the root's host, not whichever unit happened to launch it first."""
-    # One frame attributes each live allocation to its line for HostResources and HostMemoryHigh.
-    tracemalloc.start(1)
     lower_priority()
     comms.owners.require_private_launch()
     comms.owners.launch_authority.check()

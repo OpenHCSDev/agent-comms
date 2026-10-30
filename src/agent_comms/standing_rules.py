@@ -39,7 +39,6 @@ from agent_comms.repo import GitCommandError
 from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
-from agent_comms.owner_launch import HostAllocations
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
@@ -1328,7 +1327,6 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
     rule: StorageRule = field(compare=False)
     owners: int
     fleet_resident: int = field(compare=False)
-    allocations: HostAllocations = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -1345,14 +1343,11 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
         except ProcessLookupError:
             return ()
         rule = comms.registry.storage_rule
-        owners = tuple(thread for thread in comms.registry.all_threads().values()
-                       if thread.process_identity == identity)
+        owners = sum(thread.process_identity == identity
+                     for thread in comms.registry.all_threads().values())
         fleet = sum(row.resident for row in ResidentMemory.tree(identity, rule.proc).values())
-        if not (rule.host_memory_exceeded(memory)
-                or fleet > rule.fleet_memory_budget(len(owners))):
-            return ()
-        return (cls(identity, memory, rule, len(owners), fleet,
-                    HostAllocations.read(comms.root, owners)),)
+        exceeded = rule.host_memory_exceeded(memory) or fleet > rule.fleet_memory_budget(owners)
+        return (cls(identity, memory, rule, owners, fleet),) if exceeded else ()
 
     def line(self) -> str:
         return (
@@ -1362,8 +1357,8 @@ class HostMemoryHigh(IndependentStandingRule, UndatedStandingRule):
             f"{self.rule.host_memory_bytes / 2**20:.0f} MiB host budget; "
             f"whole fleet {self.fleet_resident / 2**20:.0f} / "
             f"{self.rule.fleet_memory_budget(self.owners) / 2**20:.0f} MiB "
-            f"for {self.owners} owners; {self.allocations.text()}"
-            " -> fix the owner at the top holder"
+            f"for {self.owners} owners"
+            " -> inspect comms_resources and fix the host's growing owner"
         )
 
 
