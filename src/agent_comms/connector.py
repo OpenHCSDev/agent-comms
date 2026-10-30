@@ -588,7 +588,7 @@ class Connector:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
-            acting.commanding(comms, caller.own_thread())
+            acting.join(comms, caller.own_thread())
             return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:
