@@ -1257,7 +1257,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         """One debt whoever reads it: the request's commander answering clears it for every
         peer and fork that inherits the request, and any of them may answer it themselves."""
         reader = snapshot.require(commander)
-        names = snapshot.names_for(commander)
+        names = snapshot.names_for(commander) | frozenset(
+            thread.name for thread in snapshot.commanders_channel())
         return tuple(
             cls(message=original, request=request.id, directive=directive,
                 answerer=snapshot.participant(request.commander.name).answering_thread(reader))

@@ -643,7 +643,7 @@ class RegisteredCommanderProject(CommanderProject):
         return tuple(dict.fromkeys((
             *self.leads(snapshot),
             *(thread for thread in
-              ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
+              snapshot.commanders_channel()
               if not thread.execution.commander_forks(thread)))))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
@@ -1161,6 +1161,10 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def retired_names(self) -> tuple[str, ...]:
         """Deleted declarations keep their generation without exposing its store."""
         return tuple(name for name in self._claimed_generations if name not in self.threads)
+
+    def commanders_channel(self) -> tuple[Thread, ...]:
+        """Every member of #commanders, forks included: each may answer for any commander."""
+        return tuple(ChannelMemberIndex(self.threads.values())[CommandersTag.declared_name])
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return (
