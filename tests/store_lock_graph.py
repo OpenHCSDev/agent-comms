@@ -6,7 +6,7 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.pinned_audit import ParsedModule
+from nominal_refactor_advisor.ast_tools import ParsedModule
 from agent_comms.store_files import RankedStoreLock, StoreGuard, StoreLockOwner
 
 
@@ -43,24 +43,25 @@ class StoreLockGraph:
                 continue
             text = path.read_text()
             self.modules.append(
-                ParsedModule(str(path.relative_to(self.root)), text, ast.parse(text), str(path))
+                ParsedModule(path=path.relative_to(self.root), module_name=str(path),
+                             module=ast.parse(text), source=text)
             )
         self.classes = {}
         self.functions = {}
         self.contexts = {}
         self.outer_functions = {}
         for module in self.modules:
-            for node in ast.walk(module.tree):
+            for node in ast.walk(module.module):
                 if isinstance(node, ast.ClassDef):
                     self.classes.setdefault(node.name, []).append((module, node))
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     self.functions.setdefault(node.name, []).append((module, node))
             parents = {
                 child: parent
-                for parent in ast.walk(module.tree)
+                for parent in ast.walk(module.module)
                 for child in ast.iter_child_nodes(parent)
             }
-            for node in ast.walk(module.tree):
+            for node in ast.walk(module.module):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     enclosing = parents.get(node)
                     while enclosing is not None and (
@@ -165,7 +166,7 @@ class StoreLockGraph:
             if len(inherited) == 1:
                 self.ranks[name] = inherited[0]
         for module in self.modules:
-            for node in ast.walk(module.tree):
+            for node in ast.walk(module.module):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                     owner = self.contexts[id(node)][1]
                     self.walk(node.body, [], self.environment(node, owner), module)
@@ -386,7 +387,7 @@ class StoreLockGraph:
             return ()
         owner = self.typeof(call.func.value, env)
         name = call.func.attr
-        site = f"{module.path}:{call.lineno}"
+        site = f"{module.file_path}:{call.lineno}"
         if name in self.guard_names:
             self.all_sites.add((site, owner, ast.unparse(call)))
             if self.derives(owner, StoreGuard.__name__):
@@ -495,7 +496,7 @@ class StoreLockGraph:
         find(node.body, [])
         return tuple(
             dict.fromkeys(
-                Acquisition(lock.store, lock.site, f"{module.path}:{call.lineno}", lock.expression)
+                Acquisition(lock.store, lock.site, f"{module.file_path}:{call.lineno}", lock.expression)
                 for lock in held_at_yield
             )
         )

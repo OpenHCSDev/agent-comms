@@ -2,7 +2,7 @@
 
 A system prompt survives every compaction, so a unit never drifts off it: the owner's
 instructions, the indictment, every packaged rule under its audience's heading, and the
-refactor-audit pattern index that orders and send-backs cite.
+NRA pattern index that orders and send-backs cite.
 """
 
 from __future__ import annotations
