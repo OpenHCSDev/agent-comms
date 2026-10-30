@@ -38,6 +38,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
+    UnparsedBranch,
     BranchGrowth,
     ConflictingBranches,
     DeliveredHeadReview,
@@ -192,7 +193,7 @@ class Fleet:
         claimed = OrderClaim.for_order(
             todo,
             unit,
-            number,
+            PullRequestLink(self.repository, number),
             head,
             "Delivered the repair",
             original.reference,
@@ -285,6 +286,18 @@ class BranchGrowthSeed(IncidentSeed):
             todo.id, todo.held().owner_identity, fleet.repository,
             "growing", SourceGrowth((("src/agent_comms/grown.py", SourceGrowth.limit + 1),)),
         )
+
+
+class UnparsedBranchSeed(IncidentSeed):
+    rule = UnparsedBranch
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("unparsed", base=fleet.main)
+        fleet.commit(worktree, "src/agent_comms/unparsed.py", "<<<<<<< HEAD\n")
+        fleet.push(worktree)
+        todo = fleet.unit("unparsed", worktree)
+        return UnparsedBranch(todo.id, todo.held().owner_identity, fleet.repository, "unparsed", ())
 
 
 class UnpushedBranchSeed(IncidentSeed):
