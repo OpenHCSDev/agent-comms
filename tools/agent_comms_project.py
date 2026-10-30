@@ -14,7 +14,6 @@ import inspect
 import json
 import os
 import shutil
-import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
@@ -65,10 +64,6 @@ class PinnedAudit(audit.repository.Repository):
             self._run("fetch", "--quiet", "origin", pin)
         into.mkdir(parents=True, exist_ok=True)
         self.extract(pin, into)
-
-    def has(self, commit: str) -> bool:
-        return not subprocess.run(["git", "-C", str(self.path), "cat-file", "-e", f"{commit}^{{commit}}"],
-                                  capture_output=True, timeout=20).returncode
 
 
 class StoredFormatReader(ABC):
@@ -175,10 +170,8 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             )
         if result.returncode:
             raise ValueError(f"stored formats could not be read at {ref}: {result.stderr.decode()}")
-        return {
-            name: audit.project.StoredFormat(form["version"], form["fields"], frozenset(form["required"]))
-            for name, form in json.loads(result.stdout).items()
-        }
+        return {name: audit.project.StoredFormat.declared(**form)
+                for name, form in json.loads(result.stdout).items()}
 
     def carried(self, base: str, head: str) -> bool:
         """A carry step is a module under STEPS declaring a member of the Carry family: one of
@@ -265,10 +258,9 @@ class ClientTypeErrors(audit.checkers.SideCounts):
         cls, repo: audit.project.Project, ref: str, client: StackClient,
         side: type[audit.ratchet.Side],
     ) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
-        # The pinned audit's git boundary, which pinned_audit puts on the path.
-        commit = audit.repository.Repository(client.checkout).revision("HEAD")
-        return side, repo.memo(partial(cls.checked, repo, ref, client, side),
-                               cls.__name__, client.name, commit, repo.identity(ref, "src"))
+        """Mypy resolves the client's other imports from the installed environment, which no
+        content key names, so each comparison checks afresh under mypy's own cache."""
+        return side, cls.checked(repo, ref, client, side)
 
     @classmethod
     def checked(cls, repo: audit.project.Project, ref: str, client: StackClient,

@@ -19,9 +19,10 @@ import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
 from agent_comms.field_codec import FieldCodec
-from agent_comms_project import AgentCommsProject
+from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from agent_comms.pinned_audit import audit
 from fixture_git import IDENTITY
+from module_layers import StackClient
 from process_tree_fixture import TREE, identities, ready
 
 pytestmark = pytest.mark.refactor_guard
@@ -311,6 +312,102 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
     }
     plan = audit.source_measures.NoneAbsence.at(f"{repo.root}/plan.py").text
     assert report["introduced"][plan] == [] and report["delta"][plan] == 0
+
+
+@pytest.mark.parametrize("declaration,expected", [
+    pytest.param("from agent_comms.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+                 id="imported"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder as decode\n@decode\n{function}", 0,
+                 id="aliased"),
+    pytest.param("import agent_comms.field_codec as codec\n@codec.boundary_decoder\n{function}", 0,
+                 id="qualified"),
+    pytest.param("import agent_comms.field_codec\n@agent_comms.field_codec.boundary_decoder\n{function}", 0,
+                 id="module"),
+    pytest.param("from .field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+                 id="relative"),
+    pytest.param("{function}", 1, id="undecorated"),
+    pytest.param("from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
+                 id="different-owner"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\n"
+                 "from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
+                 id="duplicate"),
+    pytest.param("if enabled:\n    from agent_comms.field_codec import boundary_decoder\n"
+                 "@boundary_decoder\n{function}", 1, id="conditional"),
+    pytest.param("from agent_comms.field_codec import *\n@boundary_decoder\n{function}", 1,
+                 id="star"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\nclass Decoder:\n"
+                 "    boundary_decoder = lambda function: function\n    @boundary_decoder\n"
+                 "    def decode(external):\n        return external.marker\n", 1, id="class-shadowed"),
+    pytest.param("from agent_comms.field_codec import boundary_decoder\ndef outer(boundary_decoder):\n"
+                 "    @boundary_decoder\n    def decode(external):\n        return external.marker\n", 1,
+                 id="parameter-shadowed"),
+])
+def test_declared_decoder_boundary_is_shared_by_both_contextual_absence_measures(
+    tmp_path: Path, declaration: str, expected: int,
+) -> None:
+    """AgentCommsProject.absence_boundaries declares boundary_decoder once; both contextual
+    absence measures read it through the same binding, so an alias admits and a shadow refuses
+    in both."""
+    repository = Checkout(tmp_path, "src/agent_comms")
+    source = declaration.format(function="def decode(external):\n    return external.marker\n")
+    base = repository.commit({"boundary.py": source})
+    head = repository.commit(
+        {"boundary.py": source.replace("return external.marker", "return external.marker is None")})
+    measures = (audit.source_measures.NoneAbsence, audit.source_measures.ForeignAbsenceProbe)
+    status, report = repository.compare(base, head, *measures)
+    assert status == int(bool(expected))
+    for measure in measures:
+        identity = measure.at(f"{repository.root}/boundary.py").text
+        assert report["head"][identity] == expected
+        assert report["delta"][identity] == expected
+
+
+USES_EXTERNAL_VALUE = "import extdep\n\nvalue: int = extdep.VALUE\n"
+
+
+def typed_dependency(directory: Path, annotation: str, value: str) -> Path:
+    """An installed PEP 561 package outside every committed root, found through sys.path."""
+    package = directory / "extdep"
+    package.mkdir(parents=True)
+    (package / "py.typed").write_text("")
+    (package / "__init__.py").write_text(f"VALUE: {annotation} = {value}\n")
+    return directory
+
+
+def source_type_errors(repo: Checkout, client: StackClient) -> int:
+    revision = repo.commit({"uses_external.py": USES_EXTERNAL_VALUE})
+    selected = [f"{repo.root}/uses_external.py"]
+    _, sites = audit.checkers.TypeErrors.findings(
+        AgentCommsProject(repo.path), revision, revision, repo.root, selected, audit.ratchet.HeadSide)
+    return sum(site.path == selected[0] for site in sites)
+
+
+def client_type_errors(repo: Checkout, client: StackClient) -> int:
+    revision = repo.commit({"__init__.py": ""})
+    _, sites = ClientTypeErrors.findings(
+        AgentCommsProject(repo.path), revision, client, audit.ratchet.HeadSide)
+    return sum(site.path == f"{client.name}/src/uses_external.py" for site in sites)
+
+
+@pytest.mark.parametrize("type_errors", [source_type_errors, client_type_errors])
+def test_type_counts_follow_the_installed_dependency_not_a_stored_count(
+    repo: Checkout, tmp_path: Path, monkeypatch, type_errors
+) -> None:
+    """Mypy reads installed packages no content key names. With committed source, client and
+    configuration unchanged, switching the installed dependency must change the count, under
+    the same project, count cache and mypy's own cache: hosted #3538 compared a base count
+    stored under a Core-only environment with a head count from the full stack, and a PEP 561
+    package on PYTHONPATH changes without any distribution metadata changing."""
+    accepting = typed_dependency(tmp_path / "accepting", "int", "1")
+    rejecting = typed_dependency(tmp_path / "rejecting", "str", "'one'")
+    (tmp_path / "client").mkdir()
+    checkout = Checkout(tmp_path / "client", "src")
+    checkout.commit({"uses_external.py": "import agent_comms\n" + USES_EXTERNAL_VALUE})
+    client = StackClient("probe-client", checkout.path)
+    monkeypatch.setenv("PYTHONPATH", search_path(accepting))
+    assert type_errors(repo, client) == 0
+    monkeypatch.setenv("PYTHONPATH", search_path(rejecting))
+    assert type_errors(repo, client) == 1
 
 
 def test_growth_lines_end_the_merged_log(repo: Checkout) -> None:
