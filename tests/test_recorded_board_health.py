@@ -10,7 +10,7 @@ import pytest
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.coordinator import Coordination
 from agent_comms.commander_hud import CommanderFrame
-from agent_comms.errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.field_codec import ToolCallId
 from agent_comms.locked_store import DocumentChange
 from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsUnjudgedTool

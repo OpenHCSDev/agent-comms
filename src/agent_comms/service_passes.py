@@ -9,7 +9,7 @@ from typing import Annotated, ClassVar, Self
 
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
-from .errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from .field_codec import WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime

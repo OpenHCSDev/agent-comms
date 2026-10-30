@@ -1,4 +1,4 @@
-"""Claude subagents operate on their resident bridge's admitted bus and actor."""
+"""Claude subagents operate on their resident bridge's bound bus and actor."""
 from __future__ import annotations
 
 import json

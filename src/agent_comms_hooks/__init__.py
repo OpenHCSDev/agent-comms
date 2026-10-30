@@ -11,14 +11,11 @@ these declarations.
 from __future__ import annotations
 
 import json
-import pkgutil
 import sys
+import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
-from functools import cache
-from importlib import import_module
-from importlib.metadata import entry_points
 from pathlib import Path
 from typing import ClassVar, NoReturn, Self, get_type_hints
 
@@ -147,25 +144,13 @@ class ClaudeToolHook(ClaudeTranscriptHook):
 class ClaudeHookProgram(ABC):
     """A program Claude Code runs on each of `events`, whatever tool is involved."""
 
-    events: ClassVar[tuple[str, ...]]
+    events: ClassVar[tuple[str, ...]] = ()
     writer: ClassVar[str] = "agent-comms"
-
-    @classmethod
-    def members(cls) -> tuple[type[ClaudeHookProgram], ...]:
-        """Every program declared in this package."""
-        for module in pkgutil.iter_modules(__path__):
-            import_module(f"{__name__}.{module.name}")
-        return tuple(
-            installed
-            for program in ClaudeHookProgram.descendants()
-            if not program.__abstractmethods__
-            for installed in program.installation_members()
-        )
 
     @classmethod
     def installation_members(cls) -> tuple[type[ClaudeHookProgram], ...]:
         """A public program installs itself; a resident handler does not install a copy."""
-        return (cls,)
+        return (cls,) if cls.events else ()
 
     @classmethod
     def descendants(cls) -> tuple[type[ClaudeHookProgram], ...]:
@@ -175,15 +160,18 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     @abstractmethod
-    def command(cls) -> str:
-        """The installed command line that runs this program."""
+    def main(cls) -> None:
+        """Run this program at its process boundary."""
 
-    @staticmethod
-    def console_script(target: str) -> str:
-        """The console script installed for a `module:function` target."""
-        scripts = entry_points(group="console_scripts")
-        (name,) = {point.name for point in scripts if point.value == target}
-        return name
+    @classmethod
+    def wire_name(cls) -> str:
+        """The declared program owns its RPC identity, including under ``python -m``."""
+        return cls.__qualname__
+
+    @classmethod
+    def entrypoint(cls) -> str:
+        """Installation derives the callable target; runtime never reads distributions."""
+        return f"{cls.__module__}:{cls.__qualname__}.{cls.main.__name__}"
 
     @classmethod
     def failure_status(cls, status: int = 1) -> int:
@@ -192,7 +180,7 @@ class ClaudeHookProgram(ABC):
 
     @classmethod
     def failed(cls, error: BaseException) -> NoReturn:
-        sys.stderr.write(f"{error}\n")
+        traceback.print_exception(error, file=sys.stderr)
         raise SystemExit(cls.failure_status())
 
     @classmethod
@@ -200,7 +188,7 @@ class ClaudeHookProgram(ABC):
         """A session with no bus has no commander or fleet behavior to run."""
 
     @classmethod
-    def owns_entry(cls, entry: Mapping[str, object]) -> bool:
+    def owns_entry(cls, entry: Mapping[str, object], installed_hooks: tuple[dict[str, str], ...]) -> bool:
         """Ownership survives deletion of a program and its console script. An untagged
         entry running only this package's hooks was written before the tag existed;
         install adopts it, so each hook keeps one entry."""
@@ -208,23 +196,17 @@ class ClaudeHookProgram(ABC):
             case {"writer": writer} if writer == cls.writer:
                 return True
             case {"hooks": [_, *_] as hooks}:
-                return all(hook in cls.hooks() for hook in hooks)
+                return all(hook in installed_hooks for hook in hooks)
         return False
 
     @classmethod
-    @cache
-    def hooks(cls) -> tuple[dict[str, str], ...]:
-        """The hook every declared program installs."""
-        return tuple(program.hook() for program in cls.members())
+    def hook(cls, command: str) -> dict[str, str]:
+        return {"type": "command", "command": command}
 
     @classmethod
-    def hook(cls) -> dict[str, str]:
-        return {"type": "command", "command": cls.command()}
-
-    @classmethod
-    def entry(cls) -> dict[str, object]:
+    def entry(cls, command: str) -> dict[str, object]:
         """This program's entry, marked so install can replace what it wrote."""
-        return {"writer": cls.writer, "hooks": [cls.hook()]}
+        return {"writer": cls.writer, "hooks": [cls.hook(command)]}
 
 
 class PermissionHookProgram(ClaudeHookProgram, ABC):
@@ -241,8 +223,8 @@ class ClaudeToolHookProgram(ClaudeHookProgram, ABC):
     tool: ClassVar[str]
 
     @classmethod
-    def entry(cls) -> dict[str, object]:
-        return {**super().entry(), "matcher": cls.tool}
+    def entry(cls, command: str) -> dict[str, object]:
+        return {**super().entry(command), "matcher": cls.tool}
 
 
 @dataclass(frozen=True)
@@ -269,10 +251,6 @@ class BashRefusal(ClaudeToolHookProgram, PermissionHookProgram, ABC):
     @abstractmethod
     def reasons(cls, command: str) -> tuple[str, ...]:
         """Why this command line is refused; empty when it may run."""
-
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{cls.__module__}:main")
 
     @classmethod
     def binds(cls, hook: ClaudeToolHook) -> bool:

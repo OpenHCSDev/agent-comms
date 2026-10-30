@@ -7,10 +7,6 @@ class SkillText(SessionHookProgram):
     events = ("SessionStart",)
 
     @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{__spec__.name}:main")
-
-    @classmethod
     def installation_members(cls) -> tuple[type[SessionHookProgram], ...]:
         """The startup owner deals after launch; do not install a parallel racing hook."""
         return ()

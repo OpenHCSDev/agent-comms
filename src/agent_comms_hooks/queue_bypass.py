@@ -192,10 +192,6 @@ class ApiMerge(QueueBypass):
 
 
 class QueueBypassGuard(SessionHookProgram, BashRefusal):
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{__spec__.name}:main")
-
     headline = "Merge bypass refused"
     advice = (
         ". Use `gh pr merge N --auto --merge` for required checks and the commander's head verdict."

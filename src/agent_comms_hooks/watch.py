@@ -129,7 +129,7 @@ class BoundSession(HookSession):
                 peer.settimeout(HookAnswer.timeout)
                 peer.connect(str(self.endpoint.socket_path))
                 peer.sendall(json.dumps({
-                    SessionWire.family_discriminator: program.command(), "payload": record,
+                    SessionWire.family_discriminator: program.wire_name(), "payload": record,
                 }).encode() + b"\n")
                 with peer.makefile("rb") as stream:
                     raw = stream.readline()

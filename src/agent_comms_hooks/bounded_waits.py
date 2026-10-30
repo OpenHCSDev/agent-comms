@@ -146,10 +146,6 @@ class WaitCommand(Bash):
 
 
 class BoundedWaits(SessionHookProgram, BashRefusal):
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{__spec__.name}:main")
-
     headline = "Unbounded wait refused"
 
     @classmethod

@@ -6,10 +6,6 @@ from .watch import SessionHookProgram
 class ReminderProgram(SessionHookProgram):
     events = ("PostToolUse",)
 
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{__spec__.name}:main")
-
 
 main = ReminderProgram.main
 

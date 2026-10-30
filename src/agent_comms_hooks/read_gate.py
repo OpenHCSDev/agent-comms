@@ -7,10 +7,6 @@ from .watch import SessionHookProgram
 class ReadGateProgram(SessionHookProgram, PermissionHookProgram):
     events = ("PreToolUse",)
 
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{__spec__.name}:main")
-
 
 main = ReadGateProgram.main
 

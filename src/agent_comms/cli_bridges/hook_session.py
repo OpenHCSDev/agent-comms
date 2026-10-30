@@ -41,10 +41,13 @@ class SessionHook(DeckStart):
         # Launch and the initial deal are one ordered startup, not parallel hooks racing a socket.
         self.warn(*self.take())
 
+    @classmethod
+    def main(cls) -> None:
+        """Run the existing SessionStart lifecycle owner at its process boundary."""
+        cls.read().start()
 
-def main() -> None:
-    """The SessionStart console entrypoint runs its existing lifecycle owner directly."""
-    SessionHook.read().start()
+
+main = SessionHook.main
 
 
 if __name__ == "__main__":

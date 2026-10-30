@@ -95,26 +95,26 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
 
 
 @dataclass(frozen=True)
-class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=ReadGateProgram.command()):
+class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=ReadGateProgram.wire_name()):
     def run_hook(self, event: GatedCall, comms: Comms, binding: Binding) -> None:
         event.judge(comms, binding)
 
 
 @dataclass(frozen=True)
-class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.command()):
+class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.wire_name()):
     def run_hook(self, event: BoardReminder, comms: Comms, binding: Binding) -> None:
         number = GatedCall.of(self.payload, output=event.output).completed(comms, binding)
         event.warn(*event.take(number))
 
 
 @dataclass(frozen=True)
-class SkillRequest(SkillText, HookRequest[DeckStart], declared_name=SkillText.command()):
+class SkillRequest(SkillText, HookRequest[DeckStart], declared_name=SkillText.wire_name()):
     def run_hook(self, event: DeckStart, comms: Comms, binding: Binding) -> None:
         event.warn(*event.take())
 
 
 @dataclass(frozen=True)
-class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGuard.command()):
+class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGuard.wire_name()):
     def decode_event(self, comms: Comms, binding: Binding, output: ResidentHookOutput) -> StopHook:
         return self.event_type().decode(self.payload, output=output, comms=comms, binding=binding)
 
@@ -123,19 +123,19 @@ class StopRequest(DeferralGuard, HookRequest[StopHook], declared_name=DeferralGu
 
 
 @dataclass(frozen=True)
-class SubagentStartRequest(SubagentStartProgram, HookRequest[SubagentHook], declared_name=SubagentStartProgram.command()):
+class SubagentStartRequest(SubagentStartProgram, HookRequest[SubagentHook], declared_name=SubagentStartProgram.wire_name()):
     def run_hook(self, event: SubagentHook, comms: Comms, binding: Binding) -> None:
         event.register(comms, binding)
 
 
 @dataclass(frozen=True)
-class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], declared_name=SubagentStopProgram.command()):
+class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], declared_name=SubagentStopProgram.wire_name()):
     def run_hook(self, event: SubagentStopHook, comms: Comms, binding: Binding) -> None:
         event.retire(comms, binding)
 
 
 @dataclass(frozen=True)
-class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.command()):
+class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.wire_name()):
     def run_hook(self, event: SessionSubagents, comms: Comms, binding: Binding) -> None:
         for refusal in event.end_subagents(comms, binding):
             raise ToolRefusedError(refusal)
@@ -145,14 +145,14 @@ class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_na
 
 
 @dataclass(frozen=True)
-class BoundedWaitRequest(BoundedWaits, HookRequest[ClaudeToolHook], declared_name=BoundedWaits.command()):
+class BoundedWaitRequest(BoundedWaits, HookRequest[ClaudeToolHook], declared_name=BoundedWaits.wire_name()):
     def run_hook(self, event: ClaudeToolHook, comms: Comms, binding: Binding) -> None:
         BoundedWaits.judge(event)
 
 
 @dataclass(frozen=True)
 class QueueBypassRequest(ReviewedMerge, QueueBypassGuard, HookRequest[ClaudeToolHook],
-                         declared_name=QueueBypassGuard.command()):
+                         declared_name=QueueBypassGuard.wire_name()):
     def run_hook(self, event: ClaudeToolHook, comms: Comms, binding: Binding) -> None:
         if not self.binds(event):
             return

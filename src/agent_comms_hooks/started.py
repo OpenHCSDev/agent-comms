@@ -1,12 +1,12 @@
 """SessionStart alone loads Core; its console script runs the actual startup owner."""
-from agent_comms.cli_bridges.hook_session import main
+from agent_comms.cli_bridges.hook_session import SessionHook, main
 
 from . import ClaudeHookProgram
 
 
-class SessionStarted(ClaudeHookProgram):
+class SessionStarted(SessionHook, ClaudeHookProgram):
     events = ("SessionStart",)
 
     @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
+    def entrypoint(cls) -> str:
+        return f"{main.__module__}:{main.__name__}"
