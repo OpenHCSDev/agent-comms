@@ -17,6 +17,7 @@ from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 from . import agent_events as events
 from .field_codec import TurnId
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
+from .transcripts import UnreadTranscriptCursor
 from .agent_backend import (
     CompactionOutcome,
     FailedCompaction,
@@ -115,7 +116,7 @@ async def _compact_started(runner, session_id, thread_name, instructions):
             update=AgentMessageChunk(
                 session_update="agent_message_chunk",
                 content=TextContentBlock(type="text", text=""),
-                field_meta=encode_updates(TranscriptChangedUpdate(None)),
+                field_meta=encode_updates(TranscriptChangedUpdate(UnreadTranscriptCursor())),
             ),
         ))
         return outcome

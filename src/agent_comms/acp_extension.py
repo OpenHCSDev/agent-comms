@@ -12,7 +12,7 @@ from .native_output import NativeOutputScope
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, Callable, ClassVar
+from typing import TYPE_CHECKING, Annotated, Callable, ClassVar, Self
 
 
 from .acp_failure import (
@@ -52,8 +52,10 @@ from .pi_payloads import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation
-from .tool_result import DeclaredReply
-from .transcripts import NativeCommittedPrefix, TranscriptCursor, TranscriptPage, TranscriptReadIdentity
+from .tool_result import ToolResult
+from .transcripts import (
+    LivePageSource, NativeCommittedPrefix, PageSource, TranscriptCursor, TranscriptPage, TranscriptRead, TranscriptReadIdentity,
+)
 from .turn_context import ContextManifest
 from .turn_lease import TurnState
 from .working_memory_labels import ModelLabel
@@ -107,7 +109,7 @@ class TextNoticeUpdate(AgentCommsUpdate):
 
 @dataclass(frozen=True)
 class TranscriptChangedUpdate(AgentCommsUpdate):
-    cursor: TranscriptCursor | None
+    cursor: TranscriptCursor
 
 
 class ClaimBlockedFailure(BackendDeliveryFailure):
@@ -138,7 +140,7 @@ class UpdateMetadata:
 
 
 @dataclass(frozen=True)
-class GoalSnapshotReply(DeclaredReply, GoalSnapshot):
+class GoalSnapshotReply(ToolResult, GoalSnapshot):
     """A goal request's reply: the owner's goal snapshot and its turn state."""
 
     execution: Annotated[GoalExecution, WireName("goalExecution")]
@@ -698,20 +700,20 @@ class TranscriptDraftUpdate(AgentCommsUpdate):
 
 
 @dataclass(frozen=True)
-class TranscriptSnapshotUpdate(AgentCommsUpdate):
+class TranscriptSnapshotUpdate(AgentCommsUpdate, ToolResult):
     page: TranscriptPage
     identity: TranscriptReadIdentity
     draft: DraftRow | None = None
 
     @classmethod
-    def from_read(cls, read):
+    def from_read(cls, read: TranscriptRead) -> Self:
         page, draft = read.read_snapshot()
         return cls(page, read.identity, draft.external_row())
 
     @classmethod
-    def capture(cls, transcripts, name, *, historical_source=None):
+    def capture(cls, transcripts, name, *, page_source: PageSource = LivePageSource()):
         """Publish the page together with the source witness that read it."""
-        read = transcripts.capture_page_read(name, historical_source=historical_source)
+        read = transcripts.capture_page_read(name, page_source=page_source)
         return cls.from_read(read)
 
 

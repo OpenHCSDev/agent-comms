@@ -458,6 +458,15 @@ query($owner: String!, $name: String!, $after: String) {
         (base_head,) = published
         return base_head
 
+    def commit_parents(self, head: str) -> tuple[str, ...]:
+        Repo.require_commits(self.checkout, Repo.remote, head)
+        return tuple(self._git("rev-list", "--parents", "-n", "1", head).split()[1:])
+
+    def commit_message(self, head: str) -> str:
+        """Read an immutable commit's message; its domain owner decodes any metadata."""
+        Repo.require_commits(self.checkout, Repo.remote, head)
+        return self._git("show", "--no-patch", "--format=%B", head)
+
     def prepare_pull_request(self, base: str, head: str) -> None:
         with Repo.acquiring():
             self.remote_heads(Repo.remote, f"refs/heads/{base}")

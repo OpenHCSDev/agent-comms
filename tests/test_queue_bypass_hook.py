@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.todos import ReviewedHeadVerdict, RejectedHeadVerdict
+from agent_comms.todos import QualifiedHeadVerdict, ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms.shell_commands import ShellCommand
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
-from test_head_review import ACCEPTED, REASON, invoke, opened
+from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)
 
@@ -136,4 +136,6 @@ def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
         assert result.stdout == ""
     opened(github, reviewed_source, request.pr, request.head)
     invoke(comms, request, RejectedHeadVerdict(REASON))
+    refused(request.head)
+    invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
     refused(request.head)

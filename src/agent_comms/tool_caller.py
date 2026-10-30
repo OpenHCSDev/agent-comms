@@ -1,9 +1,9 @@
 """The caller bound at tool entry owns caller-relative tool behavior."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated
 
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandersTag
@@ -11,8 +11,9 @@ from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
-from .launch_runtime import CallingThreadUnavailable
-from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
+from .read_basis import OperatorOutcomes, ReadAuthority
+from .notification_evidence import OutcomeViewer, OwnerOutcomes
+from .presentation import SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
 from .tool_result import ToolResult
@@ -32,7 +33,7 @@ class ThreadListing(ToolResult):
     sent_messages: tuple[SentMessageSummary, ...]
 
 
-class ToolCaller(ABC):
+class ToolCaller(ReadAuthority):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return self
 
@@ -51,22 +52,11 @@ class ToolCaller(ABC):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
 
     @abstractmethod
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        """Whose recipient outcomes this caller may read."""
-
-    @abstractmethod
     def acting_name(self, default: str) -> str: ...
 
     @abstractmethod
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
-
-    @abstractmethod
-    def own_thread(self) -> str:
-        """The thread a tool acts on when its call names none."""
-
-    def subject(self, named: str) -> str:
-        return named or self.own_thread()
 
     def commanding(self, comms: Comms, commander: str) -> None:
         """An ordinary caller needs no commander-child registration."""
@@ -96,15 +86,6 @@ class ToolCaller(ABC):
         return AgentOrigin()
 
 
-class OperatorOutcomes:
-    """A caller speaking for the owner reads every recipient outcome, as the owner's UI does."""
-
-    __slots__ = ()
-
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return AllOutcomes()
-
-
 @dataclass(frozen=True)
 class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
@@ -122,17 +103,11 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ToolCatalogResult(tools)
 
-    def refuse_thread(self) -> NoReturn:
-        raise CallingThreadUnavailable("This tool requires a thread caller.")
-
     def acting_name(self, default: str) -> str:
         return default
 
     def from_flag(self) -> tuple[str, ...]:
         return ()
-
-    def own_thread(self) -> NoReturn:
-        return self.refuse_thread()
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
@@ -162,10 +137,10 @@ class ThreadCaller(ToolCaller):
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return ThreadListing(threads, SentMessageSummary.recent(presentation))
+        return ThreadListing(threads, SentMessageSummary.for_sources(presentation.sent_notifications()))
 
-    def outcome_viewer(self, comms: Comms) -> OutcomeViewer:
-        return OwnerOutcomes.of(comms.registry.require(self.name))
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
+        return OwnerOutcomes.of(registry.require(self.name).incarnation)
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
         return ThreadToolCatalogResult(

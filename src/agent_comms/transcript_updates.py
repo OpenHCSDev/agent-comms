@@ -18,6 +18,7 @@ from .acp_extension import (
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .turn_lease import TurnState
+from .order_tools import TranscriptPageRead
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
 
 if TYPE_CHECKING:
@@ -75,13 +76,13 @@ class TranscriptReplay:
 
     async def replay(self, session_id: str, client: SessionUpdateSink) -> None:
         async with self.observing() as reads:
-            snapshot = await reads.read(ReadTranscript(str(self.comms.root), session_id))
+            snapshot = await reads.read(ReadTranscript(str(self.comms.root), TranscriptPageRead(thread=session_id)))
             await self._publish(session_id, snapshot, client)
 
     @asynccontextmanager
     async def subscribe(self, session_id: str, client: SessionUpdateSink) -> AsyncIterator[None]:
         async with self.observing() as reads:
-            snapshot = await reads.read(SubscribeTranscript(str(self.comms.root), session_id))
+            snapshot = await reads.read(SubscribeTranscript(str(self.comms.root), TranscriptPageRead(thread=session_id)))
             await self._publish(session_id, snapshot, client)
             yield
 

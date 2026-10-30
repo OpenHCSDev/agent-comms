@@ -19,6 +19,8 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .publication_measurements import PublicationMeasurements
+from .native_input_proof import NativeContextProof
+from .native_entries import NativeEvidenceScope
 from .field_codec import AcpSessionId
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
@@ -34,6 +36,11 @@ _MAX_SEND_SECONDS = 5.0
 class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
+
+    async def context_committed(
+        self, context: NativeContextProof, source_reads: NativeEvidenceScope,
+    ) -> None:
+        """An unowned prompt has no durable recipient acknowledgement to advance."""
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
         raise RelationViolationError("An unowned prompt cannot authorize following input")

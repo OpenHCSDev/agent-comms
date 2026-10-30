@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredOrder
-from .message_reference import MessageReference
+from .notification_evidence import AnsweredResponse, AssignmentResponse, UnansweredResponse
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 
 if TYPE_CHECKING:
@@ -37,6 +37,10 @@ class DeliveryProgress(ThreadPresentationStatus):
     detail: ClassVar[str] = ""
     ignored_label: ClassVar[str] = "Not answering"
     consumed: ClassVar[bool] = False
+
+    @property
+    def answer(self) -> AssignmentResponse:
+        return UnansweredResponse()
 
     def rank(self) -> int:
         return DeliveryRank.position_of(type(self))
@@ -72,9 +76,14 @@ class DeliveryProgress(ThreadPresentationStatus):
         """The lead a counted wrapper prints; a consumed proof is already named by its count."""
         return (notification.label,)
 
-    def harness_consumed(self) -> DeliveryProgress:
-        """This progress once a harness confirmed the message entered its session."""
-        return HarnessConsumedProgress()
+    def answered_notification(self, notification: MessageNotification,
+                              response: AnsweredResponse) -> MessageNotification:
+        """An independent answer preserves this state's actual context proof."""
+        return replace(notification, state=AnsweredProgress(self, response), changed=True)
+
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        """The first proof that the message entered the model's context, at its own time."""
+        return proof
 
 
 class ConsumedDelivery(SettledDelivery):
@@ -84,8 +93,8 @@ class ConsumedDelivery(SettledDelivery):
     ignored_label: ClassVar[str] = "Seen, not answering"
     consumed: ClassVar[bool] = True
 
-    def harness_consumed(self) -> Self:
-        """An earlier proof already timed the entry; a harness confirmation adds nothing."""
+    def model_consumed(self, proof: ShownToModelProgress) -> Self:
+        """An earlier proof already timed the entry; a later one adds nothing."""
         return self
 
     def working_notification_label(self, notification: MessageNotification) -> str:
@@ -93,11 +102,6 @@ class ConsumedDelivery(SettledDelivery):
 
     def counted_summary_prefix(self, notification: MessageNotification) -> tuple[str, ...]:
         return ()
-
-
-@dataclass(frozen=True)
-class HarnessConsumedProgress(ConsumedDelivery, DeliveryProgress):
-    """A harness confirmed context entry with no claim to time it; the attempt has no clock."""
 
 
 @dataclass(frozen=True)
@@ -121,16 +125,20 @@ class ContextualProgress(WaitingDelivery, DeliveryProgress):
     def consumed(self) -> bool:
         return self.proof.consumed
 
-    def harness_consumed(self) -> DeliveryProgress:
-        return replace(self, proof=self.proof.harness_consumed())
+    @property
+    def answer(self) -> AssignmentResponse:
+        return self.proof.answer
+
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        return replace(self, proof=self.proof.model_consumed(proof))
 
 
 class PendingProgress(ContextualProgress):
-    """A pending claim adds no label of its own: once a harness proves entry, the proof is
+    """A pending claim adds no label of its own: once entry is proven, the proof is
     the whole state."""
 
-    def harness_consumed(self) -> DeliveryProgress:
-        return self.proof.harness_consumed()
+    def model_consumed(self, proof: ShownToModelProgress) -> DeliveryProgress:
+        return self.proof.model_consumed(proof)
 
 
 class PassiveProgress(ContextualProgress):
@@ -183,18 +191,29 @@ class FailedProgress(ContextualProgress):
     label = "Failed"
 
 
+@dataclass(frozen=True)
 class AnsweredProgress(SettledDelivery, ContextualProgress):
+    response: AnsweredResponse
     label = "Answered"
 
+    @property
+    def answer(self) -> AnsweredResponse:
+        return self.response
+
+    def answered_notification(self, notification: MessageNotification,
+                              response: AnsweredResponse) -> MessageNotification:
+        """A later independent response cannot replace an already recorded answer."""
+        return notification
+
     def notification_label(self, notification: MessageNotification) -> str:
-        return notification.timed_state(self.label, notification.answered_at_ms)
+        return notification.timed_state(self.label, self.response.received_at_ms)
 
 
-class CompletedProgress(AnsweredProgress):
+class CompletedProgress(SettledDelivery, ContextualProgress):
+    """Workflow completion is not evidence of an independent reply."""
+
+    label = "Completed"
     detail = "The response workflow completed."
-
-    def notification_label(self, notification: MessageNotification) -> str:
-        return self.label
 
 class AssignmentProgress(DeliveryProgress):
     @property
@@ -209,11 +228,6 @@ class AssignmentProgress(DeliveryProgress):
 
     @abstractmethod
     def consumed_notification(self, notification: MessageNotification) -> MessageNotification: ...
-
-    def answered_notification(self, notification: MessageNotification,
-                              reference: MessageReference, answered_at_ms: int) -> MessageNotification:
-        return replace(notification, state=AnsweredProgress(self),
-                       answer=reference, answered_at_ms=answered_at_ms)
 
 
 @dataclass(frozen=True)
@@ -261,6 +275,10 @@ class ShownToModelProgress(ConsumedDelivery, AssignmentProgress):
 
     def consumed_notification(self, notification: MessageNotification) -> MessageNotification:
         return replace(notification, state=self)
+
+
+class HarnessConsumedProgress(ShownToModelProgress):
+    """Complete original body observed in the harness transcript, at its recorded time."""
 
 
 class SelectedConsumedProgress(ActiveDelivery, ShownToModelProgress):

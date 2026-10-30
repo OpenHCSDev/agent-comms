@@ -1,9 +1,13 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
+from collections.abc import Mapping
 from pathlib import Path
 import subprocess
 from typing import ClassVar, Self
+from types import MappingProxyType
 from tempfile import mkdtemp
+
+import tomli_w
 
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
@@ -60,11 +64,42 @@ class SourceRepository(Repo):
             capture_output=True, check=True, timeout=30,
         ).stdout.strip()
 
-    def publish_change(self, message: str, *files: str) -> str:
-        """Commit fixture files and publish this PR's new head through real Git."""
+    @staticmethod
+    def package_project(
+        name: str, *, dependencies: tuple[str, ...] = (), python: str = ">=3.10",
+        extras: dict[str, list[str]] | None = None, scripts: Mapping[str, str] = MappingProxyType({}),
+        build_system: Mapping[str, str | tuple[str, ...]] = MappingProxyType({
+            "requires": ("hatchling",), "build-backend": "hatchling.build",
+        }),
+    ) -> str:
+        """Build the actual src tree, independently of distribution or module spelling."""
+        return tomli_w.dumps({
+            "build-system": dict(build_system),
+            "project": {"name": name, "version": "0.0.1", "requires-python": python,
+                        "dependencies": list(dependencies), "optional-dependencies": extras or {},
+                        "scripts": dict(scripts)},
+            "tool": {"hatch": {"build": {"targets": {"wheel": {
+                "only-include": ["src"], "sources": ["src"],
+            }}}}},
+        })
+
+    def write_files(self, files: Mapping[Path, str]) -> tuple[str, ...]:
+        """Real source fixtures share file preparation, not a second source-selection mechanism."""
+        for relative, text in files.items():
+            destination = self.checkout / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(text)
+        return tuple(str(path) for path in files)
+
+    def commit_change(self, message: str, *files: str) -> str:
+        """Commit the current checkout; its caller chooses what ref to publish."""
         self.git(self.checkout, 'add', '--', *files)
         self.git(self.checkout, 'commit', '-m', message)
-        head = self.git(self.checkout, 'rev-parse', 'HEAD').strip()
+        return self.git(self.checkout, 'rev-parse', 'HEAD').strip()
+
+    def publish_change(self, message: str, *files: str) -> str:
+        """Commit fixture files and publish this PR's descendant through real Git."""
+        head = self.commit_change(message, *files)
         self.git(self.checkout, 'push', 'origin', f'HEAD:refs/pull/{self.number}/head')
         return head
 
@@ -76,7 +111,10 @@ class SourceRepository(Repo):
         return remote
 
     @classmethod
-    def create(cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source')) -> Self:
+    def create(
+        cls, root: Path, name: RepositoryName = RepositoryName.from_wire('example/source'), *,
+        baseline_files: Mapping[Path, str] = MappingProxyType({}),
+    ) -> Self:
         root.mkdir(parents=True, exist_ok=True)
         root = Path(mkdtemp(prefix='source-', dir=root))
         repository = root / 'repository'
@@ -84,23 +122,17 @@ class SourceRepository(Repo):
         remote = cls.remote_for(root, name)
         cls.git(repository, 'init', '--initial-branch=main')
         cls.git(repository, 'remote', 'add', 'origin', str(remote))
-        main_blob = cls.git_input(repository, cls.main_source,
-                                  'hash-object', '-w', '--stdin')
-        main_tree = cls.git_input(repository, f'100644 blob {main_blob}\towner.py\n', 'mktree')
-        main = cls.git(repository, 'commit-tree', main_tree, '-m', 'Main declaration').strip()
-        cls.git(repository, 'update-ref', 'refs/heads/main', main)
-        branch_blob = cls.git_input(repository,
-            cls.main_source + 'class Member(Parent):\n    pass\n',
-            'hash-object', '-w', '--stdin')
-        new_blob = cls.git_input(repository, '@decorated\nclass BranchOnly:\n    pass\n',
-                                'hash-object', '-w', '--stdin')
-        tree = cls.git_input(repository,
-            f'100644 blob {new_blob}\tbranch.py\n100644 blob {branch_blob}\towner.py\n', 'mktree')
-        branch = cls.git(repository, 'commit-tree', tree, '-p', main, '-m', 'PR declaration').strip()
-        cls.git(repository, 'update-ref', 'refs/heads/feature', branch)
-        cls.git(repository, 'push', 'origin', 'main', 'feature:refs/pull/7/head')
-        cls.git(repository, 'remote', 'set-head', 'origin', '--auto')
-        cls.git(repository, 'reset', '--hard', 'main')
         created = cls.of(repository)
         assert isinstance(created, cls)
+        created.commit_change('Main declaration', *created.write_files({
+            Path('owner.py'): cls.main_source, **baseline_files,
+        }))
+        cls.git(repository, 'switch', '-c', 'feature')
+        created.commit_change('PR declaration', *created.write_files({
+            Path('owner.py'): (repository / 'owner.py').read_text() + 'class Member(Parent):\n    pass\n',
+            Path('branch.py'): '@decorated\nclass BranchOnly:\n    pass\n',
+        }))
+        cls.git(repository, 'push', 'origin', 'main', f'feature:refs/pull/{created.number}/head')
+        cls.git(repository, 'remote', 'set-head', 'origin', '--auto')
+        cls.git(repository, 'switch', 'main')
         return created
