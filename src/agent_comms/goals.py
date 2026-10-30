@@ -475,6 +475,11 @@ class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_model_block(self) -> None:
         pass
 
+    def adopted(self) -> GoalOrder:
+        """The order this goal carries once a commander adopts it for a new problem."""
+        raise ValueError("This goal already carries assigned problems; give it more work with "
+                         "order send, not order adopt.")
+
     @abstractmethod
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
@@ -494,19 +499,14 @@ class UnorderedGoalOrder(GoalOrder):
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
 
+    def adopted(self) -> GoalOrder:
+        return AdoptedGoalOrder()
+
 
 @dataclass(frozen=True)
-class ProblemGoalOrder(GoalOrder):
-    """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
-
-    text: ClassVar[str] = "Complete the assigned problems."
-
-    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        raise ValueError("Complete each problem with its checked delivered commit.")
-
-    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if not goals.todos.for_goal(owner, goal.id):
-            raise ValueError("The problem Goal has no assigned Todos.")
+class AssignedGoalOrder(GoalOrder, declared_name=None):
+    """A goal whose canonical Todo assignments carry its orders, never copies of them: their
+    instructions and progress show with the goal, and none pending lets it be replaced."""
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         if goals.todos.holds_pending(owner):
@@ -518,19 +518,50 @@ class ProblemGoalOrder(GoalOrder):
     def instructions(self, todos: Sequence[Todo]) -> str:
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+        """Each problem's order state and latest verdict, as Core records them on its Todo."""
+        return "\n".join(todo.progress_line() for todo in todos)
+
+
+@dataclass(frozen=True)
+class ProblemGoalOrder(AssignedGoalOrder):
+    """A goal made for orders: its text is derived and its problems are its whole work."""
+
+    text: ClassVar[str] = "Complete the assigned problems."
+
+    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        raise ValueError("Complete each problem with its checked delivered commit.")
+
+    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        if not goals.todos.for_goal(owner, goal.id):
+            raise ValueError("The problem Goal has no assigned Todos.")
+
     def goal_text(self, goal: Goal) -> str:
         return self.text
 
     def require_edit(self) -> None:
         raise ValueError("A problem Goal's text is derived from its assigned problems.")
 
-    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
-        """Each problem's order state and latest verdict, as Core records them on its Todo."""
-        return "\n".join(todo.progress_line() for todo in todos)
-
     def require_model_block(self) -> None:
         raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
                          "problem's Todo, or standby with wait_for naming the decider.")
+
+
+@dataclass(frozen=True)
+class AdoptedGoalOrder(AssignedGoalOrder):
+    """A unit's own goal that a commander gave a problem without rewriting it: its text,
+    progress and edits stay the unit's, and it completes only once no assigned problem pends."""
+
+    def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        """The goal stands on its own text; its problems are work added to it."""
+
+    def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
+        if any(todo.pending for todo in self.todos(goals, owner, goal.id)):
+            raise ValueError("Deliver each assigned problem with its checked commit before "
+                             "completing this goal.")
+
+    def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
+        return "\n".join(part for part in (goal.progress, super().progress(goal, todos)) if part)
 
 
 @dataclass(frozen=True)

@@ -66,6 +66,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return action.continue_goal(goal, ctx)
 
+    def require_adoptable(self) -> None:
+        """An open goal keeps its state when a commander gives it a problem."""
+
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
 
@@ -214,6 +217,10 @@ class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         return action.create(ctx)
+
+    def require_adoptable(self) -> None:
+        raise ValueError("A completed goal has no work left to adopt a problem into; "
+                         "send the problem with order problem.")
 
     @classmethod
     def successors(cls) -> tuple[type[GoalState], ...]:

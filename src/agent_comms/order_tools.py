@@ -353,9 +353,14 @@ class CommsOrderTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoCreateTool(CommsOrderTool):
     label = "Create problem"
-    description = "Create a problem with its owner, checked order and review timer in one command."
+    description = (
+        "Create a problem with its owner, checked order and review timer in one command. "
+        "An adopt order joins the owner's existing goal, checked against the owner's birth, "
+        "the goal revision read and a registered pull request, and leaves the goal's text, "
+        "progress, revision, state, waits and attempts as they are."
+    )
     order: Annotated[
-        CreateProblemGoalAction, *tool_field("Typed problem creation and order")
+        CreateProblemGoalAction, *tool_field("Typed problem creation, or adoption, and order")
     ]
 
 

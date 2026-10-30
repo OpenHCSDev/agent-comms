@@ -1,7 +1,7 @@
 """The only way the commander sends an order to a unit. Refuses soft or vague orders; records strikes,
 and starts the commander's review timer on every order.
 
-`order send` and `order problem` take one JSON file. Its `order` is decoded by
+`order send`, `order problem` and `order adopt` take one JSON file. Its `order` is decoded by
 FieldCodec into the PendingProblemOrder used by native tools; its other fields
 name the problems and explain the defect. No rendered instructions are parsed.
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
@@ -43,6 +43,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
+    GoalId,
     MalformedRecord,
     MessageId,
     Normalize,
@@ -52,8 +53,13 @@ from agent_comms.field_codec import (
     SubclassUnion,
     boundary_decoder,
 )
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction
-from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, OrderCheck
+from agent_comms.goal_actions import (
+    AdoptGoalAction,
+    CreateProblemGoalAction,
+    GoalAdoption,
+    OrderGoalAction,
+)
+from agent_comms.goals import CheckCommand, CheckResult, CountCheckResult, GoalRevision, OrderCheck
 from agent_comms.held_orders import HeldOrders
 from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.message_reference import MessageReference
@@ -84,7 +90,7 @@ from agent_comms.standing_rules import (
     HuntDue,
     OwedAnswer,
 )
-from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.thread_identity import ThreadIncarnation, ThreadIncarnationRecord
 from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
@@ -527,10 +533,31 @@ class NewProblem(OrderedProblems):
     def record(self, context: CommanderContext, order: PendingProblemOrder, unit: str,
                group: Sequence[str], traced: FileLine | NoSourceReference, request: OwnerRequestId,
                review_at: RecordedEventTime) -> None:
-        context.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
+        context.call(CommsTodoCreateTool(owner=unit, order=self.creation(CreateProblemGoalAction(
             problem=self.problem, repo=Repo.of(order.check.directory).github,
             text=self.text, order=order, request=request, review_at=review_at,
-            commander=context.commander, assigner=context.actor_identity)))
+            commander=context.commander, assigner=context.actor_identity))))
+
+    def creation(self, created: CreateProblemGoalAction) -> CreateProblemGoalAction:
+        """The action that records the problem: a new one makes or continues the unit's goal."""
+        return created
+
+
+@dataclass(frozen=True, slots=True)
+class AdoptedProblem(NewProblem):
+    """Core records the problem with its first order on the unit's existing goal, which keeps
+    its text, progress, revision, state, waits and attempts."""
+
+    adoption: GoalAdoption
+    pull_request: PullRequestLink
+
+    def carried(self, order: PendingProblemOrder, group: Sequence[str],
+                listed: Mapping[str, Todo]) -> PendingProblemOrder:
+        """The order holds the pull request already carrying the goal's work."""
+        return order.carrying((self.pull_request,))
+
+    def creation(self, created: CreateProblemGoalAction) -> AdoptGoalAction:
+        return AdoptGoalAction.adopting(created, self.adoption)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1343,12 +1370,51 @@ class ProblemVerb(RequestedOrderVerb):
         if checkout.is_dir():
             ctx.comms.goals.todos.require_recurrence_declaration(
                 document.order, location, checkout, document.slop, time.time())
+        self.require_target(ctx, document)
         pid = ctx.comms.goals.todos.allocate_problem()
         ctx.send(self.to, document, clean=self.clean,
-                 target=NewProblem(pid, document.defect), disk=self.disk,
+                 target=self.target(pid, document), disk=self.disk,
                  finding=LocatedProblemFinding(location), answers=references,
                  request=self.request)
         print(pid)
+
+    def require_target(self, ctx: Commander, document: OrderFile) -> None:
+        """What must hold before a problem number is allocated; a new problem needs nothing."""
+
+    def target(self, pid: str, document: OrderFile) -> NewProblem:
+        return NewProblem(pid, document.defect)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AdoptVerb(ProblemVerb):
+    help = ("Core records the problem with its order on the unit's existing goal, keeping the "
+            "goal's text, progress, revision, state, waits and attempts, or nothing")
+    birth: Annotated[float, Argument(flags=("--birth",), options={
+        "help": "the unit's created_at as read; a reused name refuses"})]
+    goal: Annotated[GoalId, Argument(flags=("--goal",), options={
+        "help": "the unit's goal ID as read"})]
+    revision: Annotated[int, Argument(flags=("--revision",), options={
+        "help": "the goal revision as read; a stale revision refuses"})]
+    pr: Annotated[int, Argument(flags=("--pr",), options={
+        "metavar": "N",
+        "help": "the PR in the order's repository already carrying the goal's work"})]
+
+    @property
+    def adoption(self) -> GoalAdoption:
+        return GoalAdoption(ThreadIncarnationRecord.decode(self.to, self.birth),
+                            GoalRevision(self.goal, self.revision))
+
+    def pull_request(self, document: OrderFile) -> PullRequestLink:
+        return PullRequestLink(Repo.of(document.order.check.directory).github, self.pr)
+
+    def require_target(self, ctx: Commander, document: OrderFile) -> None:
+        """The whole adoption check runs before the problem number is allocated."""
+        link = self.pull_request(document)
+        self.adoption.require(ctx.comms.goals, self.to, ctx.commander, link.repo,
+                              document.order.carrying((link,)))
+
+    def target(self, pid: str, document: OrderFile) -> AdoptedProblem:
+        return AdoptedProblem(pid, document.defect, self.adoption, self.pull_request(document))
 
 
 @dataclass(frozen=True, kw_only=True)

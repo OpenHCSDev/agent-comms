@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
@@ -16,7 +16,9 @@ from agent_comms.goals import (
     GoalCheckpoint,
     GoalDeclaration,
     GoalOrder,
+    GoalRevision,
     NoGoal,
+    PresentGoalCheckpoint,
     ProblemGoalOrder,
     UnobservedGoalCheckpoint,
     UnorderedGoalOrder,
@@ -26,8 +28,8 @@ from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
-    ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
-    TodoCommand, TodoOperation,
+    ExpectedProblem, PendingProblemOrder, PullRequestLink, PullRequests, RecordOrderHeadVerdict,
+    SendBackVerdict, Todo, TodoCommand, TodoOperation,
 )
 
 from .change_report import FileLine, NoSourceReference
@@ -653,6 +655,85 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
             assigner=self.assigner, generation=generation, request=self.request,
             review_at=self.review_at, order=self.order)
+
+
+@dataclass(frozen=True)
+class GoalAdoption:
+    """The unit's birth and goal revision a commander read before giving that goal a problem."""
+
+    unit: ThreadIncarnation
+    goal: GoalRevision
+
+    def adopted(self, ctx: GoalActionContext, commander: str, repo: RepositoryName,
+                order: PendingProblemOrder) -> Goal:
+        """The goal as it carries the adopted order. A reused name, a stale read, a caller
+        that is not the bus's commander, a pull request outside the order's registered
+        repository or already held by an open problem, a unit already holding an order, or
+        a goal with no work left refuses here, before anything is allocated or written."""
+        thread = ctx.thread
+        if thread.incarnation != self.unit:
+            raise ValueError(f"{thread.name} is no longer the thread born at "
+                             f"{self.unit.wire_birth}; read the unit again.")
+        GoalPrecondition(expected_checkpoint=PresentGoalCheckpoint(self.goal)).check(ctx)
+        snapshot = ctx.goals.registry.snapshot()
+        project = snapshot.commander_project.require()
+        if commander not in {member.name for member in project.commanders(snapshot)}:
+            raise ValueError(f"{commander} is not this bus's commander; only it adopts a goal.")
+        if not order.pull_requests:
+            raise ValueError("Name the pull request that already carries the goal's work.")
+        held = PullRequests.linked_among(ctx.goals.todos.open_orders(), repo)
+        for link in order.pull_requests:
+            if link.repo != repo or repo not in project.repository_names():
+                raise ValueError(f"{link.url} is not in the order's registered repository "
+                                 f"{repo.to_wire()}.")
+            if link.number in held:
+                raise ValueError(f"{link.url} already belongs to open problem "
+                                 f"{', '.join(todo.id for todo in held[link.number])}.")
+        if ctx.goals.todos.holds_pending(thread.incarnation):
+            raise ValueError(f"{thread.name} already holds an open order; send more work with "
+                             "order send.")
+        goal = thread.goal.require()
+        goal.state.require_adoptable()
+        return replace(goal, order=goal.order.adopted())
+
+    def require(self, goals: Goals, name: str, commander: str, repo: RepositoryName,
+                order: PendingProblemOrder) -> None:
+        """The whole check outside the registry lock, GitHub reporting each pull request the
+        order carries; the adopting action repeats the local part under the lock."""
+        self.adopted(GoalActionContext(goals, goals.registry.require(name)), commander, repo, order)
+        for link in order.pull_requests:
+            PullRequestLink.existing(link.repo, link.number)
+
+
+@dataclass(frozen=True, kw_only=True)
+class AdoptGoalAction(CreateProblemGoalAction):
+    """The commander gives a new problem to a unit's existing goal without rewriting it.
+
+    The goal's id is the Todo's generation; its text, progress, revision, state, waits and
+    attempt history stay as they are, and no attempt is continued. Only its order becomes
+    AdoptedGoalOrder, so the Todo's instructions join the unit's own text and the goal
+    cannot complete while the problem pends."""
+
+    adoption: GoalAdoption
+    preserve_wait = True
+
+    @classmethod
+    def adopting(cls, created: CreateProblemGoalAction, adoption: GoalAdoption) -> AdoptGoalAction:
+        return cls(**{item.name: getattr(created, item.name) for item in fields(created)},
+                   adoption=adoption)
+
+    def prepare(self, goals: Goals, name: str, actor: type) -> AdoptGoalAction:
+        self.adoption.require(goals, name, self.commander, self.repo, self.order)
+        return self
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        adopted = self.adoption.adopted(ctx, self.commander, self.repo, self.order)
+        self.require_ready(ctx)
+        self.reserve(ctx, goal.id)
+        return adopted
+
+    def create(self, ctx: GoalActionContext) -> Goal:
+        raise RelationViolationError("The unit has no goal to adopt; read its goal again.")
 
 
 @dataclass(frozen=True, kw_only=True)
