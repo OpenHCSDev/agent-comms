@@ -2558,6 +2558,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self.require_linkable()
         return replace(self, pull_requests=(*self.pull_requests, link))
 
+    def unlinked(self, link: PullRequestLink) -> Self:
+        """This order without ``link``; its state, id, check, run, edits and times stay."""
+        if link not in self.pull_requests:
+            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
+        return replace(self, pull_requests=tuple(
+            kept for kept in self.pull_requests if kept != link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2891,14 +2898,11 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
                          "Ask the commander for a send-back before opening or linking another PR.")
 
     def merged_link(self, link: PullRequestLink) -> MergedLink:
-        if link not in self.pull_requests:
-            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
-        return MergedLink(link, self.sha)
+        return MergedLink(link, self.unlinked(link).sha)
 
     def unmerged(self, link: PullRequestLink) -> PendingProblemOrder:
         """Pending again under its own id, check, run, edits and times, without ``link``."""
-        return self.copy_as(PendingProblemOrder, pull_requests=tuple(
-            kept for kept in self.pull_requests if kept != link))
+        return self.unlinked(link).copy_as(PendingProblemOrder)
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -5111,6 +5115,23 @@ class CorrectMergedLinkTodo(CorrectOrderTodo):
 
     def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         return order.unmerged(self.previous.link)
+
+
+@dataclass(frozen=True)
+class CorrectLinkTodo(CorrectOrderTodo):
+    """The commander takes a pull request off an open order that never held its work, such as
+    another order's pull request recorded by a mistaken claim. The order keeps its state, holder,
+    review timer, strikes and every other link; a later send carries only the links left."""
+    previous: tuple[PullRequestLink, ...]
+    link: PullRequestLink
+
+    def part(self, order: OpenProblemOrder) -> tuple[PullRequestLink, ...]:
+        return order.pull_requests
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """A merged order's links are closed; CorrectMergedLinkTodo takes its merge back."""
+        order.require_linkable()
+        return order.unlinked(self.link)
 
 
 @dataclass(frozen=True)
