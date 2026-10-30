@@ -14,7 +14,7 @@ import re
 import sqlite3
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
@@ -444,7 +444,24 @@ class BusCapability(TypedRow, ProjectionSource):
         *, descending: bool = False,
     ) -> Generator[Self]:
         """One cursor reads only the capability tables this value inherits."""
-        tables = cls.tables()
+        order = "DESC" if descending else "ASC"
+        with closing(cls._joined(
+            db, cls.tables(), f'ORDER BY {BusRow.qualified("seq")} {order}',
+            parameters, lambda header: cls,
+            prefix=f"WITH selected AS ({positions}) ",
+            position_join="JOIN selected USING(seq) ",
+        )) as rows:
+            for _, stored in rows:
+                yield stored
+
+    @classmethod
+    def _joined[Stored: BusCapability](
+        cls, db: sqlite3.Connection, tables: tuple[type[CapabilityRow], ...],
+        position_clause: str, parameters: tuple[object, ...],
+        record_type: Callable[[BusRow], type[Stored]], *,
+        prefix: str = "", position_join: str = "",
+    ) -> Generator[tuple[BusRow, Stored]]:
+        """One cursor owns declaration-order joins, decoding and required-row refusal."""
         joined: tuple[type[BusTables], ...] = (BusRow, *tables)
         offsets = dict(zip(
             tables,
@@ -452,27 +469,26 @@ class BusCapability(TypedRow, ProjectionSource):
             strict=False,  # The final accumulated value is the row end, not a table start.
         ))
         header = BusRow.qualified("seq")
-        order = "DESC" if descending else "ASC"
         with closing(db.execute(
-            f"WITH selected AS ({positions}) "
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in joined)} "
-            f'FROM "{BusRow.declared_name}" JOIN selected USING(seq) '
+            f"{prefix}SELECT {', '.join(row.qualified(*row.column_projection()) for row in joined)} "
+            f'FROM "{BusRow.declared_name}" {position_join}'
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
-            + f" ORDER BY {header} {order}", parameters,
+            + f" {position_clause}", parameters,
         )) as cursor:
             for stored in cursor:
                 original = BusRow.decode_at(stored, 0)
+                kind = record_type(original)
                 try:
-                    value = cls.assembled(
-                        table.decode_at(stored, offsets[table]) for table in tables
+                    value = kind.assembled(
+                        table.decode_at(stored, offsets[table]) for table in kind.tables()
                     )
                 except MalformedRecord as error:
                     raise RelationViolationError(
                         f"Bus row {original.seq} has malformed required "
-                        f"{cls.__name__} capability: {error}"
+                        f"{kind.__name__} capability: {error}"
                     ) from error
-                yield value
+                yield original, value
 
     @classmethod
     def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:
@@ -510,27 +526,12 @@ class BusCapability(TypedRow, ProjectionSource):
     @staticmethod
     def stored_records(
         db: sqlite3.Connection, where: str, parameters: tuple[object, ...],
-    ) -> Iterator[tuple[BusRow, BusRecord]]:
-        """Each selected header with the record its capability rows assemble, decoded once."""
-        tables = TypedTable.members_with(CapabilityRow)
-        offsets = dict(zip(
-            tables,
-            accumulate((len(BusRow.columns()), *(len(table.columns()) for table in tables))),
-            strict=False,  # The final accumulated value is the row end, not a table start.
-        ))
-        header = BusRow.qualified("seq")
-        with closing(db.execute(
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
-            f'FROM "{BusRow.declared_name}" '
-            + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
-                       for table in tables)
-            + f" WHERE {where}",
-            parameters,
-        )) as cursor:
-            for stored in cursor:
-                row = BusRow.decode_at(stored, 0)
-                yield row, row.kind.assembled(
-                    table.decode_at(stored, offsets[table]) for table in row.kind.tables())
+    ) -> Generator[tuple[BusRow, BusRecord]]:
+        """Each selected header with its complete original record, decoded once."""
+        return BusCapability._joined(
+            db, TypedTable.members_with(CapabilityRow), f"WHERE {where}", parameters,
+            lambda header: header.kind,
+        )
 
     def projections(self) -> Iterator[TypedTable]:
         return iter(())

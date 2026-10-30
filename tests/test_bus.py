@@ -763,6 +763,9 @@ def test_required_capability_corruption_is_not_hidden_by_the_join(bus):
         with pytest.raises(RelationViolationError, match="malformed required Message capability") as refused:
             Message.read_from(db, 1)
         assert isinstance(refused.value.__cause__, MalformedRecord)
+        with pytest.raises(RelationViolationError) as history_refused:
+            tuple(BusCapability.history(db))
+        assert isinstance(history_refused.value.__cause__, MalformedRecord)
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):
