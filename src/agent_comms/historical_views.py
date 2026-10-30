@@ -89,7 +89,7 @@ class HistoryView(ABC):
         """
         with presentation.reading(self.viewer) as captured:
             history = captured.bus.history.captured()
-            yield partial(history.integrated_page, self, captured)
+            yield partial(history.checked_page, self, captured)
 
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         with self.reading(presentation) as read:
@@ -578,13 +578,14 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                 )
         return MessagePage((), False, False, NoDisplaySelection())
 
-    def integrated_page(
+    def checked_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
+        """One integrated page read from a catalogue checked unchanged before and after it."""
         with self.reading() as captured:
-            return captured._integrated_page(view, presentation, bounds)
+            return captured.integrated_page(view, presentation, bounds)
 
-    def _integrated_page(
+    def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
         # One traversal asks once whether live messages follow its archives.
