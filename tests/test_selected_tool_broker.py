@@ -35,7 +35,9 @@ from agent_comms.native_tool_call import (
 )
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.repo import Checkout
 from agent_comms.storage_room import NoRoomNeeded
+from agent_comms.threads import Thread
 from agent_comms.tool_denial import SelectedToolDenied
 
 
@@ -63,7 +65,7 @@ async def query(connection: OwnerToolConnection, payload: bytes) -> bool:
 
 
 def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
-    tmp_path: Path, tool_listener
+    tmp_path: Path, tool_listener, undealt_gate
 ) -> None:
     class Owner:
         input_id = secrets.token_hex(16)
@@ -72,7 +74,7 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
             raise AssertionError("invalid round must not allow a call")
 
     socket = CodingToolSocket(
-        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid()
+        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid()
     )
     repeated = ToolCallContent(id="duplicate", name="read", arguments={"path": "one"})
     with pytest.raises(DuplicateToolCallIdentity):
@@ -86,7 +88,7 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
     assert not isinstance(intent, broker.SelectedToolMode)
     assert not hasattr(intent, "action")
     with pytest.raises(TypeError):
-        broker.SelectedToolMode(None)  # type: ignore[arg-type]
+        broker.SelectedToolMode(None, None)  # type: ignore[arg-type]
 
 
 def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
@@ -115,7 +117,7 @@ def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:
 
 @pytest.mark.asyncio
 async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
-    private_comms, tmp_path: Path, tool_listener,
+    private_comms, tmp_path: Path, tool_listener, undealt_gate,
 ) -> None:
     path = CoordinationStore.path_in(private_comms.root)
     input_id = InputId.mint()
@@ -133,7 +135,7 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
     async with Coordination.worker(path):
         await Coordination.run_async(path, lambda store: None)
         listener = tool_listener(tmp_path, secrets.token_hex(32))
-        server = CodingToolSocket(listener, SlotOwner(), pid=os.getpid())
+        server = CodingToolSocket(listener, SlotOwner(), undealt_gate, pid=os.getpid())
         server.turn = object()
         arguments = {"path": str(tmp_path / "read-only-proof")}
         writer = sqlite3.connect(path, isolation_level=None)
@@ -185,8 +187,10 @@ def test_openai_responses_call_id_is_consumed_as_the_provider_spells_it(slot_sto
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
-def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comms) -> None:
+def test_owner_mode_denies_unreserved_input_before_consuming_ledger(
+        private_comms, tmp_path: Path) -> None:
     comms = private_comms
+    comms.registry.declare(Thread("owner", frozenset(), Checkout(tmp_path)))
     claim_scope = WakeClaim(
         wire_root_id="a" * 32,
         source_seq=1,
@@ -217,7 +221,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(private_comm
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 def test_fake_socket_requires_pid_token_matching_emitted_call(
-    tmp_path: Path, tool_listener
+    tmp_path: Path, tool_listener, undealt_gate
 ) -> None:
     tmp_path.chmod(0o700)
     token = secrets.token_hex(32)
@@ -226,7 +230,8 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
     async def run() -> None:
         wrong = broker.SelectedToolSocket(
             tool_listener(tmp_path, token),
-            lambda round_number, call: observed.append(call), pid=os.getpid() + 100000
+            lambda round_number, call: observed.append(call), undealt_gate,
+            pid=os.getpid() + 100000
         )
         await wrong.start()
         try:
@@ -235,7 +240,7 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
             await wrong.close()
         server = broker.SelectedToolSocket(
             tool_listener(tmp_path, token),
-            lambda round_number, call: observed.append(call), pid=os.getpid()
+            lambda round_number, call: observed.append(call), undealt_gate, pid=os.getpid()
         )
         await server.start()
         try:
@@ -296,6 +301,7 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     tool_listener,
     abandoned: bool,
     slot_store,
+    undealt_gate,
 ) -> None:
     tmp_path.chmod(0o700)
     previous = tool_listener(tmp_path, secrets.token_hex(32))
@@ -314,7 +320,8 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
             broker.record_selected_terminal(store.session.path, slot_id, request.call_id)
         observed.append(request)
 
-    server = broker.SelectedToolSocket(tool_listener(tmp_path, token), accept, pid=os.getpid())
+    server = broker.SelectedToolSocket(
+        tool_listener(tmp_path, token), accept, undealt_gate, pid=os.getpid())
     server.turn = SimpleNamespace(launch=SimpleNamespace(root=Path(slot_store.session.path).parent))
     assert server.listener.path != previous.path
     assert server.listener.path.parent.stat().st_mode & 0o777 == 0o700
@@ -361,3 +368,28 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     assert not server.listener.path.exists()
     assert not server.listener.path.parent.exists()
     assert previous.path.stat().st_ino == previous_inode
+
+
+@pytest.mark.asyncio
+async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_action(
+    tmp_path: Path, tool_listener
+) -> None:
+    """The selected write rides the shared gated transport: an unread deal refuses it before
+    the owner callback could claim or write anything."""
+    from agent_comms.pi_rule_gate import PiRuleGate, RulesUnread
+    from agent_comms_hooks.skill import FleetReader
+
+    gate = PiRuleGate(tmp_path / "scratch", tmp_path)
+    gate.deal(FleetReader, ())
+    token = secrets.token_hex(32)
+    acted: list[broker.SelectedToolRequest] = []
+    server = broker.SelectedToolSocket(
+        tool_listener(tmp_path, token), lambda round_number, call: acted.append(call), gate,
+        pid=os.getpid())
+    arguments = {"resource": "notes.txt", "contents": "é"}
+    name = broker.SelectedToolRequest.declared_name
+    server.announce((ToolCallContent(id="call_1", name=name, arguments=arguments),))
+    server.tool_started(ToolExecutionStart(tool_call_id="call_1", tool_name=name, args=arguments))
+    with pytest.raises(RulesUnread, match="before reading"):
+        await server.handle_request(_wire(token))
+    assert acted == []
