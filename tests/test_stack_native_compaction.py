@@ -33,6 +33,7 @@ from agent_comms.pi_vocabulary import OverflowCompactionReason, ThresholdCompact
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
+from conftest import answer_rules
 from native_backend_fixture import AnnouncedInputStart, NativeBackendFixture
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="native Pi uses POSIX fsync")
@@ -95,11 +96,6 @@ async def test_pi_engine_compacts_inside_a_core_turn(
         root = Path(raw)
         project = root / "project"
         project.mkdir(mode=0o700)
-        (project / ".pi").mkdir(mode=0o700)
-        (project / ".pi" / "settings.json").write_text(json.dumps({
-            "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-            "compaction": {"enabled": case != "disabled"},
-        }))
         session = root / "saved.jsonl"
         # Above the threshold (128000 - 16384) and below the window, except for overflow.
         _saved_history(
@@ -121,6 +117,10 @@ async def test_pi_engine_compacts_inside_a_core_turn(
                 (project / f"read-{index}.txt").write_text(f"TOOL_ROUND_{index}\n")
         agent = root / "agent"
         agent.mkdir(mode=0o700)
+        (agent / "settings.json").write_text(json.dumps({
+            "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
+            "compaction": {"enabled": case != "disabled"},
+        }))
         summaries: list[dict] = []
         prompts: list[dict] = []
         summary_entered = threading.Event()
@@ -311,14 +311,16 @@ async def _acp_threshold(comms, project, session, native_bin, native_args, child
                    and isinstance(field.event, ae.CompactionEnd)
                    for field in decode_updates(update.field_meta or {})):
                 resumed_activity.append(comms.agents.activity_of("project", snapshot=comms.registry.snapshot()))
+                # Compaction redeals rules before coding tools may execute.
+                answer_rules(comms, "project")
             return True
 
     owner.on_connect(Client())
-    await owner.new_session(str(project))
-    await owner.inputs.state("project").observer.stop()
-    comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
+    session_id = await NativeBackendFixture.attach_saved_owner(
+        owner, project=project, session=session,
+    )
     turn = asyncio.create_task(
-        InitialInput.run(owner.inputs, "project", "project", "Reply OK.", input_id=InputId.mint())
+        InitialInput.run(owner.inputs, session_id, "project", "Reply OK.", input_id=InputId.mint())
     )
     try:
         entered = await asyncio.to_thread(summary_entered.wait, 10)

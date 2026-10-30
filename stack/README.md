@@ -108,9 +108,9 @@ For a 1,000,000-token model with the default reserve, the threshold is 983,616.
 `compaction.enabled: false` disables automatic compaction, not manual `/compact`.
 
 These are ordinary Pi settings in `settings.json`: standalone Pi reads
-`~/.pi/agent/settings.json` and the project's `.pi/settings.json`; a Comms-managed
+`~/.pi/agent/settings.json` and trusted project `.pi/settings.json`; a Comms-managed
 agent uses its native session's `.native-pi-agent/settings.json` instead of the
-standalone global file, plus the project's settings. For example:
+standalone global file, plus trusted project settings. For example:
 
 ```json
 {"compaction": {"enabled": true, "reserveTokens": 16384, "keepRecentTokens": 20000}}
