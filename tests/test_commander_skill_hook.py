@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.rule_deal import Unengaged
+
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
@@ -563,39 +565,56 @@ def read_whole(transcript, source):
     gated(transcript, "Read", {"file_path": str(source)}).completed()
 
 
-def test_a_read_rule_is_answered_before_the_next_unread_file_opens(capsys, dealt_session):
+def test_a_batch_of_read_rules_is_answered_before_the_next_unread_file_opens(capsys, dealt_session):
     transcript, start = dealt_session
     papers = CommanderPackage.paper()
     rules = CommanderReader.rules()
     for paper in papers:
         read_whole(transcript, paper.resolve())  # a paper carries no rule name: no entry owed
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
-    read_whole(transcript, rules[0].path.resolve())
-    following = {"file_path": str(rules[1].path)}
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+        read_whole(transcript, rule.path.resolve())
+    following = {"file_path": str(rules[Unengaged.batch].path)}
     assert refused(capsys, gated(transcript, "Read", following))
     # Re-reading what was read stays open, and so does the audit, by Read, Write and Edit.
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0])}))
     for tool in ("Read", "Write", "Edit"):
         assert not refused(capsys, gated(transcript, tool, {"file_path": str(start.audit)}))
-    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
+    start.audit.write_text(answered_audit(CommanderReader, rules[:Unengaged.batch]))
     assert not refused(capsys, gated(transcript, "Read", following))
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # the rest stay unread
 
 
-def test_a_parallel_batch_opens_one_unanswered_rule_and_refuses_the_next(capsys, dealt_session):
-    """A batch's reads are each judged before any one completes: the first rule opens, the
-    second waits for its answer instead of slipping through before the first is recorded."""
+def test_a_parallel_batch_opens_a_batch_of_rules_and_refuses_the_next(capsys, dealt_session):
+    """A batch's reads are each judged before any one completes: a batch of rules opens, the
+    next waits for their answers instead of slipping through before they are recorded."""
     transcript, start = dealt_session
     for paper in CommanderPackage.paper():
         read_whole(transcript, paper.resolve())
     rules = CommanderReader.rules()
+    batch, following = rules[:Unengaged.batch], rules[Unengaged.batch]
+    for rule in batch:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}))
+    # A rule whose read is in flight stays open; answering them opens the next.
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
-    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
-    # The rule whose read is in flight stays open; answering it opens the next.
-    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
-    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
-    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+    start.audit.write_text(answered_audit(CommanderReader, batch))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}))
+
+
+def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session):
+    """Every part of a paper is judged before any read of it completes, and none waits on an
+    audit answer, so the whole paper and the first rules read in one call."""
+    transcript, _ = dealt_session
+    papers = CommanderPackage.paper()
+    for part in papers:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part.resolve())}))
+    rules = CommanderReader.rules()
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}))
 
 
 def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
@@ -733,6 +752,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     words = ("Read the rules.\nThen write the audit.",)
     start.prepare(CommanderReader(), words)
+    reasons = []
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
         gated(transcript, tool, {"file_path": str(transcript)}).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
@@ -742,11 +762,11 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         assert f"Tristan told you, verbatim:\n{words[0]}\nYou did not." in reason
         assert ReadThenRepeatedFailure().cite() in reason
         assert ReadThenRepeatedFailure.title in reason
+        reasons.append(reason)
+    assert "{\n" not in reasons[1]  # the template prints once per deal, the words every time
+    template = FieldCodec.decode(SessionAudit, json.loads(reasons[0][reasons[0].index("{\n"):]))
     for source in CommanderReader.sources():
         gated(transcript, "Read", {"file_path": str(source)}).completed()
-    gated(transcript, "Bash", {}).judge()
-    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
-    template = FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):]))
     due = start.current().due
     assert {entry.rule for entry in template.rules} == due.rules
     assert tuple(answer.words for answer in template.owner_words) == words
@@ -757,8 +777,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         gated(transcript, "Bash", {}).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
-        reason = output["permissionDecisionReason"]
-        assert FieldCodec.decode(SessionAudit, json.loads(reason[reason.index("{\n"):])) == template
+        assert str(start.audit) in output["permissionDecisionReason"]
     start.prepare(CommanderReader(), words)
     gated(transcript, "Bash", {}).judge()
     assert "Call #1 since this compaction, refused." in capsys.readouterr().out
