@@ -2,6 +2,7 @@
 
 from importlib.resources import files
 from pathlib import Path
+from typing import ClassVar
 
 
 class CommanderPackage:
@@ -18,6 +19,18 @@ class CommanderPackage:
         if not rules:
             raise ValueError("The packaged commander rules directory is empty.")
         return rules
+
+    papers: ClassVar[tuple[str, ...]] = ("semantic-completeness", "less-is-harder")
+    """The dealt papers in reading order, by their directory under `paper/`: the hierarchy every
+    rule is a consequence of, then the price of proving anything unnecessary."""
+
+    @classmethod
+    def paper(cls) -> tuple[Path, ...]:
+        """Every dealt paper's parts in reading order, each part one default read. Figures sit in
+        each paper's `figures/`; paper1's supplement in `semantic-completeness/supplement` is
+        optional and never dealt."""
+        root = Path(str(files(__package__) / "paper"))
+        return tuple(part for name in cls.papers for part in sorted((root / name).glob("*.md")))
 
     @classmethod
     def skill(cls) -> Path:

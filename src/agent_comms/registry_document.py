@@ -26,6 +26,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireValue,
@@ -57,6 +58,7 @@ from .thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -65,6 +67,7 @@ from .thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
+    StoppingThreadStatus,
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
@@ -398,17 +401,32 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
 
+    def birth(self, name: str) -> CreationTime:
+        """One row's creation time, read alone: a stored row is never decoded for it."""
+        if name in self._decoded:
+            return self._decoded[name].created_at
+        try:
+            return CreationTime.from_wire(self._raw[name].get("created_at"))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def births(self) -> set[float]:
+        return {self.birth(name) for name in self}
+
+    def lookup_names(self) -> dict[ThreadLookup, str]:
+        """Each row's creation lookup, read from its birth alone: resolving one owner never
+        decodes the other threads."""
+        return {
+            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
+            .require_recorded().lookup: name
+            for name in self
+        }
+
     def require_distinct_births(self) -> None:
-        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
-        a stored row's birth is read alone, without decoding the rest of its thread."""
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
         births: set[float] = set()
         for name in self:
-            try:
-                birth = (self._decoded[name].created_at if name in self._decoded
-                         else CreationTime.from_wire(self._raw[name].get("created_at")))
-            except ValueError as error:
-                raise InvalidRegistryDocument(error) from error
-            births.add(birth.distinct_from(births))
+            births.add(self.birth(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -823,8 +841,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        used = {existing.created_at for existing in self.threads.values()}
-        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        thread = replace(thread, created_at=thread.created_at.distinct_from(self.threads.births()))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
@@ -916,26 +933,29 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.set_status(expected.name, expected.execution.registered_status(
-            expected, StoppedThreadStatus()))
+            expected, StoppingThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
+        """Stopped: no session runs anywhere, so the row keeps no process binding."""
+        thread = self._withdraw(name, StoppedThreadStatus())
+        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+
+    def fence_owner(self, name: str) -> None:
+        """Refuse new work while the host completes the session; the binding stays."""
+        self._withdraw(name, StoppingThreadStatus())
+
+    def _withdraw(self, name: str, status: ThreadStatus) -> Thread:
         name = self.require(name).name
         self.status(name).require_mutable(name)
         self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
-        self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
+        self.set_status(name, thread.execution.registered_status(thread, status))
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
-
-    def detach_process(self, name: str, process: ProcessIdentity) -> None:
-        """A completed session releases its binding, not the root host's physical process."""
-        thread = self.require(name)
-        if thread.process_identity != process:
-            raise RelationViolationError("Session process changed before retirement")
-        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+        return self.threads[name]
 
     def archive(self, name: str) -> None:
         name = self.require(name).name
@@ -1103,9 +1123,16 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
-    def by_lookup(self) -> Mapping[str, Thread]:
-        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
-                                 for thread in self.threads.values()})
+    def lookup_names(self) -> Mapping[ThreadLookup, str]:
+        return MappingProxyType(self.threads.lookup_names())
+
+    def born(self, lookup: ThreadLookup) -> Thread:
+        """The one thread a creation lookup names; only its row decodes."""
+        try:
+            name = self.lookup_names[lookup]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread lookup {lookup!r} is not registered.") from error
+        return self.threads[name]
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
@@ -1190,8 +1217,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
-        if lookup in self.by_lookup:
-            thread = self.by_lookup[lookup]
+        if lookup in self.lookup_names:
+            thread = self.born(lookup)
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)
@@ -1217,7 +1244,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         }
 
     def process_owners(self, process: ProcessIdentity) -> tuple[str, ...]:
-        return tuple(thread.name for thread in self.threads.values() if thread.process_identity == process)
+        return tuple(thread.name for thread in self.threads.values()
+                     if thread.process_identity == process and self.status(thread.name).holds_process)
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)

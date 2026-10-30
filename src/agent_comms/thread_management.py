@@ -8,6 +8,7 @@ from abc import abstractmethod
 from collections.abc import Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -403,11 +404,14 @@ class ThreadManagement:
         edit.commit()
         changed = previous != current
         if changed:
-            self.agents.activity.rename_thread(previous, current)
-            self.agents.runtime_info.rename_thread(previous, current)
-            self.ledger.rename_thread(previous, current)
-            self.catalog.change(lambda document: document.rename_thread(previous, current))
+            edit.released.append(partial(self._rename_stores, previous, current))
         return RenameThreadResult(previous, current, changed)
+
+    def _rename_stores(self, previous: str, current: str) -> None:
+        self.agents.activity.rename_thread(previous, current)
+        self.agents.runtime_info.rename_thread(previous, current)
+        self.ledger.rename_thread(previous, current)
+        self.catalog.change(lambda document: document.rename_thread(previous, current))
 
     def heartbeat(self, name: str) -> None:
         self.registry.heartbeat(name)
@@ -476,7 +480,7 @@ class ThreadManagement:
     def _archive_in(self, edit: RegistryEdit, originals: Sequence[Thread]) -> None:
         edit.document.archive_originals(originals)
         edit.commit()
-        self.agents.runtime_info.remove_threads(originals)
+        edit.released.append(partial(self.agents.runtime_info.remove_threads, originals))
 
     @property
     def thread_owned_states(self) -> tuple[ThreadOwnedState, ...]:

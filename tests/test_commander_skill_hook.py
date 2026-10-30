@@ -437,6 +437,21 @@ def test_the_commander_reads_every_packaged_rule():
     assert CommanderReader.rules() == RuleFile.packaged()
 
 
+def test_the_reading_order_names_exactly_the_packaged_rules_and_the_spine_leads():
+    names = tuple(RuleFile.read(path).name for path in CommanderPackage.rules_files())
+    assert sorted(RuleFile.reading_order) == sorted(names)
+    assert tuple(rule.name for rule in RuleFile.packaged()) == RuleFile.reading_order
+    assert RuleFile.reading_order[0] == "spine"
+
+
+def test_every_deal_reads_the_paper_before_any_rule():
+    for reader in (FleetReader, CommanderReader):
+        sources = reader.sources()
+        paper = CommanderPackage.paper()
+        assert paper and sources[:len(paper)] == paper
+        assert sources[len(paper)] == RuleFile.packaged()[0].path
+
+
 def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"

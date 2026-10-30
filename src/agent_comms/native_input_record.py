@@ -37,6 +37,7 @@ from .field_codec import (
     WireName,
 )
 from .native_session_reopen import PiSessionId
+from .turn_item import FreshNativeId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
 
@@ -65,7 +66,7 @@ class NativeInputCommit:
         Column(primary_key=True),
     ]
     session_id: Annotated[PiSessionId, WireName("sessionId")]
-    session_entry_id: Annotated[str, WireName("sessionEntryId")]
+    session_entry_id: Annotated[FreshNativeId, WireName("sessionEntryId")]
 
     @property
     def input_commit(self) -> NativeInputCommit:

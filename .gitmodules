@@ -1,3 +1,0 @@
-[submodule "src/agent_comms/skills/refactor-audit"]
-	path = src/agent_comms/skills/refactor-audit
-	url = https://github.com/OpenHCSDev/refactor-audit.git

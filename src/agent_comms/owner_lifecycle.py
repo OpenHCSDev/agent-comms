@@ -444,7 +444,7 @@ class OwnerLifecycle:
         refusal = RelationViolationError("Only visible agent threads can be started.")
         thread.role.require_executable(refusal)
         status.require_visible(str(refusal))
-        if thread.process_alive:
+        if status.holds_process and thread.process_alive:
             status.require_active("Stopped owner session has not retired yet.")
             return OwnerStartResult(thread.name, thread.require_process().pid, False)
         owner = self._launch_owner(
@@ -539,7 +539,7 @@ class OwnerLifecycle:
         with self.registry.store.editing() as edit:
             for thread, generation in owners:
                 edit.original.snapshot.require_stopping_owner(thread, generation)
-                edit.document.unregister(thread.name)
+                edit.document.fence_owner(thread.name)
             edit.commit()
             fenced = edit.original.snapshot
             return tuple((thread, fenced.claim_generation(thread.name)) for thread, _ in owners)
@@ -642,7 +642,6 @@ class OwnerLifecycle:
             original = entry.thread
             original.turn_record.read().require_idle()
             edit.document.unregister(original.name)
-            edit.document.detach_process(original.name, process)
             edit.commit()
             self.releases.record_session(edit.original.snapshot, original, before, owner)
 
@@ -656,6 +655,6 @@ class OwnerLifecycle:
                 raise RelationViolationError(f"Thread {caller!r} cannot release {canonical!r}.")
             owner.process_identity.require_release_by(ProcessIdentity.capture(os.getpid()))
             before = edit.original.snapshot.claim_generation(canonical)
-            edit.document.unregister(canonical)
+            edit.document.fence_owner(canonical)
             edit.commit()
             self.releases.record(edit.original.snapshot, ((owner, before),))

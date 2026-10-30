@@ -114,6 +114,12 @@ class RecordedEntry(PiPayload):
     def input_boundary(self):
         return any(message.user for message in self.messages)
 
+    def require_tracked_user(self) -> MessageEntry:
+        raise MalformedRecord("Native publication requires an original tracked input")
+
+    def index_into(self, inputs: dict[InputId, int], position: int) -> None:
+        """Non-message records contribute no tracked inputs."""
+
     def require_entry_id(self) -> str:
         return self.source_coordinates.original_id
 
@@ -213,16 +219,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         """Acquire a source reader, never input acceptance or replay authority."""
         with NativeEvidenceRead.open(session_file) as evidence:
             yield evidence
-
-    @property
-    def tracked_user(self) -> MessageEntry | None:
-        return None
-
-    def require_tracked_user(self) -> MessageEntry:
-        tracked = self.tracked_user
-        if tracked is None:
-            raise MalformedRecord("Native publication requires an original tracked input")
-        return tracked
 
     @property
     def model_choice(self) -> tuple[str, str] | None:
@@ -369,7 +365,7 @@ class NativeEvidenceRead:
 
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
-        self.inputs: dict[str, int] = {}
+        self.inputs: dict[InputId, int] = {}
         self.state: NativeEvidenceState = UnreadNativeEvidence()
 
     def close(self):
@@ -391,11 +387,7 @@ class NativeEvidenceRead:
     def index(self, appended: tuple[NativeEntry, ...]) -> None:
         """Add each newly decoded tracked input once, refusing a second entry for one input."""
         for position, entry in enumerate(appended, len(self.entries)):
-            if user := entry.tracked_user:
-                if user.input_id in self.inputs:
-                    raise MalformedRecord(
-                        "ambiguous tracked user input: one input ID on two entries")
-                self.inputs[user.input_id] = position
+            entry.index_into(self.inputs, position)
 
     def header(self) -> SessionEntry:
         """Read and decode record one without discarding an existing input index."""
@@ -605,15 +597,21 @@ class MessageEntry(NativeEntry):
         # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
         return self.message.input_id.value_or(None)
 
-    @property
-    def tracked_user(self) -> MessageEntry | None:
+    def require_tracked_user(self) -> MessageEntry:
+        self.message.input_id.require()
+        if not self.message.user or not self.message.input_digest.reported:
+            raise MalformedRecord("Native Pi session has ambiguous tracked user input")
+        self.id.require_present()
+        Sha256Text.from_text(self.message.input_digest.require())
+        return self
+
+    def index_into(self, inputs: dict[InputId, int], position: int) -> None:
         for input_id in self.message.input_id.present():
-            if not self.message.user or not self.message.input_digest.reported:
-                raise MalformedRecord("Native Pi session has ambiguous tracked user input")
-            self.id.require_present()
-            Sha256Text.from_text(self.message.input_digest.require())
-            return self
-        return None
+            self.require_tracked_user()
+            if input_id in inputs:
+                raise MalformedRecord(
+                    "ambiguous tracked user input: one input ID on two entries")
+            inputs[input_id] = position
 
     def require_failed_terminal(self, parent_id: str) -> None:
         if self.parent_id != parent_id:

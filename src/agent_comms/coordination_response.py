@@ -426,7 +426,7 @@ def prepare_fenced_response(
             if existing is not None:
                 snapshot.require_existing_preparation(
                     Message(
-                        registry_snapshot.by_lookup[execution.owner_lookup].name,
+                        registry_snapshot.born(execution.owner_lookup).name,
                         target,
                         payload,
                         message_type,
@@ -438,7 +438,7 @@ def prepare_fenced_response(
                 return AlreadyApplied(existing)
             obligation = snapshot.require_preparation(target)
             candidate = Message(
-                registry_snapshot.by_lookup[execution.owner_lookup].name,
+                registry_snapshot.born(execution.owner_lookup).name,
                 target,
                 payload,
                 message_type,

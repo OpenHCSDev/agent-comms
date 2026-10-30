@@ -838,6 +838,18 @@ class MissingReviewMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
+class RefusedCarryMergeBlock(MergeBlock):
+    """The forge refused the carried review status on this head; only this head pays for it."""
+    refusal: str
+
+    def what(self) -> str:
+        return f"carried review status refused: {self.refusal}"
+
+    def remedy(self) -> str:
+        return "restore the repository's write access or drop it from the commander's repos"
+
+
+@dataclass(frozen=True)
 class BehindMergeBlock(MergeBlock):
     def what(self) -> str:
         return 'BEHIND: head is behind its base'
@@ -1138,7 +1150,14 @@ class PullRequests:
                 with goals.todos.snapshot() as db:
                     reviews = StoredHeadReview.latest_for_pull_request(db, current)
                 for review in reviews:
-                    if review.verdict.carry(goals, review, current, reader):
+                    try:
+                        carried = review.verdict.carry(goals, review, current, reader)
+                    except ToolRefusedError as refused:
+                        # One repository's forge refusal is that head's alarm, not every board's.
+                        self._read[repo, row.number] = replace(row, merge_blocks=(
+                            *row.merge_blocks, RefusedCarryMergeBlock(row.updated, str(refused))))
+                        break
+                    if carried:
                         self._read[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
 
@@ -2069,7 +2088,7 @@ class FairText(DirectiveWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID, "
+    refusal = ("{1} faults inheritance itself. Cite an NRA pattern ID, "
                "name the restated fact and the declaration that derives it.")
 
 
@@ -2647,7 +2666,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         if any((check.directory / reference.file).resolve().is_relative_to(
                    check.directory / 'tools/') for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
-            problems.append('the order changes tools/: say "ratchet with --root tools and with '
+            problems.append('the order changes tools/: say "NRA gate with --root tools and with '
                             '--root src, each as its own command"')
         return problems
 
@@ -4279,8 +4298,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
-        goals.todos.record_head(carried)
+        # GitHub first: Core never records a carry whose status the forge refused.
         verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        goals.todos.record_head(carried)
         return True
 
     @classmethod
