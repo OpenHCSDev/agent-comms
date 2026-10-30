@@ -60,8 +60,8 @@ class RunningSelection(CatalogSelection):
         return self.thread.thinking_level
 
     @property
-    def service_tier_value(self) -> str:
-        return self.thread.service_tier_value
+    def service_tier(self) -> ServiceTier:
+        return self.thread.service_tier
 
     @property
     def project_path(self) -> Path:
@@ -230,8 +230,8 @@ class ServiceTierConfigOption(CatalogConfigOption):
     description = "Provider request service tier, applied from this thread's next turn"
     category = "service_tier"
 
-    def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.service_tier_value
+    def current_value(self, thread: CatalogSelection) -> str:
+        return thread.service_tier.value
 
     async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         return [CatalogChoice(name=tier.value.title(), value=tier.value) for tier in ServiceTier]
@@ -241,7 +241,9 @@ class ServiceTierConfigOption(CatalogConfigOption):
     ) -> None:
         await Coordination.run_worker(partial(
             owner.comms.threads.set_thread_configuration, thread,
-            NextTurnConfiguration(service_tier=ChosenServiceTier(FieldCodec.decode(ServiceTier, value))),
+            NextTurnConfiguration(
+                service_tier=ChosenServiceTier(FieldCodec.decode(ServiceTier, value)),
+            ),
         ))
 
 

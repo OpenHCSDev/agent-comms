@@ -22,7 +22,8 @@ class TestToolCatalog:
         from agent_comms.cli_verbs.tools import ToolsCliCommand
         from agent_comms.native_arguments import NativeArguments
         from agent_comms.pi_vocabulary import ServiceTier
-        from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration, ThreadCatalog
+        from agent_comms.thread_catalog import ThreadCatalog
+        from agent_comms.threads import ChosenServiceTier, NextTurnConfiguration
         from agent_comms.tool_caller import ThreadCaller
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
@@ -31,7 +32,10 @@ class TestToolCatalog:
             name="catalog-owner", tags=frozenset(), worktree=Checkout(Path("/wt")), service_tier=ServiceTier.STANDARD,
         )
         comms.registry.declare(thread)
-        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package", comms.root)
+        launch_thread = thread
+        flag, path = comms.threads.native_launch_arguments(
+            launch_thread, NativeArguments(()), tmp_path / "package",
+        )
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
         assert payload == ToolsCliCommand(name=ThreadCaller(thread.name)).apply(comms).to_wire()
@@ -48,7 +52,13 @@ class TestToolCatalog:
             updated = json.loads(Path(path).read_text())
             assert updated == {**payload, "service_tier": tier.value}
             revision = Path(path).stat()
-            ThreadCatalog.publish(thread, comms.root)
+            # Launch acquired this snapshot before configuration changed. Its
+            # catalog must still project the current registry tier, not the snapshot.
+            assert comms.threads.native_launch_arguments(
+                launch_thread, NativeArguments(()), tmp_path / "package",
+            ) == (flag, path)
+            ThreadCatalog.publish(launch_thread, comms.root)
+            assert json.loads(Path(path).read_text())["service_tier"] == tier.value
             repeated = Path(path).stat()
             assert (revision.st_mtime_ns, revision.st_size) == (
                 repeated.st_mtime_ns, repeated.st_size,

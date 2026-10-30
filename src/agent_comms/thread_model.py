@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from agent_comms.field_codec import SubclassUnion, boundary_decoder
 from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.pi_vocabulary import NoThinkingOverride, ThinkingChoice
+from agent_comms.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 if TYPE_CHECKING:
@@ -132,6 +132,5 @@ class CatalogSelection(ABC):
         return NoThinkingOverride
 
     @property
-    def service_tier_value(self) -> str | None:
-        """Creation catalogs have no stored thread tier to advertise."""
-        return None
+    def service_tier(self) -> ServiceTier:
+        return ServiceTier.default()

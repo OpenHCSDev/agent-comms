@@ -40,7 +40,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError, ToolRefusedError
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
