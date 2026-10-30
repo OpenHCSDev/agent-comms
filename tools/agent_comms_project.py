@@ -42,6 +42,8 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.carry import STEPS
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.pinned_audit import SKILL, audit
@@ -249,7 +251,9 @@ class ClientTypeErrors(audit.checkers.SideCounts):
         atexit.register(shutil.rmtree, into, True)
         (into / "stack").mkdir()
         (into / stack).write_bytes(repo.blob(head, stack))
-        return StackClient.fetched(into / "stack", into)
+        with InstallCommands() as commands:
+            return StackClient.fetched(into / "stack", into, uv=StackSources.frontend(),
+                                       python=Path(sys.executable), commands=commands)
 
     @staticmethod
     def selected(client: StackClient) -> list[str]:
