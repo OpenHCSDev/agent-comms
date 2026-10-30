@@ -371,8 +371,9 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                 opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
 
     @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings
+    def needs_disposal(cls) -> bool:
+        """The heartbeat prints these above the unit tables; the rest follow them."""
+        return True
 
     @classmethod
     def sections(cls, packets: tuple[CommanderUpdate, ...],
@@ -405,6 +406,10 @@ class StillOpenAlarms(AlarmGroup):
 
 class WatchingAlarms(AlarmGroup):
     """A still-failing source remains visible, but it has no commander disposal to wake for."""
+
+    @classmethod
+    def needs_disposal(cls) -> bool:
+        return False
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],

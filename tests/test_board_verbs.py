@@ -283,3 +283,13 @@ def test_every_commander_of_the_project_may_review_its_heads(board_review):
     with pytest.raises(TodoError, match="Only a commander of this project"):
         NoHeadOrder().require_reviewer(comms.goals, request,
                                        comms.registry.require("worker").incarnation)
+
+
+def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
+    from agent_comms.head_review import PullRequestHead
+    from agent_comms.repository_name import RepositoryName
+    from agent_comms.standing_rules import OrderlessUnreviewedHead
+
+    head = "a" * 40
+    line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()
+    assert line.count("judge ") == 1 and all(part in line for part in ("--pr 7", f"--head {head}", "--repo o/r"))
