@@ -25,7 +25,9 @@ from pydantic.alias_generators import to_camel
 from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
 from .field_codec import GitCommitText, PathText, projected
-from .repo import Checkout, CheckoutHistory, GitCommandError, GitReference, Repo
+from .repo import (
+    Checkout, CheckoutHistory, GitCommandError, GitHead, GitReference, Repo, RepositoryReads,
+)
 from .repository_name import RepositoryName
 from .wire_models import WireModel
 
@@ -328,9 +330,7 @@ class BranchUpstream(DeclaredFamily):
     def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
         # A local, absent or deleted upstream cannot make its stale tracking ref publication.
         tracking = self.tracking_name()
-        remotes = tuple(ref for ref in reader.history.references("refs/remotes/")
-                        if ref != tracking)
-        count = reader.history.count(head, *remotes)
+        count = reader.history.unpublished(head, tracking)
         return (UnpushedHead(head, count, tracking),) if count else ()
 
 
@@ -380,6 +380,8 @@ class WorkBranches:
     """One repository's branches with commits that main does not have."""
 
     checkout: Path
+    reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
+                                   kw_only=True)
     _remote_heads: dict[str, dict[str, str]] = field(
         default_factory=dict,
         init=False,
@@ -425,7 +427,11 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def history(self) -> CheckoutHistory:
-        return Checkout(self.checkout).read()
+        return self.reads.history_for(Checkout(self.checkout))
+
+    @cached_property
+    def head(self) -> GitHead:
+        return self.history.head_for(Checkout(self.checkout))
 
     def read_checkout(self) -> CheckoutRead:
         """Whether git can open this checkout at all; the one probe every reader asks first."""
@@ -459,8 +465,7 @@ query($owner: String!, $name: String!, $after: String) {
     @property
     def local_work(self) -> bool:
         """Uncommitted files or HEAD commits absent from every published remote ref."""
-        return bool(self.uncommitted()) or bool(self.history.count(
-            "HEAD", *self.history.references("refs/remotes/")))
+        return bool(self.uncommitted()) or bool(self.history.unpublished(self.head.revision()))
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """One complete published-ref cut per remote for this reader, not one call per branch."""
@@ -506,7 +511,7 @@ query($owner: String!, $name: String!, $after: String) {
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            DetachedHead(self.history.head.name),
+            DetachedHead(self.head.reference),
             *(BranchUpstream.from_reference(reference) for reference in self.history.refs.values()
               if reference.name.startswith("refs/heads/")),
         )}
@@ -521,7 +526,8 @@ query($owner: String!, $name: String!, $after: String) {
             for remote, refs in references.items():
                 Repo.enter_phase()
                 heads = tuple(dict.fromkeys(
-                    head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
+                    head for reference in sorted(refs)
+                    for head in self.remote_heads(remote, reference)))
                 Repo.require_commits(self.checkout, remote, *heads)
                 self.history.include(*heads)
 
@@ -618,7 +624,7 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(
                 f"HEAD reflog in {self.checkout} has no readable movement time"
             ) from unread
-        branch = self.history.head.symbolic.removeprefix("refs/heads/") or "HEAD"
+        branch = self.head.branch
         bases = self.history.merge_base(main, head)
         if not bases:
             raise WorkBranchError(f"Unrelated main and HEAD in {self.checkout}")
@@ -657,18 +663,9 @@ query($owner: String!, $name: String!, $after: String) {
     def worktrees(self) -> dict[str, tuple[str, ...]]:
         """Branch name -> worktree paths that have it checked out."""
         checked: dict[str, list[str]] = {}
-        path = None
-        head = ""
-        for line in self._git("worktree", "list", "--porcelain").splitlines():
-            if line.startswith("worktree "):
-                path = line.removeprefix("worktree ")
-                head = ""
-            elif line.startswith("HEAD "):
-                head = line.removeprefix("HEAD ")
-            elif line.startswith("branch refs/heads/") and path is not None and head.strip("0"):
-                # Git retains a worktree's symbolic branch after its ref is deleted,
-                # with an all-zero HEAD. That is not an existing local branch.
-                checked.setdefault(line.removeprefix("branch refs/heads/"), []).append(path)
+        for head in self.history.heads.values():
+            for branch in head.checked_branch():
+                checked.setdefault(branch, []).append(str(head.checkout.path))
         return {branch: tuple(paths) for branch, paths in checked.items()}
 
     def checkouts(self, snapshot: RegistrySnapshot, branch: str,
@@ -791,12 +788,7 @@ class ReadableCheckoutRead(CheckoutRead):
         return ()
 
     def worktrees(self) -> tuple[Path, ...]:
-        listed = self.branches._git("worktree", "list", "--porcelain", "-z")
-        return tuple(
-            Path(field.removeprefix("worktree ")).resolve()
-            for field in listed.split("\0")
-            if field.startswith("worktree ")
-        )
+        return tuple(self.branches.history.heads)
 
 
 @dataclass(frozen=True)
