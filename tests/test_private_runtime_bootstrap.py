@@ -26,7 +26,7 @@ def test_drifted_private_owner_refused_and_readers_leave_missing_schema_alone(tm
     with pytest.raises(SchemaVersionError):
         Coordination(str(database))
     with pytest.raises(SchemaVersionError):
-        comms.owners.start("owner")
+        comms.owners.start_many(("owner",))
     assert not comms.registry.require("owner").process_alive
     with sqlite3.connect(database) as db:
         assert db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall() == before

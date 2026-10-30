@@ -8,9 +8,10 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, IO, cast
 from abc import abstractmethod
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -109,9 +110,17 @@ class OwnerConnection:
         return {"action": action, "thread": thread,
                 **cast(dict[str, object], FieldCodec.encode(parameters))}
 
+    @classmethod
+    def exchange(cls, root: Path, process: ProcessIdentity, request: RuntimeRequest) -> object:
+        with cls.dispatching(root, process, request) as response:
+            return cls.reply(response)
+
     @staticmethod
-    def exchange(root: Path, process: ProcessIdentity, request: RuntimeRequest) -> object:
-        """A synchronous lifecycle call uses the same declared request and reply codec.
+    @contextmanager
+    def dispatching(
+        root: Path, process: ProcessIdentity, request: RuntimeRequest,
+    ) -> Iterator[IO[bytes]]:
+        """Dispatch once; the caller owns the response until the scope closes.
 
         Lifecycle calls already run on a coordination worker. Submitting their
         socket preparation back to that same executor would deadlock it.
@@ -128,10 +137,14 @@ class OwnerConnection:
                 dispatched = replace(request, holder=MaintenanceHolder.current())
                 connection.sendall((json.dumps(FieldCodec.encode(dispatched)) + "\n").encode())
                 with connection.makefile("rb") as response:
-                    line = response.readline()
-                if not line:
-                    raise OwnerReplyLostError("Worker host disconnected after dispatch; outcome unknown")
-                return OwnerLine.read(line).reply()
+                    yield response
+
+    @staticmethod
+    def reply(response: IO[bytes]) -> object:
+        line = response.readline()
+        if not line:
+            raise OwnerReplyLostError("Worker host disconnected after dispatch; outcome unknown")
+        return OwnerLine.read(line).reply()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return self.wire_request(action, self.session_id, parameters)

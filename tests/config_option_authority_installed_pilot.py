@@ -122,8 +122,8 @@ async def run(stage, package, models, ui, menu_contention=False):
     for index, model in enumerate(models):
         name = f'configuration-{index}'
         service.registry.declare(Thread(name, frozenset(), Checkout(project), model=DeclaredModel(model), thinking_level=OffThinkingLevel, task=GivenThreadText('Private provider-free configuration acceptance; never send a prompt')))
-        service.owners.start(
-            name, agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
+        service.owners.start_many(
+            (name,), agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
             agent_args=GivenArguments(()),
         )
         owner = service.registry.require(name)
