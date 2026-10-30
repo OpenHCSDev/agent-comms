@@ -35,7 +35,7 @@ from agent_comms.phase_evidence import (
     BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent,
     RetainedPlanReadings,
 )
-from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
+from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
@@ -253,12 +253,12 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     evidence = CommitMerged(head)
     plans = RetainedNominalReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
-    failed = plans.prepare_reading(repo, (), (evidence,))
+    failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert head in failed.describe(evidence) and "origin" in failed.describe(evidence)
     plans.observe_reading(failed, (evidence,))
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(case.source.remote_path))
-    recovered = plans.prepare_reading(repo, (), (evidence,))
+    recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     assert recovered.main.commit == failed.main.commit
     assert repo.has_commit(head)
     prepared = case.snapshot()
@@ -269,7 +269,8 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
-    reading = RetainedNominalReadings().prepare_reading(repo, (), ())
+    reading = RetainedNominalReadings().prepare_reading(
+        repo, (), (), history=Checkout(repo.checkout).read())
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
     assert not reading.holds(missing)
@@ -308,7 +309,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     trace = tmp_path / "observation.trace2.jsonl"
     monkeypatch.setenv("GIT_TRACE2_EVENT", str(trace))
     before = case.snapshot()
-    main = MainTree(repo, head, NominalCensus())
+    main = MainTree(repo, head, NominalCensus(), history=Checkout(repo.checkout).read())
     assert main.has("src/promised.py")
     assert not main.has("src/deleted.py")
     assert main.missing(paths) == (False, True, False)
@@ -325,7 +326,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
     plans = RetainedNominalReadings()
-    failed = plans.prepare_reading(repo, (), (evidence,))
+    failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(failed, (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
     assert "required blob unavailable" in failed.describe(evidence)
@@ -339,7 +340,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     # Only this explicit joined acquisition changes Git. The same-main unknown must retry.
     Repo.git(repo.checkout, "fetch", "--quiet", "--no-tags", "origin", *objects)
     prepared = case.snapshot()
-    recovered = plans.prepare_reading(repo, (), (evidence,))
+    recovered = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(recovered, (evidence,))
     assert recovered.main.commit == failed.main.commit == head
     assert recovered.read(evidence) == EvidenceFound(True)

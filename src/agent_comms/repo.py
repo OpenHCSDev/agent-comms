@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import heapq
+import re
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -16,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
+from .field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
@@ -508,6 +511,10 @@ class Checkout(SingleFieldValue, PresentMember):
         checkout.prepare()
         return checkout
 
+    def read(self) -> CheckoutHistory:
+        """One operation's refs and commit graph; the caller owns this read's lifetime."""
+        return CheckoutHistory(self)
+
     def submodules(self) -> tuple[PinnedSubmodule, ...]:
         if not (self.path / ".gitmodules").is_file():
             return ()
@@ -588,6 +595,144 @@ class Checkout(SingleFieldValue, PresentMember):
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+@dataclass(frozen=True)
+class GitReference:
+    """One ref, including HEAD's symbolic target and a local branch's upstream."""
+
+    name: str
+    commit: Annotated[str, GitCommitText]
+    symbolic: str
+    upstream: str
+    remote: str
+    remote_ref: str
+
+    @classmethod
+    def listed(cls, row: str) -> GitReference:
+        name, commit, symbolic, upstream, remote, remote_ref = row.split("\0")
+        return cls(name, GitCommitText.decode(commit), symbolic, upstream, remote, remote_ref)
+
+
+@dataclass(frozen=True)
+class GitCommit:
+    """The commit facts needed by ancestry and order progress, decoded once."""
+
+    sha: Annotated[str, GitCommitText]
+    parents: tuple[Annotated[str, GitCommitText], ...]
+    at: float
+    message: str
+
+
+class CheckoutHistory:
+    """A pass's selected refs and immutable commit graph, never a command-output cache.
+
+    Acquisitions declare additional heads before the graph is first consumed. A later
+    acquisition cannot silently change an answer already observed in this cut.
+    """
+
+    def __init__(self, checkout: Checkout) -> None:
+        self.checkout = checkout
+        self.required: set[str] = set()
+
+    @cached_property
+    def refs(self) -> dict[str, GitReference]:
+        return {reference.name: reference for reference in map(GitReference.listed, Repo.git(
+            self.checkout.path, "for-each-ref", "--include-root-refs",
+            "--format=%(refname)%00%(objectname)%00%(symref)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
+            "HEAD", "refs/heads/", "refs/remotes/",
+        ).splitlines())}
+
+    def include(self, *heads: str) -> None:
+        """Prepare acquired objects before observation; an already read graph stays immutable."""
+        self.required.update(heads)
+
+    @cached_property
+    def graph(self) -> dict[str, GitCommit]:
+        heads = tuple(dict.fromkeys((*self.required,
+                                     *(reference.commit for reference in self.refs.values()))))
+        if not heads:
+            return {}
+        text = Repo.git(self.checkout.path, "rev-list", "--stdin", "--no-commit-header",
+                        "--format=%H%x00%P%x00%ct%x00%B%x00",
+                        input="".join(f"{head}\n" for head in heads))
+        commits = {}
+        for row in text.split("\0\n"):
+            if not row:
+                continue
+            sha, parents, at, message = row.split("\0", 3)
+            commit = GitCommit(GitCommitText.decode(sha),
+                               tuple(map(GitCommitText.decode, parents.split())), float(at), message)
+            commits[commit.sha] = commit
+        return commits
+
+    def resolve(self, revision: str) -> str:
+        """Resolve captured ref names or an unambiguous captured commit abbreviation."""
+        revision = revision.removesuffix("^{commit}")
+        for name in (revision, f"refs/heads/{revision}", f"refs/remotes/{revision}"):
+            if name in self.refs:
+                return self.refs[name].commit
+        matches = tuple(sha for sha in self.graph if sha.startswith(revision))
+        if len(matches) != 1:
+            raise UnavailableCommitError(self.checkout.path, (revision,))
+        return matches[0]
+
+    def commit(self, revision: str) -> GitCommit:
+        return self.graph[self.resolve(revision)]
+
+    def references(self, prefix: str) -> tuple[str, ...]:
+        return tuple(name for name in self.refs if name.startswith(prefix))
+
+    def ancestors(self, *revisions: str) -> set[str]:
+        """Reachability over the admitted graph; shallow boundaries remain graph leaves."""
+        pending = [self.resolve(revision) for revision in revisions]
+        found: set[str] = set()
+        while pending:
+            sha = pending.pop()
+            if sha not in found:
+                found.add(sha)
+                pending.extend(parent for parent in self.graph[sha].parents if parent in self.graph)
+        return found
+
+    def contains(self, ancestor: str, revision: str) -> bool:
+        return self.resolve(ancestor) in self.ancestors(revision)
+
+    def commits(self, refs: tuple[str, ...], *excluded: str,
+                pattern: str = "", first_parent: bool = False) -> Iterator[GitCommit]:
+        """Git's newest-first revision walk, excluding complete ancestor closures."""
+        seen = self.ancestors(*excluded)
+        pending: list[tuple[float, int, str]] = []
+        sequence = 0
+        for ref in refs:
+            commit = self.commit(ref)
+            heapq.heappush(pending, (-commit.at, sequence, commit.sha))
+            sequence += 1
+        matching = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+        while pending:
+            _at, _sequence, sha = heapq.heappop(pending)
+            if sha in seen:
+                continue
+            seen.add(sha)
+            commit = self.graph[sha]
+            if matching.search(commit.message):
+                yield commit
+            parents = commit.parents[:1] if first_parent else commit.parents
+            for parent in parents:
+                if parent not in seen and parent in self.graph:
+                    heapq.heappush(pending, (-self.graph[parent].at, sequence, parent))
+                    sequence += 1
+
+    def merge_base(self, left: str, right: str) -> tuple[str, ...]:
+        """Best common ancestors: a common ancestor of another candidate is not best."""
+        common = self.ancestors(left) & self.ancestors(right)
+        redundant: set[str] = set()
+        for sha in common:
+            redundant.update(parent for parent in self.graph[sha].parents if parent in common)
+        best = common - redundant
+        return tuple(sorted(best, key=lambda sha: self.graph[sha].at, reverse=True))
+
+    def count(self, head: str, *excluded: str) -> int:
+        return len(self.ancestors(head) - self.ancestors(*excluded))
 
 
 @dataclass(frozen=True)

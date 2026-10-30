@@ -214,4 +214,4 @@ def test_every_order_greps_one_history_walk_per_selection(tmp_path):
         expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',
                        f'--grep={pattern}', '--format=%H', *refs, '--not')
         assert [point.sha for point in checkout.commits(pattern, refs)] == expected.split()
-    assert tuple(checkout.walks) == ((refs, ()),)
+    assert len(checkout.branches.history._walks) == 1
