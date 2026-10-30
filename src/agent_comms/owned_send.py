@@ -26,6 +26,10 @@ from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
+from .input_drain import InputDrain
+from .threads import Thread
+from .goal_attempts import GoalAttemptStore
+from .goal_turn_permit import GoalTurnPermit
 from .native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .tool_denial import SelectedToolDenied
@@ -35,13 +39,8 @@ from .turn_input_source import (
 )
 
 if TYPE_CHECKING:
-    from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.goal_turn_permit import GoalTurnPermit
-
     from .goal_waits import GoalWait
-    from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)

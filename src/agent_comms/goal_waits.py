@@ -21,6 +21,8 @@ from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import GoalWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .registry_document import RegistrySnapshot
+from .threads import Thread
 from .turn_lease import TurnCompletion, TurnLease
 from .typed_table import (
     Column, DurableStore, ForeignKey, FULL_SCHEMA_REBUILD, Index, SchemaRebuild,
@@ -33,9 +35,7 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-    from .registry_document import RegistrySnapshot
     from .registry_store import RegistryEdit
-    from .threads import Thread
 
 
 class GoalWait(ABC):

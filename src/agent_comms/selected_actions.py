@@ -17,13 +17,13 @@ from .selected_claim import (
     write_selected_claimed_file,
 )
 from .turn_context import InstructionFile
+from .coordination_tables.assignments import WakeAssignment
+from .selected_write_authority import BoundSelectedWriteAuthority
+from .selected_write_plan import PlannedWrite
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingToolOwner
-    from .coordination_tables.assignments import WakeAssignment
-    from .selected_write_authority import BoundSelectedWriteAuthority
-    from .selected_write_plan import PlannedWrite
-    from .threads import Thread
 
 
 class SelectedAction(ABC):

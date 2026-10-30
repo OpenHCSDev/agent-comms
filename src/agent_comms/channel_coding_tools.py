@@ -44,12 +44,12 @@ from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_rules import StorageProjection
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination_tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
-    from .threads import Thread
 
 
 @dataclass(frozen=True, kw_only=True)

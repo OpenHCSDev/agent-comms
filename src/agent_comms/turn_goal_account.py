@@ -23,6 +23,7 @@ from .field_codec import GoalId, TurnId
 from .turn_item import UsageChargeId
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from .goals import Goal
 from .reported_turn import ReportedTurn
 from .attempt_resolution import VerifiedTurnDecision
 
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
     from . import agent_events as events
     from .turn_terminal import TurnTerminal
     from .comms import Comms
-    from .goals import Goal, GoalDeclaration
+    from .goals import GoalDeclaration
     from .pi_payloads import PiUsage
     from .threads import Thread
     from .turn_lease import TurnLeaseFence

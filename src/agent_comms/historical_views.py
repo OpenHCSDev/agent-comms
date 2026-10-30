@@ -43,7 +43,7 @@ from .notification_evidence import (
     RecipientLimit,
 )
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification
+from .presentation import MessageNotification, WireRevision
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
@@ -73,7 +73,7 @@ from .transcript_routes import TranscriptRoutes
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews
-    from .presentation import BusPresentation, WireRevision
+    from .presentation import BusPresentation
     from .threads import Thread
 
 

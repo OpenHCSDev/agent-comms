@@ -38,6 +38,7 @@ from .notification_progress import (
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
+from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -47,7 +48,6 @@ if TYPE_CHECKING:
     from .coordination_database import InvalidStore, MissingStore
     from .presentation import MessageNotification
     from .private_registry_guard import RegistryPrivacy
-    from .wake_policy import RecipientDecision
 
 
 @dataclass(frozen=True)

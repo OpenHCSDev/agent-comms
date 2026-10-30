@@ -44,11 +44,11 @@ from .errors import (
 from .mentions import ThreadMention
 from .private_path import FileRevision
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from .registration import Registration
 from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
     from .coordination_session import NativeCapture
-    from .registration import Registration
     from .threads import Thread
 
 from .catalog_document import CatalogDocument
