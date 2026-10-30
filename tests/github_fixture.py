@@ -42,6 +42,12 @@ class GitHubFixture:
         data[repository.to_wire()]["requests"][str(number)]["arm_refusal"] = refusal
         self.path.write_text(json.dumps(data))
 
+    def refuse_status(self, repository: RepositoryName, refusal: str) -> None:
+        """GitHub's answer to every commit-status post in this repository, as when archived."""
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()]["status_refusal"] = refusal
+        self.path.write_text(json.dumps(data))
+
     def calls(self) -> tuple[tuple[str, ...], ...]:
         path = self.directory / "calls.jsonl"
         return tuple(tuple(json.loads(line)) for line in path.read_text().splitlines()) if path.exists() else ()
