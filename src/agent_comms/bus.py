@@ -502,12 +502,13 @@ class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, B
 
     filename = "bus.sqlite3"
 
-    def unreceived(self, lookup: ThreadLookup,
+    def unreceived(self, lookups: tuple[ThreadLookup, ...],
                    references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
-        """The references outside this participant's frozen delivery audiences."""
+        """The references outside every one of these participants' frozen delivery audiences."""
         with self.observing() as db:
-            return tuple(reference for reference in references if not ReceivedSource.exists(
-                db, where="{seq} = ?", parameters=(reference.seq,), lookup=lookup))
+            return tuple(reference for reference in references if not any(
+                ReceivedSource.exists(db, where="{seq} = ?", parameters=(reference.seq,),
+                                      lookup=lookup) for lookup in lookups))
 
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""

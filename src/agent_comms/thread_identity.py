@@ -10,7 +10,7 @@ from .class_fact import ClassFact
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
@@ -234,8 +234,13 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return self
 
     def commands(self, creator: ThreadIncarnation) -> bool:
-        """Whether this actor may change an order ``creator`` made: its own orders only."""
+        """Whether this actor may act for ``creator``: change its orders, complete its owner
+        requests and answer what it received. Its own only, unless an authority says more."""
         return creator == self.commanding_identity
+
+    def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
+        """Whose receipts this actor may answer: a birthless member received nothing."""
+        return ()
 
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
@@ -303,6 +308,11 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return self.lookup == lookup
 
+    def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
+        """Its own receipts, and those of every owner it acts for."""
+        return (self.lookup, *(owner.require_recorded().lookup
+                               for owner in owners if self.commands(owner)))
+
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
         return CommanderForkIdentity(self.name, self.created_at, authority)
 
@@ -337,6 +347,10 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
     @property
     def commanding_identity(self) -> ThreadIncarnation:
         return self.authority
+
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        """A fork acts with its parent's authority, a commander peer's included."""
+        return self.authority.commands(creator)
 
 
 @dataclass(frozen=True, eq=False)

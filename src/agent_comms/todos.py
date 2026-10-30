@@ -5371,7 +5371,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
         return cls(OwnerRequestId.new(), commander.require_recorded(), text)
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
-        if self.commander != commander.require_recorded():
+        if not commander.commands(self.commander):
             raise TodoError(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
