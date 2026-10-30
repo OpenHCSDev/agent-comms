@@ -67,17 +67,15 @@ class MainTree:
         A submodule is another repository's tree, regardless of local recurse settings.
         Git pathspecs such as ``:!file`` exclude.
         """
-        return [row for row in Repo.grep(
-            self.repo.checkout,
-            "--no-recurse-submodules",
-            *options,
-            "-E",
-            "-e",
-            pattern,
-            self.commit,
-            "--",
-            *paths,
-        ) if row.split(":", 2)[1].endswith(self.source)]
+        return [row for row in self.text_grep(*options, pattern=pattern, paths=paths)
+                if row.split(":", 2)[1].endswith(self.source)]
+
+    def text_grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
+        """Text evidence searches its declared paths, including plan documents, at this commit."""
+        return Repo.grep(
+            self.repo.checkout, "--no-recurse-submodules", *options,
+            "-E", "-e", pattern, self.commit, "--", *paths,
+        )
 
     def count(self, pattern: str, paths: tuple[str, ...]) -> int:
         """Matching lines under ``paths``."""
@@ -347,18 +345,12 @@ class PatternEvidence(MainEvidence):
     pattern: str
     paths: tuple[str, ...] = ("src",)
 
-    def read(self, main: MainTree) -> bool:
-        return self.satisfied(main.count(self.pattern, self.searched(main)))
-
     def searched(self, main: MainTree) -> tuple[str, ...]:
         """``paths`` without the phase declarations, which spell every pattern they ban."""
         from .plan_phases import PlanPhase
 
         declaration = main.repo.module_file(PlanPhase.__module__)
         return (*self.paths, f":!{declaration.as_posix()}")
-
-    @abstractmethod
-    def satisfied(self, count: int) -> bool: ...
 
 
 @dataclass(frozen=True)
@@ -367,8 +359,8 @@ class PatternAbsent(PatternEvidence):
         return tuple(f"{path}:{line}" for path, line in
                      sorted(main.matching_lines(self.pattern, self.searched(main))))
 
-    def satisfied(self, count: int) -> bool:
-        return count == 0
+    def read(self, main: MainTree) -> bool:
+        return main.count(self.pattern, self.searched(main)) == 0
 
     def describe(self) -> str:
         return f"no {self.pattern!r} in {' '.join(self.paths)} on main"
@@ -376,8 +368,8 @@ class PatternAbsent(PatternEvidence):
 
 @dataclass(frozen=True)
 class PatternPresent(PatternEvidence):
-    def satisfied(self, count: int) -> bool:
-        return count > 0
+    def read(self, main: MainTree) -> bool:
+        return bool(main.text_grep("-l", pattern=self.pattern, paths=self.searched(main)))
 
     def describe(self) -> str:
         return f"{self.pattern!r} in {' '.join(self.paths)} on main"

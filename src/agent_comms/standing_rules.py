@@ -10,7 +10,7 @@ import time
 from abc import abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from functools import cache
 from itertools import combinations
 from pathlib import Path
@@ -24,7 +24,7 @@ from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
-    AnswerSubject, HeadSubject, HeartbeatSubject, UnitSubject,
+    AnswerSubject, CommanderHistory, HeadSubject, HeartbeatSubject, UnitSubject,
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.thread_identity import ThreadIncarnation
@@ -33,7 +33,7 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
-from agent_comms.todos import MergeBlock, ProgressRead, ProgressSource, StoredHeadReview
+from agent_comms.todos import MergeBlock, ProgressRead, ProgressSource
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.todos import (
-        OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo, TodoStore,
+        OrderClaim, OwnerRequest, PresentCheckout, PullRequest, Todo,
     )
     from agent_comms.goal_management import Goals
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState
@@ -157,10 +157,6 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         """Ordinary lines retain every verb that declares it clears them."""
         return True
 
-    def undecided(self, store: TodoStore) -> bool:
-        """Whether no recorded decision answers this line; only a head verdict can."""
-        return True
-
     def clearing_commands(self) -> str:
         """The applicable verbs, with arguments supplied by this line's observed owners."""
         values = self.command_values()
@@ -229,14 +225,25 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         rule scans independently."""
         return next((owner for owner in cls.__mro__ if FamilyScan in owner.__bases__), cls)
 
+    @staticmethod
+    def current_lines[Line: StandingRule](lines: Sequence[Line], history: CommanderHistory) -> tuple[Line, ...]:
+        """Every standing line clears through its declared subjects, not a sibling-only hook."""
+        from agent_comms.task_attachments.commander_pings import RulePing
+
+        since = RecordedEventTime(time.time())
+        return tuple(rule for rule in lines
+                     if not replace(RulePing.capture(rule), since=since).acted(history))
+
     @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
-               observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
+               observed: Sequence[UnitState], frame: HeartbeatFrame,
+               history: CommanderHistory) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader."""
         owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
-        return tuple(rule for owner in owners
-                     for rule in owner.scan_observed(comms, commander, observed, frame)
-                     if rule.attention() and rule.broke_after(after))
+        opened = tuple(rule for owner in owners
+                       for rule in owner.scan_observed(comms, commander, observed, frame)
+                       if rule.attention() and rule.broke_after(after))
+        return cls.current_lines(opened, history)
 
 
 class FamilyScan(StandingRule, declared_name=None):
@@ -576,7 +583,9 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
+        opened = cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
+        history = CommanderHistory.read(comms, commander, rules=opened, observed=())
+        return cls.current_lines(opened, history)
 
     @classmethod
     def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
@@ -585,9 +594,8 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
         held = scan.holders
         with comms.bus.bus.reading() as source:
-            opened = tuple(rule for member in cls.members_with(cls)
-                           for rule in member.read_open(source, snapshot, held, commander, requests))
-        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos))
+            return tuple(rule for member in cls.members_with(cls)
+                         for rule in member.read_open(source, snapshot, held, commander, requests))
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -671,14 +679,6 @@ class HeadReviewRule(StandingRule, declared_name=None):
     """A head verdict can answer this rule's review request."""
 
     request: PullRequestHead
-
-    @staticmethod
-    def decided(store: TodoStore, request: PullRequestHead) -> bool:
-        """A recorded verdict on exactly this head answers it; a reviewing mark still owes one."""
-        return any(review.verdict.decides() for review in StoredHeadReview.head_reviews(store, request))
-
-    def undecided(self, store: TodoStore) -> bool:
-        return not self.decided(store, self.request)
 
 
 @dataclass(frozen=True)
@@ -818,7 +818,6 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
             for row in pulls.open(repo)
             for due in row.review_due(now, cls.seconds)
             for request in (PullRequestHead(repo, row.number, row.head),)
-            if not cls.decided(goals.todos, request)
             for rule in cls.for_head(request, due, todos)
         )
 

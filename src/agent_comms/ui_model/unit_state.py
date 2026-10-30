@@ -224,7 +224,21 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
         snapshot, now = comms.registry.snapshot(), time.time()
         held = frame.holders
         requests = frame.pulls
-        readings = tuple(
+        candidates = tuple(
+            thread for thread in snapshot.threads.values()
+            if thread.name != commander
+            for _ in thread.execution.commanded_units(thread)
+        )
+        candidate_ids = frozenset(thread.incarnation for thread in candidates
+                                  if thread.role.executor(thread))
+        eligible = {
+            thread.incarnation: presence
+            for thread in snapshot.threads.values()
+            if thread.incarnation in held or thread.incarnation in candidate_ids
+            for presence in (snapshot.status(thread.name),)
+            if thread.incarnation in held or presence.receiving
+        }
+        return tuple(
             UnitObservation(
                 comms,
                 thread,
@@ -236,24 +250,12 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
                     for message in rule.questions_for(thread.incarnation)
                 ),
                 now,
-                snapshot.status(thread.name),
+                eligible[thread.incarnation],
                 comms.agents.is_working(thread.incarnation, snapshot),
             )
             for thread in snapshot.threads.values()
+            if thread.incarnation in eligible
         )
-        candidates = tuple(
-            reading
-            for reading in readings
-            if reading.thread.name != commander
-            for _ in reading.thread.execution.commanded_units(reading.thread)
-        )
-        eligible = set(held)
-        eligible.update(
-            reading.thread.incarnation
-            for reading in candidates
-            if reading.thread.role.executor(reading.thread) and reading.presence.receiving
-        )
-        return tuple(reading for reading in readings if reading.thread.incarnation in eligible)
 
     @classmethod
     def current(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[UnitState, ...]:

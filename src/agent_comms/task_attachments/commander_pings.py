@@ -126,12 +126,7 @@ class RulePing(Ping):
         return self.rule.disposes_subjects(self.subjects)
 
     def holds(self, history: CommanderHistory) -> bool:
-        return any(
-            rule.attention() and rule.observation_key() == self.observation
-            for rule in self.rule.scan_owner().scan_observed(
-                history.comms, history.commander, history.observed, history.frame,
-            )
-        )
+        return any(rule.observation_key() == self.observation for rule in history.rules)
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
@@ -190,10 +185,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         a status feed and the action lines scrolled under it."""
         return "\n".join((self.header, *self.lines(now), *frame))
 
-    def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """This packet's lines the commander disposes of, through the same recorded actions the
-        gate reads: a verdict or a false condition drops its line on the next read."""
-        history = CommanderHistory.read(comms, commander)
+    def board(self, history: CommanderHistory) -> tuple[BoardEntry, ...]:
+        """Lines still true in the beat's capture, without a disposing action."""
         return tuple(ping.board_entry() for ping in self.handled
                      if ping.on_board(history))
 
@@ -204,9 +197,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
         """What reaches the session itself once its bridge has put this packet on its board."""
 
-    def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
+    def undisposed(self, history: CommanderHistory, cut: float) -> tuple[Ping, ...]:
         """Still-true lines older than ``cut`` without a recorded action on their subjects."""
-        history = CommanderHistory.read(comms, commander)
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
 
     def require_publication(self, sender: str, registry: RegistrySnapshot,
@@ -231,15 +223,18 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     @classmethod
     def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """The newest packet's lines still undisposed past ``cut``."""
+        """Overdue packet lines admitted by the heartbeat's latest published board."""
         latest = cls.latest(comms, comms.registry.require(commander).incarnation)
-        return latest.undisposed(comms, commander, cut) if latest else ()
+        current = frozenset(entry.content for entry in cls.current_board(comms, commander))
+        return tuple(ping for ping in latest.handled
+                     if ping.waits_on_commander(cut) and ping.board_entry().content in current) if latest else ()
 
     @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """The newest packet's board, derived at the moment of asking."""
-        latest = cls.latest(comms, comms.registry.require(commander).incarnation)
-        return latest.board(comms, commander) if latest else ()
+        """Serve the latest beat; a reader never captures or recomputes conditions."""
+        from agent_comms.commander_hud import CommanderHud
+
+        return CommanderHud.read(comms, commander).board
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],

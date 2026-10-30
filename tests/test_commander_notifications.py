@@ -18,6 +18,7 @@ from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
 from agent_comms.errors import OverdueHeadRefusalError, UnregisteredThreadError
 from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -59,7 +60,8 @@ def lead_hud(comms, states=()):
 
 def beat(comms, rules=(), *, states=()):
     frame = CommanderObservation(
-        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
+        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states),
+        history=CommanderHistory.read(comms, "lead", rules=rules, observed=states))
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
     CommanderHeartbeat().pass_body(comms, (frame,))
 
@@ -158,7 +160,8 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
     failing = ServicePassFailing("following-rule", time.time(), "independent source")
-    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms))
+    history = CommanderHistory.read(comms, "lead", rules=(failing,), observed=())
+    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms), history=history)
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
         CommanderHeartbeat().pass_body(comms, frames)
@@ -307,7 +310,8 @@ def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
 
     request.addfinalizer(lambda: StandingRule.__registry__.pop(FailedScan.declared_name))
     with pytest.raises(IndexError):
-        StandingRule.broken(comms, "lead", observed=states, frame=frame)
+        StandingRule.broken(comms, "lead", observed=states, frame=frame,
+                            history=CommanderHistory.read(comms, "lead", rules=(), observed=states))
 
 
 def test_commander_page_reads_each_beats_frame_and_nothing_between(notification_bus):

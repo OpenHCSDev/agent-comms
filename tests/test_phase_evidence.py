@@ -45,11 +45,14 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
     git(tmp_path, "init", "-q")
     (tmp_path / "src").mkdir()
     (tmp_path / "src/kept.py").write_text("flag = True\n")
+    marker = tmp_path / "plan.md"
+    marker.write_text("- completed on main\n")
     git(tmp_path, "add", ".")
     git(tmp_path, "commit", "-qm", "main")
     sha = git(tmp_path, "rev-parse", "HEAD")
     git(tmp_path, "update-ref", "refs/remotes/origin/main", sha)
     (tmp_path / "src/kept.py").unlink()
+    marker.write_text("unfinished in this checkout\n")
     reading = PlanReading((), MainTree.of(
         Repo(checkout=tmp_path, github=RepositoryName.from_wire("OpenHCSDev/agent-comms"))))
 
@@ -57,6 +60,7 @@ def test_evidence_reads_origin_main_and_never_the_worktree(tmp_path):
     assert reading.holds(PathsAbsent(("src/gone.py",)))
     assert not reading.holds(PathsAbsent(("src/kept.py",)))
     assert reading.holds(PatternPresent("flag = True"))
+    assert reading.holds(PatternPresent(r"^- completed on main$", ("plan.md",)))
     assert not reading.holds(PatternAbsent("flag = True"))
     assert reading.holds(PatternAbsent("flag = True", ("src", ":!src/kept.py")))
     assert not reading.holds(AllEvidence((CommitMerged(sha), PathsAbsent(("src/kept.py",)))))
