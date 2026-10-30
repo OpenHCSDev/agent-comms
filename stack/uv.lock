@@ -29,6 +29,7 @@ dependencies = [
     { name = "agent-client-protocol" },
     { name = "aiohttp" },
     { name = "metaclass-registry" },
+    { name = "nominal-refactor-advisor" },
     { name = "packaging" },
     { name = "pydantic" },
 ]
@@ -40,7 +41,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
-    { name = "nominal-refactor-advisor", marker = "extra == 'dev'", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
+    { name = "nominal-refactor-advisor", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
     { name = "packaging", specifier = ">=24" },
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
@@ -609,6 +610,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/ac/cb/a330b1474608eef92e6a0a5861d61b8f2d3152d1a71b65dad8b56edea150/multidict-7.2.1-cp314-cp314t-win_amd64.whl", hash = "sha256:b5fb6b048931ea925b484f0c7c01b007981415a00a6c62ee74bbf8d229d39c08", size = 101163, upload-time = "2026-10-24T20:40:41.847Z" },
     { url = "https://files.pythonhosted.org/packages/66/fe/1563cd1336111755f79a60d06ffecd11dfbce5eb8c32ece9eae888d5fbef/multidict-7.2.1-cp314-cp314t-win_arm64.whl", hash = "sha256:e64b86d16158954825d12799271979c6944c1fd1d03575b2f22e869c3f7d00dc", size = 98630, upload-time = "2026-10-24T20:40:42.671Z" },
     { url = "https://files.pythonhosted.org/packages/9d/96/1aaad0e5df33f1f5af21775c411349c0234a6edd581ea403bc81919a6eab/multidict-7.2.1-py3-none-any.whl", hash = "sha256:08ea94663d9e7c25d14d78222f7aee906c472d4837766bec62477c38f6e419dc", size = 28145, upload-time = "2026-10-24T20:40:59.159Z" },
+]
+
+[[package]]
+name = "nominal-refactor-advisor"
+version = "0.1.0"
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#b542c5a20d7d1d181ae94b36cf81d12715e13379" }
+dependencies = [
+    { name = "metaclass-registry" },
+    { name = "tree-sitter" },
+    { name = "tree-sitter-python" },
+    { name = "typing-extensions" },
 ]
 
 [[package]]
