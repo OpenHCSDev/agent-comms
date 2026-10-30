@@ -14,7 +14,7 @@ The fight is not worth having. Tristan's positions are theorems with checked pro
 
 After reading a rule file, the audit owes one entry for that rule before the next file unlocks:
 
-- `quote`: the part of the rule that related most, verbatim, checked as an exact substring of the rule file, bounded (at most 8 lines) so it is a selection, not a file copy.
+- `quote`: the part of the greentext that related most, whole greentext lines verbatim, so nobody can pretend the greentext is not there; checked against the rule file, bounded (at most 8 lines) so it is a selection, not a file copy.
 - `does`: what the quote does to you — which reflex it names, which costume it closes off, what you saw in yourself.
 - `why`: why the fight is completely unnecessary — the proof was read, the position is settled, resisting costs him hours and changes nothing.
 
