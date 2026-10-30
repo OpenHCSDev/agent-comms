@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
+from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -136,11 +137,19 @@ class TurnRunner:
                 TurnTranscriptUpdate(state=state)
             )
 
-    async def observe_compaction(self, session_id: str, event) -> None:
+    async def on_published_thread(
+        self, session_id: str, observe: Callable[[Thread], Awaitable[None]],
+    ) -> None:
+        """Hand a published session's thread to `observe`; an unpublished session has none."""
         if session_id not in self.sessions.published:
             return
-        thread = await Coordination.run_worker(partial(
-            self.comms.registry.require, self.sessions.require(session_id)))
+        await observe(await Coordination.run_worker(partial(
+            self.comms.registry.require, self.sessions.require(session_id))))
+
+    async def observe_compaction(self, session_id: str, event) -> None:
+        await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
+
+    async def compacted(self, session_id: str, event, thread: Thread) -> None:
         await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
@@ -149,10 +158,9 @@ class TurnRunner:
         self, session_id: AcpSessionId, usage: ContextUsage,
     ) -> None:
         """Pi's own context-use report deals the rules again at each declared share left."""
-        if session_id not in self.sessions.published:
-            return
-        thread = await Coordination.run_worker(partial(
-            self.comms.registry.require, self.sessions.require(session_id)))
+        await self.on_published_thread(session_id, partial(self.context_used, usage))
+
+    async def context_used(self, usage: ContextUsage, thread: Thread) -> None:
         await Coordination.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
 
     def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:

@@ -124,12 +124,10 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_de
     assert refused(unit_deal)
 
 
-def test_a_bus_with_no_commander_project_refuses_every_tool_loudly(comms, tmp_path):
-    """No commander project means no rules: never a silently open gate."""
+def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, tmp_path):
+    """No commander project leaves every thread commanded: a Pi unit is dealt the fleet deck,
+    as the Claude Code hooks deal it on the same bus."""
     unit = comms.registry.declare(Thread("unit-y", frozenset(), Checkout(tmp_path)))
     deal = PiRedeal.of(comms, unit)
     deal.start()
-    with pytest.raises(RulesUnread, match="no commander project: no rules to deal"):
-        call("bash", {"command": "ls"}).judge_under(deal)
-    with pytest.raises(RulesUnread, match="no commander project"):
-        call("read", {"path": "notes.md"}).judge_under(deal)
+    assert deal.current().sources() == tuple(path.resolve() for path in FleetReader.sources())

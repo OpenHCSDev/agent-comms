@@ -538,8 +538,8 @@ def wired(comms: Comms) -> Comms:
 
 
 def declare_fleet(comms: Comms, commander: Thread) -> Comms:
-    """The bus's commander project, naming `commander`: the one test owner of a fleet. A Pi
-    unit started on a bus without one is refused every tool until one is declared."""
+    """The bus's commander project, naming `commander`: the one test owner of a fleet, for a
+    test whose goals need a commander to assign them."""
     comms.registry.declare(commander)
     comms.registry.set_commander_project(RegisteredCommanderProject(
         comms.registry.require(commander.name).incarnation, ()))

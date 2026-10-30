@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
 from .store_files import AtomicFile
@@ -165,10 +164,6 @@ class DealState(ABC):
     def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
         """What a report of the context's use does to the deal."""
 
-    def answer(self) -> GateAnswer:
-        """What the deal itself answers once its reads and audit are done."""
-        return GateOpen()
-
 
 class NoDeal(DealState):
     """A session never dealt: nothing to read and no audit owed."""
@@ -194,42 +189,8 @@ class NoDeal(DealState):
         return
 
 
-class WrittenDeal(DealState, DeclaredFamily):
-    """A deal record written whole and atomically; its member says what was dealt."""
-
-
 @dataclass(frozen=True)
-class RulelessDeal(WrittenDeal, declared_name="no_rules"):
-    """A start or compaction that had no rules to deal: every tool is refused, loudly, until a
-    later start finds the rules its role follows."""
-
-    reason: str
-
-    def sources(self) -> tuple[Path, ...]:
-        return ()
-
-    def unread(self, read: Path) -> tuple[Path, ...]:
-        return ()
-
-    def audit_refusal(self, audit: Path) -> str:
-        return ""
-
-    def reminders(self, audit: Path) -> tuple[str, ...]:
-        return ()
-
-    def started(self, deal: Redeals) -> None:
-        """Every start tries again."""
-        deal.redeal()
-
-    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
-        return
-
-    def answer(self) -> GateAnswer:
-        return GateRefusal("being dealt any rules", f"{self.reason}.")
-
-
-@dataclass(frozen=True)
-class DealRecord(WrittenDeal, declared_name="rules"):
+class DealRecord(DealState):
     """One deal: the files dealt and what the audit must answer. The read log and the audit
     hang off it, and a new deal resets both before it is written."""
 
@@ -293,7 +254,12 @@ class RuleDeal(ABC):
     @property
     def audit(self) -> Path:
         """The session's audit of the dealt rules and the owner's words, written after reading."""
-        return self.stem.with_suffix(".audit.json")
+        return self.audit_beside(self.stem)
+
+    @staticmethod
+    def audit_beside(stem: Path) -> Path:
+        """The audit of the deal whose files sit at `stem`."""
+        return stem.with_suffix(".audit.json")
 
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
@@ -304,7 +270,7 @@ class RuleDeal(ABC):
         """The deal this session holds; the record is its one declaration."""
         if not self.record.exists():
             return NoDeal()
-        return FieldCodec.decode(WrittenDeal, FieldCodec.parse(self.record.read_bytes()))
+        return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
 
     def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
         """A start or compaction drops what was read: the read log and the audit reset first,
@@ -320,14 +286,9 @@ class RuleDeal(ABC):
             )
         )
 
-    def deal_none(self, reason: str) -> None:
-        """Nothing to deal is a deal too: it refuses every tool and says why."""
-        self.stem.parent.mkdir(parents=True, exist_ok=True)
-        self.publish(RulelessDeal(reason))
-
-    def publish(self, record: WrittenDeal) -> None:
+    def publish(self, record: DealRecord) -> None:
         AtomicFile(self.record).write_bytes(
-            json.dumps(FieldCodec.encode(record, WrittenDeal)).encode()
+            json.dumps(FieldCodec.encode(record)).encode()
         )
 
     def record_read(self, path: Path, span: ReadSpan) -> None:
@@ -377,8 +338,8 @@ class ToolGate(RuleDeal):
     refuses or hands on to the next by the MRO; this base requires nothing."""
 
     def blocked(self, deal: DealState) -> GateAnswer:
-        """The first requirement still open, or what the deal itself answers."""
-        return deal.answer()
+        """The first requirement still open; with none left the call runs."""
+        return GateOpen()
 
     def judge_tool(self, tool: str) -> None:
         """Refuse this call while a requirement is open, or let it run."""

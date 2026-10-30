@@ -582,13 +582,6 @@ class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
-    def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
-                   commander: type[DealtSources], commanded: type[DealtSources],
-                   prompts: tuple[str, ...]) -> None:
-        """A Pi unit started on a bus with no commander project has no rules to follow, so its
-        tools are refused, loudly, until one is declared."""
-        deal.deal_none("no commander project: no rules to deal")
-
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
         return ()
 

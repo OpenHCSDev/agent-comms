@@ -4,8 +4,8 @@ transcript, and a refusal is a PreToolUse denial.
 PreToolUse only judges: it refuses any tool but reading a dealt file while one is unread or the
 audit does not answer the deal. PostToolUse, which Claude Code sends only after a tool completes,
 records a Read that covered a whole dealt file; a failed or partial Read leaves the gate closed.
-A subagent runs on its parent's transcript and is never gated: the parent reads the rules, while
-the subagent reports tool activity through its existing seat.
+A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
+it may not write the main agent's audit, and it reports its tool activity through its seat.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, ReadSpan, RuleDeal
+from agent_comms.rule_deal import DealtRuleGate, ReadSpan
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.forks import SeatedSubagent
@@ -84,17 +84,6 @@ class WriteTool(ToolMeaning, declared_name="Write"):
 
 
 @dataclass(frozen=True)
-class SessionDeal(RuleDeal):
-    """The deal of the session's own agent, beside the transcript Claude Code names."""
-
-    transcript: Path
-
-    @property
-    def stem(self) -> Path:
-        return self.transcript
-
-
-@dataclass(frozen=True)
 class GatedCall(ClaudeToolHook, DealtRuleGate):
     """One tool call of the session's own agent, judged before it runs and seen after it
     completes. Its deal lives beside the transcript, and a refusal is a PreToolUse denial."""
@@ -134,7 +123,7 @@ class SubagentCall(GatedCall, SeatedSubagent):
 
     def judge_write(self, tool: str, path: Path) -> None:
         """The main agent's audit is never a subagent's to write, whatever its context says."""
-        if path == SessionDeal(super().stem).audit.resolve():
+        if path == self.audit_beside(super().stem).resolve():
             self.refuse(f"{path} is the main agent's audit; yours is {self.audit}.")
             return
         super().judge_write(tool, path)

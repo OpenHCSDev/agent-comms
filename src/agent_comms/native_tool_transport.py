@@ -338,8 +338,8 @@ class ToolTransport(Generic[Call]):
             call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
     def judge(self, call: Call) -> None:
-        """Refuse a call before its policy is asked; a transport exposing no tools allows none."""
-        raise SelectedToolDenied("Native tools are disabled for this input")
+        """Refuse a call before its policy is asked; an ungated transport leaves it to `allow`."""
+        return
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
