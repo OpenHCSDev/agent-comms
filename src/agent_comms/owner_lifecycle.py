@@ -404,7 +404,7 @@ class OwnerLifecycle:
         if previous.process_identity.offline():
             orders = tuple(
                 todo
-                for commander in CommanderService.commanders(self.registry, self.goals)
+                for commander in CommanderService.boards(self.registry, self.goals)
                 for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
