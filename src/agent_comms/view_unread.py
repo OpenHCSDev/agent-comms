@@ -9,6 +9,7 @@ from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
+from functools import partial
 from pathlib import Path
 from threading import Event, RLock
 from typing import TYPE_CHECKING, ClassVar, Annotated
@@ -82,11 +83,6 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         """Coverage, not the number found, determines whether this is a lower bound."""
         return CappedCount(total) if self.start > seen else Counted(total)
 
-    def extended_by(self, revision: FileRevision) -> bool:
-        """The transcript only grew past the indexed revision: its prefix and replies stand."""
-        return isinstance(self.revision, FileRevision) and self.revision.holds_cut(
-            revision, self.revision.size)
-
     def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
         """Visit at most limit newest records, stopping earlier at the read mark. An append
         visits only the appended records and keeps the indexed prefix, so a growing
@@ -96,30 +92,32 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
                 return RevisionMoved()
         if self.continues(revision):
             return self._scan(revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
-        if self.extended_by(revision):
-            boundary = max(seen, self.revision.size)
-            appended = self._scan(revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex)
-            if isinstance(appended, ContinuedReplyIndex) and appended.after.start <= boundary:
-                return appended.joined(self)
-        return self._scan(revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
+        fresh = partial(self._scan, revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
+        for indexed in self.revision.revisions():
+            if indexed.holds_cut(revision, indexed.size):
+                # Only appended: visit the new records, keep the indexed prefix and replies.
+                boundary = max(seen, indexed.size)
+                return self._scan(
+                    revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
+                ).extending(self, boundary, fresh)
+        return fresh()
 
     def _scan(self, revision: FileRevision, seen: int, start: int, visited: int,
               cancelled: Event, result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
         replies: list[TranscriptReply] = []
         records = reverse_records(Path(self.source), start, floor=max(0, seen - 1))
         with closing(records):
-            while visited < self.limit and start > seen:
+            for begin, end, raw in records:
+                if visited >= self.limit or start <= seen:
+                    break
                 if cancelled.is_set():
                     return CancelledRead()
-                record = next(records, None)
-                if record is None:
-                    start = seen
-                    break
-                begin, end, raw = record
                 visited += 1
                 start = begin
                 if raw.endswith(b"\n") and NativeEntry.read(raw).unread_reply:
                     replies.append(TranscriptReply(self.source, end))
+            else:
+                start = min(start, seen)
         index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start)
         return result(self, index, tuple(replies))
 
@@ -231,6 +229,11 @@ class ReplyIndexResult(ABC):
     @abstractmethod
     def commit(self, database: sqlite3.Connection) -> None: ...
 
+    def extending(self, before: ReplyIndex, boundary: int,
+                  fresh: Callable[[], ReplyIndexResult]) -> ReplyIndexResult:
+        """A read that published nothing extends nothing."""
+        return self
+
 
 class NoReplyUpdate(ReplyIndexResult):
     def commit(self, database: sqlite3.Connection) -> None:
@@ -278,8 +281,12 @@ class ContinuedReplyIndex(ReplyIndexUpdate):
     def replace_earlier(self, database: sqlite3.Connection) -> None:
         pass
 
-    def joined(self, before: ReplyIndex) -> ContinuedReplyIndex:
-        """The appended records' scan joined to the coverage the stored index already had."""
+    def extending(self, before: ReplyIndex, boundary: int,
+                  fresh: Callable[[], ReplyIndexResult]) -> ReplyIndexResult:
+        """Appended records scanned through the boundary join the stored coverage; more
+        than the record allowance leaves a gap, so the fresh scan replaces it."""
+        if self.after.start > boundary:
+            return fresh()
         return ContinuedReplyIndex(before, replace(
             self.after, start=before.start, records=before.records + self.after.records,
         ), self.replies)
