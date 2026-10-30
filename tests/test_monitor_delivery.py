@@ -50,9 +50,11 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, 
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_reference import BridgeStart, MessageReference
-from agent_comms.runtime_updates import HiddenItem
-from agent_comms.turn_item import NativeTurnId
-from agent_comms.messages import InfoKind, Message
+from agent_comms.runtime_updates import (
+    AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
+)
+from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.threads import Thread
 
 
@@ -125,8 +127,8 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 
 @pytest.fixture
 def bridge(comms, tmp_path):
-    declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout(tmp_path))
+    declare_test_bus(comms, channels=('monitor',), threads=tuple(
+        Thread(name, frozenset({'monitor'}), Checkout(tmp_path))
         for name in ('claude-code', 'viewer', 'peer')
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
@@ -401,10 +403,10 @@ def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
 
-def notification(line, record_id=transcript_record('notification-record')):
+def notification(line, record_id=transcript_record('notification-record'), *, prompt_id='prompt'):
     return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
+        sessionId='session', promptId=prompt_id, origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 
@@ -1017,6 +1019,98 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
             await asyncio.wait_for(pending, 5)
     assert type(claim()) is DeliveredAssignment
 
+@pytest.fixture(params=(FinishedTurn(NativeTurnId('reply-turn')), AllTurnsEnded()))
+def reply_end(request: pytest.FixtureRequest) -> RuntimeUpdate:
+    return request.param
+
+
+async def confirm_and_finish_reply(
+    bridge: ClaudeBridge, message: Message, expected: tuple[str, ...], end: RuntimeUpdate,
+) -> None:
+    """Real monitor consumption feeds the ordinary staged output and terminal update."""
+    from agent_comms.transcript_events import AssistantTranscript
+
+    assert bridge.binding.bus == 'viewer'
+    assert bridge.binding.thread == 'session'
+    output = bridge.output_type.for_comms(
+        bridge.comms.transcripts.external(bridge.binding.bus), bridge.comms)
+    async with attached_monitor(bridge) as reader:
+        await bridge.accept(message)
+        line = await only_event(reader)
+        updates = [await update.observed(bridge)
+                   for update in notification(line).updates(ClaudeSession())]
+        # A long diagnostic path can make the harness request a Read instead of inline text.
+        exported = Path(MonitorReadFile.naming(bridge.exports, message.reference).path)
+        if exported.is_file():
+            for update in read_records(exported, shown(exported.read_text()), 'reply-read'):
+                updates.append(await update.observed(bridge))
+    delivered, = await bridge.attempts(message.message_id)
+    assert delivered.outcome is DeliveredOutcome
+    assert isinstance(delivered.monitor, ObservedMonitor)
+    assert message.reference not in {
+        row.reference for row in bridge.comms.bus.inbox(
+            bridge.binding.bus, after=TakenInputStart()).page.messages}
+
+    def replies() -> tuple[tuple[str, str], ...]:
+        return tuple((row.target, row.body) for row in bridge.comms.bus.bus.message_history()
+                     if row.sender == bridge.binding.bus)
+
+    output.publish_batch(updates)
+    turn, item = NativeTurnId('reply-turn'), NativeItemId('answer')
+    output.publish_batch([FinishedItem(turn, item, (AssistantTranscript(
+        'unrelated assistant final', timestamp=2., position=item),))])
+    assert replies() == ()
+    output.publish_batch([end])
+    assert replies() == tuple((target, 'unrelated assistant final') for target in expected)
+    # Completion is idempotent, and another turn cannot inherit these routes.
+    later, later_item = NativeTurnId('later-turn'), NativeItemId('later-answer')
+    output.publish_batch([FinishedTurn(turn), AllTurnsEnded(), FinishedItem(
+        later, later_item, (AssistantTranscript(
+            'a later final', timestamp=3., position=later_item),)), AllTurnsEnded()])
+    assert replies() == tuple((target, 'unrelated assistant final') for target in expected)
+
+
+@pytest.mark.asyncio
+async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_sender(bridge, reply_end):
+    from agent_comms.diagnostics import record_terminal_failure
+    from agent_comms.field_codec import InputId
+    from agent_comms.turn_failure import BackendFailed
+
+    diagnostic = record_terminal_failure(
+        bridge.comms.root, subject=InputId.mint(), thread='peer',
+        failure=BackendFailed, sequences=(), source_error=RuntimeError('native request failed'))
+    message = bridge.comms.messaging.send(
+        'peer', 'viewer', f'Request failed. No automatic retry. [Open diagnostic]({diagnostic.as_uri()})',
+        AlertKind, role=NoticeRole()).message
+    await confirm_and_finish_reply(bridge, message, (), reply_end)
+    assert diagnostic.is_file()
+    assert json.loads(diagnostic.read_text())['failure'] == BackendFailed.declared_name
+    assert bridge.comms.bus.pending_count('peer') == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('target', 'body', 'kind', 'expected'), (
+    ('viewer', 'ordinary direct request', QuestionKind, ('claude-code',)),
+    ('#monitor', 'channel information', InfoKind, ()),
+    ('#monitor', '@viewer please answer this channel request', QuestionKind, ()),
+))
+async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
+    bridge, reply_end, target, body, kind, expected,
+):
+    message = bridge.comms.messaging.send('claude-code', target, body, kind).message
+    await confirm_and_finish_reply(bridge, message, expected, reply_end)
+
+
+@pytest.mark.asyncio
+async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_end):
+    from agent_comms.channel_targets import ThreadTarget
+
+    message = bridge.comms.messaging.send_user_message(
+        ThreadTarget('viewer'), 'please answer once',
+        worktree=Checkout(bridge.options.state.parent))
+    await confirm_and_finish_reply(bridge, message, (message.sender,), reply_end)
+
+
 def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     """The commander answers its owner in its own transcript: a unit that messaged it
     mid-turn never receives that turn's answer as a direct message."""
@@ -1031,14 +1125,16 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
-        output.delivered_targets((sender.name,))
+        original = comms.messaging.send(sender.name, speaker.name, "Open this answer").message
         turn = NativeTurnId(f"{speaker.name}-turn")
+        output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
         output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
-    assert comms.bus.pending_count("unit") == 0
-    assert comms.bus.pending_count("lead") == 1
+    replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
+                    if message.body in {"lead answers", "unit answers"})
+    assert replies == (("lead", "unit answers"),)
 
 
 @pytest.mark.parametrize(('rows', 'start', 'frames'), (

@@ -1287,7 +1287,20 @@ class JoinVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetireVerb(OrderVerb):
+class EndsForkVerb(OrderVerb):
+    """Ends a fork the registry already declared. Declaring a fork only to end it held the
+    registry write lock for a whole registration, past every unit's 5 s lock budget."""
+
+    def apply(self, ctx: Commander) -> None:
+        ctx = ctx.model_copy(update={'actor': self.actor})
+        if ctx.actor_name not in ctx.comms.registry:
+            print(f'{ctx.actor_name} never joined; nothing to end')
+            return
+        self.act(ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(EndsForkVerb):
     help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
@@ -1296,7 +1309,7 @@ class RetireVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class EndVerb(OrderVerb):
+class EndVerb(EndsForkVerb):
     help = "archive a commander fork that has stopped, reporting the work it left unrecorded"
 
     def run(self, ctx: Commander) -> None:

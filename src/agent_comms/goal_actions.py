@@ -175,11 +175,6 @@ class GoalAction[Result: GoalDeclaration](
     def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
-        if ctx.model_report and any(
-            entry.reports_turn(ctx.reported_turn)
-            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
-        ):
-            raise ValueError("This goal was already reported in this turn.")
         goal = ctx.thread.goal.apply_action(self, ctx)
         if goal == ctx.thread.goal:
             return goal
@@ -224,7 +219,6 @@ class TransitionGoalAction(GoalAction[Goal]):
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ctx.reported_turn if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed
@@ -244,9 +238,20 @@ class TransitionGoalAction(GoalAction[Goal]):
         pass
 
 
+class GoalReportAction(TransitionGoalAction):
+    """A model's report consumes this goal's slot; recovery commands do not."""
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        if ctx.model_report:
+            if goal.reports_turn(ctx.reported_turn):
+                raise ValueError("This goal was already reported in this turn.")
+            goal = replace(goal, reported_turn=ctx.reported_turn)
+        return super().change(goal, ctx)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ActiveGoalAction(
-    TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
     schedules_goal = True
 
@@ -283,7 +288,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
+class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     wait_for: tuple[str, ...] = ()
     reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...] = ()
     preserve_wait = True
@@ -404,7 +409,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompletionGoalAction(TransitionGoalAction):
+class CompletionGoalAction(GoalReportAction):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
 
@@ -453,7 +458,7 @@ class HeadReviewedOrderGoalAction(HeldOrderGoalAction):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+class BlockedGoalAction(GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     block_reason: str | None = None
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
