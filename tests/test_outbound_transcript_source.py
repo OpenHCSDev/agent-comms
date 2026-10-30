@@ -89,8 +89,8 @@ def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp
         assert own.selection.viewer == viewer and own.sources == (initial,)
         assert own.rows == tuple(row for row in everyone.rows if row[0].recipient == name)
         assert own.evidence[reference].claims == own.rows
-        assert own.evidence[reference].attempts == {
-            recipient: attempts for recipient, attempts in everyone.evidence[reference].attempts.items()
+        assert own.evidence[reference].consumption == {
+            recipient: attempts for recipient, attempts in everyone.evidence[reference].consumption.items()
             if recipient == lookup}
     sender = NotificationAssignment.read(root, OwnerOutcomes(lookups["sender"]).selection((initial,)))
     assert sender.rows == everyone.rows
@@ -404,7 +404,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
     assert tuple(value for batch in batches for value in batch.bindings) == unlimited.bindings
     assert limited.selection.viewer == AllOutcomes() and limited.sources == sources
     assert limited.rows == ordinary.rows
-    assert limited.attempts == ordinary.attempts
+    assert limited.consumption == ordinary.consumption
     assert limited.evidence == ordinary.evidence
     assert len({claim.assignment_id for claim, _evidence in limited.rows}) == len(limited.rows)
     order = [(-claim.wire_seq, claim.recipient) for claim, _evidence in limited.rows]

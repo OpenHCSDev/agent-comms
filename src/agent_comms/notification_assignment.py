@@ -231,7 +231,7 @@ class NotificationAssignment(NotificationSource):
                 for answered in reply.message.answers:
                     key = (reply.sender_lookup, answered)
                     if key in keys:
-                        responses[key] = responses.get(key, UnansweredResponse()).recorded(reply.message)
+                        responses[key] = responses.get(key, UnansweredResponse()).recorded(reply)
         return replace(read, responses=MappingProxyType(responses))
 
     @classmethod

@@ -130,7 +130,7 @@ def test_a_public_root_without_a_coordinator_keeps_its_viewer_and_projects_visib
     CoordinationStore.path_in(comms.root).unlink(missing_ok=True)
     viewer = OwnerOutcomes.of(comms.registry.require("peer-a").incarnation)
     read = NotificationAssignment.read(comms.root, viewer.selection((original,)))
-    assert (read.sources, read.rows, read.attempts, read.selection.viewer) == ((original,), (), (), viewer)
+    assert (read.sources, read.rows, read.consumption, read.selection.viewer) == ((original,), (), {}, viewer)
     window = MessageNotification.delivery_window(comms.root, comms.registry, read)
     assert {item.recipient for item in window.outcomes[(sent.seq, sent.message_id)]} == {"peer-a"}
 

@@ -36,7 +36,7 @@ import tomllib
 import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from functools import cache, cached_property
 from pathlib import Path
 
@@ -429,7 +429,8 @@ class MaterializedClients(ClientSources):
     inputs: IntegrationInput
     uv: Path
     python: Path
-    commands: InstallCommands
+    # The executor's lifetime is operational; source cuts and their interpreters identify this input.
+    commands: InstallCommands = field(compare=False, repr=False)
 
     @classmethod
     def read(cls, directory: Path, *, uv: Path, python: Path,
