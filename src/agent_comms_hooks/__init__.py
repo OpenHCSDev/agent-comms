@@ -14,7 +14,7 @@ import pkgutil
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
@@ -86,15 +86,25 @@ class ClaudeTranscriptHook(ClaudeHook):
     window: ClassVar[int] = 1_000_000
     """Transcript bytes read from the end."""
 
+    @staticmethod
+    def raised_by_subagent(record: Mapping[str, object]) -> bool:
+        """The boundary test: Claude Code names a subagent's event by its agent_id."""
+        return "agent_id" in record
+
+    @property
+    def session_stem(self) -> Path:
+        """The main agent's transcript, which every event names, its subagents' included."""
+        return Path(self.transcript_path)
+
     @property
     def stem(self) -> Path:
         """A session's deal and deck files sit beside its transcript, each with its own suffix."""
-        return Path(self.transcript_path)
+        return self.session_stem
 
     @property
     def subagent_transcripts(self) -> Path:
         """Claude Code keeps each subagent's transcript in this directory beside the session's."""
-        return Path(self.transcript_path).with_suffix("") / "subagents"
+        return self.session_stem.with_suffix("") / "subagents"
 
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
@@ -102,6 +112,19 @@ class ClaudeTranscriptHook(ClaudeHook):
             start = max(0, transcript.seek(0, 2) - self.window)
             transcript.seek(start)
             return transcript.read().splitlines()[1 if start else 0 :]
+
+
+@dataclass(frozen=True)
+class ClaudeSubagentHook(ClaudeTranscriptHook):
+    """An event a subagent raised. It shares its session's id and transcript path, but its
+    deal and deck sit beside its own transcript, so its reads, its audit and its compactions
+    never touch the main agent's."""
+
+    agent_id: SubagentId = field(kw_only=True)
+
+    @property
+    def stem(self) -> Path:
+        return self.subagent_transcripts / f"agent-{self.agent_id}.jsonl"
 
 
 @dataclass(frozen=True)

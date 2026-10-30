@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
+from itertools import islice
 from math import ceil
 from pathlib import Path
 from statistics import median
@@ -1246,6 +1247,25 @@ class ProgressPoint(DisclosedRecord):
 
 
 @dataclass(frozen=True)
+class LoggedCommit:
+    """One commit of a frame's history walk with the message every problem pattern greps."""
+    point: ProgressPoint
+    message: str
+
+    format: ClassVar[str] = f"{ProgressPoint.format}%x00%B%x00"
+
+    @classmethod
+    def walked(cls, output: str) -> tuple[LoggedCommit, ...]:
+        fields = output.split("\0")
+        return tuple(cls(ProgressPoint.listed(head), message)
+                     for head, message in zip(fields[0::2], fields[1::2]) if head.strip())
+
+    def matches(self, pattern: re.Pattern[str]) -> bool:
+        """Git's --grep: the pattern searched line by line, ignoring case."""
+        return bool(pattern.search(self.message))
+
+
+@dataclass(frozen=True)
 class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
@@ -1469,14 +1489,26 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
+    @cached_property
+    def walks(self) -> dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[LoggedCommit, ...]]:
+        """This frame's history walks, one per selection of refs; every order greps them."""
+        return {}
+
+    def walk(self, refs: tuple[str, ...], excluded: tuple[str, ...]) -> tuple[LoggedCommit, ...]:
+        if (refs, excluded) not in self.walks:
+            self.walks[refs, excluded] = LoggedCommit.walked(self.git(
+                "log", f"--format={LoggedCommit.format}", *refs, "--not", *excluded))
+        return self.walks[refs, excluded]
+
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
         if refs:
-            for line in self.git("log", "-1", "--extended-regexp", "--regexp-ignore-case",
-                                 f"--grep={pattern}", f"--format={ProgressPoint.format}",
-                                 *refs, "--not", *excluded).splitlines():
-                yield ProgressPoint.listed(line)
+            matcher = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+            for commit in self.walk(refs, excluded):
+                if commit.matches(matcher):
+                    yield commit.point
+                    return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
@@ -1728,6 +1760,10 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     def require_read(self) -> None:
         """A normal progress answer has no acquisition failure."""
 
+    def unjudged(self, edits: Callable[[], int]) -> int:
+        """A readable checkout counts its edits."""
+        return edits()
+
     def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
         """These source roots may still qualify edit ownership in this progress cut."""
         return paths
@@ -1798,6 +1834,10 @@ class UnreadProgress(OrderProgress):
 
     def require_read(self) -> None:
         raise WorkBranchError(self.reason)
+
+    def unjudged(self, edits: Callable[[], int]) -> int:
+        """The holder's card reports this checkout; a count must not fail the whole pass."""
+        return 0
 
     def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
         return ()
@@ -2557,6 +2597,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self.require_linkable()
         return replace(self, pull_requests=(*self.pull_requests, link))
 
+    def unlinked(self, link: PullRequestLink) -> Self:
+        """This order without ``link``; its state, id, check, run, edits and times stay."""
+        if link not in self.pull_requests:
+            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
+        return replace(self, pull_requests=tuple(
+            kept for kept in self.pull_requests if kept != link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2890,14 +2937,11 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
                          "Ask the commander for a send-back before opening or linking another PR.")
 
     def merged_link(self, link: PullRequestLink) -> MergedLink:
-        if link not in self.pull_requests:
-            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
-        return MergedLink(link, self.sha)
+        return MergedLink(link, self.unlinked(link).sha)
 
     def unmerged(self, link: PullRequestLink) -> PendingProblemOrder:
         """Pending again under its own id, check, run, edits and times, without ``link``."""
-        return self.copy_as(PendingProblemOrder, pull_requests=tuple(
-            kept for kept in self.pull_requests if kept != link))
+        return self.unlinked(link).copy_as(PendingProblemOrder)
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -3060,7 +3104,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         measured = MeasuredReview.read(context.comms.goals.todos)
         review_at = measured.review_at(self)
         message = self.message(context, document, unit, group, replacing, reassign)
-        request_id = request.for_order(context.comms.goals.todos, context.incarnation)
+        request_id = request.for_order(context.comms.goals.todos, context.actor_identity)
         target.record(context, self, unit, group, traced, request_id, review_at)
         self.publish(context, unit, group, message, answers)
         self.notify_replaced(context, unit, group, holders, listed, reassign)
@@ -3927,7 +3971,7 @@ class AssignTodo(TodoOperation):
             db, current.id, IncomingWork(
                 self.actor, self.group | {current.id}, frozenset({self.order.id})),
             RegistryStore.at(store.root).snapshot(), store.prepared_edits())
-        OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
+        OwnerRequest.require(db, id=self.request).require_open(self.actor)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -4420,10 +4464,12 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        project = goals.registry.snapshot().commander_project.require()
-        if (actor.commanding_identity != project.commander or
+        snapshot = goals.registry.snapshot()
+        project = snapshot.commander_project.require()
+        commanders = {thread.incarnation for thread in project.commanders(snapshot)}
+        if (actor.commanding_identity not in commanders or
                 request.repo not in project.repository_names()):
-            raise TodoError("Only this repository's commander or the director may review its heads.")
+            raise TodoError("Only a commander of this project or the director may review its heads.")
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
@@ -5110,6 +5156,23 @@ class CorrectMergedLinkTodo(CorrectOrderTodo):
 
     def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         return order.unmerged(self.previous.link)
+
+
+@dataclass(frozen=True)
+class CorrectLinkTodo(CorrectOrderTodo):
+    """The commander takes a pull request off an open order that never held its work, such as
+    another order's pull request recorded by a mistaken claim. The order keeps its state, holder,
+    review timer, strikes and every other link; a later send carries only the links left."""
+    previous: tuple[PullRequestLink, ...]
+    link: PullRequestLink
+
+    def part(self, order: OpenProblemOrder) -> tuple[PullRequestLink, ...]:
+        return order.pull_requests
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """A merged order's links are closed; CorrectMergedLinkTodo takes its merge back."""
+        order.require_linkable()
+        return order.unlinked(self.link)
 
 
 @dataclass(frozen=True)
@@ -5977,11 +6040,13 @@ class OwnerRequestStore(DurableStore):
         self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
-            return tuple(OwnerRequest.select(
-                db, where="commander_created_at=?",
-                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
-                order_by=("created_at", "id"), descending=descending, limit=limit,
-            ))
+            requests = (
+                request for request in OwnerRequest.stream(
+                    db, state=OpenRequestState(),
+                    order_by=("created_at", "id"), descending=descending,
+                ) if commander.commands(request.commander)
+            )
+            return tuple(islice(requests, None if limit < 0 else limit))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
         with self.writing() as db:
@@ -6328,7 +6393,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
                 RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
-            OwnerRequest.require(db, id=request).require_open(identity)
+            OwnerRequest.require(db, id=request).require_open(creator.acting_identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -6339,6 +6404,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def record_head(self, record: HeadReviewRecord) -> None:
         with self.writing() as db:
             StoredHeadReview.insert_values(db, record=record)
+
+    def recorded_head_review(self, actor: RecordedThreadIncarnation) -> bool:
+        """Whether this actor recorded any head verdict: the record keeps the actor's own
+        birth, a fork's included, so a fork's verdicts are its record in Core."""
+        actor_key = FieldCodec.record_key(HeadReviewRecord, 'actor')
+        birth_key = FieldCodec.record_key(RecordedThreadIncarnation, 'created_at')
+        with self.snapshot() as db:
+            return StoredHeadReview.exists(
+                db, where=f"json_extract({{record}}, '$.{actor_key}.{birth_key}') = ?",
+                parameters=(actor.created_at,))
 
     def unjudged_since(self, todo: Todo) -> float:
         """The problem's work starts at its first order; a send-back reissues the order but

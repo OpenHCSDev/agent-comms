@@ -1,9 +1,9 @@
 """Read/correct original annotation addresses without reader-side installation."""
 from dataclasses import replace
 import hashlib
-import sqlite3
-
 import pytest
+
+from agent_comms.coordination_database import ReadableStore
 
 from agent_comms.turn_context import (
     ContextSpan, ContributionCoordinates, FileProvenance, SystemLayerSegment,
@@ -26,8 +26,9 @@ def local_system(text, sources=()):
 def test_readers_do_not_create_a_missing_store(tmp_path):
     path = tmp_path / "missing" / "coordination.sqlite3"
     segment = local_system("Keep the original instructions.")
-    with pytest.raises(sqlite3.OperationalError):
-        WorkingMemoryAnnotations.for_segment(path, segment.measured_manifest(), JevClassifier.version())
+    with pytest.raises(FileNotFoundError):
+        WorkingMemoryAnnotations.for_segment(
+            ReadableStore(path), segment.measured_manifest(), JevClassifier.version())
     assert not path.exists()
 
 

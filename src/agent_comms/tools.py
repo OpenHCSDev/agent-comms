@@ -40,7 +40,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError, ToolRefusedError
+from .errors import ToolRefusedError
 from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
@@ -54,8 +54,7 @@ from .message_page import PageBounds
 from .message_reference import MessageReference
 from .messages import InfoKind, Message, MessageKind, NoticeRole, SendableMessageKind
 from .owner_lifecycle import OwnerStartResult
-from .owner_connection import OwnerConnection
-from .owner_launch import HostResources, ReadHostResourcesRuntimeRequest
+from .owner_launch import HostResources
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
@@ -340,10 +339,6 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
-        if not caller.may_reconfigure(comms, thread_name):
-            raise RelationViolationError(
-                f"{thread_name} is running; change its settings through its own session"
-            )
         thread = comms.threads.set_thread_configuration(original, self)
         return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
 
@@ -741,11 +736,7 @@ class CommsResourcesTool(ThreadReadTool):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ToolResult:
-        thread = comms.registry.require(caller.subject(self.thread))
-        return FieldCodec.decode(HostResources, OwnerConnection.exchange(
-            comms.root, thread.require_process(),
-            ReadHostResourcesRuntimeRequest(thread=thread.name),
-        ))
+        return HostResources.read(comms.root, comms.registry.require(caller.subject(self.thread)))
 
 
 @dataclass(frozen=True, kw_only=True)

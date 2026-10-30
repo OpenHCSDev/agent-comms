@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
@@ -24,13 +25,14 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
+from agent_comms.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.rule_deal import DealtSources, RuleDeal
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
-from agent_comms_hooks import ClaudeHookProgram, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook, ClaudeTranscriptHook
 from agent_comms_hooks.watch import WatchClaim
 
 if TYPE_CHECKING:
@@ -145,10 +147,15 @@ class FleetReader(DeckReader, audience=FleetAudience):
 
     @classmethod
     def sources(cls) -> tuple[Path, ...]:
+        """Everything leading, then the rules that close the deal."""
+        return (*cls.leading(), *(rule.path for rule in cls.rules() if rule.closes_deal))
+
+    @classmethod
+    def leading(cls) -> tuple[Path, ...]:
         """Proof first, then the rules it makes binding, then how they are said and broken."""
         return (
             *cls.proofs(),
-            *(rule.path for rule in cls.rules()),
+            *(rule.path for rule in cls.rules() if not rule.closes_deal),
             CommanderPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
         )
@@ -171,10 +178,12 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         return (cls.voice(), indictment, cls.tells(), cls.failures())
 
     @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        """The fleet's files, its own rules among them by audience, then the commander's."""
-        return (*super().sources(), CommanderPackage.indictment(), CommanderPackage.skill(),
-                Slop.catalog() / "README.md")
+    def leading(cls) -> tuple[Path, ...]:
+        """The fleet's files, its own rules among them by audience, then the commander's, and the
+        indictment after them: read once every proof and rule is understood, it is the record of
+        what the model still did anyway, never a preface to skim (Tristan, 2026-10-30)."""
+        return (*super().leading(), CommanderPackage.skill(), Slop.catalog() / "README.md",
+                CommanderPackage.indictment())
 
     def header(self, start: DeckStart) -> str:
         return start.held()
@@ -211,9 +220,43 @@ class DealtDeck(ClaudeTranscriptHook, RuleDeal):
         return self.stem.with_suffix(reader.deck_suffix)
 
 
+class StartReason(DeclaredFamily):
+    """Why Claude Code started the session; a member declares Claude Code's own spelling."""
+
+    def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
+        """The context is gone: the deck is dealt from its start and every file is read again."""
+        return start.dealt(reader)
+
+
+class LostContext(StartReason):
+    """A first start, a compaction or a clear: what the session read is no longer in front of it."""
+
+
+class Resume(StartReason, declared_name="resume"):
+    """Claude Code reattaches a session with its context intact. On 2026-10-30 a resume at
+    07:17 re-dealt claude-code mid-gate: its answered audit was unlinked and 23 read files
+    were demanded again."""
+
+    def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
+        return start.current().resume(lambda: start.dealt(reader), ())
+
+
+class SessionSource(str):
+    """Claude Code's name for why a session started, as its hook record spells it."""
+
+    def reason(self) -> StartReason:
+        return StartReason.member_or_default(self, LostContext)()
+
+
 @dataclass(frozen=True)
 class DeckStart(DealtDeck):
     """A session start, resume or compaction: the deal, its order and the deck."""
+
+    source: SessionSource = SessionSource("startup")
+
+    @classmethod
+    def of(cls, record: Mapping[str, object]) -> DeckStart:
+        return (SubagentDeckStart if cls.raised_by_subagent(record) else cls).decode(record)
 
     def take(self) -> tuple[str, ...]:
         """What this hook says: nothing to a session no bus binding names, the fleet's deck to
@@ -223,8 +266,8 @@ class DeckStart(DealtDeck):
             commander=lambda record: self.taken(CommanderReader()))
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        """A session start deals the deck."""
-        return self.dealt(reader)
+        """A start that lost the context deals the deck; a resume keeps the deal it holds."""
+        return self.source.reason().deal(self, reader)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path."""
@@ -236,13 +279,13 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. After each rule file, before the next unread file opens,"
-            " answer it in the audit: a line it holds quoted verbatim, what that line did, and why"
+            " answer it in the audit: greentext lines it holds quoted verbatim, what they did, and why"
             " it holds. Check what you did since your last start or compaction against it and"
             " name every action that broke it, and fix what you can: reading alone is passive, the"
             " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
             " one session). That audit is not optional: every tool but Read, and Write or Edit of"
             f" {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "quote": A LINE OF IT VERBATIM, "does": what that line did,'
+            ' {"rules": [{"rule": NAME, "quote": WHOLE GREENTEXT LINES OF IT VERBATIM, "does": what they did,'
             ' "why": why it holds, "broke": [each action since the last start or compaction that'
             ' broke it; empty means kept]}, one entry for every rule you were dealt],'
             ' "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are doing about'
@@ -295,10 +338,28 @@ class DeckStart(DealtDeck):
         self.deal(type(reader), prompts)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
+    def widened(self, reader: DeckReader) -> tuple[str, ...]:
+        """The deck of this session's role is the one record of the role it was dealt. A
+        session whose role changed finds none of its kind and is dealt only the files the role
+        adds, keeping what it read and wrote, since its context was never lost; a session bound
+        after it started is dealt in full and told so."""
+        deck = self.deck(reader)
+        if deck.exists():
+            return ()
+        said = self.current().widen(self, type(reader), lambda: self.dealt(reader), ())
+        deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
+        return said
+
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]
         return ("Commander: " + ", ".join(names) + "." if names
                 else "No commander project is registered for this session.")
+
+
+@dataclass(frozen=True)
+class SubagentDeckStart(DeckStart, ClaudeSubagentHook):
+    """A subagent's compaction deals the subagent's own deck: on 2026-10-30 a commander fork's
+    compaction dealt the main agent's stem, whose audit was then mid-answer."""
 
 
 class SkillText(ClaudeHookProgram):
@@ -310,7 +371,7 @@ class SkillText(ClaudeHookProgram):
 
 
 def main() -> None:
-    start = DeckStart.read()
+    start = DeckStart.of(json.load(sys.stdin))
     start.warn(*start.take())
 
 

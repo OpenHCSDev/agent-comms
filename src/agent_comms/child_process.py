@@ -36,7 +36,7 @@ from contextlib import (
 )
 from contextvars import copy_context
 from dataclasses import dataclass
-from functools import cached_property, partial
+from functools import cache, cached_property, partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
@@ -107,21 +107,30 @@ class ResidentMemory(ProcfsRecord):
 
     @classmethod
     def tree(cls, process: ProcessIdentity, proc: Path) -> dict[int, ResidentMemory]:
-        """A sampled descendant set, guarded by the root's exact process birth."""
+        """A sampled descendant set, guarded by the root's exact process birth. The kernel lists
+        each task's children, so only the subtree's status files are read."""
         if not process.alive():
             return {}
-        rows = {}
-        for directory in proc.glob("[0-9]*"):
+        rows: dict[int, ResidentMemory] = {}
+        pending = [process.pid]
+        while pending:
+            pid = pending.pop()
+            directory = proc / str(pid)
             try:
-                rows[int(directory.name)] = cls.read(directory)
+                rows[pid] = cls.read(directory)
             except (FileNotFoundError, ProcessLookupError):
                 continue
-        tree = {process.pid}
-        pending = set(rows) - tree
-        while children := {pid for pid in pending if rows[pid].parent in tree}:
-            tree.update(children)
-            pending.difference_update(children)
-        return {pid: rows[pid] for pid in tree & rows.keys()} if process.alive() else {}
+            pending.extend(child for child in cls.children(directory) if child not in rows)
+        return rows if process.alive() else {}
+
+    @staticmethod
+    def children(directory: Path) -> Iterator[int]:
+        """Every task's children: a child forked by a non-leader thread is listed only there."""
+        for listing in directory.glob("task/*/children"):
+            try:
+                yield from map(int, listing.read_text().split())
+            except (FileNotFoundError, ProcessLookupError):
+                continue
 
 class IdentityMismatchError(ProcessLookupError):
     """A recorded process incarnation is absent or has been replaced."""
@@ -281,6 +290,16 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
+        return cls.current() if pid == os.getpid() else Platform.current().identity(pid)
+
+    @classmethod
+    def current(cls) -> ProcessIdentity:
+        """The caller's immutable birth; a fork selects its own PID, not its parent's."""
+        return cls._current(os.getpid())
+
+    @staticmethod
+    @cache
+    def _current(pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
 
     def allows_owner_start(self) -> bool:
@@ -567,6 +586,8 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Wait for a member's exit or the caller's remaining deadline."""
 
     def matches(self, identity: ProcessIdentity) -> bool:
+        if identity.runs_here():
+            return identity == ProcessIdentity.current()
         try:
             return self.identity(identity.pid) == identity
         except ProcessLookupError:

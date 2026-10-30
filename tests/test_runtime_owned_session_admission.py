@@ -17,10 +17,10 @@ from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import AcpSessionId, FieldCodec
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.private_path import PrivateSocketRole
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
 from agent_comms.threads import Thread
 
@@ -63,7 +63,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     assert json.loads(registered.stdout) == {"registered": "registered"}
     thread = comms.registry.require("registered")
     await owner._runtime.start()
-    proxy = RuntimeProxy(client, "registered", socket_path(root, os.getpid()))
+    proxy = client._create_runtime_proxy(thread, AcpSessionId("registered"))
     try:
         for action, parameters in (
             (
@@ -94,7 +94,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
 
         retired = Thread('retired-owner', frozenset(), Checkout(project), process_identity=ProcessIdentity.capture(os.getpid()))
         comms.registry.declare(retired)
-        await owner.sessions.bind_owned(retired, "retired-acp-session")
+        await owner.sessions.bind_owned(retired, AcpSessionId("retired-acp-session"))
         await asyncio.to_thread(comms.owners.stop, retired.name)
         comms.registry.remove(retired.name)
         snapshot = comms.registry.snapshot()
@@ -105,7 +105,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
 
         # Use the original production publisher before another independent read.
         # The failed prompt is never resent or turned into a binding.
-        await owner.sessions.bind_owned(thread, "original-acp-session")
+        await owner.sessions.bind_owned(thread, AcpSessionId("original-acp-session"))
         assert await proxy.request("goal_history") == {"history": [], "failures": []}
         comms.registry.rename("registered", "renamed-owner")
         assert await proxy.request("goal_history") == {"history": [], "failures": []}

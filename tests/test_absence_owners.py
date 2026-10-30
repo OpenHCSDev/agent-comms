@@ -5,7 +5,8 @@ import asyncio
 import pytest
 
 from agent_comms import agent_events as events
-from agent_comms.agent_backend import InputStartListener, NoInputStartListener, SendNow, TurnInbox
+from agent_comms.agent_backend import InputStartListener, NoInputStartListener
+from agent_comms.turn_inbox import SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError

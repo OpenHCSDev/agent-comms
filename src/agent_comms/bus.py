@@ -50,7 +50,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
@@ -490,17 +490,12 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class StoredBusReader(BusReader):
+class StoredBusReader(BusReader, SQLiteReader):
     """File-backed readers use SQLite snapshots; held snapshots need no connection."""
-
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The file named by this reader's owning declaration."""
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        with SQLiteFile.opened_reader(self.path) as db:
+        with self.reader_snapshot() as db:
             yield db
 
 

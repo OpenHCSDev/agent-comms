@@ -210,8 +210,8 @@ class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
         return super().read()
 
     def native(self) -> frozenset[MessageReference]:
-        return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
-            self.references)
+        return self.privacy.native_answered(
+            HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy), self.references)
 
     def external(self) -> frozenset[MessageReference]:
         return ExternalTranscript(self.root, self.thread.incarnation).answered_inputs(self.references)
@@ -340,6 +340,9 @@ class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
 
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
+
+    def read(self) -> int:
+        return self.progress.unjudged(super().read)
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))

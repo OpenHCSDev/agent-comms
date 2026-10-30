@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import RootId
+from agent_comms.field_codec import AcpSessionId, RootId
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication
@@ -20,4 +20,4 @@ class InputEffects(ABC):
     def _debug_log(self, message: str) -> None: ...
 
     @abstractmethod
-    async def _drain_private_nk(self, session_id: str, wire_root_id: RootId) -> int: ...
+    async def _drain_private_nk(self, session_id: AcpSessionId, wire_root_id: RootId) -> int: ...

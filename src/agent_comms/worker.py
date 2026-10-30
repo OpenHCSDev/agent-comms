@@ -17,11 +17,11 @@ from .root_runtime import RootRuntimeStore
 
 
 async def run() -> None:
-    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     parser = argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__)
     parser.add_argument("--listener-fd", type=int, required=True)
     options = parser.parse_args()
-    await run_host(wire(), options.listener_fd)
+    await run_host(wire(root.path), options.listener_fd)
 
 
 async def run_host(comms: Comms, listener_fd: int) -> None:

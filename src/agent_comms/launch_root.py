@@ -83,16 +83,18 @@ class LaunchRoot(LaunchSelection, LaunchRequest):
         return self.argument, str(self.path)
 
     @classmethod
-    def startup(cls, arguments: list[str], published: Callable[[], LaunchRoot]) -> None:
+    def startup(cls, arguments: list[str], published: Callable[[], LaunchRoot]) -> LaunchRoot:
         if cls.argument in arguments:
             index = arguments.index(cls.argument)
             if index + 1 == len(arguments):
                 raise ValueError(f"{cls.argument} requires a root")
             record = FieldCodec.decode(cls, {"path": arguments[index + 1]})
-            cls.from_path(record.path).install()
+            root = cls.from_path(record.path)
             del arguments[index : index + 2]
         else:
-            published().install()
+            root = published()
+        root.install()
+        return root
 
     @classmethod
     def environment(cls, source: Mapping[str, str]) -> dict[str, str]:

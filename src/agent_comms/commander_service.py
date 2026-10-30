@@ -23,7 +23,7 @@ class CommanderService:
     def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
         """The oldest open request makes a live holder owed service, even before its first beat."""
         return tuple(request for live in cls.live((thread,))
-                     for request in goals.todos.open_requests(live.incarnation, limit=1, descending=False))
+                     for request in goals.todos.open_requests(live.acting_identity, limit=1, descending=False))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, commander: str) -> tuple[Thread, ...]:

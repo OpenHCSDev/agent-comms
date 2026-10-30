@@ -33,6 +33,14 @@ class CompletedWatch:
         return 2 * cls.pass_duration + Coordination.watch_period
 
 
+class CommanderPass(CompletedWatch):
+    """The commander's board pass: its service runs it, and its readers judge freshness by it."""
+
+    pass_duration: ClassVar[float] = 270
+    """The longest pass on the live bus: first passes after the 2026-10-30 installs took
+    190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
+
+
 @dataclass(frozen=True)
 class FailingPass:
     """A watch failing since its first failed pass, with its newest error and the time of its
@@ -71,7 +79,7 @@ class ServicePasses:
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
         """Only the commander's completion clock determines heartbeat freshness."""
-        return heartbeat.since(time.time() - 3 * Coordination.watch_period)
+        return heartbeat.since(time.time() - CommanderPass.completion_ceiling())
 
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
@@ -126,11 +134,16 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
     async def wait_completed(
         self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
         watch: type[CompletedWatch],
-    ) -> None:
-        """Join ordinary recorded completions, never run the watch being qualified.
+    ) -> tuple[RecordedThreadIncarnation, ...]:
+        """Join the first ordinary recorded completion, never run the watch being qualified,
+        and return the commanders it has not reached yet.
 
-        Subscribe before reading, so a completion between the first read and wait
-        cannot disappear. A partial pass plus a recorded failure is not acceptance.
+        One completed pass after ``since`` is the service running on the new runtime. Which
+        commanders a pass reaches is each commander's own state (a session whose bridge is down
+        gets no delivery), so the rest are reported, never awaited: waiting on them held the
+        2026-10-30 installs 518 s and 376 s on claude-nra's absent bridge. Subscribe before
+        reading, so a completion between the first read and wait cannot disappear. A recorded
+        failure is not acceptance.
         """
         pending = commanders
         timeout = asyncio.timeout(watch.completion_ceiling())
@@ -144,13 +157,13 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
                             raise ToolRefusedError(passes.failing[name].failure_line(name))
                         pending = tuple(owner for owner in commanders
                                         if not passes.completed_since(owner, since))
-                        if not pending:
-                            return
+                        if len(pending) < len(commanders):
+                            return pending
         except TimeoutError as error:
             if not timeout.expired():
                 raise
             raise ToolRefusedError(
-                f"{name} has no ordinary completion since service restart {since}: "
+                f"{name} has no ordinary completion since service restart {since} for any of: "
                 + ", ".join(owner.name for owner in pending)
             ) from error
 

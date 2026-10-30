@@ -1,6 +1,7 @@
 """A held phase's clock reads the real stored order history, not an inline tuple double."""
 from dataclasses import replace
 
+from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.recorded_time import RecordedEventTime
@@ -23,14 +24,14 @@ def held_order(comms, number: int, at: float, previous: tuple[float, ...] = ()):
 
 def test_a_resent_order_keeps_the_first_orders_time(recorded_problem, source_repository):
     current = held_order(recorded_problem, 1, 5000, previous=(100,))
-    reading = PlanReading((current,), MainTree.of(source_repository))
+    reading = PlanReading((current,), MainTree.of(source_repository, NominalCensus()))
     assert BusWriterPhase.ordered_since(reading) == 100
 
 
 def test_the_oldest_held_order_sets_the_clock(recorded_problem, source_repository):
     first = held_order(recorded_problem, 1, 300)
     second = held_order(recorded_problem, 2, 200)
-    reading = PlanReading((first, second), MainTree.of(source_repository))
+    reading = PlanReading((first, second), MainTree.of(source_repository, NominalCensus()))
     assert BusWriterPhase.ordered_since(reading) == 200
 
 
@@ -40,14 +41,14 @@ def test_an_unheld_order_does_not_count(recorded_problem, source_repository):
     released = comms.goals.todos.apply(current.id, ReleaseTodo(current.revision,
         comms.registry.require("lead").incarnation, current.held(),
         StrikeReason("The commander releases this order so another worker can repair the owner.")))
-    reading = PlanReading((released,), MainTree.of(source_repository))
+    reading = PlanReading((released,), MainTree.of(source_repository, NominalCensus()))
     assert not BusWriterPhase.ordered(reading)
 
 
 def test_an_unplanned_reason_answers_without_reading_main(source_repository):
     from agent_comms.plan_phases import UnplannedPhase
 
-    reading = PlanReading((), MainTree.of(source_repository))
+    reading = PlanReading((), MainTree.of(source_repository, NominalCensus()))
     reason = "This repair keeps the order tool usable before the planned work resumes."
     assert UnplannedPhase.order_refusals(reading, reason) == ()
     assert not reading.reads

@@ -71,7 +71,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
             is ReservedInput)
     state = next(
         f
-        for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
+        for f in decode_updates((await agent.sessions.metadata("beta", session_id=AcpSessionId("beta"))))
         if isinstance(f, QueueChangedUpdate)
     )
     assert state.scope.claimed_identity.incarnation.name == "beta"
@@ -144,7 +144,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.agent_backend import ClearQueue, SendNow
+    from agent_comms.turn_inbox import ClearQueue, SendNow
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
 
     comms, agent, _, _ = _owner(tmp_path)
@@ -173,8 +173,8 @@ async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_
 
 async def test_alias_maps_only_attachment_session_id(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
-    state = await agent.inputs.queue_state("beta")
-    (rebased,) = decode_updates(present_session(encode_updates(state), "alias"))
+    state = await agent.inputs.queue_state(AcpSessionId("beta"))
+    (rebased,) = decode_updates(present_session(encode_updates(state), AcpSessionId("alias")))
     assert rebased.scope.session_id == "alias"
     assert rebased.scope.claimed_identity == state.scope.claimed_identity
     assert rebased.projection is not None and rebased.projection == state.projection
@@ -187,16 +187,16 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
     scopes = (
         LiveQueueScope(
-            session_id="official-acp-id", claimed_identity=original, owner=ProcessIdentity(123, 1),
+            session_id=AcpSessionId("official-acp-id"), claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
         LiveCursorScope(
-            session_id="official-acp-id", wire_root_id=RootId("a" * 32),
+            session_id=AcpSessionId("official-acp-id"), wire_root_id=RootId("a" * 32),
             claimed_identity=original, owner=ProcessIdentity(123, 1),
         ),
     )
     for scope in scopes:
         assert scope.relation(replace(scope, claimed_identity=renamed)).current
-        assert scope.relation(replace(scope, session_id="new-route")).foreign
+        assert scope.relation(replace(scope, session_id=AcpSessionId("new-route"))).foreign
         assert scope.relation(replace(scope, owner=ProcessIdentity(124, 1))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, incarnation=replace(original.incarnation, created_at=1001.0)))).ambiguous
         assert scope.relation(replace(scope, claimed_identity=replace(original, claimed_generation=8))).newer

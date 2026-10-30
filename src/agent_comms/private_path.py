@@ -155,9 +155,9 @@ class FileRevision(RecordMember, FileObservation):
         return cls.from_stat(os.fstat(stream.fileno()))
 
     @classmethod
-    def capture(cls, path: Path) -> FileObservation:
+    def capture(cls, path: Path, *, follow_symlinks: bool = True) -> FileObservation:
         try:
-            return cls.from_stat(path.stat())
+            return cls.from_stat(path.stat(follow_symlinks=follow_symlinks))
         except FileNotFoundError:
             return MissingFile()
 

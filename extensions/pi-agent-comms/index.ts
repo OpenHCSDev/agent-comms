@@ -6,7 +6,7 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -57,13 +57,26 @@ function run(args: string[], launchArguments: string[], timeout = 30_000): Recor
 export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
 	pi.registerFlag("comms-catalog", { type: "string", description: "Core native launch catalog" });
-	let serviceTier: unknown;
+	let catalogRevision: string | undefined;
+	let catalog: Record<string, unknown>;
+	const readCatalog = (): Record<string, unknown> => {
+		const path = pi.getFlag("comms-catalog");
+		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
+		const revision = statSync(path, { bigint: true });
+		const key = `${revision.mtimeNs}:${revision.size}`;
+		if (key !== catalogRevision) {
+			catalog = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+			catalogRevision = key;
+		}
+		return catalog;
+	};
 	let launchArguments: string[];
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
 	pi.on("before_provider_request", (event, ctx) => {
 		if (!currentThread || !ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
+		const serviceTier = readCatalog().service_tier;
 		if (serviceTier !== "priority") return;
 		if (typeof event.payload !== "object" || event.payload === null || Array.isArray(event.payload)) {
 			ctx.abort();
@@ -75,10 +88,7 @@ export default function (pi: ExtensionAPI) {
 	// standalone forks attach themselves, checkpoint, publish activity and release.
 	// Decode the one launch catalog before any standalone session hook uses it.
 	pi.on("session_start", () => {
-		const path = pi.getFlag("comms-catalog");
-		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
-		const startup = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-		serviceTier = startup.service_tier;
+		const startup = readCatalog();
 		launchArguments = startup.launch_arguments as string[];
 		const catalog = startup.tools as ToolDeclaration[];
 		for (const declaration of catalog) {
@@ -88,8 +98,8 @@ export default function (pi: ExtensionAPI) {
 				description: declaration.description,
 				parameters: Type.Unsafe(declaration.parameters),
 				async execute(_id, params, _signal, _onUpdate, ctx) {
-					if (declaration.name === "comms_model") {
-						const selected = String(params.model ?? "").trim();
+					if (declaration.name === "comms_model" && params.model != null) {
+						const selected = String(params.model).trim();
 						const separator = selected.indexOf("/");
 						if (separator <= 0 || separator === selected.length - 1) {
 							throw new Error("Model must be an exact provider/model identifier");
@@ -116,7 +126,6 @@ export default function (pi: ExtensionAPI) {
 						"tool", ...(currentThread ? ["--from", currentThread] : []),
 						"--tool", declaration.name, "--arguments", JSON.stringify(params),
 					], launchArguments);
-					if (declaration.name === "comms_model" && result.thread === currentThread) serviceTier = result.service_tier;
 					return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }], details: result };
 				},
 			});

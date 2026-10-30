@@ -4,7 +4,7 @@ but reading them and writing the audit that answers them is refused until it has
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
 path forward, whatever runs the agent. Reading alone is passive too, so each rule read is answered
-in the audit, by a verbatim quote and what it did, before the next unread file opens.
+in the audit, by a verbatim greentext quote and what it did, before the next unread file opens.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -16,17 +16,20 @@ Code hooks deny a PreToolUse event, Core's Pi tool owner raises a tool denial.
 
 from __future__ import annotations
 
+import hashlib
 import json
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from pathlib import Path
+from importlib.util import find_spec
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
-from .store_files import AtomicFile
+from .locked_store import DocumentChange, LockedStore
+from .store_files import AtomicFile, DependentStateTier, SingleFileStore
 
 if TYPE_CHECKING:
     from .commander.rule_file import RuleFile
@@ -53,9 +56,77 @@ class ReadSpan:
 
 
 @dataclass(frozen=True)
+class DealtSource:
+    """A dealt file by what it is, never by where an install put it: its package and its path
+    inside that package. Every install moves the runtime, so a read keyed by the absolute path
+    was a read of a place, and each identical install demanded every file again."""
+
+    package: str
+    relative: str
+
+    @classmethod
+    def of(cls, path: Path) -> DealtSource:
+        """The installed package file this path names, under this runtime or an earlier one."""
+        for index, name in enumerate(path.parts[:-1]):
+            source = cls(name, PurePosixPath(*path.parts[index + 1:]).as_posix())
+            if name.isidentifier() and source.installed():
+                return source
+        raise ValueError(f"{path} names no file of an installed package")
+
+    def installed(self) -> bool:
+        spec = find_spec(self.package)
+        return bool(spec and spec.submodule_search_locations) and self.path.is_file()
+
+    @property
+    def path(self) -> Path:
+        """Where the running install holds this file."""
+        spec = find_spec(self.package)
+        assert spec is not None and spec.submodule_search_locations is not None
+        return Path(spec.submodule_search_locations[0]) / self.relative
+
+    def digest(self) -> str:
+        return hashlib.sha256(self.path.read_bytes()).hexdigest()
+
+
+@dataclass(frozen=True)
+class OpenedReads:
+    """The dealt files the gate let a read open since context was last lost, in order. A
+    parallel batch's reads are each judged before any one completes, so the gate counts what
+    it opened, not only what finished."""
+
+    sources: tuple[DealtSource, ...] = ()
+
+    def opening(self, path: Path) -> OpenedReads:
+        return OpenedReads((*self.sources, DealtSource.of(path)))
+
+
+@dataclass(frozen=True, slots=True)
+class OpenedReadsStore(SingleFileStore, LockedStore[OpenedReads], DependentStateTier):
+    """One session's opened reads beside its deal. Each read is judged and recorded in one
+    change, so concurrent hooks see every read opened before theirs."""
+
+    record_type = OpenedReads
+
+    def empty(self) -> OpenedReads:
+        return OpenedReads()
+
+
+@dataclass(frozen=True)
+class DealtRead:
+    """One dealt file read in full: the source and the content that was read. It still counts
+    under any runtime holding that content, and stops counting the moment the file changes."""
+
+    source: DealtSource
+    digest: str
+
+    def current(self) -> bool:
+        return self.digest == self.source.digest()
+
+
+@dataclass(frozen=True)
 class RuleAudit:
     """One dealt rule: each action since the last start or compaction that broke it, and the
-    answer to reading it: a line it holds verbatim, what that line did, and why it holds."""
+    answer to reading it: greentext lines it holds verbatim, what they did, and why it holds."""
 
     rule: str
     broke: tuple[str, ...] = ()
@@ -69,8 +140,12 @@ class RuleAudit:
         """Why this entry does not answer reading `source`, or nothing when it does."""
         if not self.quote.strip():
             return "its quote is blank"
-        if self.quote not in source.read_text(encoding="utf-8"):
+        text = source.read_text(encoding="utf-8")
+        if self.quote not in text:
             return f"its quote is not verbatim in {source}"
+        greentext = {line for line in text.splitlines() if line.startswith("> ")}
+        if not greentext.issuperset(self.quote.splitlines()):
+            return f"its quote must be whole greentext lines of {source}: every line starts with >"
         if len(self.quote.splitlines()) > self.max_quote_lines:
             return f"its quote runs past {self.max_quote_lines} lines"
         if not self.does.strip() or not self.why.strip():
@@ -170,8 +245,8 @@ class AuditDue:
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
                 "After each rule file you read, answer it in the audit before the next unread file"
-                f" opens: quote a line it holds, verbatim and at most {RuleAudit.max_quote_lines}"
-                " lines; does says what that line did to you; why says why it holds. Answered:\n"
+                f" opens: quote its greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
+                " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
                 " keep every rule name and quoted words unchanged. Empty broke means the rule was"
@@ -288,30 +363,86 @@ class Blocked(ToolGateState):
     def permits_read(self, path: Path) -> bool:
         return self.cause.permits_read(path)
 
+    def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
+        """A refresh passed while the deal is being answered is answered by it: the context
+        filled with the very files being read. Dealing them again once the gate opened made
+        frame-baseline and install-speed reread 16 files the call after finishing 25 (bus 45261,
+        45247)."""
+        deal.refresh_answered(usage)
+
 
 @dataclass(frozen=True)
 class DealRecord:
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
-    the audit hang off it, and a new deal resets both before it is written."""
+    the audit hang off it; a deal that follows lost context empties the read log and deletes
+    the audit, so every rule is answered again by the instance that just read it."""
 
     dealt: tuple[Path, ...]
     due: AuditDue
 
-    def read_by(self, deal: RuleDeal) -> tuple[Path, ...]:
-        """The dealt files read in full so far, first read first."""
-        log = deal.dealt_read.read_text(encoding="utf-8").splitlines()
-        return tuple(dict.fromkeys(path for path in map(Path, log) if path in self.dealt))
+    def sources(self) -> tuple[DealtSource, ...]:
+        return tuple(DealtSource.of(path) for path in self.dealt)
 
-    def answer(self, deal: RuleDeal) -> ToolGateState:
+    @property
+    def paths(self) -> tuple[Path, ...]:
+        """The dealt files where the running install holds them."""
+        return tuple(source.path for source in self.sources())
+
+    def read_by(self, deal: RuleDeal) -> tuple[Path, ...]:
+        """The dealt files whose current content was read in full, first read first."""
+        sources = frozenset(self.sources())
+        return tuple(dict.fromkeys(
+            read.source.path for read in deal.reads() if read.source in sources and read.current()
+        ))
+
+    def opened_by(self, deal: RuleDeal, opened: OpenedReads) -> tuple[Path, ...]:
+        """The dealt files read in full, then those whose read the gate let open and that have
+        not finished: a parallel batch's reads are each judged before any one is recorded, so a
+        read in flight counts, or every rule in the batch opens unanswered."""
+        sources = frozenset(self.sources())
+        return tuple(dict.fromkeys((
+            *self.read_by(deal),
+            *(source.path for source in opened.sources if source in sources),
+        )))
+
+    def widen[Said](self, deal: RuleDeal, dealt: type[DealtSources],
+                    full: Callable[[], Said], kept: Said) -> Said:
+        """A session whose role now follows more sources is dealt only those: what it read and
+        wrote stays, since its context was never lost."""
+        deal.publish(DealRecord(
+            tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
+            AuditDue(self.due.rules | {rule.name for rule in dealt.rules()}, self.due.owner_words),
+        ))
+        return kept
+
+    def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
+        """A resume keeps the context it had, and the deal it still answers: its reads and
+        audit stay."""
+        return kept
+
+    def answer(self, deal: RuleDeal, opened: OpenedReads) -> ToolGateState:
         """The first requirement still owed holds the gate; with none owed it is open."""
-        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self))
+        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self, opened))
         return next(owed, Open()).state()
 
 
 class UndealtRecord(DealRecord):
     """The record of a session with no deal on disk: nothing dealt, nothing due."""
 
-    def answer(self, deal: RuleDeal) -> ToolGateState:
+    def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
+        """A session never dealt is dealt at its first start, whatever started it."""
+        return deal()
+
+    @property
+    def paths(self) -> tuple[Path, ...]:
+        return ()
+
+    def widen[Said](self, deal: RuleDeal, dealt: type[DealtSources],
+                    full: Callable[[], Said], kept: Said) -> Said:
+        """A session bound after it started is dealt in full."""
+        return full()
+
+    def answer(self, deal: RuleDeal, opened: OpenedReads) -> ToolGateState:
         return Undealt()
 
 
@@ -330,7 +461,7 @@ class Owed(State):
 
     @classmethod
     @abstractmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         """This case, when the deal owes it."""
 
     @property
@@ -348,28 +479,29 @@ class Unengaged(Owed):
     """A rule was read and its audit entry does not answer it. Nothing unread opens until it
     does; what was already read stays open, since re-reading is how it gets answered."""
 
-    source: Path
-    fault: str
+    faults: tuple[tuple[Path, str], ...]
     read: tuple[Path, ...]
 
     before: ClassVar[str] = "answering the rule you just read"
 
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
-        read = record.read_by(deal)
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
+        read = record.opened_by(deal, opened)
         audit = SessionAudit.read(deal.audit)
-        for source in read:
-            if source.stem in record.due.rules and (
-                fault := audit.fault() or audit.entry(source.stem).unengaged(source)
-            ):
-                yield cls(record, deal.audit, source, fault, read)
+        faults = tuple(
+            (source, fault) for source in read if source.stem in record.due.rules
+            and (fault := audit.fault() or audit.entry(source.stem).unengaged(source))
+        )
+        if faults:
+            yield cls(record, deal.audit, faults, read)
 
     @property
     def reason(self) -> str:
-        return (
-            f"You read {self.source} and the audit's entry for {self.source.stem} does not"
-            f" answer it: {self.fault}. Answer it in {self.audit} before the next file opens."
-        )
+        """Every unanswered rule at once, so one rewrite of the audit can clear them all."""
+        return " ".join(
+            f"You read {source} and the audit's entry for {source.stem} does not answer it:"
+            f" {fault}." for source, fault in self.faults
+        ) + f" Answer each in {self.audit} before the next file opens."
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
@@ -377,24 +509,37 @@ class Unengaged(Owed):
 
 @dataclass(frozen=True)
 class Unread(Owed):
-    """A dealt file has not been read in full."""
+    """A dealt file has not been read in full. They open in the order dealt: the papers first,
+    the indictment last. On 2026-10-30 claude-code opened the indictment and two rules first and
+    never read either paper, because any unread dealt file opened."""
 
     remaining: tuple[Path, ...]
+    unopened: tuple[Path, ...]
+    """The dealt files no read has opened yet, in the order dealt; one in flight counts as
+    opened, so a parallel batch's first read does not pin the order to itself."""
 
     before: ClassVar[str] = "reading"
 
+    def permits_read(self, path: Path) -> bool:
+        """Any file already opened, since re-reading is how a rule gets answered, or the next
+        unopened one in the dealt order."""
+        return path not in self.unopened or path == self.unopened[0]
+
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         read = record.read_by(deal)
-        remaining = tuple(source for source in record.dealt if source not in read)
+        remaining = tuple(source for source in record.paths if source not in read)
         if remaining:
-            yield cls(record, deal.audit, remaining)
+            taken = record.opened_by(deal, opened)
+            yield cls(record, deal.audit, remaining,
+                      tuple(source for source in record.paths if source not in taken))
 
     @property
     def reason(self) -> str:
         return (
-            "Read the rules you were dealt first, each in full with your read tool (no offset"
-            " or limit): " + ", ".join(str(source) for source in self.remaining)
+            f"Read the rules you were dealt first, in the order dealt, each in full with your"
+            f" read tool (no offset or limit). Next: {next(iter(self.unopened), self.remaining[0])}."
+            " Still unread: " + ", ".join(str(source) for source in self.remaining)
             + ". Your summary is a paraphrase of them, not a reading."
         )
 
@@ -408,7 +553,7 @@ class Unaudited(Owed):
     before: ClassVar[str] = "writing the required audit"
 
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         refusal = record.due.refusal(SessionAudit.read(deal.audit))
         if refusal:
             yield cls(record, deal.audit, refusal)
@@ -455,8 +600,20 @@ class RuleDeal(State):
 
     @property
     def dealt_read(self) -> Path:
-        """The dealt files read in full since the last deal, one path per line."""
-        return self.stem.with_suffix(".dealt-read")
+        """The dealt files read in full since context was last lost, one DealtRead per line."""
+        return self.stem.with_suffix(".dealt-reads")
+
+    @property
+    def dealt_opened(self) -> OpenedReadsStore:
+        return OpenedReadsStore(self.stem.with_suffix(".dealt-opened"))
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        if not self.dealt_read.exists():
+            return ()
+        return tuple(
+            FieldCodec.decode(DealtRead, FieldCodec.parse(line.encode()))
+            for line in self.dealt_read.read_text(encoding="utf-8").splitlines()
+        )
 
     @property
     def audit(self) -> Path:
@@ -481,14 +638,17 @@ class RuleDeal(State):
             return UndealtRecord((), AuditDue(frozenset(), ()))
 
     def state(self) -> ToolGateState:
-        return self.current().answer(self)
+        return self.current().answer(self, self.dealt_opened.read())
 
     def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
-        """A start or compaction drops what was read: the read log and the audit reset first,
-        then the record is published whole, so no reader sees a half-written deal."""
+        """A start or compaction drops what was read: the read log resets first, then the record
+        is published whole, so no reader sees a half-written deal. The audit goes with the reads:
+        a fresh instance owes a fresh confession, never one carried over from the context it
+        lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
         self.dealt_read.write_text("", encoding="utf-8")
+        self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
         self.publish(
             DealRecord(
@@ -503,11 +663,14 @@ class RuleDeal(State):
         )
 
     def record_read(self, path: Path, span: ReadSpan) -> None:
-        """A completed read covering a whole dealt file counts it; any other read counts nothing."""
-        if path not in self.current().dealt or not span.covers(path):
+        """A completed read covering a whole dealt file counts its content; any other read
+        counts nothing."""
+        if path not in self.current().paths or not span.covers(path):
             return
+        source = DealtSource.of(path)
+        read = DealtRead(source, source.digest())
         with self.dealt_read.open("a", encoding="utf-8") as record:
-            record.write(f"{path}\n")
+            record.write(json.dumps(FieldCodec.encode(read)) + "\n")
 
 
 class ToolGate(RuleDeal):
@@ -521,11 +684,21 @@ class ToolGate(RuleDeal):
     def judge_read(self, tool: str, path: Path) -> None:
         """Reading a dealt file the state permits is the way through the gate, and the session
         may always read its own audit to answer it; any other read waits."""
-        state = self.state()
         if path == self.audit.resolve():
             return
-        if path not in self.current().dealt or not state.permits_read(path):
-            state.enforce(self, tool)
+        record = self.current()
+        if path not in record.paths:
+            self.state().enforce(self, tool)
+            return
+
+        def judged(opened: OpenedReads) -> DocumentChange[OpenedReads, ToolGateState]:
+            """One change decides the read and records it, so the next hook sees it."""
+            state = record.answer(self, opened)
+            if state.permits_read(path):
+                return DocumentChange(opened.opening(path), Open())
+            return DocumentChange(opened, state)
+
+        self.dealt_opened.update(judged).enforce(self, tool)
 
     def judge_write(self, tool: str, path: Path) -> None:
         """Writing the audit itself is the way through the gate; any other write waits."""
@@ -603,12 +776,21 @@ class Redeals(RuleDeal):
 
     def refresh_due(self, usage: ContextUsage) -> None:
         """Every refresh the context passed that this compaction has not dealt yet deals once."""
+        if self.passed(usage):
+            self.reread()
+
+    def refresh_answered(self, usage: ContextUsage) -> None:
+        """Every refresh the context passed while the deal is read counts as dealt."""
+        self.passed(usage)
+
+    def passed(self, usage: ContextUsage) -> tuple[str, ...]:
+        """The refreshes the context passed since the last compaction, each recorded once."""
         done = frozenset(self.refreshed.read_text(encoding="utf-8").split())
-        if due := [
+        due = tuple(
             refresh.key
             for refresh in self.refreshes
             if refresh.due(usage) and refresh.key not in done
-        ]:
-            with self.refreshed.open("a", encoding="utf-8") as record:
-                record.write("".join(f"{key}\n" for key in due))
-            self.reread()
+        )
+        with self.refreshed.open("a", encoding="utf-8") as record:
+            record.write("".join(f"{key}\n" for key in due))
+        return due
