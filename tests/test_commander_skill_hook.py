@@ -17,7 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.rule_deal import CompactedDeal, StartedDeal, Unengaged, UnstampedCompactionDeal
+from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
+                                   UnstampedCompactionDeal)
 
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
@@ -51,7 +52,8 @@ from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
+from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
+                                     Prime, UnboundPrimeError)
 from agent_comms_hooks.watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
@@ -449,6 +451,41 @@ def test_every_deal_reads_the_paper_before_any_rule():
         paper = CommanderPackage.paper()
         assert paper and sources[:len(paper)] == paper
         assert sources[len(paper)] == RuleFile.packaged()[0].path
+
+
+def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indictment_last():
+    """/prime deals a selection of the one reader list: each variant keeps or drops the papers
+    and the commander's indictment, every rule stays, and a kept indictment stays last."""
+    paper = set(CommanderPackage.paper())
+    indictment = CommanderPackage.indictment()
+    kept = set()
+    for prime in Prime.members_with(Prime):
+        commander = prime.commander.sources()
+        assert indictment not in prime.fleet.sources()
+        assert all(rule.path in commander for rule in CommanderReader.rules())
+        kept.add((paper <= set(commander), indictment in commander))
+        if indictment in commander:
+            assert prime.commander.leading()[-1] == indictment
+        assert prime.commander.slices() and prime.fleet.slices()
+    assert kept == {(True, True), (True, False), (False, True), (False, False)}
+
+
+def test_every_prime_variant_says_it_was_primed_never_that_the_session_started():
+    for prime in Prime.members_with(Prime):
+        reason = prime.trigger().reason()
+        assert f"/prime ({prime.declared_name})" in reason
+        assert reason != StartedDeal().reason()
+
+
+def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode({"hook_event_name": "SessionStart", "session_id": "loose",
+                              "transcript_path": str(transcript)})
+    with pytest.raises(UnboundPrimeError, match="loose"):
+        start.primed(FullPrime)
+    assert not transcript.with_suffix(".deal.json").exists()
 
 
 def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):

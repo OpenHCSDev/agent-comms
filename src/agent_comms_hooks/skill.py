@@ -31,8 +31,8 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, RuleDeal, StartedDeal,
-    UnstampedCompactionDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal, RuleDeal,
+    StartedDeal, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
@@ -70,6 +70,11 @@ class DeckReader(DealtSources):
     def proofs(cls) -> tuple[Path, ...]:
         """The papers every rule is a consequence of, read before any rule."""
         return CommanderPackage.paper()
+
+    @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        """The record of what the reader actually did; a fleet session is dealt none."""
+        return ()
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -177,9 +182,15 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
     deck_suffix = ".deck.json"
 
     @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return (CommanderPackage.indictment(),)
+
+    @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
-        indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
-        return (cls.voice(), indictment, cls.tells(), cls.failures())
+        indictment = tuple(paragraph for path in cls.indictment()
+                           for paragraph in cls.paragraphs(path.read_text(encoding="utf-8")))
+        return tuple(stream for stream in (cls.voice(), indictment, cls.tells(), cls.failures())
+                     if stream)
 
     @classmethod
     def leading(cls) -> tuple[Path, ...]:
@@ -187,7 +198,7 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         indictment after them: read once every proof and rule is understood, it is the record of
         what the model still did anyway, never a preface to skim (Tristan, 2026-10-30)."""
         return (*super().leading(), CommanderPackage.skill(), Slop.catalog() / "README.md",
-                CommanderPackage.indictment())
+                *cls.indictment())
 
     @classmethod
     def answered(cls) -> frozenset[str]:
@@ -223,6 +234,58 @@ class CommanderRulesReader(RulesOnly, CommanderReader, audience=CommanderAudienc
     """The commander's refresh."""
 
 
+class IndictmentFree(DeckReader, audience=FleetAudience):
+    """A prime asked for mid-context without the indictment, so it does not fill the window."""
+
+    @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return ()
+
+
+class CommanderIndictmentFreeReader(IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's papers and rules without the indictment."""
+
+
+class CommanderLightReader(RulesOnly, IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's rules alone: no papers, no indictment."""
+
+
+class Prime(DeclaredFamily):
+    """A deal the owner asks for on demand (/prime, `agent-comms-prime`). Each member names
+    the readers it deals by role; the readers own which files those are, so a variant is a
+    selection over the one dealt order, never a second list."""
+
+    fleet: ClassVar[type[DeckReader]]
+    commander: ClassVar[type[DeckReader]]
+
+    @classmethod
+    def trigger(cls) -> PrimedDeal:
+        """Why this variant's deal was dealt: the owner asked for it by this variant's name."""
+        return PrimedDeal(cls.declared_name)
+
+
+class FullPrime(Prime, declared_name="full"):
+    """Papers, rules and, for a commander, the indictment: the same deal as a compaction."""
+
+    fleet = FleetReader
+    commander = CommanderReader
+
+
+class PaperlessPrime(Prime, declared_name="no-papers"):
+    fleet = FleetRulesReader
+    commander = CommanderRulesReader
+
+
+class IndictmentlessPrime(Prime, declared_name="no-indictment"):
+    fleet = FleetReader
+    commander = CommanderIndictmentFreeReader
+
+
+class LightPrime(Prime, declared_name="light"):
+    fleet = FleetRulesReader
+    commander = CommanderLightReader
+
+
 @dataclass(frozen=True)
 class DealtDeck(ClaudeTranscriptHook, RuleDeal):
     """The deal and the slices the session start hook dealt beside the transcript."""
@@ -236,7 +299,7 @@ class StartReason(DeclaredFamily):
 
     def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
         """The context is gone: the deck is dealt from its start and every file is read again."""
-        return start.dealt(reader)
+        return start.dealt(reader, self.trigger(start))
 
     def trigger(self, start: DeckStart) -> DealTrigger:
         """The cause every refusal of this deal opens with."""
@@ -269,7 +332,7 @@ class Resume(StartReason, declared_name="resume"):
     were demanded again."""
 
     def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
-        return start.current().resume(lambda: start.dealt(reader), ())
+        return start.current().resume(lambda: start.dealt(reader, self.trigger(start)), ())
 
 
 class SessionSource(str):
@@ -277,6 +340,15 @@ class SessionSource(str):
 
     def reason(self) -> StartReason:
         return StartReason.member_or_default(self, LostContext)()
+
+
+class UnboundPrimeError(Exception):
+    """/prime asked of a session no bus thread holds: no gate holds a deal for it, so it is
+    refused out loud instead of printing nothing."""
+
+    def __init__(self, start: DeckStart) -> None:
+        super().__init__(f"session {start.session_id} is bound to no bus thread, so there is no "
+                         "gate to deal it; bind it to the bus first")
 
 
 @dataclass(frozen=True)
@@ -300,10 +372,20 @@ class DeckStart(DealtDeck):
         """A start that lost the context deals the deck; a resume keeps the deal it holds."""
         return self.source.reason().deal(self, reader)
 
-    def dealt(self, reader: DeckReader) -> tuple[str, ...]:
+    def primed(self, prime: type[Prime]) -> tuple[str, ...]:
+        """The owner's /prime: a fresh deal of the variant's reader for this session's role,
+        whatever its context holds, through the same gate as a compaction."""
+        return WatchClaim(self.session_id).state().by_role(
+            unbound=self.refuse_unbound,
+            fleet=lambda record: self.dealt(prime.fleet(), prime.trigger()),
+            commander=lambda record: self.dealt(prime.commander(), prime.trigger()))
+
+    def refuse_unbound(self) -> tuple[str, ...]:
+        raise UnboundPrimeError(self)
+
+    def dealt(self, reader: DeckReader, trigger: DealTrigger) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path, opening with why."""
         prompts = self.prompts()
-        trigger = self.source.reason().trigger(self)
         self.prepare(reader, prompts, trigger)
         sources = reader.sources()
         return (
@@ -389,7 +471,8 @@ class DeckStart(DealtDeck):
         deck = self.deck(reader)
         if deck.exists():
             return ()
-        said = self.current().widen(self, type(reader), lambda: self.dealt(reader), ())
+        said = self.current().widen(
+            self, type(reader), lambda: self.dealt(reader, self.source.reason().trigger(self)), ())
         deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
         return said
 
