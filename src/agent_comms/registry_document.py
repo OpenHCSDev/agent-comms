@@ -61,6 +61,7 @@ from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadBirthRecord,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -344,19 +345,21 @@ class ThreadRow(ThreadBirthRecord, DeclaredWireType):
         return type(self).from_wire, (self.to_wire(),)
 
     @cached_property
+    def captured_birth(self) -> Mapping[str, object]:
+        return MappingProxyType({entry.name: entry.current(self)
+                                 for entry in FieldCodec.field_plans(ThreadBirthRecord)
+                                 if entry.records})
+
+    @cached_property
     def membership(self) -> ThreadMembership:
-        captured = {entry.name: entry.current(self)
-                    for entry in FieldCodec.field_plans(ThreadBirthRecord) if entry.records}
         return FieldCodec.project_record(
-            ThreadMembership, dict(self.raw), source=Thread, decoded_fields=captured,
+            ThreadMembership, dict(self.raw), source=Thread, decoded_fields=self.captured_birth,
         )
 
     @cached_property
     def goal_owner(self) -> GoalOwner:
-        captured = {entry.name: entry.current(self)
-                    for entry in FieldCodec.field_plans(ThreadBirthRecord) if entry.records}
         return FieldCodec.project_record(
-            GoalOwner, dict(self.raw), source=Thread, decoded_fields=captured,
+            GoalOwner, dict(self.raw), source=Thread, decoded_fields=self.captured_birth,
         )
 
     def decoded(self) -> Thread:
@@ -373,9 +376,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         # checked_rows proved each stored row an object, so the type keeps that proof.
         self._raw: dict[str, dict[str, JsonValue]] = {}
         self._decoded: dict[str, Thread] = {}
-        # Same-cut copies share read memos; an actual assignment detaches them.
+        # Each cut owns its memo of immutable captured rows.
         self._captured: dict[str, ThreadRow] = {}
-        self._lookup_names: dict[ThreadLookup, str] = {}
         self._binding: Callable[[Thread], Thread] = self.unbound
 
     @staticmethod
@@ -423,18 +425,8 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def birth_record(self, name: str) -> ThreadBirthRecord:
         return self._decoded[name] if name in self._decoded else self.captured(name)
 
-    def creation_time(self, name: str) -> CreationTime:
-        return self.birth_record(name).created_at
-
     def incarnation(self, name: str) -> ThreadIncarnation:
         return self.birth_record(name).incarnation
-
-    def lookup_names(self) -> Mapping[ThreadLookup, str]:
-        """Prime once for this cut, including its document and detached snapshot copies."""
-        if not self._lookup_names:
-            captured = {self.incarnation(name).require_recorded().lookup: name for name in self}
-            self._lookup_names.update(captured)
-        return MappingProxyType(self._lookup_names)
 
     def active_goal_owners(self) -> Iterator[Thread]:
         """Select through the shared goal/role declarations before full thread acquisition."""
@@ -464,16 +456,6 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __setitem__(self, name: str, thread: Thread) -> None:
         if thread.name != name:
             raise MalformedRecord("thread name differs from its declaration")
-        if self._lookup_names:
-            lookup = thread.incarnation.require_recorded().lookup
-            if self._lookup_names.get(lookup) != name:
-                names = self._lookup_names.copy()
-                if name in self:
-                    names.pop(self.incarnation(name).require_recorded().lookup)
-                names[lookup] = name
-                self._lookup_names = names
-        else:
-            self._lookup_names = {}
         self._captured.pop(name, None)
         self._decoded[name] = self._binding(thread)
         self._raw.pop(name, None)
@@ -481,12 +463,6 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __delitem__(self, name: str) -> None:
         if name not in self:
             raise KeyError(name)
-        if self._lookup_names:
-            names = self._lookup_names.copy()
-            names.pop(self.incarnation(name).require_recorded().lookup)
-            self._lookup_names = names
-        else:
-            self._lookup_names = {}
         self._captured.pop(name, None)
         self._raw.pop(name, None)
         self._decoded.pop(name, None)
@@ -511,12 +487,31 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
 
+    def birth(self, name: str) -> CreationTime:
+        """One row's creation time, read alone: a stored row is never decoded for it."""
+        if name in self._decoded:
+            return self._decoded[name].created_at
+        try:
+            key = FieldCodec.field_plan(Thread, "created_at").key
+            return CreationTime.from_wire(self._raw[name].get(key))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def births(self) -> set[float]:
+        return {self.birth(name).to_wire() for name in self}
+
+    def lookup_names(self) -> Mapping[ThreadLookup, str]:
+        """Derive this cut's lookup names from the declared birth owner, never full threads."""
+        return MappingProxyType({
+            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation
+            .require_recorded().lookup: name for name in self
+        })
+
     def require_distinct_births(self) -> None:
-        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
-        a stored row's birth is read alone, without decoding the rest of its thread."""
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
         births: set[float] = set()
         for name in self:
-            births.add(self.creation_time(name).distinct_from(births))
+            births.add(self.birth(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -535,8 +530,7 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         result = cls()
         result._raw = source._raw.copy()
         result._decoded = source._decoded.copy()
-        result._captured = source._captured
-        result._lookup_names = source._lookup_names
+        result._captured = source._captured.copy()
         result._binding = source._binding
         return result
 
@@ -548,23 +542,6 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         self._decoded = {name: earlier._decoded[name] for name in kept if name in earlier._decoded}
         self._captured = {name: earlier._captured[name] for name in kept & earlier._captured.keys()}
         self._binding = earlier._binding
-        if earlier._lookup_names:
-            removed = (earlier._raw.keys() | earlier._decoded.keys()) - rows.keys()
-            retired = {earlier.incarnation(name).require_recorded().lookup for name in removed}
-            added: dict[ThreadLookup, str] = {}
-            for name in rows.keys() - kept:
-                lookup = self.incarnation(name).require_recorded().lookup
-                if earlier._lookup_names.get(lookup) != name:
-                    added[lookup] = name
-                    if name in earlier:
-                        retired.add(earlier.incarnation(name).require_recorded().lookup)
-            if retired or added:
-                self._lookup_names = earlier._lookup_names.copy()
-                for lookup in retired:
-                    self._lookup_names.pop(lookup)
-                self._lookup_names.update(added)
-            else:
-                self._lookup_names = earlier._lookup_names
 
 
 class FrozenThreadRows(ThreadRows):
@@ -948,8 +925,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        used = {existing.created_at for existing in self.threads.values()}
-        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        thread = replace(thread, created_at=thread.created_at.distinct_from(self.threads.births()))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change

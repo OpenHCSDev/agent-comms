@@ -304,7 +304,7 @@ def test_cold_shape_and_birth_capture_do_not_acquire_unrequested_goal_fields(
         snapshot.born(original.incarnation.lookup)
 
 
-def test_lookup_metadata_is_carried_from_snapshot_through_data_only_revision(
+def test_lookup_metadata_is_derived_from_each_unchanged_captured_row_set(
     comms, declare_reference,
 ):
     original = declare_reference(status=RunningThreadStatus())
@@ -312,13 +312,12 @@ def test_lookup_metadata_is_carried_from_snapshot_through_data_only_revision(
     before = comms.registry.snapshot()
     lookup = original.incarnation.lookup
     original_index = before.lookup_names
-    metadata = before.threads._lookup_names
     changed = comms.registry.update_thread(
         original.name, lambda thread: replace(thread, task=GivenThreadText("data-only edit")),
     )
     after = comms.registry.snapshot()
     assert after.born(lookup) == changed
-    assert after.threads._lookup_names is metadata
+    assert after.lookup_names == original_index
     assert original_index[lookup] == original.name
     assert before.born(lookup) == original
     assert tuple(after.lookup_names) == tuple(after.incarnation(name).require_recorded().lookup

@@ -6,6 +6,8 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
+from .thread_name import ThreadName
+
 from .class_fact import ClassFact
 from .thread_creation import CreationSeconds, CreationTime, RequiredCreationTime
 import hashlib
@@ -425,14 +427,10 @@ class ThreadIncarnationRecord:
     name: str
     created_at: float
 
-    @staticmethod
-    def require_name(name: str) -> None:
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not name or not set(name) <= allowed:
-            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
-
     def __post_init__(self) -> None:
-        self.require_name(self.name)
+        ThreadName.require(self.name, ValueError(
+            f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores."
+        ))
 
     @property
     def birth(self) -> float:

@@ -990,6 +990,11 @@ class Message(MessageInput, TurnOrigin):
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
+    @property
+    def category(self) -> type[MessageCategory]:
+        """The filter category this message files under, answered by what it carries."""
+        return self.task.category(self.role.category)
+
     def require_decision(self) -> Decision:
         return self.task.require_decision()
 

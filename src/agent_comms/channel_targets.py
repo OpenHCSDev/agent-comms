@@ -16,6 +16,7 @@ from .projection_source import ProducedRow, ProjectionSource
 from .repo import Checkout
 from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
+from .thread_name import ThreadName
 from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
@@ -419,9 +420,9 @@ class ThreadTarget(NamedTarget):
     def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
             raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not set(self.name) <= allowed:
-            raise ValueError(f"Message target {self.name!r} is not a thread name or #channel.")
+        ThreadName.require(self.name, ValueError(
+            f"Message target {self.name!r} is not a thread name or #channel."
+        ))
 
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> FullWake:
         return FullWake()
