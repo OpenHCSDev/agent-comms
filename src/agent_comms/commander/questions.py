@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
@@ -82,14 +81,3 @@ class UnansweredUnitAsks(SenderMessages):
             kinds=MessageKind.members_with(NeedsAnswerKind),
         )
 
-
-@dataclass(frozen=True, slots=True)
-class UnansweredBurst(SenderMessages):
-    """An answer to one burst line covers everything sent before that answer."""
-
-    def lower_bound(self, source: BusReader) -> float:
-        covered = source.answer_timestamp(
-            self.scope,
-            since=self.since,
-        )
-        return max(self.since, math.nextafter(covered, math.inf))

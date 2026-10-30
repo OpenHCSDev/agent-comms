@@ -39,9 +39,10 @@ from agent_comms.ui_model.unit_state import (
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
-from agent_comms.bus_publication import AgentOrigin
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
@@ -57,7 +58,6 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
     monkeypatch.setattr(CodexConnection, "CONTROL_SOCKET", tmp_path / "no-account.sock")
     lead = held_bus.registry.require("lead")
     held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-    CommanderHeartbeat.register(held_bus.registry)
     with LaunchRoot.from_path(held_bus.root).selected():
         yield held_bus
 
@@ -76,9 +76,14 @@ def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_
     assert any(plan.main == inputs.plan.main for plan in heartbeat.plans)
 
 
+def owner(comms):
+    """The owner's thread, which the heartbeat speaks under."""
+    return comms.messaging.user_identity(Checkout(comms.root))
+
+
 def notifications(comms):
     page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+        owner(comms).name, "lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
 
@@ -168,7 +173,7 @@ def test_failed_heartbeat_pass_publishes_one_typed_packet_and_still_raises(notif
     assert str(raised) == "forced heartbeat pass failure"
     failure = retained_failure(comms)
     message, = notifications(comms)
-    assert message.sender == CommanderHeartbeat.sender and message.target == "lead"
+    assert message.sender == owner(comms).name and message.target == "lead"
     assert isinstance(message.task, CommanderDecisions)
     assert message.task.decisions == message.task.handled == (RulePing.capture(failure),)
     assert failure.line() in message.body and "first wording" in message.body
@@ -237,17 +242,13 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
 
 
 def independent_instruction(comms, body):
-    """A taskless message from the heartbeat's own sender, as raw alarms were published."""
-    return comms.bus.publisher.publish_ordinary(
-        Message(sender=CommanderHeartbeat.sender, target="lead", body=body,
-                type=InfoKind, role=ConversationRole()),
-        origin=AgentOrigin(), destination=ThreadTarget("lead"),
-    )
+    """A taskless message the owner typed, under the same thread the heartbeat speaks in."""
+    return comms.messaging.send_user_message(ThreadTarget("lead"), body, worktree=Checkout(comms.root))
 
 
 def everything_to_lead(comms):
     page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+        owner(comms).name, "lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return {message.reference for message in page.messages}
 
@@ -324,27 +325,27 @@ def test_only_the_heartbeat_publishes_a_packet_for_its_exact_commander(notificat
     comms = notification_bus
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
-    for sender, target, commander in (("worker", "lead", lead),
-                                      (CommanderHeartbeat.sender, "lead", worker)):
+    user = owner(comms)
+    for sender, origin, commander in (("worker", AgentOrigin(), lead),
+                                      (user.name, HumanOrigin.of(user), worker)):
         with pytest.raises(RelationViolationError):
             comms.bus.publisher.publish_ordinary(
-                Message(sender=sender, target=target, body="forged board", type=InfoKind,
+                Message(sender=sender, target="lead", body="forged board", type=InfoKind,
                         role=CommanderNotice.role, task=CommanderNotice(commander, ())),
-                origin=AgentOrigin(), destination=ThreadTarget(target),
+                origin=origin, destination=ThreadTarget("lead"),
             )
     assert CommanderUpdate.latest(comms, lead) == ()
     assert CommanderUpdate.latest(comms, worker) == ()
 
 
-def test_failure_packet_follows_commander_and_service_rename_aliases(notification_bus):
+def test_failure_packet_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
     failed_pass(comms, RuntimeError("down"))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
-    comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     failed_pass(comms, RuntimeError("still down"))
     page = MessagePageRequest(DMDisplayScope.capture(
-        "renamed-heartbeat", "renamed-lead", comms.registry.snapshot(),
+        owner(comms).name, "renamed-lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     published = tuple(message for message in page.messages
                       if isinstance(message.task, CommanderUpdate))
@@ -534,12 +535,11 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     assert repeated.task.decisions == first.task.decisions
 
 
-def test_latest_observation_follows_commander_and_service_rename_aliases(notification_bus):
+def test_latest_observation_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
     beat(comms, (ServicePassFailing("watch", 1.0, "failed source read"),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
-    comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
     assert previous == (first.task,)
 

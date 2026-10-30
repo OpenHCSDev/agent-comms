@@ -422,17 +422,10 @@ class BusReader(RouteCounts, ABC):
                 db, scope, since, before, upper, limit, kinds,
             )
 
-    def latest_answer(
-        self, scope: RepliesDisplayScope, *, since: float,
-    ) -> tuple[BusRecord, ...]:
+    def latest_reply(self, references: tuple[MessageReference, ...],
+                     responders: frozenset[str]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return AnsweredSource.latest_answer(db, scope, since)
-
-    def answer_timestamp(
-        self, scope: RepliesDisplayScope, *, since: float,
-    ) -> float:
-        with self.observing() as db:
-            return AnsweredSource.answer_timestamp(db, scope, since)
+            return AnsweredSource.latest_reply(db, tuple(reference.seq for reference in references), responders)
 
     def replies(self, references: tuple[MessageReference, ...]) -> tuple[BusRecord, ...]:
         with self.observing() as db:
