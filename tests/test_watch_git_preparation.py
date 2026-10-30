@@ -702,3 +702,27 @@ async def test_owned_git_ordinary_timeout_and_nonzero_keep_their_errors(
                 await AsyncWork.run_async(lambda: Repo.git(
                     repo.checkout, "ls-remote", "--refs", "origin", timeout=.5))
     assert not children.active and not children.closing.is_set()
+
+
+def test_pushed_conflict_markers_are_the_branchs_fact_not_an_error(tmp_path):
+    """Foreign branch text that does not parse is reported with its path and line, and
+    refuses acceptance; it never escapes the heartbeat's growth count."""
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    for argument in (("init", "-q", "-b", "main"), ("config", "user.email", "t@example.com"),
+                     ("config", "user.name", "t")):
+        Repo.git(checkout, *argument)
+    (checkout / "src").mkdir()
+    module = checkout / "src" / "owner.py"
+    module.write_text("value = 1\n")
+    Repo.git(checkout, "add", ".")
+    Repo.git(checkout, "commit", "-q", "-m", "base")
+    base = Repo.git(checkout, "rev-parse", "HEAD").strip()
+    module.write_text("<<<<<<< HEAD\nvalue = 1\n=======\nvalue = 2\n>>>>>>> other\n")
+    Repo.git(checkout, "commit", "-q", "-am", "conflict markers pushed")
+    head = Repo.git(checkout, "rev-parse", "HEAD").strip()
+    reader = WorkBranches(checkout)
+    growth = reader.source_growth(base, head, reader.changed(base, head))
+    assert [(source.path, source.line) for source in growth.unparsed] == [("src/owner.py", 1)]
+    with pytest.raises(WorkBranchError, match="src/owner.py:1"):
+        growth.require_parsed()

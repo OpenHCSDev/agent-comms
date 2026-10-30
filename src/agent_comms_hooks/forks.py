@@ -27,6 +27,7 @@ from agent_comms.cli_commands import RegisteredResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
+from agent_comms.tool_caller import CommanderForkCaller
 from agent_comms.turn_phase import ModelWaitPhase, TurnPhase
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
@@ -99,10 +100,11 @@ class SubagentHook(SeatedSubagent):
         self.enter(ModelWaitPhase())
 
     def join(self, record: WatchRecord) -> None:
-        run = self.commanding("join")
-        if run.returncode:
-            raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
+        """In this process: a CLI subprocess per fork cost about 19 s under load and launched
+        forks serialized past Claude Code's hook budget, so most never registered."""
         fork = self.agent_id.fork
+        with client_wire(Path(record.root)) as comms:
+            CommanderForkCaller(fork).join(comms)
         self.warn(f"Core registered you as commander fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
