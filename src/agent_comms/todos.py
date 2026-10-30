@@ -4315,6 +4315,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         project = goals.registry.snapshot().commander_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
                               ).reviewed_growth(request.pr, request.head, request.base)
+        growth.require_parsed()
         self.require_growth(growth)
         return f"#{request.pr} (src {growth.total:+d})"
 
