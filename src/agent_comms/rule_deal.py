@@ -229,13 +229,9 @@ class AuditDue:
     )
     """What answering a rule looks like, shown with every template."""
 
-    def reminder(self, audit_path: Path) -> str:
-        """Render the required answers from their declarations, not another JSON schema."""
+    def reminder(self) -> str:
+        """Render what every refusal repeats from its declarations."""
         failure = ReadThenRepeatedFailure()
-        audit = SessionAudit(
-            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
-            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
-        )
         return "\n\n".join(
             (
                 *(
@@ -244,8 +240,20 @@ class AuditDue:
                 ),
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
-                "After each rule file you read, answer it in the audit before the next unread file"
-                f" opens: quote its greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
+            )
+        )
+
+    def template(self, audit_path: Path) -> str:
+        """Render the required answers from their declarations, not another JSON schema."""
+        audit = SessionAudit(
+            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
+            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
+        )
+        return "\n\n".join(
+            (
+                f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
+                " unanswered, so read them in batches and answer each batch in one edit: quote its"
+                f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
@@ -355,7 +363,7 @@ class Blocked(ToolGateState):
                     f"You just tried {tool} before {self.cause.before}. Call #{gate.count_call()}"
                     " since this compaction, refused.",
                     self.cause.reason,
-                    self.cause.record.due.reminder(self.cause.audit),
+                    gate.template_once(self.cause.record.due),
                 )
             )
         )
@@ -476,11 +484,15 @@ class Owed(State):
 
 @dataclass(frozen=True)
 class Unengaged(Owed):
-    """A rule was read and its audit entry does not answer it. Nothing unread opens until it
-    does; what was already read stays open, since re-reading is how it gets answered."""
+    """A rule was read and its audit entry does not answer it. Up to `batch` rules may stand
+    unanswered, so several are read in one call and answered in one edit; past that nothing
+    unread opens. What was already read stays open, since re-reading is how it gets answered."""
 
     faults: tuple[tuple[Path, str], ...]
     read: tuple[Path, ...]
+    unopened: tuple[Path, ...]
+
+    batch: ClassVar[int] = 4
 
     before: ClassVar[str] = "answering the rule you just read"
 
@@ -493,7 +505,8 @@ class Unengaged(Owed):
             and (fault := audit.fault() or audit.entry(source.stem).unengaged(source))
         )
         if faults:
-            yield cls(record, deal.audit, faults, read)
+            yield cls(record, deal.audit, faults, read,
+                      tuple(source for source in record.paths if source not in read))
 
     @property
     def reason(self) -> str:
@@ -501,10 +514,12 @@ class Unengaged(Owed):
         return " ".join(
             f"You read {source} and the audit's entry for {source.stem} does not answer it:"
             f" {fault}." for source, fault in self.faults
-        ) + f" Answer each in {self.audit} before the next file opens."
+        ) + f" Answer them in {self.audit}: at most {self.batch} rules may stand unanswered."
 
     def permits_read(self, path: Path) -> bool:
-        return path in self.read
+        return path in self.read or (
+            len(self.faults) < self.batch and path == next(iter(self.unopened), None)
+        )
 
 
 @dataclass(frozen=True)
@@ -625,6 +640,22 @@ class RuleDeal(State):
         """The audit of the deal whose files sit at `stem`."""
         return stem.with_suffix(".audit.json")
 
+    @property
+    def template_shown(self) -> Path:
+        return self.stem.with_suffix(".template-shown")
+
+    def template_once(self, due: AuditDue) -> str:
+        """The whole template once per deal: on 2026-10-30 a batch of 28 refused reads reprinted
+        it 28 times, about 84k tokens, and the deal filled the context it was dealt to restore."""
+        try:
+            self.template_shown.touch(exist_ok=False)
+        except FileExistsError:
+            return (
+                f"{due.reminder()}\n\n"
+                f"The audit's template was in your first refusal; it goes in {self.audit}."
+            )
+        return f"{due.reminder()}\n\n{due.template(self.audit)}"
+
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
             calls.write(b".")
@@ -650,6 +681,7 @@ class RuleDeal(State):
         self.dealt_read.write_text("", encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
+        self.template_shown.unlink(missing_ok=True)
         self.publish(
             DealRecord(
                 tuple(source.resolve() for source in dealt.sources()),
