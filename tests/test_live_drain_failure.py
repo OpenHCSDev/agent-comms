@@ -54,8 +54,8 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
     with sqlite3.connect(path) as db:
         broken_schema = db.execute("SELECT name, sql FROM sqlite_master ORDER BY name").fetchall()
     try:
-        agent.inputs.ensure_live_drain("beta")
-        await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
+        await until(lambda: agent.inputs.state(AcpSessionId("beta")).observation_watcher is not None)
         await until(
             lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
         )
@@ -114,7 +114,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     lease = comms.agents.begin_turn("beta", TurnId('028a74a690b644b1557f0f9b70b9d9a2')).turn_lease
     try:
         async with drain_failures(comms, "beta", owner):
-            await agent.inputs.drain_inbox("beta")
+            await agent.inputs.drain_inbox(AcpSessionId("beta"))
         current = owner_view(comms)
         assert not current.activity.readiness.source_diagnostic().holds_event_current
         assert current.thread.executing
@@ -122,7 +122,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
         assert not current.presentation.status.details
         activity = comms.agents.activity.current("beta", active=True)
         async with drain_failures(comms, "beta", owner):
-            await agent.inputs.drain_inbox("beta")
+            await agent.inputs.drain_inbox(AcpSessionId("beta"))
         assert comms.agents.activity.current("beta", active=True) == activity
     finally:
         comms.agents.finish_turn(lease)
@@ -142,14 +142,14 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
     )
     assert owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
     try:
-        agent.inputs.ensure_live_drain("beta")
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
         await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
         assert not owner_view(comms).presentation.status.details
-        await agent.inputs.state("beta").observer.stop()
+        await agent.inputs.state(AcpSessionId("beta")).observer.stop()
         # A new consumer gets its first read even while the shared root is idle.
-        agent.inputs.ensure_live_drain("beta")
-        await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
-        await until(lambda: agent.inputs._quiescent("beta"))
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
+        await until(lambda: agent.inputs.state(AcpSessionId("beta")).observation_watcher is not None)
+        await until(lambda: agent.inputs._quiescent(AcpSessionId("beta")))
     finally:
         await agent.shutdown()
 
@@ -158,8 +158,8 @@ async def test_settled_observer_recovers_another_path_failure(tmp_path):
     comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     try:
-        agent.inputs.ensure_live_drain("beta")
-        await until(lambda: agent.inputs._quiescent("beta"))
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
+        await until(lambda: agent.inputs._quiescent(AcpSessionId("beta")))
         diagnostic = UnavailableDrainDiagnostic(
             owner, "OSError", "selected wake failed", recorded_at=1.0,
         )
@@ -167,7 +167,7 @@ async def test_settled_observer_recovers_another_path_failure(tmp_path):
         assert owner_view(comms).activity.readiness.source_diagnostic() == diagnostic
         # This is the existing failed-wake notification. Unchanged input stores
         # must not make a settled observer skip the actual recovery read.
-        agent.inputs.wake_observer("beta")
+        agent.inputs.wake_observer(AcpSessionId("beta"))
         await until(lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current)
         assert not owner_view(comms).presentation.status.details
     finally:
@@ -183,7 +183,7 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
 
     try:
         async with drain_failures(comms, "beta", owner):
-            await agent.inputs.drain_inbox("beta")
+            await agent.inputs.drain_inbox(AcpSessionId("beta"))
             newer = replace(first, reason="different failure", recorded_at=2.0)
             comms.agents.set_drain_diagnostic("beta", owner, newer)
             if recurs:
@@ -195,7 +195,7 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
         assert retained == newer
         assert retained.recorded_at == newer.recorded_at
         async with drain_failures(comms, "beta", owner):
-            await agent.inputs.drain_inbox("beta")
+            await agent.inputs.drain_inbox(AcpSessionId("beta"))
         assert not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
     finally:
         await agent.shutdown()
@@ -209,7 +209,7 @@ async def test_predecessor_success_cannot_clear_replacement_owner_failure(tmp_pa
 
     try:
         async with drain_failures(comms, "beta", owner):
-            await agent.inputs.drain_inbox("beta")
+            await agent.inputs.drain_inbox(AcpSessionId("beta"))
             comms.registry.register(comms.registry.require("beta"), new_owner=True)
             successor = comms.registry.snapshot().owner_identity("beta")
             assert successor != owner

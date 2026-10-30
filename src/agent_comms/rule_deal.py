@@ -229,13 +229,9 @@ class AuditDue:
     )
     """What answering a rule looks like, shown with every template."""
 
-    def reminder(self, audit_path: Path) -> str:
-        """Render the required answers from their declarations, not another JSON schema."""
+    def reminder(self) -> str:
+        """Render what every refusal repeats from its declarations."""
         failure = ReadThenRepeatedFailure()
-        audit = SessionAudit(
-            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
-            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
-        )
         return "\n\n".join(
             (
                 *(
@@ -244,8 +240,20 @@ class AuditDue:
                 ),
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
+            )
+        )
+
+    def template(self, audit_path: Path) -> str:
+        """Render the required answers from their declarations, not another JSON schema."""
+        audit = SessionAudit(
+            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
+            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
+        )
+        return "\n\n".join(
+            (
                 f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
-                " unanswered, so read them in batches and answer each batch in one edit: quote its greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
+                " unanswered, so read them in batches and answer each batch in one edit: quote its"
+                f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
@@ -642,8 +650,11 @@ class RuleDeal(State):
         try:
             self.template_shown.touch(exist_ok=False)
         except FileExistsError:
-            return f"The audit's template was in your first refusal; it goes in {self.audit}."
-        return due.reminder(self.audit)
+            return (
+                f"{due.reminder()}\n\n"
+                f"The audit's template was in your first refusal; it goes in {self.audit}."
+            )
+        return f"{due.reminder()}\n\n{due.template(self.audit)}"
 
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
