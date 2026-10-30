@@ -46,7 +46,7 @@ from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
-from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, RuleAudit, SessionAudit
+from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
@@ -455,11 +455,11 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     assert transcript.with_suffix(".deck.json").exists()
     commanding_session.registry.set_commander_project(RegisteredCommanderProject(
         commanding_session.registry.require("unit-x").incarnation, ()))
+    dealt = transcript.with_suffix(".deal.json").read_bytes()
     reminder = BoardReminder.decode(hook_record(transcript))
-    (order, _, header) = reminder.take()  # now a fleet session: dealt the fleet deck, once
-    assert "Read each of these" in order and "What your units actually hold" not in header
     assert [reminder.take() for _ in range(SliceReminder.every - 1)] == [()] * (SliceReminder.every - 1)
     assert transcript.with_suffix(".fleet-deck.json").exists()
+    assert transcript.with_suffix(".deal.json").read_bytes() == dealt  # the fleet adds nothing
     StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
                      "transcript_path": str(transcript), "stop_hook_active": False}).guard()
     assert capsys.readouterr().out == ""
@@ -738,15 +738,15 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     transcript.write_text("")
     assert session_start(transcript, "compact").returncode == 0
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
-    first = start.current().dealt[0]
-    start.dealt_read.write_text(f"{first}\n", encoding="utf-8")
+    first = start.current().paths[0]
+    start.record_read(first, ReadSpan(1, sys.maxsize, sys.maxsize))
     start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
     result = session_start(transcript, "resume")
     assert result.returncode == 0, result.stderr
     assert start.audit.exists()
     assert start.current().read_by(start) == (first,)
     assert session_start(transcript, "compact").returncode == 0
-    assert not start.audit.exists()
+    assert start.audit.exists()  # a compaction drops the reads, never the answers
     assert start.current().read_by(start) == ()
 
 

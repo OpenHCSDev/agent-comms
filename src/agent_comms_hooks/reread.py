@@ -32,13 +32,10 @@ class SliceReminder(DeckStart):
     every: ClassVar[int] = 5
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        deck = self.deck(reader)
-        if not deck.exists():
-            return self.dealt(reader)  # the session was bound, or changed role, after it started
+        slices = self.slices(reader)
         count = self.count_call()
         if count % self.every:
             return ()
-        slices = json.loads(deck.read_text(encoding="utf-8"))
         return (slices[(count // self.every - 1) % len(slices)],)
 
 

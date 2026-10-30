@@ -331,6 +331,16 @@ class DeckStart(DealtDeck):
         self.deal(type(reader), prompts)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
+    def slices(self, reader: DeckReader) -> list[str]:
+        """The deck of this session's role. A session bound after it started, or whose role
+        changed, finds none of its kind: it is dealt only the files the role adds, keeping what
+        it read and wrote, since its context was never lost."""
+        deck = self.deck(reader)
+        if not deck.exists():
+            self.current().widen(self, type(reader), self.prompts)
+            deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
+        return json.loads(deck.read_text(encoding="utf-8"))
+
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]
         return ("Commander: " + ", ".join(names) + "." if names
