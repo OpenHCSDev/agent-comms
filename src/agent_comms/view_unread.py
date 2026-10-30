@@ -82,14 +82,30 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         """Coverage, not the number found, determines whether this is a lower bound."""
         return CappedCount(total) if self.start > seen else Counted(total)
 
+    def extended_by(self, revision: FileRevision) -> bool:
+        """The transcript only grew past the indexed revision: its prefix and replies stand."""
+        return isinstance(self.revision, FileRevision) and self.revision.holds_cut(
+            revision, self.revision.size)
+
     def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
-        """Visit at most limit newest records, stopping earlier at the read mark."""
-        resume = self.continues(revision)
-        start, visited = (self.start, self.records) if resume else (revision.size, 0)
-        replies: list[TranscriptReply] = []
+        """Visit at most limit newest records, stopping earlier at the read mark. An append
+        visits only the appended records and keeps the indexed prefix, so a growing
+        transcript never re-reads records it already indexed."""
         with Path(self.source).open("rb") as stream:
             if not revision.opened_by(stream):
                 return RevisionMoved()
+        if self.continues(revision):
+            return self._scan(revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
+        if self.extended_by(revision):
+            boundary = max(seen, self.revision.size)
+            appended = self._scan(revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex)
+            if isinstance(appended, ContinuedReplyIndex) and appended.after.start <= boundary:
+                return appended.joined(self)
+        return self._scan(revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
+
+    def _scan(self, revision: FileRevision, seen: int, start: int, visited: int,
+              cancelled: Event, result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
+        replies: list[TranscriptReply] = []
         records = reverse_records(Path(self.source), start, floor=max(0, seen - 1))
         with closing(records):
             while visited < self.limit and start > seen:
@@ -105,7 +121,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
                 if raw.endswith(b"\n") and NativeEntry.read(raw).unread_reply:
                     replies.append(TranscriptReply(self.source, end))
         index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start)
-        return ReplyIndexUpdate(self, index, tuple(replies))
+        return result(self, index, tuple(replies))
 
 
 @dataclass(frozen=True)
@@ -231,7 +247,8 @@ class RevisionMoved(NoReplyUpdate):
 
 @dataclass(frozen=True)
 class ReplyIndexUpdate(ReplyIndexResult):
-    """A native-only prepared delta, authorized against one stored suffix."""
+    """A native-only prepared delta, authorized against one stored suffix. A fresh scan
+    replaces every reply the source had indexed."""
 
     before: ReplyIndex
     after: ReplyIndex
@@ -243,13 +260,29 @@ class ReplyIndexUpdate(ReplyIndexResult):
         )
         if current != self.before:
             return  # Another observer changed this suffix; discard the stale delta.
-        if not self.before.continues(self.after.revision):
-            database.execute(
-                f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
-            )
+        self.replace_earlier(database)
         for reply in self.replies:
             reply.insert(database)
         self.after.upsert(database)
+
+    def replace_earlier(self, database: sqlite3.Connection) -> None:
+        database.execute(
+            f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
+        )
+
+
+@dataclass(frozen=True)
+class ContinuedReplyIndex(ReplyIndexUpdate):
+    """A delta over records the stored index has not visited; its replies stand."""
+
+    def replace_earlier(self, database: sqlite3.Connection) -> None:
+        pass
+
+    def joined(self, before: ReplyIndex) -> ContinuedReplyIndex:
+        """The appended records' scan joined to the coverage the stored index already had."""
+        return ContinuedReplyIndex(before, replace(
+            self.after, start=before.start, records=before.records + self.after.records,
+        ), self.replies)
 
 
 class ReplyPreparation:
