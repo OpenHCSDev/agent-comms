@@ -104,7 +104,7 @@ class SubagentHook(SeatedSubagent):
         forks serialized past Claude Code's hook budget, so most never registered."""
         fork = self.agent_id.fork
         with client_wire(Path(record.root)) as comms:
-            CommanderForkCaller(fork).join(comms)
+            CommanderForkCaller(fork).join(comms, record.bus)
         self.warn(f"Core registered you as commander fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
