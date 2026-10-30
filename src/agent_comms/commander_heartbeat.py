@@ -74,8 +74,7 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
             now = time.time()
             snapshot = comms.registry.snapshot()
             actions = CommanderHistory.read(comms, self.actors(snapshot))
-            for thread in (recipient for lead in self.boards(comms.registry, comms.goals)
-                           for recipient in self.recipients(snapshot, lead)):
+            for thread in self.served(comms.registry, comms.goals):
                 for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,

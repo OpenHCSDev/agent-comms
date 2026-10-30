@@ -293,6 +293,11 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
         self.completion.require_loss(snapshot, self)
         return self.completion
 
+    def require_retired_for(self, snapshot: RegistrySnapshot, current: Thread) -> None:
+        """A successor reads the release after the original left the registry: a retired
+        session unregistered its process, so the released process is what retired."""
+        self.completion.require_retired(snapshot, current, self.require_process())
+
     def require_owner_loss(self, snapshot, owner_identity):
         """Attest only this recorded owner's release and dead process.
 

@@ -120,7 +120,7 @@ class VerifiedOwnerLoss(ABC):
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         release = cls._released(releases, boundary, identity.owner_lookup)
         release = release.require_owner_loss(boundary.registry, identity)
-        release.retirement(boundary.registry, owner, release.before)
+        release.require_retired_for(boundary.registry, owner)
         proof = ReleasedOwnerLoss(release, store, boundary)
         with proof.observed():
             yield proof
