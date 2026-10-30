@@ -1247,6 +1247,25 @@ class ProgressPoint(DisclosedRecord):
 
 
 @dataclass(frozen=True)
+class LoggedCommit:
+    """One commit of a frame's history walk with the message every problem pattern greps."""
+    point: ProgressPoint
+    message: str
+
+    format: ClassVar[str] = f"{ProgressPoint.format}%x00%B%x00"
+
+    @classmethod
+    def walked(cls, output: str) -> tuple[LoggedCommit, ...]:
+        fields = output.split("\0")
+        return tuple(cls(ProgressPoint.listed(head), message)
+                     for head, message in zip(fields[0::2], fields[1::2]) if head.strip())
+
+    def matches(self, pattern: re.Pattern[str]) -> bool:
+        """Git's --grep: the pattern searched line by line, ignoring case."""
+        return bool(pattern.search(self.message))
+
+
+@dataclass(frozen=True)
 class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
@@ -1470,14 +1489,26 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
+    @cached_property
+    def walks(self) -> dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[LoggedCommit, ...]]:
+        """This frame's history walks, one per selection of refs; every order greps them."""
+        return {}
+
+    def walk(self, refs: tuple[str, ...], excluded: tuple[str, ...]) -> tuple[LoggedCommit, ...]:
+        if (refs, excluded) not in self.walks:
+            self.walks[refs, excluded] = LoggedCommit.walked(self.git(
+                "log", f"--format={LoggedCommit.format}", *refs, "--not", *excluded))
+        return self.walks[refs, excluded]
+
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
         if refs:
-            for line in self.git("log", "-1", "--extended-regexp", "--regexp-ignore-case",
-                                 f"--grep={pattern}", f"--format={ProgressPoint.format}",
-                                 *refs, "--not", *excluded).splitlines():
-                yield ProgressPoint.listed(line)
+            matcher = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+            for commit in self.walk(refs, excluded):
+                if commit.matches(matcher):
+                    yield commit.point
+                    return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
@@ -2558,6 +2589,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         self.require_linkable()
         return replace(self, pull_requests=(*self.pull_requests, link))
 
+    def unlinked(self, link: PullRequestLink) -> Self:
+        """This order without ``link``; its state, id, check, run, edits and times stay."""
+        if link not in self.pull_requests:
+            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
+        return replace(self, pull_requests=tuple(
+            kept for kept in self.pull_requests if kept != link))
+
     @property
     def installation_commits(self) -> tuple[str, ...]:
         return ()
@@ -2891,14 +2929,11 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
                          "Ask the commander for a send-back before opening or linking another PR.")
 
     def merged_link(self, link: PullRequestLink) -> MergedLink:
-        if link not in self.pull_requests:
-            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
-        return MergedLink(link, self.sha)
+        return MergedLink(link, self.unlinked(link).sha)
 
     def unmerged(self, link: PullRequestLink) -> PendingProblemOrder:
         """Pending again under its own id, check, run, edits and times, without ``link``."""
-        return self.copy_as(PendingProblemOrder, pull_requests=tuple(
-            kept for kept in self.pull_requests if kept != link))
+        return self.unlinked(link).copy_as(PendingProblemOrder)
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -5111,6 +5146,23 @@ class CorrectMergedLinkTodo(CorrectOrderTodo):
 
     def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         return order.unmerged(self.previous.link)
+
+
+@dataclass(frozen=True)
+class CorrectLinkTodo(CorrectOrderTodo):
+    """The commander takes a pull request off an open order that never held its work, such as
+    another order's pull request recorded by a mistaken claim. The order keeps its state, holder,
+    review timer, strikes and every other link; a later send carries only the links left."""
+    previous: tuple[PullRequestLink, ...]
+    link: PullRequestLink
+
+    def part(self, order: OpenProblemOrder) -> tuple[PullRequestLink, ...]:
+        return order.pull_requests
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """A merged order's links are closed; CorrectMergedLinkTodo takes its merge back."""
+        order.require_linkable()
+        return order.unlinked(self.link)
 
 
 @dataclass(frozen=True)
