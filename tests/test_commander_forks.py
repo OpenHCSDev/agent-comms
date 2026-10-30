@@ -207,7 +207,7 @@ def document(path, order, problems=()):
     return str(path)
 
 
-def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path):
+def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path, installed_runtime):
     comms, source, order = fork_bus
     store = comms.goals.todos
     parent = comms.registry.require("lead")

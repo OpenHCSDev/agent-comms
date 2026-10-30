@@ -50,6 +50,7 @@ from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, RuleAudit, Session
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
+from conftest import engaged
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
 
@@ -102,7 +103,7 @@ def test_the_commander_session_start_reads_all_package_files(tmp_path, source, c
 
 def dealt_sources(transcript):
     """The files the last deal named, read from its one record."""
-    return DeckStart.decode(hook_record(transcript, "SessionStart")).current().sources()
+    return DeckStart.decode(hook_record(transcript, "SessionStart")).current().dealt
 
 
 def hook_record(transcript, event="PostToolUse"):
@@ -409,7 +410,7 @@ def test_a_session_bound_to_another_bus_thread_reads_the_fleet_rules_and_not_the
     WatchClaim("s").enrol(WatchRecord("unit-x", str(commander_bus.root), (), tmp_path))
     start = DeckStart.decode(record)
     assert start.take()
-    dealt = start.current().sources()
+    dealt = start.current().dealt
     assert all(rule.path.resolve() in dealt for rule in FleetReader.rules())
     commander_only = [rule for rule in RuleFile.packaged() if rule.audience is CommanderAudience]
     assert commander_only and not any(rule.path.resolve() in dealt for rule in commander_only)
@@ -511,6 +512,102 @@ def refused(capsys, call):
     return out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
+def answered_audit(reader, read=None, owner_words=()):
+    """The audit answering every rule of `read`, by default all of the reader's, as a session
+    writes it."""
+    rules = reader.rules() if read is None else read
+    return json.dumps({"rules": [engaged(rule.name, rule.path.resolve()) for rule in rules],
+                       "owner_words": list(owner_words)})
+
+
+@pytest.fixture
+def dealt_session(tmp_path, commanding_session):
+    """A commander session just dealt its deck: its transcript and the deal."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take()
+    return transcript, start
+
+
+def read_whole(transcript, source):
+    gated(transcript, "Read", {"file_path": str(source)}).completed()
+
+
+def test_a_read_rule_is_answered_before_the_next_unread_file_opens(capsys, dealt_session):
+    transcript, start = dealt_session
+    papers = CommanderPackage.paper()
+    rules = CommanderReader.rules()
+    for paper in papers:
+        read_whole(transcript, paper.resolve())  # a paper carries no rule name: no entry owed
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    read_whole(transcript, rules[0].path.resolve())
+    following = {"file_path": str(rules[1].path)}
+    assert refused(capsys, gated(transcript, "Read", following))
+    # Re-reading what was read stays open, and so does the audit, by Read, Write and Edit.
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0])}))
+    for tool in ("Read", "Write", "Edit"):
+        assert not refused(capsys, gated(transcript, tool, {"file_path": str(start.audit)}))
+    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
+    assert not refused(capsys, gated(transcript, "Read", following))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # the rest stay unread
+
+
+@pytest.mark.parametrize("change, says", [
+    ({"quote": "no rule file holds this line"}, "not verbatim"),
+    ({"quote": "   "}, "blank"),
+    ({"quote": ""}, "blank"),
+    ({"does": " "}, "does and why"),
+    ({"why": ""}, "does and why"),
+])
+def test_an_answer_that_does_not_hold_keeps_the_next_file_shut(capsys, dealt_session, change, says):
+    transcript, start = dealt_session
+    rules = CommanderReader.rules()
+    read_whole(transcript, rules[0].path.resolve())
+    written = {**engaged(rules[0].name, rules[0].path), **change}
+    start.audit.write_text(json.dumps({"rules": [written], "owner_words": []}))
+    gated(transcript, "Read", {"file_path": str(rules[1].path)}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert says in reason
+    assert str(start.audit) in reason
+
+
+def test_a_quote_past_the_line_cap_is_refused(tmp_path):
+    source = tmp_path / "rule.md"
+    source.write_text("\n".join(f"line {number}" for number in range(9)))
+    capped = source.read_text().splitlines()
+    assert "past 8 lines" in RuleAudit("rule", quote="\n".join(capped), does="d", why="w").unengaged(source)
+    assert RuleAudit("rule", quote="\n".join(capped[:8]), does="d", why="w").unengaged(source) == ""
+
+
+def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, commanding_session):
+    transcript = tmp_path / "session.jsonl"
+    words = ("fix the gate",)
+    transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    start.take()
+    start.prepare(CommanderReader(), words)
+    for source in CommanderReader.sources():
+        read_whole(transcript, source.resolve())
+    start.audit.write_text(answered_audit(CommanderReader))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # his words unanswered
+    answers = ({"words": words[0], "doing": "editing rule_deal"},)
+    start.audit.write_text(answered_audit(CommanderReader, owner_words=answers))
+    assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
+
+
+def test_the_reminder_teaches_the_three_fields_by_a_real_answer(capsys, dealt_session):
+    transcript, start = dealt_session
+    gated(transcript, "Bash", {}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    example = AuditDue.worked_answer
+    assert json.dumps(FieldCodec.encode(example), ensure_ascii=False) in reason
+    spine = next(rule for rule in CommanderReader.rules() if rule.name == example.rule)
+    assert example.unengaged(spine.path) == ""
+    assert {"quote", "does", "why"} <= json.loads(reason[reason.index("{\n"):])["rules"][0].keys()
+
+
 def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
         tmp_path, capsys, commanding_session):
     """The deal names the packaged rule files themselves; PreToolUse only judges, and a file
@@ -525,9 +622,9 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     whole = {"file_path": str(parts[0])}
     assert not refused(capsys, gated(transcript, "Read", whole))
     assert refused(capsys, gated(transcript, "Read", {"file_path": str(transcript)}))  # not dealt
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a Read that never completed
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}))  # a Read that never completed
     gated(transcript, "Read", {**whole, "limit": 5}).completed()
-    assert refused(capsys, gated(transcript, "Edit", {}))  # a partial read is not a reading
+    assert refused(capsys, gated(transcript, "Edit", {"file_path": str(transcript)}))  # a partial read is not a reading
     for part in parts:
         gated(transcript, "Read", {"file_path": str(part)}).completed()
     audit = transcript.with_suffix(".audit.json")
@@ -535,6 +632,8 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     assert not refused(capsys, gated(transcript, "Write", {"file_path": str(audit)}))
     audit.write_text(json.dumps({"rules": [{"rule": rule.name} for rule in CommanderReader.rules()],
                                  "owner_words": []}))
+    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # read, never answered
+    audit.write_text(answered_audit(CommanderReader))
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take()  # compaction
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
@@ -548,7 +647,7 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     words = ("Read the rules.\nThen write the audit.",)
     start.prepare(CommanderReader(), words)
     for attempt, tool in enumerate(("Bash", "Edit"), 1):
-        gated(transcript, tool, {}).judge()
+        gated(transcript, tool, {"file_path": str(transcript)}).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert output["permissionDecision"] == "deny"
         reason = output["permissionDecisionReason"]

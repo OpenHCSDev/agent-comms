@@ -205,9 +205,6 @@ class NoRelease(OwnerRelease):
 class ReleasedOwner(ThreadIncarnationRecord):
     process_identity: Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
-    def require_process(self) -> ProcessIdentity:
-        return self.process_identity.require(f"Thread {self.name!r} has no released process")
-
     def matches(self, expected: Thread) -> bool:
         return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
 
@@ -222,27 +219,37 @@ class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
 
     @abstractmethod
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None: ...
+                        process: ProcessState) -> None:
+        """``thread`` is the registry's current declaration; ``process`` is the released one."""
 
     def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
-        return release.matches(snapshot.require(release.name))
+        """The row still binds the released process or, once a dead owner's stop
+        unregistered it, none; a different process is a successor."""
+        current = snapshot.require(release.name)
+        return (release.incarnation() == current.incarnation
+                and not current.process_identity.conflicts_with(release.process_identity))
 
 
 @dataclass(frozen=True)
 class ProcessExitedOwnerCompletion(OwnerCompletion):
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None:
-        thread.require_local_process(process)
+                        process: ProcessState) -> None:
+        # The registry still binds the released process (a fenced self-release) or none
+        # (a stopped owner was unregistered). A release that names no process was
+        # recorded only after its stop saw the owner dead: nothing of it is alive.
+        if thread.process_identity.conflicts_with(process):
+            raise RelationViolationError("live owner is not the current process incarnation")
         if process.alive():
             raise RelationViolationError("Original owner survived retirement")
 
     def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
-        if release.require_process().alive():
+        if release.process_identity.alive():
             raise RelationViolationError("Released native owner process is still alive")
         current = snapshot.require(release.name)
         if release.matches(current):
             snapshot.status(current.name).require_inactive("Released native process is still the registry owner")
-        if snapshot.claim_generation(current.name) == release.after and not release.matches(current):
+        if (snapshot.claim_generation(current.name) == release.after
+                and current.process_identity.conflicts_with(release.process_identity)):
             raise RelationViolationError("Native release process differs from its original declaration")
 
 
@@ -251,7 +258,7 @@ class SessionRetiredOwnerCompletion(OwnerCompletion):
     owner: OwnerIdentity
 
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None:
+                        process: ProcessState) -> None:
         current = snapshot.owner_identity(thread.name)
         if current.incarnation != self.owner.incarnation or current.generation <= self.owner.generation:
             raise RelationViolationError("Retired session still holds its original owner lease")
@@ -293,10 +300,10 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
         self.completion.require_loss(snapshot, self)
         return self.completion
 
-    def require_retired_for(self, snapshot: RegistrySnapshot, current: Thread) -> None:
-        """A successor reads the release after the original left the registry: a retired
-        session unregistered its process, so the released process is what retired."""
-        self.completion.require_retired(snapshot, current, self.require_process())
+    def require_retired_for(self, snapshot: RegistrySnapshot) -> None:
+        """Judge the registry's current declaration, never a caller's pre-stop copy: a
+        retired session unregistered its process, so the released process is what retired."""
+        self.completion.require_retired(snapshot, snapshot.require(self.name), self.process_identity)
 
     def require_owner_loss(self, snapshot, owner_identity):
         """Attest only this recorded owner's release and dead process.

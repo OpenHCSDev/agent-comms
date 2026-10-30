@@ -248,8 +248,8 @@ class PiNativeBackend(
         return await open_native(
             self,
             self.configuration.launch.binary,
-            thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
+            self.comms.threads.native_launch_arguments(
+                thread, NativeArguments.parse(self.arguments(thread)), package.path),
             package=package,
             worktree=thread.worktree.path,
             root=self.comms.root,
@@ -275,8 +275,8 @@ class PiNativeBackend(
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
             self.configuration.launch.binary,
-            thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
+            self.comms.threads.native_launch_arguments(
+                thread, NativeArguments.parse(self.arguments(thread)), package.path),
             content.text,
             delivery.worktree,
             delivery.environment,

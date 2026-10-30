@@ -18,71 +18,18 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
 
 from agent_comms.cli_commands import RegisteredResult
 from agent_comms.comms import client_wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
 from agent_comms.tool_caller import CommanderForkCaller
-from agent_comms.turn_phase import ModelWaitPhase, TurnPhase
+from agent_comms.turn_phase import ModelWaitPhase
 from agent_comms_hooks import ClaudeHookProgram, SubagentId
-from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
-
-
-class SubagentSeats(CommanderSession):
-    """The slots this session's subagents occupy, one file per occupant naming its slot:
-    Claude Code names the subagent and Core names the slot, so the pairing is written only
-    here, when Core seats an occupant, and removed when Core vacates it."""
-
-    command: ClassVar[tuple[str, ...]] = ("agent-comms-commander", "order")
-    timeout: ClassVar[float] = 30
-
-    @property
-    def seats(self) -> Path:
-        return WatchClaim(self.session_id).path.with_suffix(".slots")
-
-    def run(self, *argv: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(argv, capture_output=True, text=True, timeout=self.timeout)
-
-    def core(self, record: WatchRecord, *argv: str) -> subprocess.CompletedProcess[str]:
-        """Core on this session's bus; Core writes its answer, or its refusal, to stdout."""
-        return self.run(sys.executable, "-m", "agent_comms.cli", "--root", record.root, *argv)
-
-    def vacate(self, record: WatchRecord, seat: Path) -> tuple[str, ...]:
-        """Core's refusal to vacate the seat's slot, or none once it is vacated."""
-        run = self.core(record, "retire-slot", "--name", seat.read_text())
-        if run.returncode:
-            return (run.stdout.strip(),)
-        seat.unlink()
-        return ()
-
-
-@dataclass(frozen=True)
-class SeatedSubagent(SubagentSeats):
-    """The existing seat or commander-fork name identifies whose activity a hook reports."""
-
-    agent_id: SubagentId
-
-    @property
-    def seat(self) -> Path:
-        return self.seats / self.agent_id
-
-    def enter(self, phase: TurnPhase) -> None:
-        state = WatchClaim(self.session_id).state()
-        state.by_role(
-            lambda: None,
-            lambda record: self.record_phase(record, self.seat.read_text(), phase),
-            lambda record: self.record_phase(record, self.agent_id.fork, phase),
-        )
-
-    @staticmethod
-    def record_phase(record: WatchRecord, name: str, phase: TurnPhase) -> None:
-        with client_wire(Path(record.root)) as comms:
-            comms.agents.enter_phase(name, phase)
+from agent_comms_hooks.seats import SeatedSubagent, SubagentSeats
+from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 
 @dataclass(frozen=True)
