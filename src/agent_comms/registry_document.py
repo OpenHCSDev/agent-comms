@@ -61,7 +61,6 @@ from .thread_identity import (
     RecordedThreadIncarnation,
     ThreadBirthRecord,
     ThreadIncarnation,
-    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -510,17 +509,6 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
             if not isinstance(name, str) or not isinstance(row, dict) or row.get(name_key) != name:
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
-
-    def lookup_names(self) -> dict[ThreadLookup, str]:
-        """Each row's creation lookup, read from its birth alone like the distinctness check:
-        resolving one owner never decodes the other threads."""
-        return {
-            (self._decoded[name].incarnation if name in self._decoded
-             else ThreadIncarnationRecord(name, CreationTime.from_wire(
-                 self._raw[name].get("created_at")).to_wire()).incarnation()
-             ).require_recorded().lookup: name
-            for name in self
-        }
 
     def require_distinct_births(self) -> None:
         """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
