@@ -30,6 +30,7 @@ from .field_codec import (
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
 from .native_input_proof import NativeContextProof, NativeInputCommit
+from .native_entries import NativeEvidenceScope
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
@@ -59,7 +60,6 @@ if TYPE_CHECKING:
     from .pi_events import Response, ResponseOutcome
     from .pending_requests import PendingRequest
     from .launch_runtime import RestartEnvironment
-    from .native_entries import NativeEvidenceScope
 
 
 class SessionSnapshot:
