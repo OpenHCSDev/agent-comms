@@ -808,6 +808,25 @@ class EditWorkplaces:
                 path: frozenset(problems) for path, problems in sources.items()})
         return workplaces
 
+    @cached_property
+    def owners_by_allocation(self) -> Mapping[str, tuple[Thread, ...]]:
+        """The captured owners under each checkout allocation name, derived once per capture:
+        a boundary names its allocation, so no edit walks every registered thread."""
+        owners: dict[str, list[Thread]] = {}
+        for thread in self.owners.values():
+            owners.setdefault(self.rule.roots_of(thread).allocation_name, []).append(thread)
+        return {name: tuple(threads) for name, threads in owners.items()}
+
+    def allocating(self, boundary: Path) -> Iterator[Thread]:
+        """Owners whose order-checkout prefix ``<allocation>--`` starts the boundary's name."""
+        if boundary.parent != self.rule.checkout_base:
+            return
+        name = boundary.name
+        split = name.find('--')
+        while split != -1:
+            yield from self.owners_by_allocation.get(name[:split], ())
+            split = name.find('--', split + 1)
+
     def problems_for(self, path: str) -> frozenset[str]:
         original = Path(path)
         if not original.is_absolute():
@@ -819,9 +838,7 @@ class EditWorkplaces:
                  if original.is_relative_to(self.rule.checkout_base) else ())
         boundary = self.rule.checkout_base.joinpath(*parts[:1])
         reserved = boundary in self.allocated or any(allocation.reserves_boundary()
-                       for thread in self.owners.values()
-                       for prefix in (self.rule.order_checkout(self.rule.roots_of(thread), ''),)
-                       if boundary.parent == prefix.parent and boundary.name.startswith(prefix.name)
+                       for thread in self.allocating(boundary)
                        for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
         # Even a missing/released/unknown allocation reserves its lexical boundary. Only
         # captured actual Git identity may supply an owner; absence never enables spill.
