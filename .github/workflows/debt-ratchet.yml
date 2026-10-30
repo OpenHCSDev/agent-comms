@@ -271,7 +271,7 @@ jobs:
           set -o pipefail
           ratchet_status=0
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base "$BASE" --head HEAD --ci-inputs "$RUNNER_TEMP/paired-sources" 2>ratchet-findings.txt | tee ratchet.txt || ratchet_status=$?
+            --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>ratchet-findings.txt | tee ratchet.txt || ratchet_status=$?
           cat ratchet-findings.txt >&2
           exit "$ratchet_status"
 

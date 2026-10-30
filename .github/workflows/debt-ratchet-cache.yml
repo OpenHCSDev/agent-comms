@@ -70,7 +70,7 @@ jobs:
       - name: Measure main against its parent
         run: |
           PYTHONPATH=src:tools python tools/debt_ratchet.py \
-            --root ${{ matrix.kind }} --base HEAD^1 --head HEAD --ci-inputs "$RUNNER_TEMP/paired-sources" || true
+            --root ${{ matrix.kind }} --base HEAD^1 --head HEAD || true
 
       - name: The same sources are still current before saving cache
         env:
