@@ -33,6 +33,14 @@ class ServicePasses:
             return RecordedEventTime(self.commander_completed[commander])
         return UnrecordedEventTime()
 
+    def stall(self) -> str:
+        """Why passes stopped completing: every recorded failure with its error, or, with none
+        recorded, that no watch is running at all."""
+        return "; ".join(
+            f"{watch} failing since {RecordedEventTime(failure.since).clock()}: {failure.error}"
+            for watch, failure in self.failing.items()
+        ) or "no failure recorded, so no heartbeat is running"
+
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
         return self.heartbeat_completed_at(commander).since(since)

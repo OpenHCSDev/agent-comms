@@ -39,10 +39,10 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
     BranchGrowth,
+    ConflictingBranches,
     DeliveredHeadReview,
     HeldBranchRule,
     LostTools,
-    SharedFileBranches,
     StandingRule,
 )
 from agent_comms.thread_identity import ReportedTools, ToolName
@@ -245,8 +245,8 @@ class BranchBehindMainSeed(IncidentSeed):
         )
 
 
-class SharedFileBranchesSeed(IncidentSeed):
-    rule = SharedFileBranches
+class ConflictingBranchesSeed(IncidentSeed):
+    rule = ConflictingBranches
 
     @classmethod
     def seed(cls, fleet: Fleet) -> StandingRule:
@@ -257,7 +257,7 @@ class SharedFileBranchesSeed(IncidentSeed):
             fleet.push(worktree)
             held.append(fleet.unit(branch, worktree))
         left, right = held
-        return SharedFileBranches(
+        return ConflictingBranches(
             left.id,
             left.held().owner_identity,
             "shared-left",
@@ -265,7 +265,7 @@ class SharedFileBranchesSeed(IncidentSeed):
             right.held().owner_identity,
             "shared-right",
             fleet.repository,
-            "shared.py",
+            ("shared.py",),
         )
 
 
