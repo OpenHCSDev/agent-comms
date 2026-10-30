@@ -16,7 +16,7 @@ from typing import Annotated
 @dataclass(frozen=True, kw_only=True)
 class CheckoutCliCommand(PreparedCheckoutCliCommand,
                          declared_name=OrderCheckoutAllocation.verb):
-    help = "Create, repair or remove an owned problem checkout with its pinned submodules"
+    help = "Create, repair, transfer or remove an owned problem checkout with its pinned submodules"
     problem: Annotated[str, Argument(flags=("problem",))]
 
     def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant:

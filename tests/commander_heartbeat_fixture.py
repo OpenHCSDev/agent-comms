@@ -30,7 +30,7 @@ def current_hud(comms: Comms, commander: str, frame: HeartbeatFrame,
     owner = comms.registry.require(commander).incarnation
     previous = CommanderUpdate.latest(comms, owner)
     packet = next(iter(previous), CommanderNotice(owner, ()))
-    history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot(), commander))
+    history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot()))
     return CommanderHud.of(comms, commander, frame, states,
                            delivery=CommanderDelivery(packet, packet.open_pings(history)), usage=usage)
 

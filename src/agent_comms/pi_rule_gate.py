@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms_hooks.skill import CommanderReader, FleetReader
+from agent_comms_hooks.skill import (
+    CommanderReader,
+    CommanderRulesReader,
+    DeckReader,
+    FleetReader,
+    FleetRulesReader,
+)
 
 from .rule_deal import DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
@@ -60,13 +66,20 @@ class PiRedeal(PiRuleGate, Redeals):
         return cls(gate.scratch, gate.worktree, comms, thread)
 
     def renew(self) -> None:
+        """A start or compaction deals the papers, then the rules."""
+        self.deal_from(CommanderReader, FleetReader)
+
+    def reread(self) -> None:
+        self.deal_from(CommanderRulesReader, FleetRulesReader)
+
+    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader]) -> None:
         """The registry's commander project picks the deck reader whose sources it deals."""
         snapshot = self.comms.registry.snapshot()
         snapshot.commander_project.deal_rules(
             self,
             self.thread.incarnation,
-            commander=CommanderReader,
-            commanded=FleetReader,
+            commander=commander,
+            commanded=commanded,
             prompts=self.owner_words(snapshot),
         )
 

@@ -17,7 +17,7 @@ from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
-from agent_comms.field_codec import FieldCodec, OrderId, PublicationExclude
+from agent_comms.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
@@ -29,6 +29,7 @@ from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms_hooks.board import BoardEntry
 
@@ -224,6 +225,10 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
 
+    def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
+        """A board packet speaks in the owner's voice yet is not his words: its own category."""
+        return HeartbeatCategory
+
     def should_publish(self, facts: PublishedFacts, previous: tuple[CommanderUpdate, ...]) -> bool:
         return True
 
@@ -237,11 +242,9 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
             "Full evidence: comms_hud board/open_pings, or Toad /commander original details",
         ))
 
-    def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """This packet's lines the commander disposes of, through the same recorded actions the
-        gate reads: a verdict drops its line on the next read, not the next packet."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+    def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
+        """Any commander's recorded action disposes of its subject on the shared board."""
+        history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot()))
         return tuple(ping.board_entry() for ping in self.open_pings(history))
 
     def open_pings(self, history: CommanderHistory) -> tuple[Ping, ...]:
@@ -272,17 +275,10 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
                      for packet in message.task.commander_update(commander))
 
     @classmethod
-    def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """The newest packet's lines still undisposed past ``cut``."""
-        history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot(), commander))
-        return tuple(ping for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for ping in latest.undisposed(history, cut))
-
-    @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """The newest packet's board, derived at the moment of asking."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for entry in latest.board(comms, commander))
+                     for entry in latest.board(comms))
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
@@ -464,8 +460,8 @@ class AlarmSection:
                 overflow.append(AlarmOverflow(kind, len(rest), min(
                     rest, key=lambda ping: ping.since.chronology()).since.age(now)))
         tables: list[ViewTable[AlarmLine] | ViewTable[AlarmOverflow]] = [
-            ViewTable(AlarmLine, "hud", tuple(lines)),
+            ViewTable(AlarmLine, HudExclude, tuple(lines)),
         ]
         if overflow:
-            tables.append(ViewTable(AlarmOverflow, "hud", tuple(overflow)))
+            tables.append(ViewTable(AlarmOverflow, HudExclude, tuple(overflow)))
         return tuple(tables)

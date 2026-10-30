@@ -135,6 +135,15 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
 
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
+        """Input and system evidence do not start an assistant answer."""
+        return window
+
+    @property
+    def answers_turn(self) -> bool:
+        """Non-answer events do not clear a turn's opening questions."""
+        return False
+
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
@@ -277,7 +286,7 @@ class IncomingTranscript(TextTranscript):
 
     @property
     def category(self) -> type[MessageCategory]:
-        return self.message.role.category
+        return self.message.category
 
     message: Annotated[Message, ActivityExclude()]
     reader: str
@@ -347,7 +356,18 @@ class UserTranscript(NativeTextTranscript):
         return (replace(self, routing=self.routing.with_requests(remaining)),)
 
 
-class AssistantTranscript(AgentTextTranscript):
+class ModelOutput:
+    """Assistant text, thinking and tool output close the window for new automatic reply routes."""
+
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
+        return answering()
+
+
+class AssistantTranscript(ModelOutput, AgentTextTranscript):
+    @property
+    def answers_turn(self) -> bool:
+        return bool(self.text)
+
     def append_to(self, events: list[TranscriptEvent]) -> None:
         if events and (merged := events[-1].followed_by_assistant(self)) is not None:
             events[-1] = merged
@@ -437,7 +457,7 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
-class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
+class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
     category = ThinkingCategory
 
     @property
@@ -453,7 +473,7 @@ class ContextTranscript(SilentTranscript, NativeTextTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolTranscript(SilentTranscript, RecordedTranscript):
+class ToolTranscript(ModelOutput, SilentTranscript, RecordedTranscript):
     category = ToolCategory
     tool_call_id: ToolCallId
     tool_name: str

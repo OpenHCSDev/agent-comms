@@ -286,9 +286,12 @@ class CommanderLoad(ServiceReading):
             return 'Retained board rows and load:'
         return 'STALE retained board rows and load:'
 
+    def health_lines(self) -> tuple[str, ...]:
+        return (*self.service_status, self.retained_status())
+
     @projected(view=WireExclude)
     def header(self) -> tuple[str, ...]:
-        return (*self.service_status, self.retained_status(), str(self.load))
+        return (*self.health_lines(), str(self.load))
 
 
 @dataclass(frozen=True)
@@ -364,6 +367,12 @@ class CommanderHud(CommanderLoad):
                    open_pings=delivery.open_pings, services=passes,
                    heartbeat=passes.heartbeat_completed_at(owner))
 
+    def for_delivery(self, delivery: CommanderDelivery) -> CommanderHud:
+        """Keep the prepared shared board; packet history and completion belong to its recipient."""
+        owner = delivery.packet.commander.require_recorded()
+        return replace(self, commander=owner, packets=(delivery.packet,),
+                       open_pings=delivery.open_pings).with_services(self.services, owner)
+
     @property
     def board(self) -> tuple[BoardEntry, ...]:
         """The one action-filtered set captured from Ping.on_board for this publication."""
@@ -389,8 +398,7 @@ class CommanderHud(CommanderLoad):
         ),))
 
     def status_strip(self, now: float) -> str:
-        return "\n".join((*self.service_status, self.retained_status(),
-                          *self.status_table(now).labelled_lines()))
+        return "\n".join((*self.health_lines(), *self.status_table(now).labelled_lines()))
 
     @cached_property
     def display_facts(self) -> HudDisplayFacts:

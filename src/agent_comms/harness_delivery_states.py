@@ -11,7 +11,7 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .channel_targets import CommandTarget
+from .message_reference import MessageReference
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
 
@@ -85,7 +85,7 @@ class MonitorEvidence(DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         return ()
 
     def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
@@ -104,7 +104,7 @@ class ReceivingMonitor(MonitorEvidence):
     total: int
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         if notification.total != self.total:
             return ()
         parts = await bridge.observe_part(delivery, notification, record)
@@ -116,9 +116,7 @@ class ReceivingMonitor(MonitorEvidence):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return (CommandTarget.named(message.target).automatic_reply_targets(message.sender)
-                if message.role.response_policy(message).starts_turn_for(message, bridge.binding.bus)
-                else ())
+        return message.opening_references(bridge.binding.bus)
 
 
 @dataclass(frozen=True)

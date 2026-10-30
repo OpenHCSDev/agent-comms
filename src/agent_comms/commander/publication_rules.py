@@ -43,7 +43,7 @@ class UnpushedBranch(HeldBranchRule):
     def line(self) -> str:
         return (f"{self.holder.name} has {self.unpublished.commits} unpushed commits on"
                 f" {self.problem} ({self.unpublished.head[:9]} in {self.worktree}, upstream"
-                f" {self.unpublished.upstream or 'not configured'}). waiting for the disk to die?"
+                f" {self.unpublished.upstream or 'not configured'}). these commits exist only locally"
                 " -> push them")
 
 

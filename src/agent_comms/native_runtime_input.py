@@ -30,6 +30,7 @@ from .field_codec import (
     ToolCallId,
 )
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from .turn_item import FreshNativeId
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -290,7 +291,7 @@ class NativeRuntimeInput(
     ] = field(default_factory=UnrecordedNativeClaim)
     session_id: PiSessionId | NoPiSessionId = NoPiSessionId()
     session_file: str | None = None
-    session_entry_id: Annotated[NativeColumn, NativeContext(str), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
+    session_entry_id: Annotated[NativeColumn, NativeContext(FreshNativeId), Column(storage=TextStorage, nullable=True)] = UnrecordedNativeColumn()
     session_entry_start: Annotated[
         NativeInputPosition,
         NativeInputLocation.position_column,

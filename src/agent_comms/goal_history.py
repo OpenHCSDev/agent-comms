@@ -30,7 +30,6 @@ from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
 from .tool_result import DeclaredReply
-from .reported_turn import ReportedTurnState
 from .typed_table import (
     Column,
     DurableTables,
@@ -192,10 +191,6 @@ class GoalHistoryEntry(RecordedGoalRevision, RowidSequenced, DurableTables):
     )
     state: Annotated[type[JournalState], HistoryExclude()] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
-
-    def reports_turn(self, turn: ReportedTurnState) -> bool:
-        """A committed goal revision records its original model reporting turn."""
-        return self.after.reports_turn(turn)
 
     def recorded(self) -> RecordedGoalRevision:
         return FieldCodec.construct(RecordedGoalRevision, {

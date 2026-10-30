@@ -24,6 +24,8 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
 
     Packet-owned wake behavior is shared with every bridge; tool-call board reads still derive
     their current undisposed requests from Core rather than keeping another copy here.
+    The native frame receives the original message: rewriting its body changes the identity
+    the delivery attempt was stored under.
     """
 
     incoming_frame = ClaudeMonitorFrame
@@ -41,14 +43,13 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         await super().watch_operation(operation)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
-        """On restart only the last 4 MiB is published again; Core's finish is idempotent, so
-        completed items may overlap. The first record starts after a newline in that window."""
+        """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""
         start = max(0, boundary - self.RECENT_BYTES)
         if start:
             stream.seek(start - 1)
             stream.readline()
             start = stream.tell()
-        return start
+        return self.opening_before(stream, start)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()

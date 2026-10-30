@@ -15,6 +15,8 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
+from .channel_targets import CommandersTag
+from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -24,6 +26,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireValue,
@@ -55,6 +58,7 @@ from .thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -396,17 +400,32 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
 
+    def birth(self, name: str) -> CreationTime:
+        """One row's creation time, read alone: a stored row is never decoded for it."""
+        if name in self._decoded:
+            return self._decoded[name].created_at
+        try:
+            return CreationTime.from_wire(self._raw[name].get("created_at"))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def births(self) -> set[float]:
+        return {self.birth(name) for name in self}
+
+    def lookup_names(self) -> dict[ThreadLookup, str]:
+        """Each row's creation lookup, read from its birth alone: resolving one owner never
+        decodes the other threads."""
+        return {
+            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
+            .require_recorded().lookup: name
+            for name in self
+        }
+
     def require_distinct_births(self) -> None:
-        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
-        a stored row's birth is read alone, without decoding the rest of its thread."""
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
         births: set[float] = set()
         for name in self:
-            try:
-                birth = (self._decoded[name].created_at if name in self._decoded
-                         else CreationTime.from_wire(self._raw[name].get("created_at")))
-            except ValueError as error:
-                raise InvalidRegistryDocument(error) from error
-            births.add(birth.distinct_from(births))
+            births.add(self.birth(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -548,7 +567,12 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
     @abstractmethod
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """Every commander of this bus."""
+
+    @abstractmethod
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered commander that owns the project's board, repositories and orders."""
 
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
@@ -585,6 +609,10 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A bus with no commander project has no commanders, tagged or not."""
+        return ()
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
@@ -608,6 +636,12 @@ class RegisteredCommanderProject(CommanderProject):
     repos: tuple[Repo, ...]
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered lead first, then every thread declared in #commanders."""
+        return tuple(dict.fromkeys((
+            *self.leads(snapshot),
+            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name])))
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
         if not selected:
             raise RelationViolationError("The registered commander thread no longer exists.")
@@ -806,8 +840,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        used = {existing.created_at for existing in self.threads.values()}
-        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        thread = replace(thread, created_at=thread.created_at.distinct_from(self.threads.births()))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
@@ -1086,9 +1119,16 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
-    def by_lookup(self) -> Mapping[str, Thread]:
-        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
-                                 for thread in self.threads.values()})
+    def lookup_names(self) -> Mapping[ThreadLookup, str]:
+        return MappingProxyType(self.threads.lookup_names())
+
+    def born(self, lookup: ThreadLookup) -> Thread:
+        """The one thread a creation lookup names; only its row decodes."""
+        try:
+            name = self.lookup_names[lookup]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread lookup {lookup!r} is not registered.") from error
+        return self.threads[name]
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
@@ -1173,8 +1213,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
-        if lookup in self.by_lookup:
-            thread = self.by_lookup[lookup]
+        if lookup in self.lookup_names:
+            thread = self.born(lookup)
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)
