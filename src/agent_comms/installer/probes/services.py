@@ -32,11 +32,11 @@ class CommanderHeartbeatProbe(TargetProbe, RuntimeProbe[None]):
 
     def run(self) -> None:
         comms = wire(self.root)
-        snapshot = comms.registry.snapshot()
+        # The heartbeat's own served set: a retired or dead #commanders member gets no pass.
         commanders = tuple(thread.incarnation.require_recorded()
-                           for thread in snapshot.commander_project.commanders(snapshot))
+                           for thread in CommanderHeartbeat.served(comms.registry, comms.goals))
         if not commanders:
-            print("Commander heartbeat: no registered commander; not qualified")
+            print("Commander heartbeat: no live served commander; not qualified")
             return
         asyncio.run(ServicePassStore.at(self.root).wait_completed(
             commanders, self.since, CommanderHeartbeat.__name__,
