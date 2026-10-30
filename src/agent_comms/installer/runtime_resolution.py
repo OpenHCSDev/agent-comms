@@ -32,13 +32,14 @@ from agent_comms.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 
 if TYPE_CHECKING:
-    from agent_comms.installer.upgrade import Stack
+    from agent_comms.installer.runtime_stack import RuntimeStack
 
 
 @dataclass(frozen=True)
@@ -706,10 +707,26 @@ class ResolvedLock(BaseModel):
 
 @dataclass(frozen=True)
 class UnbuiltRuntime:
+    """A prefix with no recorded resolution: unsynced, or synced and not yet completed."""
+
     prefix: Path
 
-    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
+    def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
+
+    def prepare(self, stack: RuntimeStack) -> None:
+        stack.sync()
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        """Link the native package, record the resolution and prove the client imports; a
+        failure leaves no prefix, so the next build syncs it afresh."""
+        try:
+            stack.install_native()
+            RuntimeResolution.capture(stack, core).save(self.prefix)
+            stack.imports()
+        except BaseException:
+            shutil.rmtree(self.prefix)
+            raise
 
 
 class RuntimeResolution(BaseModel):
@@ -726,13 +743,25 @@ class RuntimeResolution(BaseModel):
 
     @classmethod
     def installed(cls) -> RuntimeResolution | UnbuiltRuntime:
-        prefix = LaunchRuntime.installed().prefix
+        return cls.recorded(LaunchRuntime.installed().prefix)
+
+    @classmethod
+    def recorded(cls, prefix: Path) -> RuntimeResolution | UnbuiltRuntime:
         if not (prefix / cls.record_path().name).is_file():
             return UnbuiltRuntime(prefix)
         return cls.at(prefix)
 
+    def prepare(self, stack: RuntimeStack) -> None:
+        """A recorded runtime is already synced; ``complete`` checks it still matches."""
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        if not self.matches(stack.lock, stack, core):
+            raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+        stack.stage_native()
+        stack.prepare_runtime()
+
     @classmethod
-    def capture(cls, stack: Stack, core: str) -> RuntimeResolution:
+    def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:
         packages = stack.probe(InstalledPackagesProbe(core))
         return cls(core_commit=core, packages=packages)
 
@@ -752,7 +781,7 @@ class RuntimeResolution(BaseModel):
             )
         return result
 
-    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
+    def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its

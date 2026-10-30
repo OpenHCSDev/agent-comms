@@ -18,7 +18,7 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.launch import InstallRun
-from agent_comms.installer.upgrade import TargetTree
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.installer.upgrade import Stack
 from agent_comms.launch_runtime import LaunchRuntime
@@ -85,7 +85,7 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     target = subprocess.check_output(("git", "-C", str(checkout), "rev-parse", "HEAD"), text=True).strip()
     scratch = tmp_path / "attempt"
     scratch.mkdir()
-    target_tree = TargetTree(checkout, scratch, target)
+    target_tree = TargetTree(scratch, target, repo=checkout)
     target_tree.add()
     request = InstallRun(InstallRequest(checkout=checkout, spill_dir=tmp_path), root, scratch, target)
     result = subprocess.run(

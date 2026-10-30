@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -65,6 +66,11 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def require_forkable(self):
         pass
+
+    def last_written(self) -> float:
+        """When the native transcript last grew; one never written grew at the epoch."""
+        transcript = Path(self.path)
+        return transcript.stat().st_mtime if transcript.exists() else 0.0
 
     async def compact(self, operation):
         return await operation()
