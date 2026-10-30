@@ -427,13 +427,16 @@ class CommanderHud(CommanderLoad):
     def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
         """The heartbeat has no viewport; native readers own their concrete geometry."""
         result = list(self.status_strip(now).splitlines())
-        result.extend(("", *self.alarm_text(self.alarms, now, colour=colour),
+        result.extend(("", *self.alarm_text(
+            tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
                        *(line for packet in self.packets for line in packet.not_applied)))
         for section in self.groups:
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
                 table.lines() for table in section.tables))
+        result.extend(("", *self.alarm_text(
+            tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)
 
     @projected(view=WireExclude)

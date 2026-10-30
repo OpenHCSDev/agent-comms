@@ -141,3 +141,16 @@ def test_every_native_record_producer_declares_entity_identity() -> None:
     for declaration in HudRecord.__subclasses__():
         assert any(DisclosureIdentity.read(plan.annotation, False)
                    for plan in FieldCodec.field_plans(declaration)), declaration
+
+
+def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> None:
+    from agent_comms.task_attachments.commander_pings import AlarmSection, NewAlarms, WatchingAlarms
+
+    hud = example_hud()
+    pings = hud.packets[0].handled
+    hud.__dict__["alarms"] = (AlarmSection(NewAlarms, pings[:1]), AlarmSection(WatchingAlarms, pings[1:] or pings))
+    plain = hud.hud_text(1000)
+    new, watching = (plain.index(section.heading()) for section in hud.alarms)
+    units = [plain.index(section.heading()) for section in hud.groups]
+    assert new < min(units) and max(units) < watching
+    assert all(ping.text in "\n".join(plain) for ping in pings)
