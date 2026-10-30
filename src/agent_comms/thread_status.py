@@ -102,6 +102,10 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def declaration(self) -> ThreadStatus:
         return self
 
+    def fenced(self) -> ThreadStatus:
+        """This stored status while its process still binds it; only a stop has a fence."""
+        return self
+
     def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
         return NoBridgeThreadStatus().registered(thread, now)
 
@@ -210,7 +214,9 @@ class HostBoundPresence:
         return thread.role.executor(thread) if thread.process_alive else ()
 
 
-class ActiveThreadPresence(HostBoundPresence, AlwaysListed, Visible, ThreadStatus, declared_name=None):
+class ActiveThreadPresence(
+    HostBoundPresence, AlwaysListed, Visible, ThreadStatus, declared_name=None,
+):
     """Shared semantics of running and idle owners; not a second state family."""
 
     receiving = True
@@ -318,6 +324,14 @@ class StoppedThreadStatus(Visible, ThreadStatus):
     stopped = True
     vacant = True
 
+    def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
+        """Stopped never keeps a process binding, so a stored stop still bound is a fence
+        whose host has not completed the session."""
+        return thread.process_identity.stopped_seen(self)
+
+    def fenced(self) -> ThreadStatus:
+        return StoppingThreadStatus()
+
     def require_stopped(self) -> None:
         pass
 
@@ -328,7 +342,11 @@ class StoppedThreadStatus(Visible, ThreadStatus):
 class StoppingThreadStatus(HostBoundPresence, StoppedThreadStatus):
     """Fenced against new work while its host completes the session. The binding stays
     until that completion, so a restart cannot race it; a stop sent again completes a
-    session the host no longer holds."""
+    session the host no longer holds. It is stored as stopped: the kept binding is what
+    tells it apart, so the registry's stored format does not change."""
+
+    def declaration(self) -> ThreadStatus:
+        return StoppedThreadStatus()
 
 
 class CliInboxPresence(AlwaysListed):
