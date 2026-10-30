@@ -40,6 +40,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -72,12 +73,14 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.nominal_census import NominalPlanReadings
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
     ClearingVerb,
@@ -89,6 +92,7 @@ from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
     CleanHunt,
+    CorrectLinkTodo,
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
@@ -384,7 +388,7 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReadings().prepare_reading(repository, todos, tuple(
+        return NominalPlanReadings().prepare_reading(repository, todos, tuple(
             phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
@@ -423,7 +427,19 @@ class CommanderContext(BaseModel):
                   answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            answerer=self.receipts).message
+
+    @property
+    def receipts(self) -> CommanderReceipts:
+        """Whose receipts this actor answers: its commander's, and those of every commander of
+        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
+        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
+        a retired commander's directives included."""
+        actor = self.actor_identity
+        owners = (self.incarnation, *(request.commander for request
+                                      in self.comms.goals.todos.open_requests(actor)))
+        return CommanderReceipts(actor, tuple(dict.fromkeys(owners)))
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -684,6 +700,7 @@ class Commander(CommanderContext):
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
+        self.comms.registry.status(unit).require_visible(f"{unit} cannot take an order.")
         document = document.resolved(finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
@@ -801,10 +818,9 @@ class Commander(CommanderContext):
             superseded_by)))
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo))
-        self.post(VerdictAudience((unit,)),
-             f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
+        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} Withdrawn: {withdrawal}. '
+                       'Stop that work; it counts against no one.', 'Withdrawal',
+                       VerdictAudience.of(unit, todo))
         print(withdrawal)
 
     def fire(self, unit: str, why: str) -> None:
@@ -850,7 +866,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        self.actor.commanding(ctx.comms, ctx.commander)
+        self.actor.commanding(ctx.comms)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
@@ -1242,6 +1258,23 @@ class RunVerb(OrderVerb):
     def run(self, ctx: Commander) -> None:
         ctx.call(CommsOrderRunTool(problem=self.pid, run=self.text, why=self.why))
         print(f'{self.pid}: order now works when {self.text}')
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnlinkVerb(Reasoned, OrderVerb):
+    help = ("take a pull request off an open order that never held its work; keeps its holder, "
+            "review timer and strikes")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    repo: Annotated[RepositoryName, Argument(flags=("repo",), options={"metavar": "OWNER/NAME"})]
+    number: Annotated[int, Argument(flags=("number",), options={"metavar": "PR"})]
+
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.get(self.pid)
+        link = PullRequestLink(self.repo, self.number)
+        ctx.call(CommsChangeProblemTool(problem=self.pid, operation=CorrectLinkTodo(
+            todo.revision, ctx.incarnation, self.why,
+            previous=todo.order.pull_requests, link=link)))
+        print(f'{self.pid}: order no longer links {link.url}')
 
 
 @dataclass(frozen=True, kw_only=True)

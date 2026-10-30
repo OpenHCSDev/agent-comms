@@ -82,10 +82,10 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     def for_path(cls, rule: StorageRule, owner: Thread,
                  path: Path) -> Iterator[CheckoutAllocation]:
         allocated = rule.roots_of(owner).allocation_name
-        prefix = f'{allocated}--'
+        prefix = f'{allocated}{rule.checkout_separator}'
         name = (path.name.removeprefix(prefix)
                 if path.parent == rule.checkout_base and path.name.startswith(prefix) else '')
-        problem, _, suffix = name.partition('--')
+        problem, _, suffix = name.partition(rule.checkout_separator)
         for member in cls.members_with(cls):
             yield from member.read(owner, path, problem, suffix)
 
@@ -323,6 +323,8 @@ class StorageRule(RoomAllocation, DurableFile):
     scratch_base: StoragePath = field(
         default_factory=lambda: Path.home() / '.cache' / 'agent-scratch')
     checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
+    # Joins a checkout's allocation, problem and companion repository: one name, one format.
+    checkout_separator: ClassVar[str] = '--'
 
     def __post_init__(self):
         limits = (self.floor_gib, self.cleanup_gib)
@@ -347,13 +349,24 @@ class StorageRule(RoomAllocation, DurableFile):
     def order_checkout(self, roots: StorageRoots, problem: str) -> Path:
         """Allocation path for a new problem checkout of its order's check repository; an
         existing source may be reused."""
-        return self.checkout_base / f'{roots.allocation_name}--{problem}'
+        return self.checkout_base / f'{roots.allocation_name}{self.checkout_separator}{problem}'
+
+    def allocation_names(self, boundary: Path) -> Iterator[str]:
+        """order_checkout's inverse: every allocation name whose order checkouts could be named
+        ``boundary``, one per separator position in its name."""
+        if boundary.parent != self.checkout_base:
+            return
+        name = boundary.name
+        split = name.find(self.checkout_separator)
+        while split != -1:
+            yield name[:split]
+            split = name.find(self.checkout_separator, split + 1)
 
     def repository_checkout(self, roots: StorageRoots, problem: str,
                             repository: RepositoryName) -> Path:
         """The same problem's checkout of another repository, changed in lockstep with it."""
         checkout = self.order_checkout(roots, problem)
-        return checkout.with_name(f'{checkout.name}--{repository.name}')
+        return checkout.with_name(f'{checkout.name}{self.checkout_separator}{repository.name}')
 
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
@@ -365,7 +378,7 @@ class StorageRule(RoomAllocation, DurableFile):
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
         checkout = self.order_checkout(roots, problem)
-        return (checkout, *sorted(checkout.parent.glob(f'{checkout.name}--*')))
+        return (checkout, *sorted(checkout.parent.glob(f'{checkout.name}{self.checkout_separator}*')))
 
     def work_for_problem(
         self, problem: Todo, registry: Registration, todos: TodoStore,
@@ -535,7 +548,7 @@ class StorageRule(RoomAllocation, DurableFile):
             f'Storage (refused without a strike): your project is {thread.project_path}; '
             f'your checkouts are '
             f'{checkout} (another repository changed in the '
-            f'same problem: {checkout}--<repository name>), '
+            f'same problem: {checkout}{self.checkout_separator}<repository name>), '
             f'created with agent-comms {OrderCheckoutAllocation.verb} --from {thread.name} add PROBLEM '
             f'(another repository: agent-comms {RepositoryCheckoutAllocation.verb} '
             f'--from {thread.name} add PROBLEM OWNER/REPO), '
@@ -808,6 +821,20 @@ class EditWorkplaces:
                 path: frozenset(problems) for path, problems in sources.items()})
         return workplaces
 
+    @cached_property
+    def owners_by_allocation(self) -> Mapping[str, tuple[Thread, ...]]:
+        """The captured owners under each checkout allocation name, derived once per capture:
+        a boundary names its allocation, so no edit walks every registered thread."""
+        owners: dict[str, list[Thread]] = {}
+        for thread in self.owners.values():
+            owners.setdefault(self.rule.roots_of(thread).allocation_name, []).append(thread)
+        return {name: tuple(threads) for name, threads in owners.items()}
+
+    def allocating(self, boundary: Path) -> Iterator[Thread]:
+        """Owners whose order-checkout prefix ``<allocation>--`` starts the boundary's name."""
+        for name in self.rule.allocation_names(boundary):
+            yield from self.owners_by_allocation.get(name, ())
+
     def problems_for(self, path: str) -> frozenset[str]:
         original = Path(path)
         if not original.is_absolute():
@@ -819,9 +846,7 @@ class EditWorkplaces:
                  if original.is_relative_to(self.rule.checkout_base) else ())
         boundary = self.rule.checkout_base.joinpath(*parts[:1])
         reserved = boundary in self.allocated or any(allocation.reserves_boundary()
-                       for thread in self.owners.values()
-                       for prefix in (self.rule.order_checkout(self.rule.roots_of(thread), ''),)
-                       if boundary.parent == prefix.parent and boundary.name.startswith(prefix.name)
+                       for thread in self.allocating(boundary)
                        for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
         # Even a missing/released/unknown allocation reserves its lexical boundary. Only
         # captured actual Git identity may supply an owner; absence never enables spill.

@@ -14,7 +14,8 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from agent_comms.locked_store import DocumentChange, LockedStore
+from agent_comms.locked_store import DocumentBytes, DocumentChange, LockedStore
+from agent_comms.private_path import FileRevision, MissingFile
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.pi_counts import PiCount
 from agent_comms.registry_store import RegistryStore
@@ -29,6 +30,21 @@ from agent_comms.store_files import (
     StoreGuard,
     _store_lock,
 )
+
+
+@pytest.mark.parametrize("existing", (False, True))
+def test_document_bytes_captures_original_missing_or_existing_file(tmp_path, existing):
+    path = tmp_path / "document" / "value.json"
+    content = b'{"original":"bytes"}\n'
+    if existing:
+        path.parent.mkdir()
+        path.write_bytes(content)
+    captured = DocumentBytes.capture(path)
+    if existing:
+        assert captured == DocumentBytes(FileRevision.capture(path), content)
+    else:
+        assert captured == DocumentBytes(MissingFile(), b"")
+        assert not path.exists() and not path.parent.exists()
 
 
 def observation(thread="goal"):

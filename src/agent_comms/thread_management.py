@@ -49,7 +49,7 @@ from .field_codec import (
 from .importing import ImportLimits, ImportedConversation, ThreadImported
 from .launch_runtime import LaunchRuntime, TagListText
 from .message_bus import MessageBus
-from .native_arguments import ConfiguredBinary
+from .native_arguments import ConfiguredBinary, NativeArguments
 from .native_settings import NativeThreadDefaults
 from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
@@ -59,7 +59,9 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
+from .thread_catalog import ThreadCatalog
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .tool_declaration import NativeRequestTools
 from .native_session_reopen import PiSessionId
 from .tool_result import ToolResult
 
@@ -438,7 +440,18 @@ class ThreadManagement:
             thread.execution.require_native()
             return configuration.configured(thread)
 
-        return self.registry.update_thread(original.name, configure)
+        updated = self.registry.update_thread(original.name, configure)
+        ThreadCatalog.publish(updated, self.root)
+        return updated
+
+    def native_launch_arguments(
+        self, thread: Thread, arguments: NativeArguments, package: Path,
+    ) -> tuple[str, ...]:
+        """Publish the current catalog before launching an extension that consumes it."""
+        if not arguments.loads(NativeRequestTools.native_extension(package)):
+            return arguments.argv
+        path = ThreadCatalog.publish(thread, self.root)
+        return (*arguments.argv, "--comms-catalog", str(path))
 
     def initialize_native_configuration(
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],

@@ -133,7 +133,7 @@ class DrainDiagnostic(DeclaredFamily, DrainObservation, affix="Diagnostic"):
     def summary(self) -> str:
         return f"{self.headline} · {self.error_type}: {self.reason} · {self.recovery}"
 
-    @projected(view="artifact", name="kind")
+    @projected(view=ArtifactExclude, name="kind")
     def artifact_kind(self) -> str:
         return FieldCodec.encode(type(self))
 

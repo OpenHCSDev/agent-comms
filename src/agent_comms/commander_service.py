@@ -23,7 +23,7 @@ class CommanderService:
     def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
         """The oldest open request makes a live holder owed service, even before its first beat."""
         return tuple(request for live in cls.live((thread,))
-                     for request in goals.todos.open_requests(live.incarnation, limit=1, descending=False))
+                     for request in goals.todos.open_requests(live.acting_identity, limit=1, descending=False))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, commander: str) -> tuple[Thread, ...]:
@@ -46,6 +46,14 @@ class CommanderService:
     def recipients(cls, snapshot: RegistrySnapshot, lead: Thread) -> tuple[Thread, ...]:
         """The board's lead, then every other live commander: one board read, one packet each."""
         return tuple(dict.fromkeys((lead, *cls.live(snapshot.commander_project.commanders(snapshot)))))
+
+    @classmethod
+    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
+        """Every commander a pass sends a packet to: each board's recipients, once."""
+        snapshot = registry.snapshot()
+        return tuple(dict.fromkeys(
+            recipient for lead in cls.boards(registry, goals)
+            for recipient in cls.recipients(snapshot, lead)))
 
     @classmethod
     def boards(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:

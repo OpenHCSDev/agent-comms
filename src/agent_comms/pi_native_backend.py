@@ -19,20 +19,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
-from agent_comms.pi_payloads import PiOmitted
+from agent_comms.pi_payloads import PiOmitted, PiResponseData
 
-from .agent_backend import (
-    CompactionOutcome,
-    FailedCompaction,
-    Forks,
-    InputContent,
-    Interrupts,
-    NewThreadBackend,
-    NothingToCompaction,
-    PlacedCompaction,
-    RuntimeLocation,
-)
+from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
+from .turn_inbox import InputContent
 from .coordinator import Coordination
+from .field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_failures import NativePiUnavailable
@@ -43,7 +35,7 @@ from .native_fork import (
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
-from .pi_commands import Compact
+from .pi_commands import Compact, NativeQuery
 from .selected_session import SavedSelectedSession
 from .session_revision import (
     SessionObservation,
@@ -144,7 +136,6 @@ class PersistentPiSession:
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
-        reused = child is not None
         if child is None:
             await self.close()
             attestation = launch.session.attestation()
@@ -152,10 +143,11 @@ class PersistentPiSession:
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
             self.child_state = BorrowedNative(child, self.child_state)
+            watchdog.spawned()
         else:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             self.child_state = BorrowedNative(child, EmptyNative())
-        watchdog.spawned(reused)
+            watchdog.reused()
         return child
 
     async def context_for_input(self, thread, context):
@@ -217,7 +209,7 @@ class PiNativeBackend(
         self.observe = observe
 
     @classmethod
-    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId) -> Self:
         return cls(
             runner.inputs.state(session_id).owned().configuration, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
@@ -248,8 +240,8 @@ class PiNativeBackend(
         return await open_native(
             self,
             self.configuration.launch.binary,
-            thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
+            self.comms.threads.native_launch_arguments(
+                thread, NativeArguments.parse(self.arguments(thread)), package.path),
             package=package,
             worktree=thread.worktree.path,
             root=self.comms.root,
@@ -260,7 +252,7 @@ class PiNativeBackend(
             observe=partial(self.observe, thread),
         )
 
-    async def inspect(self, thread: Thread, request):
+    async def inspect(self, thread: Thread, request: NativeQuery) -> PiResponseData:
         """Answer one Pi query on the idle child, preparing it first when needed."""
         return await self.child_state.inspect(self, partial(self.prepare, thread), request)
 
@@ -275,8 +267,8 @@ class PiNativeBackend(
         package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
             self.configuration.launch.binary,
-            thread.native_launch_arguments(
-                NativeArguments.parse(self.arguments(thread)), package.path, self.comms.root),
+            self.comms.threads.native_launch_arguments(
+                thread, NativeArguments.parse(self.arguments(thread)), package.path),
             content.text,
             delivery.worktree,
             delivery.environment,
@@ -309,7 +301,7 @@ class PiNativeBackend(
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
         try:
             command = Compact(custom_instructions=PiOmitted.from_input(instructions))
-            data = await self.inspect(thread, command)
+            data = (await self.inspect(thread, command)).require_compaction()
         except NativePiUnavailable as error:
             return FailedCompaction(str(error))
         if data.summary is None:

@@ -5,7 +5,6 @@ from pathlib import Path
 import pwd
 import subprocess
 import sys
-import time
 
 import pytest
 
@@ -30,22 +29,20 @@ with HostTestLease(Path(sys.argv[1])).held(InheritedTestRun(int(sys.argv[2]))):
 """
 
 
-def test_second_process_refuses_without_waiting(tmp_path: Path) -> None:
+def test_second_process_waits_for_the_holder_then_runs(tmp_path: Path) -> None:
     lease = leases.HostTestLease.in_home(tmp_path)
     command = (sys.executable, "-c", _HOLD, str(lease.path))
     with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, text=True) as holder:
-        try:
-            assert holder.stdout.readline().strip() == "held"
-            started = time.monotonic()
-            refused = subprocess.run(command, input="", capture_output=True, text=True, timeout=2)
-            assert time.monotonic() - started < 2
-            assert refused.returncode != 0
-            assert leases.TestLease.refusal in refused.stderr
-        finally:
+                          text=True) as holder:
+        assert holder.stdout.readline().strip() == "held"
+        with subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              text=True) as queued:
+            with pytest.raises(subprocess.TimeoutExpired):
+                queued.wait(timeout=1)
             holder.communicate(input="x", timeout=5)
-    with lease.held():
-        pass
+            assert queued.stdout.readline().strip() == "held"
+            queued.communicate(input="x", timeout=5)
+    assert queued.returncode == 0
 
 
 def test_child_adopts_the_same_claim_and_parent_keeps_it(tmp_path: Path) -> None:
@@ -58,9 +55,6 @@ def test_child_adopts_the_same_claim_and_parent_keeps_it(tmp_path: Path) -> None
         )
         assert adopted.returncode == 0, adopted.stderr
         assert adopted.stdout.strip() == "adopted"
-        with pytest.raises(leases.TestLeaseBusy, match=leases.TestLease.refusal):
-            with lease.held():
-                pass
 
 
 def test_foreign_descriptor_cannot_exempt_a_controller(tmp_path: Path) -> None:
@@ -80,10 +74,7 @@ def test_only_declared_ci_runner_avoids_the_host_claim(tmp_path: Path) -> None:
     with ci.held(), ci.held():
         pass
     local = leases.TestLease.for_runner_programs((Path(sys.executable),), tmp_path)
-    with local.held():
-        with pytest.raises(leases.TestLeaseBusy, match=leases.TestLease.refusal):
-            with local.held():
-                pass
+    assert local.path == leases.HostTestLease.in_home(tmp_path).path
 
 
 def test_environment_does_not_choose_ci_or_move_the_host_lock(

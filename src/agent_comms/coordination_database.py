@@ -15,7 +15,7 @@ from typing import Self
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
-from agent_comms.locked_store import FileStore
+from agent_comms.locked_store import FileStore, SQLiteReader
 from agent_comms.typed_table import (
     CarriedWriter,
     ReconciledFile,
@@ -59,11 +59,11 @@ class InvalidStore(StoreFile):
 
 
 @dataclass(frozen=True)
-class ReadableStore(StoreFile):
-    path: Path
+class ReadableStore(FileStore, StoreFile, SQLiteReader):
+    """Read-only coordinator view; its lifetime owns the thread-local handles."""
 
     def _capture(self, consumer, *arguments):
-        with CoordinationStore.opened_reader(self.path) as connection:
+        with self.reader_snapshot() as connection:
             yield consumer.capture(connection, *arguments)
 
 

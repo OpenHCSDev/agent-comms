@@ -32,17 +32,20 @@ class CommanderHeartbeatProbe(TargetProbe, RuntimeProbe[None]):
 
     def run(self) -> None:
         comms = wire(self.root)
-        snapshot = comms.registry.snapshot()
+        # The heartbeat's own served set: a retired or dead #commanders member gets no pass.
         commanders = tuple(thread.incarnation.require_recorded()
-                           for thread in snapshot.commander_project.commanders(snapshot))
+                           for thread in CommanderHeartbeat.served(comms.registry, comms.goals))
         if not commanders:
-            print("Commander heartbeat: no registered commander; not qualified")
+            print("Commander heartbeat: no live served commander; not qualified")
             return
-        asyncio.run(ServicePassStore.at(self.root).wait_completed(
-            commanders, self.since, CommanderHeartbeat.__name__,
+        unreached = asyncio.run(ServicePassStore.at(self.root).wait_completed(
+            commanders, self.since, CommanderHeartbeat,
         ))
         current = comms.registry.snapshot()
         if not all(owner.current(current) for owner in commanders):
             raise RelationViolationError("Commander changed during post-restart heartbeat qualification")
         print("Commander heartbeat: ordinary post-restart completion for "
-              + ", ".join(owner.name for owner in commanders))
+              + ", ".join(owner.name for owner in commanders if owner not in unreached))
+        if unreached:
+            print("Commander heartbeat: no delivery yet, so no live bridge, for "
+                  + ", ".join(owner.name for owner in unreached))

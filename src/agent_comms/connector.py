@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 
 import asyncio
 import base64
@@ -275,7 +277,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def code(self) -> int:
         return Refused.METHOD_NOT_FOUND
 
@@ -562,7 +564,7 @@ class Connector:
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
         """The connector's caller must exist at startup and at each later call."""
-        with client_wire(self.root, plans=self.heartbeat) as comms:
+        with client_wire(self.root) as comms:
             comms.registry.require(CALLER.name)
             yield comms
 
@@ -573,7 +575,7 @@ class Connector:
         Waiting with a client route borrowed would hold up its replacement. The
         pass inherits the bus's hold wait; requests retain client_wire's fast refusal.
         """
-        yield wire(self.root, plans=self.heartbeat)
+        yield wire(self.root)
 
     def invoke(
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
@@ -582,7 +584,7 @@ class Connector:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
-            acting.commanding(comms, caller.own_thread())
+            acting.join(comms, caller.own_thread())
             return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:

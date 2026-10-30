@@ -14,7 +14,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_commander
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import OrderId, ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
@@ -22,6 +22,7 @@ from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.standing_rules import ReviewTimerUp
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -40,6 +41,7 @@ from agent_comms.ui_model.unit_state import (
     Detached,
     Idle,
     Moving,
+    ReviewDue,
     Spinning,
     StalledOnNothing,
     Stuck,
@@ -156,6 +158,11 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
                             first_call_deadline=RecordedEventTime(time.time() - 1),
                         ),
                     ).upsert(db)
+        elif member is ReviewDue:
+            todo = comms.goals.todos.get("P1")
+            with comms.goals.todos.writing() as db:
+                replace(todo, review_at=RecordedEventTime(time.time() - 1),
+                        revision=todo.revision + 1).upsert(db)
         elif member is Spinning:
             recorded_turn(comms, (True, True))
         elif member is StalledOnNothing:
@@ -195,8 +202,9 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             pass  # Assigned work, before its first-call deadline.
         else:
             pytest.fail(f"New UnitState needs its real-record scenario: {member}")
-        states = UnitState.current(
-            comms, "lead", capture_frame(comms, "lead", ProgressRead()))
+        frame = capture_frame(comms, "lead", ProgressRead())
+        assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
+        states = UnitState.current(comms, "lead", frame)
         (state,) = (state for state in states if state.unit.name == unit)
         assert isinstance(state, member)
         assert state.unit == comms.registry.require(unit).incarnation
@@ -378,8 +386,8 @@ def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
             assert worker.reason == str(source_failure.value)
         else:
             assert not isinstance(worker, Unreadable)
-        expected = CommanderHud.of(held_bus, lead.name, observed.frame, cards)
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(held_bus)))
+        expected = current_hud(held_bus, lead.name, observed.frame, cards)
         published, = CommanderFrame.read_all(held_bus.root)
         assert published == expected
         assert tuple(unit.unit for unit in published.units) == tuple(card.unit for card in cards)

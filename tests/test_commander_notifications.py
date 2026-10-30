@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import pickle
+import sqlite3
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass, replace
@@ -18,9 +19,9 @@ from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import Comms
-from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.commander_hud import (
-    BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
+    CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
@@ -29,17 +30,16 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ProgressRead, UnitOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
 from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.standing_rules import ServicePassFailing, StandingRule, UndatedStandingRule
+from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
-    AwaitingApplicationRun, NoPendingClock, PendingClock, Spinning, Stuck, UnitState,
+    Spinning, UnitState, UrgentGroup,
 )
-from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms_hooks.board import BoardEntry
 from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
@@ -86,15 +86,21 @@ def owner(comms):
     return comms.messaging.user_identity(Checkout(comms.root))
 
 
-def notifications(comms):
+def notifications(comms, commander="lead"):
     page = MessagePageRequest(DMDisplayScope.capture(
-        owner(comms).name, "lead", comms.registry.snapshot(),
+        owner(comms).name, commander, comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
+    return current_hud(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
+
+
+def assert_status_fields(message, hud):
+    facts = hud.status_table(time.time()).facts
+    assert all(f"{label}: {value}" in message.body
+               for row in facts.rows for label, value in zip(facts.columns, row))
 
 
 def beat(comms, rules=(), *, states=()):
@@ -165,7 +171,8 @@ def failed_pass(comms, error):
 
 def retained_failure(comms):
     stored = ServicePassStore.at(comms.root).read().failing[BrokenHeartbeat.__name__]
-    return ServicePassFailing(watch=BrokenHeartbeat.__name__, since=stored.since, error=stored.error)
+    return ServicePassFailing(watch=BrokenHeartbeat.__name__, since=stored.since,
+                              error=stored.error, failed_at=stored.failed_at)
 
 
 def aged(pings):
@@ -197,8 +204,9 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
 
     recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
-    rules = (RefusedRule("refused", 1.0, "review pending"),
-             ServicePassFailing(watch="independent", since=1.0, error="another source"))
+    rules = (RefusedRule(watch="refused", since=1.0, error="review pending", failed_at=1.0),
+             ServicePassFailing(watch="independent", since=1.0, error="another source",
+                                failed_at=1.0))
     beat(comms, rules, states=states)
     board, = notifications(comms)
     assert board.task.not_applied and len(board.task.handled) == 2
@@ -215,7 +223,8 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
     ServicePassStore.at(comms.root).passed(BrokenHeartbeat.__name__)
     beat(comms, rules, states=state_cards(comms, Spinning))
     _, _, recovered = notifications(comms)
-    assert isinstance(recovered.task, CommanderNotice)
+    assert isinstance(recovered.task, CommanderDecisions)
+    assert recovered.task.decisions == ()
     assert aged(recovered.task.handled) == aged(board.task.handled)
 
     # A new occurrence after the pass recovered is new, once.
@@ -258,9 +267,51 @@ def everything_to_lead(comms):
     return {message.reference for message in page.messages}
 
 
+def test_hidden_tool_time_does_not_append_quiet_bus_history(notification_bus):
+    comms = notification_bus
+    recorded_turn(comms, (False,))
+    hud = beat(comms, states=state_cards(comms, UnitState))
+    first, = notifications(comms)
+    assert isinstance(first.task, CommanderNotice)
+    for _ in range(2):
+        recorded_turn(comms, (False,))
+        later = beat(comms, states=state_cards(comms, UnitState))
+        assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
+        assert hud.display_facts == later.display_facts
+    assert tuple(message.reference for message in notifications(comms)) == (first.reference,)
+
+
+def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
+    from test_holder_standing_rules import publish
+
+    comms = notification_bus
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(problem=todo.id, holder=todo.held().owner_identity,
+                         order=todo.order.checked().id, since=RecordedEventTime(time.time()))
+    beat(comms, (rule,))
+    first, = notifications(comms)
+    beat(comms, (rule,))
+    _, second = notifications(comms)
+    assert isinstance(second.task, CommanderDecisions)
+    assert second.task.decisions == ()
+    assert second.task.handled[0].since == first.task.handled[0].since
+    hud = CommanderFrame.current(comms, "lead")
+    assert hud.board == second.task.board(comms)
+    assert len(hud.board) == 1
+
+    publish(comms, "lead", "worker", time.time())
+    beat(comms, (rule,))
+    _, _, cleared = notifications(comms)
+    assert isinstance(cleared.task, CommanderNotice)
+    assert CommanderFrame.current(comms, "lead").board == ()
+    beat(comms, (rule,))
+    assert len(notifications(comms)) == 3
+
+
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
+                                 failed_at=time.time())
     beat(comms, (failing,))
     board, = notifications(comms)
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
@@ -269,15 +320,19 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
     assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms)
     assert lead_hud(comms).board == board.task.board(comms)
     assert raw.reference in everything_to_lead(comms)
-    # The next pass derives from the typed board, so nothing is restated as new.
+    # The next pass clears NEW without promoting a subjectless observation to STILL OPEN.
     beat(comms, (failing,))
-    assert len(notifications(comms)) == 1
+    _, repeated = notifications(comms)
+    assert isinstance(repeated.task, CommanderNotice)
+    assert repeated.task.handled == board.task.handled
 
 
 def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notification_bus):
     comms = notification_bus
-    kept = ServicePassFailing(watch="kept-rule", since=time.time(), error="still failing")
-    cleared = ServicePassFailing(watch="cleared-rule", since=time.time(), error="now fixed")
+    kept = ServicePassFailing(watch="kept-rule", since=time.time(), error="still failing",
+                              failed_at=time.time())
+    cleared = ServicePassFailing(watch="cleared-rule", since=time.time(), error="now fixed",
+                                 failed_at=time.time())
     beat(comms, (kept, cleared))
     decisions, = notifications(comms)
     beat(comms, (kept,))
@@ -291,7 +346,8 @@ def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notifica
 
 def test_a_raw_message_between_failures_does_not_restate_the_board(notification_bus):
     comms = notification_bus
-    rules = (ServicePassFailing(watch="independent", since=1.0, error="another source"),)
+    rules = (ServicePassFailing(watch="independent", since=1.0, error="another source",
+                                failed_at=1.0),)
     beat(comms, rules)
     board, = notifications(comms)
     failed_pass(comms, RuntimeError("down"))
@@ -308,7 +364,8 @@ def test_a_raw_message_between_failures_does_not_restate_the_board(notification_
 
 def test_a_recreated_commander_inherits_no_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
+                                 failed_at=time.time())
     beat(comms, (failing,))
     board, = notifications(comms)
     worktree = comms.registry.require("lead").worktree
@@ -375,47 +432,52 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
     ), load=OverloadDegradation.from_orders((), 0, 0), forks=(worker,),
-        usage=CodexUsage(UnreadableUsage(reason='not requested')))
-    assert hud.frame == (
-        *hud.header,
-        "commander_native/record_plane done=False ready=True holders=",
-        "commander_native/review_queue done=True ready=False holders=worker",
-        "commander_native/design_reconciled done=False ready=False holders=worker",
-        "usage unreadable: not requested",
-        "forks: worker",
-        "commander_native: 2 phases done",
-    )
+        usage=CodexUsage(UnreadableUsage(reason='not requested')), open_pings=())
+    urgent = next(section for section in hud.groups if section.group is UrgentGroup)
+    assert tuple(row.phase for row in urgent.records) == (RecordPlanePhase, ReviewQueuePhase)
+    assert urgent.tables[0].record is type(hud.phases[0])
+    folded, = next(section.records for section in hud.groups
+                    if section.group is FinishedPlansGroup)
+    assert folded.phases == (RetainedStorePhase, OneOrderOwnerPhase)
+    assert folded.done == 2
+    rendered = "\n".join(hud.hud_text(time.time()))
+    assert all(phase.declared_name in rendered for phase in (RecordPlanePhase, ReviewQueuePhase))
 
 
-def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_path):
+def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
+    from agent_comms.field_codec import OrderId
+    from agent_comms.thread_identity import RecordedThreadIncarnation
+    from agent_comms.ui_model.unit_state import Idle, IdleGroup, NoPendingClock, PendingClock, Stuck
+
     now = time.time()
-    awaiting = CommanderUnit(
-        RecordedThreadIncarnation("waiting-run", 1.0), AwaitingApplicationRun,
-        NoPendingClock(), (), 0, (), (),
+    idle = CommanderUnit(
+        RecordedThreadIncarnation("idle-worker", 1.0), Idle, NoPendingClock(), (), 0, (), (),
     )
-    stuck = replace(
-        awaiting, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
-        state=Stuck, clock=PendingClock(now - 3600, now - 3600),
-    )
-    board = (
-        BoardEntry("blocked", "BLOCKED waiting-run", now - 120, now + 3600),
-        BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
-    )
+    stuck = replace(idle, unit=RecordedThreadIncarnation("stuck-worker", 2.0),
+                    state=Stuck, clock=PendingClock(now - 3600, now - 3600))
+    pings = tuple(replace(RulePing.capture(ReviewTimerUp(
+        problem=problem, holder=unit.unit, order=OrderId(order),
+        since=RecordedEventTime(now - age))), since=RecordedEventTime(now - age))
+        for problem, unit, order, age in (
+            ("P1", idle, "123456789abc", 120), ("P2", stuck, "abcdef123456", 240)))
+    owner = RecordedThreadIncarnation("lead", 3.0)
+    packet = CommanderDecisions(owner, pings, pings, ())
     hud = CommanderHud(
-        commander=RecordedThreadIncarnation("lead", 3.0), units=(awaiting, stuck), phases=(),
+        commander=owner, units=(idle, stuck), phases=(),
         load=OverloadDegradation.from_orders((), 0, 0), forks=(),
-        usage=CodexUsage(UnreadableUsage(reason="not requested")), board=board,
+        usage=CodexUsage(UnreadableUsage(reason="not requested")),
+        packets=(packet,), open_pings=pings,
     )
-
     CommanderFrame.replace_all(tmp_path, (hud,))
     restored, = CommanderFrame.read_all(tmp_path)
     assert restored == hud
-    rows = restored.rows()
-    assert rows[:4] == (
-        BoardRow(board[0]), BoardRow(board[1]), stuck, QuietUnits((awaiting,)),
-    )
-    assert awaiting.unit.name in rows[3].line()
-    assert all("AwaitingApplicationRun" not in line for line in restored.frame)
+    assert restored.open_pings == pings
+    assert restored.board == tuple(ping.board_entry() for ping in pings)
+    urgent, = (section for section in restored.groups if section.group is UrgentGroup)
+    quiet, = (section for section in restored.groups if section.group is IdleGroup)
+    assert urgent.records == (stuck,)
+    assert quiet.records == (idle,)
+    assert idle.unit.name in "\n".join(quiet.tables[0].lines())
 
 
 def test_a_registered_commander_fork_is_on_the_hud(notification_bus):
@@ -428,7 +490,8 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
+                                 failed_at=time.time())
     frame = capture_frame(comms, "lead", ProgressRead())
     frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
@@ -437,9 +500,9 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
-    # A quiet pass, its line unchanged, still completes after its original notice was committed.
+    # A quiet pass still completes and keeps the original alarm visibly open.
     beat(comms, (failing,))
-    assert len(notifications(comms)) == 1
+    assert len(notifications(comms)) == 2
     # A pass that misses a still-registered commander retires nothing but its frame.
     asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert CommanderFrame.read_all(comms.root) == ()
@@ -451,25 +514,32 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 
-def test_recreated_watcher_reads_original_committed_unit_observation(notification_bus):
-    """Quiet unit cards are not heartbeat lines; a fresh watcher reads the committed packet
-    and restates nothing it already carries."""
+def test_recreated_watcher_retains_non_disposable_observation_without_nagging(notification_bus):
+    """The original observation keeps its age, but is not an actionable open board line."""
     comms = notification_bus
     states = state_cards(comms, UnitState)
     assert states and not any(state.attention() for state in states)
-    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
+                                 failed_at=time.time())
     beat(comms, (failing,), states=states)
     first, = notifications(comms)
-    assert failing.line() in first.body
+    assert type(failing).declared_name in first.body
     assert not any(state.line() in first.body for state in states)
     hud = lead_hud(comms, states)
-    assert first.body.startswith(CommanderUpdate.header)
-    assert all(line in first.body for line in hud.brief())
-    assert all(card.unit.name in first.body for card in hud.units)
+    assert_status_fields(first, hud)
+    assert all(section.heading() in first.body for section in hud.groups)
     assert CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation) == (first.task,)
     beat(comms, (failing,), states=state_cards(comms, UnitState))
-    unchanged, = notifications(comms)
-    assert unchanged.reference == first.reference
+    _, unchanged = notifications(comms)
+    assert unchanged.reference != first.reference
+    assert isinstance(unchanged.task, CommanderNotice)
+    assert aged(unchanged.task.handled) == aged(first.task.handled)
+    assert lead_hud(comms).board == ()
+    from agent_comms.task_attachments.commander_pings import WatchingAlarms
+
+    section, = CommanderFrame.current(comms, "lead").alarms
+    assert section.group is WatchingAlarms
+    assert tuple(ping.text for ping in section.pings) == (failing.line(),)
 
 
 def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notification_bus):
@@ -486,8 +556,9 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
             super().enforce(_comms, _commander)
             raise refusal
 
-    rules = (OccupiedRule("occupied-unit", 1.0, "unit already holds work"),
-             FollowingRule("following-rule", 1.0, "another rule"))
+    rules = (OccupiedRule(watch="occupied-unit", since=1.0, error="unit already holds work",
+                          failed_at=1.0),
+             FollowingRule(watch="following-rule", since=1.0, error="another rule", failed_at=1.0))
     beat(comms, rules)
 
     assert enforced == ["occupied-unit", "following-rule"]
@@ -501,22 +572,31 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
         ServicePassStore.at(comms.root).read().commander_completed)
 
 
-def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
+def test_rule_packets_compact_new_lines_keep_originals_then_repeat_without_a_new_wake(notification_bus):
     comms = notification_bus
-    rules = tuple(ServicePassFailing(watch=f"watch-{index}", since=1.0, error="failed source read")
+    rules = tuple(ServicePassFailing(watch=f"watch-{index}", since=1.0, error="failed source read",
+                                     failed_at=1.0)
                   for index in range(7))
     beat(comms, rules)
     first, = notifications(comms)
     assert isinstance(first.task, CommanderDecisions)
     assert set(first.task.decisions) == set(first.task.handled) == {
         RulePing.capture(rule) for rule in rules}
-    assert all(rule.line() in first.body for rule in rules)
-    assert all(line in first.body for line in lead_hud(comms).brief())
+    assert sum(len(section.pings) for section in lead_hud(comms).alarms) == len(rules)
+    assert rules[0].line() in first.body
+    details = "\n".join(lead_hud(comms).alarm_detail(lead_hud(comms).alarms, time.time()))
+    assert all(rule.line() in details for rule in rules)
+    assert_status_fields(first, lead_hud(comms))
     beat(comms, rules)
-    assert len(notifications(comms)) == 1
-    # Changed diagnostic wording is not another failed occurrence.
+    _, unchanged = notifications(comms)
+    assert isinstance(unchanged.task, CommanderNotice)
+    assert CommanderFrame.current(comms, "lead").board == ()
+    # Changed diagnostic wording is visible but not another failed occurrence.
     beat(comms, tuple(replace(rule, error="new diagnostic detail") for rule in rules))
-    assert len(notifications(comms)) == 1
+    assert len(notifications(comms)) == 3
+    changed = CommanderFrame.current(comms, "lead")
+    assert aged(changed.packets[0].handled) == aged(first.task.handled)
+    assert all("new diagnostic detail" in ping.text for ping in changed.packets[0].handled)
 
 
 def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
@@ -530,9 +610,9 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     _, quiet = notifications(comms)
     assert isinstance(quiet.task, CommanderNotice)
-    assert all(line in quiet.body for line in lead_hud(comms).brief())
+    assert_status_fields(quiet, lead_hud(comms))
     assert all(isinstance(decision.wake_mode, PassiveWake) for decision in quiet.decisions)
-    # Nothing new and nothing cleared sends nothing.
+    # An identical quiet frame updates no bus history.
     beat(comms, ServicePassFailing.violations(comms, "lead"))
     assert len(notifications(comms)) == 2
     # Use the same source occurrence to prove it was retired, not merely hidden.
@@ -543,7 +623,8 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
 
 def test_latest_observation_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
-    beat(comms, (ServicePassFailing(watch="watch", since=1.0, error="failed source read"),))
+    beat(comms, (ServicePassFailing(watch="watch", since=1.0, error="failed source read",
+                                    failed_at=1.0),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
@@ -562,7 +643,10 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
     assert RulePing.capture(first) == RulePing.capture(moved)
     beat(comms, (first,))
     beat(comms, (moved,))
-    assert len(notifications(comms)) == 1
+    original, repeated = notifications(comms)
+    assert isinstance(repeated.task, CommanderDecisions)
+    assert repeated.task.decisions == ()
+    assert aged(repeated.task.handled) == aged(original.task.handled)
 
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
@@ -647,7 +731,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused
 
 
-def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(notification_bus):
+def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_evidence(notification_bus):
     comms = notification_bus
     from agent_comms.head_review import PullRequestHead
     from agent_comms.repository_name import RepositoryName
@@ -662,12 +746,140 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    message = packet.send(comms, time.time(), lead_hud(comms).brief())
-    assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
-    assert max(map(len, message.body.splitlines())) < 300
+    from agent_comms.task_attachments.commander_pings import AlarmOverflow
+
+    hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
+    message = packet.send(comms, time.time(), hud.hud_text(time.time()))
+    for frame in (lead_hud(comms), hud):
+        assert len(frame.alarm_text(frame.alarms, time.time())) < len(rules)
+        overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
+                         if table.record is AlarmOverflow for row in table.records)
+        assert sum(row.more for row in overflow) == len(rules) - 1
+        now = time.time()
+        original_lines = frame.alarm_detail(frame.alarms, now)
+        assert all(section.heading() not in original_lines for section in frame.alarms)
+        assert all(rule.line() in "\n".join(original_lines) for rule in rules)
+    assert rules[0].line() in original.body
+    assert rules[0].line() in message.body
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
+    from agent_comms.text_digest import TextDigest
+
+    swapped = (*packet.handled[:-1], replace(packet.handled[-1], observation=TextDigest.of("other observation")))
+    replacement = replace(packet, handled=swapped, waiting=swapped)
+    changed = replace(hud, packets=(replacement,), open_pings=swapped)
+    assert hud.alarm_text(hud.alarms, 1000) == changed.alarm_text(changed.alarms, 1000)
+    assert hud.display_facts != changed.display_facts
+
+
+def test_failed_quiet_publication_retries_identical_display_until_committed(notification_bus):
+    """A real SQLite refusal rolls back publication, not the disposable frame write."""
+    from agent_comms.task_attachments.commander_pings import PublishedFacts
+
+    comms = notification_bus
+    first_hud = beat(comms)
+    first, = notifications(comms)
+    assert isinstance(first.task, CommanderNotice)
+    assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
+    comms.registry.register_child("quiet-fork", "lead", CommanderForkExecution, comms.goals)
+    bus = comms.bus.bus
+    with bus.writing() as db:
+        db.execute(
+            f'CREATE TRIGGER refuse_quiet BEFORE INSERT ON "{Message.table.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'quiet publication refused'); END"
+        )
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="quiet publication refused"):
+            beat(comms)
+    finally:
+        with bus.writing() as db:
+            db.execute("DROP TRIGGER refuse_quiet")
+    owner = comms.registry.require("lead").incarnation
+    unsent = CommanderFrame.at(comms.root, owner).read()
+    assert first_hud.display_facts != unsent.display_facts
+    assert CommanderUpdate.latest(comms, owner) == (first.task,)
+    assert len(notifications(comms)) == 1
+
+    retried = beat(comms)
+    assert retried.display_facts == unsent.display_facts
+    _, committed = notifications(comms)
+    assert committed.task.publication == PublishedFacts.of(retried.display_facts)
+    assert committed.reference != first.reference
+    beat(comms)
+    assert tuple(message.reference for message in notifications(comms)) == (
+        first.reference, committed.reference,
+    )
+    ServicePassStore.at(comms.root).failed("independent-watch", OSError("new recorded failure"))
+    failed = beat(comms)
+    assert failed.display_facts != retried.display_facts
+    assert "new recorded failure" in failed.status_strip(time.time())
+    assert len(notifications(comms)) == 3
+
+
+def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus, request):
+    from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject, UnitSubject
+    from agent_comms.task_attachments.commander_pings import CommanderDelivery
+    from test_holder_standing_rules import publish
+
+    queries = []
+
+    class CountedUnitSubject(UnitSubject):
+        def action_at(self, history):
+            queries.append(self)
+            return super().action_at(history)  # Real addressed-message evidence, not a policy fake.
+
+    request.addfinalizer(lambda: HeartbeatSubject.__registry__.pop(CountedUnitSubject.declared_name))
+    comms = notification_bus
+    owner = comms.registry.require("lead").incarnation
+    worker = comms.registry.require("worker").incarnation
+    now = time.time()
+    action = publish(comms, "lead", "worker", now - 300)
+    subject = CountedUnitSubject(worker)
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(problem=todo.id, holder=worker, order=todo.order.checked().id,
+                         since=RecordedEventTime(now - 600))
+    old = replace(RulePing.capture(rule), subjects=(subject,), since=RecordedEventTime(now - 600))
+    new = replace(old, since=RecordedEventTime(now - 200))
+    packet = CommanderDecisions(owner, (old, new), (), ())
+    history = CommanderHistory.read(comms, frozenset({"lead"}))
+    assert history.action_at(subject) == RecordedEventTime(action.timestamp)
+    assert old.acted(history) and not new.acted(history)
+    opened = packet.open_pings(history)
+    assert opened == (new,) and opened[0].since == new.since
+    waiting = packet.undisposed(history, now)
+    assert tuple(ping.since for ping in waiting) == (new.since,)
+    hud = CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), (),
+                          delivery=CommanderDelivery(packet, opened), usage=CodexUsage.read())
+    assert hud.open_pings is opened
+    assert hud.board == (new.board_entry(),)
+    assert queries == [subject]
+    # A later original action changes a fresh beat, never the already captured evidence.
+    publish(comms, "lead", "worker", now)
+    assert not new.acted(history)
+    assert new.acted(CommanderHistory.read(comms, frozenset({"lead"})))
+    assert queries == [subject, subject]
+
+
+def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.task_attachments.commander_pings import PublishedFacts, UnpublishedFacts
+
+    comms = notification_bus
+    hud = beat(comms)
+    message, = notifications(comms)
+    encoded = FieldCodec.encode(message)
+    # The original retained packet has no evidence for display facts; the default says so.
+    del encoded["task"]["publication"]
+    retained = FieldCodec.decode(Message, encoded)
+    assert retained.message_id == message.message_id
+    assert retained.reference == message.reference
+    assert retained.body == message.body
+    assert retained.task.publication == UnpublishedFacts()
+    facts = PublishedFacts.of(hud.display_facts)
+    assert retained.task.should_publish(facts, (retained.task,))
+    assert not message.task.should_publish(facts, (message.task,))
+    assert FieldCodec.decode(Message, FieldCodec.encode(retained)).message_id == message.message_id
 
 
 def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(notification_bus):
@@ -695,7 +907,8 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
     comms.registry.register(replace(fork, process_identity=live))
     assert CommandersTag.declared_name in comms.registry.require("worker-fork").tags
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source",
+                                 failed_at=time.time())
     beat(comms, (failing,))
     lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
     worker = comms.registry.require("worker").incarnation
@@ -704,8 +917,22 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
     assert CommanderUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
     assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
-    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
-        comms.registry.require("lead").incarnation, worker}
+    served = (lead_packet.commander, worker)
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == set(served)
+    for recipient in served:
+        hud = CommanderFrame.current(comms, recipient.name)
+        assert hud.commander == recipient
+        assert hud.packets == CommanderUpdate.latest(comms, recipient)
+        assert len(notifications(comms, recipient.name)) == 1
+    # Every recipient owns its quiet-publication receipt; the prepared board is shared.
+    beat(comms, (failing,))
+    beat(comms, (failing,))
+    for recipient in served:
+        first, quiet = notifications(comms, recipient.name)
+        assert isinstance(quiet.task, CommanderNotice)
+        assert quiet.task.commander == recipient
+        assert aged(quiet.task.handled) == aged(first.task.handled)
+        assert CommanderFrame.current(comms, recipient.name).packets == (quiet.task,)
 
 
 def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):

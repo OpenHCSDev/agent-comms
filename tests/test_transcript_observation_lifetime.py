@@ -11,7 +11,6 @@ import pytest
 
 from agent_comms.coordinator import Coordination
 from agent_comms.native_arguments import GivenBinary
-from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObserverDied,
@@ -56,11 +55,11 @@ async def test_headless_bind_has_no_observation_process(headless_owner, tmp_path
 async def test_subscriptions_share_process_and_last_close_joins_it(headless_owner):
     owner = headless_owner
     session, = owner.sessions.published
-    session = owner.sessions.require(session)
+    thread = owner._comms.registry.require(owner.sessions.require(session))
     frontend = canonical_agent(owner._comms, auto_wake=False)
-    first = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
-    second = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
-    reopened = RuntimeProxy(frontend, session, socket_path(owner._comms.root, os.getpid()))
+    first = frontend._create_runtime_proxy(thread, session)
+    second = frontend._create_runtime_proxy(thread, session)
+    reopened = frontend._create_runtime_proxy(thread, session)
     try:
         assert observation_children() == ()
         await first.subscribe()

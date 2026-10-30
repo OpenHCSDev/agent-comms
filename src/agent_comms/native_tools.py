@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ArgumentsExclude
+
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -119,7 +121,7 @@ class ArgumentTool:
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
         # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.project(self, "arguments")
+        encoded = FieldCodec.project(self, ArgumentsExclude)
         del encoded[self.family_discriminator]
         return encoded
 
@@ -213,6 +215,10 @@ class BashTool(ExecuteAction, CodingTool):
 
 class MutatingPathTool(EditAction, PathTool):
     claim_type: ClassVar[type[FileClaimPath]]
+    declared_name: ClassVar[str]
+
+    def judge_under(self, gate: PiRuleGate) -> None:
+        gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
 
     def _parse_resource(self):
         return self.claim_type(Path(self.path))
@@ -259,9 +265,6 @@ class WriteTool(MutatingPathTool, CodingTool):
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return (ReplacementEdit(old_text='', new_text=self.content),)
-
-    def judge_under(self, gate: PiRuleGate) -> None:
-        gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
 
     claim_type = WritableFileClaim
 

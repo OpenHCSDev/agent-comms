@@ -110,6 +110,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
     reading_order: ClassVar[tuple[str, ...]] = (
         "spine",
+        "self-protection",
         "unnecessary",
         "correct-maintenance",
         "slop-and-polymorphism",
@@ -121,13 +122,18 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "fork-orders",
         "tests-and-commands",
         "ship-and-install",
+        "hotfix",
         "storage-and-cleanup",
         "send-backs-and-strikes",
         "blunt-reviews",
         "coordination",
         "commander-self-correction",
         "deadlines",
+        "ally",
     )
+    closing: ClassVar[frozenset[str]] = frozenset({"ally"})
+    """The rules a deal holds back until everything else is read, the indictment included: read
+    after the record of every failure, they say how to work with him once it lands."""
     """The one declaration of the order every deal and unit prompt presents the rules in. The
     papers are dealt before all of them; the spine comes next and kills the hedge on what they
     proved, then the price of calling an abstraction unnecessary; each rule after it is set up by
@@ -148,6 +154,10 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     def position(cls, name: str) -> int:
         """Where a rule stands in the reading order; an undeclared rule reads last."""
         return cls.reading_order.index(name) if name in cls.reading_order else len(cls.reading_order)
+
+    @property
+    def closes_deal(self) -> bool:
+        return self.name in self.closing
 
     @property
     def summary(self) -> str:

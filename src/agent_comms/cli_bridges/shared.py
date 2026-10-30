@@ -1095,7 +1095,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
 
     async def coordinator_read[Result](self, operation: Callable[[sqlite3.Connection], Result]) -> Result:
         def read() -> Result:
-            with CoordinationStore.opened_reader(CoordinationStore.path_in(Path(self.binding.root))) as db:
+            with self.comms.registry.store.coordinator_reader.reader_snapshot() as db:
                 return operation(db)
         return await self.comms.bus.when_open(read)
 
@@ -1134,7 +1134,11 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         """A transport may prepare its harness after the operation bound its reader."""
 
     async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
-        """A harness with no tool-call route takes a heartbeat packet like any message."""
+        """Every transport honors the packet's wake decision; passive display is not input."""
+        return await update.wake(self, message)
+
+    async def wake(self, message: messages.Message) -> type[Outcome]:
+        """The packet already owns its HUD text; every harness receives that original message."""
         return await self.deliver(message)
 
     async def accept(self, message: messages.Message) -> None:

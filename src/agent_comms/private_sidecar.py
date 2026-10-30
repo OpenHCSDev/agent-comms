@@ -32,7 +32,7 @@ from agent_comms.locked_store import DurableFile, SQLiteFile
 from .field_codec import FieldCodec
 
 if TYPE_CHECKING:
-    from .agent_backend import StreamingInputPolicy
+    from .turn_inbox import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import ExclusiveLock, StoreOwner

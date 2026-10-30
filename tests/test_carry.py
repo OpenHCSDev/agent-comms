@@ -400,7 +400,7 @@ async def test_the_install_start_stops_owners_under_its_hold(
         with LaunchRoot.from_path(comms.root).selected():
             comms.registry.declare(Thread("unit", frozenset(), Checkout(tmp_path)))
             await Coordination.run_worker(partial(
-                comms.owners.start, "unit", agent_bin=GivenBinary("pi"),
+                comms.owners.start_many, ("unit",), agent_bin=GivenBinary("pi"),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
             original = comms.registry.require("unit")

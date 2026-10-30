@@ -116,7 +116,7 @@ async def run(stage, package):
 
     persist('canonical-saved-fork-prepared-no-input')
     try:
-        await asyncio.to_thread(service.owners.start, child.name,
+        await asyncio.to_thread(service.owners.start_many, (child.name,),
                                 agent_bin=GivenBinary(str(binary)), agent_args=GivenArguments(tuple(launch.arguments)))
         await attach(service, child.name)
         async with acp.spawn_agent_process(Observation(), sys.executable, '-m', 'agent_comms.acp',

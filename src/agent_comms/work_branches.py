@@ -8,6 +8,8 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import subprocess
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -112,7 +114,7 @@ class WorkBranch:
     links: tuple[BranchLink, ...]
     checkouts: tuple[BranchCheckout, ...]
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def linked(self) -> bool:
         return bool(self.links)
 
@@ -310,6 +312,10 @@ class NoUpstream(BranchUpstream):
     """This local branch declares no upstream."""
 
 
+class DetachedHead(BranchUpstream):
+    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
+
+
 @dataclass(frozen=True)
 class TrackedUpstream(BranchUpstream, declared_name=None):
     tracking: str
@@ -469,11 +475,12 @@ query($owner: String!, $name: String!, $after: String) {
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            BranchUpstream.from_git(line) for line in self._git(
+            DetachedHead("HEAD"),
+            *(BranchUpstream.from_git(line) for line in self._git(
                 "for-each-ref",
                 "--format=%(refname:strip=2)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
                 "refs/heads/",
-            ).splitlines()
+            ).splitlines()),
         )}
 
     def prepare_upstreams(self) -> None:
@@ -676,7 +683,8 @@ query($owner: String!, $name: String!, $after: String) {
             sorted(
                 thread.name
                 for thread in snapshot.threads.values()
-                if str(thread.worktree.path.expanduser().resolve()) == resolved
+                if not snapshot.statuses[thread.name].archived
+                and str(thread.worktree.path.expanduser().resolve()) == resolved
             )
         )
         if not threads:

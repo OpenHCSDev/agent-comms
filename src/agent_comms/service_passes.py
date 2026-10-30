@@ -12,7 +12,7 @@ from typing import Annotated, ClassVar, Self
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
 from .errors import ToolRefusedError
-from .field_codec import WireTransient, projected
+from .field_codec import WireExclude, WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
@@ -20,12 +20,40 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .watched import FileSource, Watched
 
 
+class CompletedWatch:
+    """A service watch whose ordinary completion an install waits on after a restart; each
+    member declares how long its longest pass takes."""
+
+    pass_duration: ClassVar[float]
+
+    @classmethod
+    def completion_ceiling(cls) -> float:
+        """How long a new runtime may take to record its first completion: one cadence (a pass,
+        then the service loop's sleep) plus one pass of slack."""
+        return 2 * cls.pass_duration + Coordination.watch_period
+
+
+class CommanderPass(CompletedWatch):
+    """The commander's board pass: its service runs it, and its readers judge freshness by it."""
+
+    pass_duration: ClassVar[float] = 270
+    """The longest pass on the live bus: first passes after the 2026-10-30 installs took
+    190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
+
+
 @dataclass(frozen=True)
 class FailingPass:
-    """A watch failing since its first failed pass, with its newest error."""
+    """A watch failing since its first failed pass, with its newest error and the time of its
+    newest failed pass."""
 
     since: float
     error: str
+    failed_at: float
+
+    def failed_since(self, moment: float) -> bool:
+        """Its newest pass failed at or after ``moment``; an older failure is a runtime's that
+        ``moment`` replaced, and the next pass either clears or rewrites it."""
+        return self.failed_at >= moment
 
     def failure_line(self, watch: str) -> str:
         return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}'
@@ -51,7 +79,7 @@ class ServicePasses:
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
         """Only the commander's completion clock determines heartbeat freshness."""
-        return heartbeat.since(time.time() - 3 * Coordination.watch_period)
+        return heartbeat.since(time.time() - CommanderPass.completion_ceiling())
 
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
@@ -70,7 +98,7 @@ class ServiceReading(ToolResult):
     def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
         return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def service_status(self) -> tuple[str, ...]:
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
         failures = self.services.failure_lines()
@@ -104,38 +132,47 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
         return ServicePasses()
 
     async def wait_completed(
-        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float, watch: str,
-    ) -> None:
-        """Join ordinary recorded completions, never run the watch being qualified.
+        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
+        watch: type[CompletedWatch],
+    ) -> tuple[RecordedThreadIncarnation, ...]:
+        """Join the first ordinary recorded completion, never run the watch being qualified,
+        and return the commanders it has not reached yet.
 
-        Subscribe before reading, so a completion between the first read and wait
-        cannot disappear. A partial pass plus a recorded failure is not acceptance.
+        One completed pass after ``since`` is the service running on the new runtime. Which
+        commanders a pass reaches is each commander's own state (a session whose bridge is down
+        gets no delivery), so the rest are reported, never awaited: waiting on them held the
+        2026-10-30 installs 518 s and 376 s on claude-nra's absent bridge. Subscribe before
+        reading, so a completion between the first read and wait cannot disappear. A recorded
+        failure is not acceptance.
         """
         pending = commanders
-        timeout = asyncio.timeout(Coordination.watch_period)
+        timeout = asyncio.timeout(watch.completion_ceiling())
+        name = watch.__name__
         try:
             async with timeout:
                 async with aclosing(self.watch_sources(FileSource(self.path))) as changes:
                     async for _ in changes:
                         passes = await Coordination.run_worker(self.read)
-                        if watch in passes.failing:
-                            raise ToolRefusedError(passes.failing[watch].failure_line(watch))
+                        if name in passes.failing and passes.failing[name].failed_since(since):
+                            raise ToolRefusedError(passes.failing[name].failure_line(name))
                         pending = tuple(owner for owner in commanders
                                         if not passes.completed_since(owner, since))
-                        if not pending:
-                            return
+                        if len(pending) < len(commanders):
+                            return pending
         except TimeoutError as error:
             if not timeout.expired():
                 raise
             raise ToolRefusedError(
-                f"{watch} has no ordinary completion since service restart {since}: "
+                f"{name} has no ordinary completion since service restart {since} for any of: "
                 + ", ".join(owner.name for owner in pending)
             ) from error
 
     def failed(self, watch: str, error: BaseException) -> None:
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
-            since = passes.failing.get(watch, FailingPass(time.time(), "")).since
-            failing = FailingPass(since, f"{type(error).__name__}: {error}")
+            now = time.time()
+            since = passes.failing[watch].since if watch in passes.failing else now
+            failing = FailingPass(
+                since=since, error=f"{type(error).__name__}: {error}", failed_at=now)
             return DocumentChange.to(replace(passes, failing=passes.failing | {watch: failing}))
 
         self.update(change)

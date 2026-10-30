@@ -13,7 +13,7 @@ from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage
@@ -36,8 +36,9 @@ async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer
     comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
     agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
 
+    session_id = AcpSessionId("worker")
     session = NewSessionResponse(
-        session_id="worker", field_meta=(await agent.sessions.metadata("worker"))
+        session_id=str(session_id), field_meta=(await agent.sessions.metadata("worker", session_id=session_id))
     ).model_dump(by_alias=True, exclude_none=True)
     configuration = next(update for update in decode_updates(session["_meta"])
                          if isinstance(update, CoordinationChangedUpdate))

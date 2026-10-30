@@ -9,7 +9,7 @@ from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -23,7 +23,10 @@ from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
-from .pi_vocabulary import ThinkingChoice
+from .pi_vocabulary import ServiceTier, ThinkingChoice
+from .coordinator import Coordination
+from .field_codec import FieldCodec
+from .threads import ChosenServiceTier, NextTurnConfiguration
 from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
     GetAvailableModels,
@@ -55,6 +58,10 @@ class RunningSelection(CatalogSelection):
     @property
     def thinking_level(self) -> type[ThinkingChoice]:
         return self.thread.thinking_level
+
+    @property
+    def service_tier(self) -> ServiceTier:
+        return self.thread.service_tier
 
     @property
     def project_path(self) -> Path:
@@ -218,6 +225,28 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         )
 
 
+class ServiceTierConfigOption(CatalogConfigOption):
+    title = "Service tier"
+    description = "Provider request service tier, applied from this thread's next turn"
+    category = "service_tier"
+
+    def current_value(self, thread: CatalogSelection) -> str:
+        return thread.service_tier.value
+
+    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
+        return [CatalogChoice(name=tier.value.title(), value=tier.value) for tier in ServiceTier]
+
+    async def apply(
+        self, owner: SessionConfigOptions, thread: Thread, value: str
+    ) -> None:
+        await Coordination.run_worker(partial(
+            owner.comms.threads.set_thread_configuration, thread,
+            NextTurnConfiguration(
+                service_tier=ChosenServiceTier(FieldCodec.decode(ServiceTier, value)),
+            ),
+        ))
+
+
 class ModelCatalog(DeclaredFamily, affix="ModelCatalog"):
     """The launch's selected discovery source, decoded once at its environment boundary."""
 
@@ -285,12 +314,12 @@ class ConfigOptions:
         return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
 
     async def observe_authentication(
-        self, session_id: AcpSessionId, publish: Callable[[str], Awaitable[object]],
+        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
         async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
             async for _ in observations:
-                await publish(str(session_id))
+                await publish(session_id)
 
     def native_environment(
         self, thread: Thread, snapshot: RegistrySnapshot,

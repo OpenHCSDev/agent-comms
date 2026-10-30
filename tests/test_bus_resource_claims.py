@@ -43,7 +43,6 @@ from agent_comms.messages import (
     StoredHolders,
 )
 from agent_comms.registration import Registration
-from agent_comms.store_files import store_lock_path
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.typed_table import ProjectionProducer, TypedTable
@@ -337,28 +336,28 @@ def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: Cl
     print("SIGKILL after original+resource+operation inserts: every table unchanged; next seq=1")
 
 
-def test_retirement_failure_is_sent_not_a_refusal(tmp_path: Path):
+def test_change_signal_failure_is_sent_not_a_refusal(tmp_path: Path):
     bus = Bus.install(Bus.path_in(tmp_path / "bus"))
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("author", "worker", "warm", InfoKind, seq=seq),
     ))
+    marker, = Bus.source_paths(tmp_path / "bus")
     connections = []
 
     def build(seq, db):
         connections.append(db)
-        store_lock_path(bus.path).unlink()
-        bus.path.parent.chmod(0o500)
+        marker.chmod(0o400)
         return PublicRecord.from_message(Message("author", "worker", "sent", InfoKind, seq=seq))
 
     try:
         with pytest.raises(CommittedMessageError) as failed:
             HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
     finally:
-        bus.path.parent.chmod(0o700)
+        marker.chmod(0o600)
         for connection in connections:
             connection.close()
     assert isinstance(failed.value.__cause__, StoreCommittedError)
     assert isinstance(failed.value.__cause__.__cause__, PermissionError)
     assert failed.value.record.body == "sent"
     assert bus.lookup(failed.value.record.seq) == failed.value.record
-    print("Post-COMMIT lock-retirement PermissionError: human outcome is sent, exact record retained")
+    print("Post-COMMIT change-signal PermissionError: human outcome is sent, exact record retained")
