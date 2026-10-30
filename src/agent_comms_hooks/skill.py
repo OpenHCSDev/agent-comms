@@ -68,6 +68,11 @@ class DeckReader(DealtSources):
         return CommanderPackage.paper()
 
     @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        """The record of what the reader actually did; a fleet session is dealt none."""
+        return ()
+
+    @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
         return tuple(rule for rule in RuleFile.packaged() if rule.audience in cls.audiences)
 
@@ -168,14 +173,20 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
     deck_suffix = ".deck.json"
 
     @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return (CommanderPackage.indictment(),)
+
+    @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
-        indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
-        return (cls.voice(), indictment, cls.tells(), cls.failures())
+        indictment = tuple(paragraph for path in cls.indictment()
+                           for paragraph in cls.paragraphs(path.read_text(encoding="utf-8")))
+        return tuple(stream for stream in (cls.voice(), indictment, cls.tells(), cls.failures())
+                     if stream)
 
     @classmethod
     def sources(cls) -> tuple[Path, ...]:
         """The fleet's files, its own rules among them by audience, then the commander's."""
-        return (*super().sources(), CommanderPackage.indictment(), CommanderPackage.skill(),
+        return (*super().sources(), *cls.indictment(), CommanderPackage.skill(),
                 Slop.catalog() / "README.md")
 
     def header(self, start: DeckStart) -> str:
@@ -203,6 +214,53 @@ class FleetRulesReader(RulesOnly, FleetReader, audience=FleetAudience):
 
 class CommanderRulesReader(RulesOnly, CommanderReader, audience=CommanderAudience):
     """The commander's refresh."""
+
+
+class IndictmentFree(DeckReader, audience=FleetAudience):
+    """A prime asked for mid-context without the indictment, so it does not fill the window."""
+
+    @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return ()
+
+
+class CommanderIndictmentFreeReader(IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's papers and rules without the indictment."""
+
+
+class CommanderLightReader(RulesOnly, IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's rules alone: no papers, no indictment."""
+
+
+class Prime(DeclaredFamily):
+    """A deal the owner asks for on demand (/prime, `agent-comms-prime`). Each member names
+    the readers it deals by role; the readers own which files those are, so a variant is a
+    selection over the one dealt order, never a second list."""
+
+    fleet: ClassVar[type[DeckReader]]
+    commander: ClassVar[type[DeckReader]]
+
+
+class FullPrime(Prime, declared_name="full"):
+    """Papers, rules and, for a commander, the indictment: the same deal as a compaction."""
+
+    fleet = FleetReader
+    commander = CommanderReader
+
+
+class PaperlessPrime(Prime, declared_name="no-papers"):
+    fleet = FleetRulesReader
+    commander = CommanderRulesReader
+
+
+class IndictmentlessPrime(Prime, declared_name="no-indictment"):
+    fleet = FleetReader
+    commander = CommanderIndictmentFreeReader
+
+
+class LightPrime(Prime, declared_name="light"):
+    fleet = FleetRulesReader
+    commander = CommanderLightReader
 
 
 @dataclass(frozen=True)
@@ -261,6 +319,13 @@ class DeckStart(DealtDeck):
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
         """A start that lost the context deals the deck; a resume keeps the deal it holds."""
         return self.source.reason().deal(self, reader)
+
+    def primed(self, prime: type[Prime]) -> tuple[str, ...]:
+        """The owner's /prime: a fresh deal of the variant's reader for this session's role,
+        whatever its context holds, through the same gate as a compaction."""
+        return WatchClaim(self.session_id).state().by_role(
+            unbound=tuple, fleet=lambda record: self.dealt(prime.fleet()),
+            commander=lambda record: self.dealt(prime.commander()))
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path."""
