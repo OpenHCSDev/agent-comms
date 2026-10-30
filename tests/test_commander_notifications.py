@@ -556,8 +556,9 @@ def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notificati
             super().enforce(_comms, _commander)
             raise refusal
 
-    rules = (OccupiedRule("occupied-unit", 1.0, "unit already holds work"),
-             FollowingRule("following-rule", 1.0, "another rule"))
+    rules = (OccupiedRule(watch="occupied-unit", since=1.0, error="unit already holds work",
+                          failed_at=1.0),
+             FollowingRule(watch="following-rule", since=1.0, error="another rule", failed_at=1.0))
     beat(comms, rules)
 
     assert enforced == ["occupied-unit", "following-rule"]
