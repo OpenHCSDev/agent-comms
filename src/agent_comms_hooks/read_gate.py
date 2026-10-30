@@ -3,7 +3,8 @@ transcript, and a refusal is a PreToolUse denial.
 
 PreToolUse only judges: it refuses any tool but reading a dealt file and answering it while one is
 unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
-only after a tool completes, records a Read that covered a whole dealt file; a failed or partial Read leaves the gate closed.
+only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
+Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
 it may not write the main agent's audit, and it reports its tool activity through its seat.
 """

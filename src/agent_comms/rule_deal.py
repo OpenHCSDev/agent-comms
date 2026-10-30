@@ -425,17 +425,17 @@ class RuleDeal(State):
     owner_prompts: ClassVar[int] = 6
     """How many of the person's own last prompts a deal puts back in front of the session."""
 
-    owes: ClassVar[tuple[type[Owed], ...]] = ()
-    """What this class itself declares the deal can owe; a requirement parent names its case."""
+    declared_owed: ClassVar[dict[type, tuple[type[Owed], ...]]] = {}
+    """What each class itself declares the deal can owe; a requirement parent names its case."""
 
     requirements: ClassVar[tuple[type[Owed], ...]] = ()
     """Everything this deal can owe, each class's declaration in MRO order."""
 
     def __init_subclass__(cls, owes: tuple[type[Owed], ...] = (), **options: object) -> None:
         super().__init_subclass__(**options)
-        cls.owes = owes
+        cls.declared_owed[cls] = owes
         cls.requirements = tuple(
-            case for base in cls.__mro__ if issubclass(base, RuleDeal) for case in base.owes
+            case for base in cls.__mro__ for case in cls.declared_owed.get(base, ())
         )
 
     @property
