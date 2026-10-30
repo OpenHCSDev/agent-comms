@@ -41,7 +41,6 @@ from agent_comms.todos import (
     Todo,
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
-from agent_comms.turn_digests import LastTurns, TurnDigestRead
 from agent_comms.work_branches import WorkBranchError
 
 if TYPE_CHECKING:
@@ -122,7 +121,7 @@ class UnitObservation:
 
     @cached_property
     def turns(self) -> tuple[TurnDigest, ...]:
-        return TurnDigestRead(self.comms.root, self.thread, LastTurns(2)).read().turns
+        return self.frame.recent_turns(self.comms, self.thread)
 
     @cached_property
     def calls(self) -> tuple[OrderCall, ...]:
