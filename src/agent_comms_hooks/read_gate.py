@@ -20,7 +20,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.rule_deal import DealtRuleGate, ReadSpan
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
-from agent_comms_hooks.forks import SeatedSubagent
+from agent_comms_hooks.seats import SeatedSubagent
 
 
 @dataclass(frozen=True)
