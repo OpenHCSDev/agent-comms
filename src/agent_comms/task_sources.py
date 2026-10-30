@@ -35,12 +35,13 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
-    from .messages import Message
+    from .messages import Message, MessageRole
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
     from .typed_table import TypedTable
+    from .ui_model.message_category import MessageCategory
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -234,6 +235,10 @@ class TaskAttachment(
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         """The commander observations this attachment carries for that commander: none."""
         return ()
+
+    def category(self, role: MessageRole) -> type[MessageCategory]:
+        """Which category the message carrying this attachment files under: its sender's."""
+        return role.category
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
