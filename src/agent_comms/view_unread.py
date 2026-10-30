@@ -21,7 +21,7 @@ from .locked_store import PublishedSQLiteFile, RuntimeFile, SQLiteFile
 from .store_files import StoreBusy
 from .bus import Bus
 from .native_entries import NativeEntry
-from .native_transcript import SessionCut, reverse_records
+from .native_transcript import SessionCut, record_end, reverse_records
 from .private_path import FileObservation, FileRevision, MissingFile
 from .read_ledger import ReadDocument, ReadLedger
 from .registry_document import RosterVisibility
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .threads import Thread
 
-_INDEX_VERSION = 7
+_INDEX_VERSION = 8
 
 
 class ReplyIndexTable:
@@ -56,6 +56,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
     records: int = 0
     source: Annotated[str, Column(primary_key=True, check="source<>''")] = ""
     start: int = 0
+    complete: int = 0
     limit: ClassVar[int] = 32
 
     @classmethod
@@ -72,16 +73,23 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
 
     def counts(self, revision: FileRevision, seen: int) -> bool:
         """The read reached this mark or exhausted the record allowance."""
-        return seen == revision.size or (
-            self.revision == revision and (self.start <= seen or self.records >= self.limit)
-        )
+        return seen == revision.size or (self.revision == revision and self._covers(seen))
+
+    def _covers(self, seen: int) -> bool:
+        return self.start <= seen or self.records >= self.limit
+
+    def appended_cut(self, revision: FileRevision) -> tuple[int, ...]:
+        """The end of the last complete record indexed, when ``revision`` only appended
+        past it: records before the cut are indexed, a half-written tail after it is not."""
+        return tuple(
+            self.complete for indexed in self.revision.revisions()
+            if indexed.holds_cut(revision, self.complete))
 
     def presents(self, revision: FileRevision, seen: int) -> bool:
         """Whether the stored replies answer this revision while its delta prepares: it is
-        counted, or it only appended to an indexed revision, whose replies all remain."""
+        counted, or it only appended past the indexed cut, whose replies all remain."""
         return self.counts(revision, seen) or any(
-            indexed.holds_cut(revision, indexed.size) and self.counts(indexed, seen)
-            for indexed in self.revision.revisions())
+            seen == cut or self._covers(seen) for cut in self.appended_cut(revision))
 
     def continues(self, revision: FileRevision) -> bool:
         return self.revision == revision
@@ -100,20 +108,22 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
         if self.continues(revision):
             return self._scan(revision, seen, self.start, self.records, cancelled, ContinuedReplyIndex)
         fresh = partial(self._scan, revision, seen, revision.size, 0, cancelled, ReplyIndexUpdate)
-        for indexed in self.revision.revisions():
-            if indexed.holds_cut(revision, indexed.size):
-                # Only appended: visit the new records, keep the indexed prefix and replies.
-                boundary = max(seen, indexed.size)
-                return self._scan(
-                    revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
-                ).extending(self, boundary, fresh)
+        for cut in self.appended_cut(revision):
+            # Only appended: visit the new records, keep the indexed prefix and replies.
+            boundary = max(seen, cut)
+            return self._scan(
+                revision, boundary, revision.size, 0, cancelled, ContinuedReplyIndex,
+            ).extending(self, boundary, fresh)
         return fresh()
 
     def _scan(self, revision: FileRevision, seen: int, start: int, visited: int,
               cancelled: Event, result: type[ReplyIndexUpdate]) -> ReplyIndexResult:
         replies: list[TranscriptReply] = []
-        records = reverse_records(Path(self.source), start, floor=max(0, seen - 1))
-        with closing(records):
+        source = Path(self.source)
+        with source.open("rb") as stream, closing(
+            reverse_records(source, start, floor=max(0, seen - 1), stream=stream)
+        ) as records:
+            complete = record_end(stream, revision.size)
             for begin, end, raw in records:
                 if visited >= self.limit or start <= seen:
                     break
@@ -125,7 +135,8 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
                     replies.append(TranscriptReply(self.source, end))
             else:
                 start = min(start, seen)
-        index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start)
+        index = ReplyIndex(revision=revision, records=visited, source=self.source, start=start,
+                           complete=complete)
         return result(self, index, tuple(replies))
 
 

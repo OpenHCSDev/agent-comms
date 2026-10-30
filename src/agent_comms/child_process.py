@@ -43,7 +43,7 @@ from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
+from .field_codec import DisclosedRecord, FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .native_build_inputs import (
     AsyncStdioOptions, ChildStdio, ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled,
@@ -1403,7 +1403,7 @@ class OrderCheckFailedError(ValueError):
     """A completed order check did not prove its expected result."""
 
 
-class CheckPrinted(DeclaredFamily, affix="Printed"):
+class CheckPrinted(DisclosedRecord, DeclaredFamily, affix="Printed"):
     """The count printed by a child, or the absence of an integer."""
 
     @staticmethod

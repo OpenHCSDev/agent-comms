@@ -290,27 +290,23 @@ class SessionLifecycle:
         ))
 
     async def retire_owner(self, state: OwnerSession, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+        """Only a completed retirement is remembered: a failed attempt (a busy store lock)
+        fails its own stop request and leaves the next stop to retry every idempotent step."""
         async with state.retirement_lock:
             if state.retired.done():
-                await state.retired
                 return
-            try:
-                state.request_stop()
-                self.runtime.retire_session(state.identifier)
-                await self.effects.inputs.close_sessions((state,))
-                await self.effects.turns.close_sessions((state,))
-                await Coordination.run_worker(partial(
-                    self.comms.owners.complete_session, state.owner, expected,
-                    state.configuration.launch.process, claim.claimed_generation,
-                ))
-                self.config.stop_observing_configuration(state.identifier)
-                del self.published[state.identifier]
-                self.effects.inputs.end_session(state.identifier)
-            except BaseException as error:
-                state.retired.set_exception(error)
-                raise
-            else:
-                state.retired.set_result(None)
+            state.request_stop()
+            self.runtime.retire_session(state.identifier)
+            await self.effects.inputs.close_sessions((state,))
+            await self.effects.turns.close_sessions((state,))
+            await Coordination.run_worker(partial(
+                self.comms.owners.complete_session, state.owner, expected,
+                state.configuration.launch.process, claim.claimed_generation,
+            ))
+            self.config.stop_observing_configuration(state.identifier)
+            del self.published[state.identifier]
+            self.effects.inputs.end_session(state.identifier)
+            state.retired.set_result(None)
 
     async def _acquire_loaded(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
         await Coordination.run_worker(self.comms.owners.require_private_launch)

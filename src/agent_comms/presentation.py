@@ -702,17 +702,17 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+        return FieldCodec.project(self, PresenceExclude)
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def is_fork(self) -> bool:
         return self.thread.is_fork
 
-    @projected(view="presence", name="activity")
+    @projected(view=PresenceExclude, name="activity")
     def activity_state(self) -> ActivityState:
         return self.activity.state
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def activity_detail(self) -> str:
         shown = self.activity.presentation(self.thread.display_title)
         return " · ".join(part for part in (self.activity.detail, *shown.status.details) if part)
@@ -756,19 +756,19 @@ class ThreadView(ThreadRecord):
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def resumable(self) -> bool:
         return self.thread.runtime.resumable
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def last_activity(self) -> float:
         return self.activity.timestamp
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def context_used(self) -> PiCount:
         return self.runtime.context_used
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def context_size(self) -> PiCount:
         return self.runtime.context_size
 

@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
+from agent_comms_hooks.watch import WatchClaim
+
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
@@ -68,8 +70,12 @@ class ToolCaller(ABC):
     def subject(self, named: str) -> str:
         return named or self.own_thread()
 
-    def commanding(self, comms: Comms, commander: str) -> None:
+    def commanding(self, comms: Comms) -> None:
         """An ordinary caller needs no commander-child registration."""
+        return None
+
+    def join(self, comms: Comms, parent: str) -> None:
+        """An ordinary caller is nobody's child."""
         return None
 
     def retire(self, comms: Comms) -> None:
@@ -219,7 +225,7 @@ class ActsForCommander(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
 
 
 @dataclass(frozen=True)
@@ -228,7 +234,7 @@ class CommanderPeerCaller(ThreadCaller):
     the declaration, so its verdicts and orders record its own incarnation, never the
     registered commander's."""
 
-    def commanding(self, comms: Comms, commander: str) -> None:
+    def commanding(self, comms: Comms) -> None:
         if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
             raise ToolRefusedError(
                 f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
@@ -258,14 +264,31 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
 class CommanderForkCaller(ActsForCommander, SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
-    def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
+    def commanding(self, comms: Comms) -> None:
+        """A verb resumes the fork under the parent that spawned it, never under whichever
+        thread the bus records as commander."""
+        self.join(comms, self.spawner(comms))
 
-    def join(self, comms: Comms) -> None:
-        """The SubagentStart hook declares the fork under the registered lead, in its own
-        process, before the fork's first call."""
-        snapshot = comms.registry.snapshot()
-        self.commanding(comms, snapshot.commander_project.require().lead(snapshot).name)
+    def join(self, comms: Comms, parent: str) -> None:
+        """The SubagentStart hook declares the fork under the session that spawned it, in its
+        own process, before the fork's first call; the child inherits that parent's tags.
+        A connector grant names its holder, so a fork of another parent is refused."""
+        comms.registry.register_child(self.name, parent, CommanderForkExecution, comms.goals)
+
+    def spawner(self, comms: Comms) -> str:
+        """The parent the hook registered; before it has, the bus thread the calling Claude
+        session is bound to, which is the session that spawned this fork."""
+        if self.name in comms.registry:
+            parent, = comms.registry.require(self.name).parent.names()
+            return parent
+        claim = WatchClaim(WatchClaim.environment_session())
+        bindings = claim.state().bindings()
+        if not bindings:
+            raise ToolRefusedError(
+                f"{self.name} has no registered parent and Claude session {claim.thread}"
+                " has no bus binding to name one.")
+        binding, = bindings
+        return binding.bus
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)

@@ -145,7 +145,6 @@ class PersistentPiSession:
 
         key = (launch, launch.configuration.auth_revision())
         child = self.child_state.reuse(key) if reuse else None
-        reused = child is not None
         if child is None:
             await self.close()
             attestation = launch.session.attestation()
@@ -153,10 +152,11 @@ class PersistentPiSession:
             with startup.measurements.operation("native_spawn"):
                 child = await PiSessionChild.start(key, attestation)
             self.child_state = BorrowedNative(child, self.child_state)
+            watchdog.spawned()
         else:
             watchdog.launching(asyncio.get_running_loop().time, launch.session.path)
             self.child_state = BorrowedNative(child, EmptyNative())
-        watchdog.spawned(reused)
+            watchdog.reused()
         return child
 
     async def context_for_input(self, thread, context):

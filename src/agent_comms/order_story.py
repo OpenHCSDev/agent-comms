@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Self
 
 from .build_identity import InstalledBuild
-from .field_codec import DisclosureIdentity, OrderId
+from .field_codec import DisclosedRecord, DisclosureIdentity, OrderId
 from .recorded_time import EventTime
 from .tool_result import ToolResult
 
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class StoryLine:
+class StoryLine(DisclosedRecord):
     at: EventTime
     text: str
 
@@ -52,7 +52,7 @@ class StoryEvent(StorySource):
 
 
 @dataclass(frozen=True)
-class ProblemStory:
+class ProblemStory(DisclosedRecord):
     problem: Annotated[str, DisclosureIdentity()]
     state: str
     events: tuple[StoryLine, ...]

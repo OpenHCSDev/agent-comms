@@ -115,6 +115,15 @@ class WatchClaim:
     thread: str
     home: Path = field(default_factory=Path.home)
 
+    @staticmethod
+    def environment_session() -> str:
+        """Claude exports the identity shared by its hooks, its bare Monitor command and
+        every Bash call its subagents make."""
+        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if not session:
+            raise ValueError("Claude did not export CLAUDE_CODE_SESSION_ID")
+        return session
+
     @classmethod
     def directory(cls, home: Path) -> Path:
         return home / ".local/state/agent-comms/cli-watch"

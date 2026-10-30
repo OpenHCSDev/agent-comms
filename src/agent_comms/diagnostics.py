@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ArtifactExclude
+
 import hashlib
 import json
 import os
@@ -164,7 +166,7 @@ def record_drain_failure(
         # file reference out of a previously presented diagnostic. The declared
         # artifact view excludes the activity-owned observation clock.
         "drain": FieldCodec.project(
-            replace(diagnostic, reason=str(source_error)), "artifact"
+            replace(diagnostic, reason=str(source_error)), ArtifactExclude
         ),
         "outcome": "inbox observation failed; this record grants no retry authority",
         **DiagnosticDocument.source_error_evidence(source_error),
