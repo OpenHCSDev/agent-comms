@@ -158,6 +158,13 @@ class Repo(GitLaunch, BaseModel, WireValue):
         """A repository name or path identifies this declared checkout, not another worktree."""
         return self.github.named(name) or self.checkout == Path(name).resolve()
 
+    @property
+    def checked_out(self) -> bool:
+        """The checkout is a work tree of its own; a removed submodule leaves an empty directory
+        that git would resolve to the enclosing repository instead."""
+        return (self.checkout / ".git").exists()
+
+
     def default_branch(self) -> str:
         """The origin's declared default, never a guessed branch name."""
         try:
