@@ -297,7 +297,9 @@ class RetainedPlanReadings(PlanReadings):
         self.plans: tuple[PlanReading, ...] = ()
         self.lock = Lock()
 
-    def observed(self, repo: Repo, todos: tuple[Todo, ...], history: CheckoutHistory) -> PlanReading:
+    def observed(
+        self, repo: Repo, todos: tuple[Todo, ...], history: CheckoutHistory,
+    ) -> PlanReading:
         current = super().observed(repo, todos, history)
         with self.lock:
             plans = self.plans

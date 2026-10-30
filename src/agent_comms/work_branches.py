@@ -26,7 +26,8 @@ from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
 from .field_codec import GitCommitText, PathText, projected
 from .repo import (
-    Checkout, CheckoutHistory, GitCommandError, GitHead, GitReference, Repo, RepositoryReads,
+    BranchUpstream, Checkout, CheckoutHistory, DetachedHead, GitCommandError, GitHead,
+    Repo, RepositoryReads, UnpushedHead,
 )
 from .repository_name import RepositoryName
 from .wire_models import WireModel
@@ -289,90 +290,10 @@ class ForgeQuery[Repository](ForgeAnswer):
 
 
 @dataclass(frozen=True)
-class UnpushedHead:
-    head: str
-    commits: int = field(compare=False)
-    upstream: str = field(compare=False)
-
-
-@dataclass(frozen=True)
 class BranchComparison:
     base: str
     head: str
     paths: tuple[Annotated[Path, PathText], ...]
-
-
-@dataclass(frozen=True)
-class BranchUpstream(DeclaredFamily):
-    """Git's upstream decoded once; each member owns acquisition and publication answers."""
-
-    branch: str
-
-    @classmethod
-    def from_reference(cls, reference: GitReference) -> BranchUpstream:
-        branch = reference.name.removeprefix("refs/heads/")
-        if not reference.upstream:
-            return NoUpstream(branch)
-        if reference.remote == Repo.local_remote:
-            return LocalUpstream(branch, reference.upstream)
-        return PublishedUpstream(branch, reference.upstream, reference.remote, reference.remote_ref)
-
-    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
-        """Only published upstreams supply remote/reference acquisition requirements."""
-        return ()
-
-    def require_prepared(self, reader: WorkBranches) -> None:
-        """An absent or local upstream requires no published remote head."""
-
-    def tracking_name(self) -> str:
-        return ""
-
-    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
-        # A local, absent or deleted upstream cannot make its stale tracking ref publication.
-        tracking = self.tracking_name()
-        count = reader.history.unpublished(head, tracking)
-        return (UnpushedHead(head, count, tracking),) if count else ()
-
-
-class NoUpstream(BranchUpstream):
-    """This local branch declares no upstream."""
-
-
-class DetachedHead(BranchUpstream):
-    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
-
-
-@dataclass(frozen=True)
-class TrackedUpstream(BranchUpstream, declared_name=None):
-    tracking: str
-
-    def tracking_name(self) -> str:
-        return self.tracking
-
-
-class LocalUpstream(TrackedUpstream):
-    """Git's dot remote names another local branch, never a publication."""
-
-
-@dataclass(frozen=True)
-class PublishedUpstream(TrackedUpstream):
-    remote: str
-    reference: str
-
-    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
-        return ((self.remote, self.reference),)
-
-    def require_prepared(self, reader: WorkBranches) -> None:
-        for head in reader.selected_heads(self.remote, self.reference):
-            reader.history.commit(head)
-
-    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
-        published = reader.selected_heads(self.remote, self.reference)
-        if published:
-            (remote_head,) = published
-            count = reader.history.count(head, remote_head)
-            return (UnpushedHead(head, count, self.tracking),) if count else ()
-        return super().unpushed(reader, head)
 
 
 @dataclass(frozen=True)
@@ -512,8 +433,8 @@ query($owner: String!, $name: String!, $after: String) {
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
             DetachedHead(self.head.reference),
-            *(BranchUpstream.from_reference(reference) for reference in self.history.refs.values()
-              if reference.name.startswith("refs/heads/")),
+            *(upstream for reference in self.history.refs.values()
+              for upstream in reference.upstreams()),
         )}
 
     def prepare_upstreams(self) -> None:
