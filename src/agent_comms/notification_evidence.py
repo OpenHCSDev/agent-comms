@@ -15,13 +15,19 @@ from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily
 from .field_codec import (
-    FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember,
-    SingleFieldValue, SubclassUnion, ThreadLookup, boundary_decoder,
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    NullMember,
+    RecordMember,
+    SingleFieldValue,
+    SubclassUnion,
+    ThreadLookup,
+    boundary_decoder,
 )
 from .message_reference import MessageReference
-from .recorded_bus import RecordedBusIdentity
-
 from .participant_identity import FrozenRecipientIdentity
+from .recorded_bus import RecordedBusIdentity
 from .thread_identity import ThreadIncarnation
 
 
@@ -31,11 +37,11 @@ class ConsumptionEvidence(ABC):
     @abstractmethod
     def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress: ...
 
+
 if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
-    from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_assignment import AssignmentActivityEvidence
     from .notification_progress import AssignmentProgress, DeliveryProgress
     from .presentation import MessageNotification, WireRevision
@@ -68,7 +74,7 @@ class RecipientSelection:
 
     @property
     def positions(self) -> range:
-        return self.eligible[:self.limit.value]
+        return self.eligible[: self.limit.value]
 
     @property
     def remaining(self) -> int:
@@ -79,9 +85,13 @@ class RecipientSelection:
         return tuple(self.source.recipients[position] for position in self.positions)
 
     @property
-    def entries(self) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipientIdentity], ...]:
-        return tuple(((recipient.recipient_lookup, self.source.message.reference), recipient)
-                     for recipient in self.recipients)
+    def entries(
+        self,
+    ) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipientIdentity], ...]:
+        return tuple(
+            ((recipient.recipient_lookup, self.source.message.reference), recipient)
+            for recipient in self.recipients
+        )
 
 
 @dataclass(frozen=True)
@@ -118,8 +128,11 @@ class AfterRecipient(RecordMember, RecipientCursor):
     recipient: FrozenRecipientIdentity
 
     def positions(self, source: Delivered) -> range:
-        start = bisect_right(source.recipients, self.recipient.recipient_lookup,
-                             key=lambda item: item.recipient_lookup)
+        start = bisect_right(
+            source.recipients,
+            self.recipient.recipient_lookup,
+            key=lambda item: item.recipient_lookup,
+        )
         return range(start, len(source.recipients))
 
 
@@ -129,17 +142,28 @@ class OutcomeViewer(ABC):
     @abstractmethod
     def positions(self, source: Delivered) -> range: ...
 
-    def selection(self, sources: Sequence[Delivered], *, after: RecipientCursor = FirstRecipient(),
-                  limit: RecipientLimit = RecipientLimit()) -> NotificationSelection:
+    def selection(
+        self,
+        sources: Sequence[Delivered],
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
+    ) -> NotificationSelection:
         pages = []
         for source in sources:
             eligible, following = self.positions(source), after.positions(source)
-            pages.append(RecipientSelection(
-                source, range(max(eligible.start, following.start), min(eligible.stop, following.stop)), limit))
+            pages.append(
+                RecipientSelection(
+                    source,
+                    range(max(eligible.start, following.start), min(eligible.stop, following.stop)),
+                    limit,
+                )
+            )
         return NotificationSelection(self, tuple(pages))
 
-    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
-                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
+    def visible_reads(
+        self, displayed_to: tuple[ThreadIncarnation, ...], source: RecordedBusIdentity
+    ) -> tuple[ThreadIncarnation, ...]:
         """Unscoped/operator and agent readers retain every human read mark."""
         return displayed_to
 
@@ -177,10 +201,14 @@ class DisplayOutcomes(AllOutcomes):
     viewer: ThreadIncarnation
     bus_identity: RecordedBusIdentity
 
-    def visible_reads(self, displayed_to: tuple[ThreadIncarnation, ...],
-                      source: RecordedBusIdentity) -> tuple[ThreadIncarnation, ...]:
-        return tuple(reader for reader in displayed_to
-                     if reader != self.viewer or not self.bus_identity.matches(source))
+    def visible_reads(
+        self, displayed_to: tuple[ThreadIncarnation, ...], source: RecordedBusIdentity
+    ) -> tuple[ThreadIncarnation, ...]:
+        return tuple(
+            reader
+            for reader in displayed_to
+            if reader != self.viewer or not self.bus_identity.matches(source)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,8 +224,13 @@ class OwnerOutcomes(OutcomeViewer):
     def positions(self, source: Delivered) -> range:
         if source.sender_lookup == self.lookup:
             return range(len(source.recipients))
-        position = bisect_left(source.recipients, self.lookup, key=lambda item: item.recipient_lookup)
-        if position < len(source.recipients) and source.recipients[position].recipient_lookup == self.lookup:
+        position = bisect_left(
+            source.recipients, self.lookup, key=lambda item: item.recipient_lookup
+        )
+        if (
+            position < len(source.recipients)
+            and source.recipients[position].recipient_lookup == self.lookup
+        ):
             return range(position, position + 1)
         return range(0)
 
@@ -245,11 +278,11 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
 
 class UnansweredResponse(AssignmentResponse):
     def recorded(self, message: Delivered) -> AssignmentResponse:
-        return AnsweredResponse(
-            message.reference, message.at_ms
-        )
+        return AnsweredResponse(message.reference, message.at_ms)
 
-    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
+    def completed_notification(
+        self, progress: AssignmentProgress, notification: MessageNotification
+    ) -> MessageNotification:
         return progress.consumed_notification(notification)
 
     def answered(self, notification: MessageNotification) -> MessageNotification:
@@ -261,7 +294,9 @@ class AnsweredResponse(AssignmentResponse):
     reference: MessageReference
     received_at_ms: int
 
-    def completed_notification(self, progress: AssignmentProgress, notification: MessageNotification) -> MessageNotification:
+    def completed_notification(
+        self, progress: AssignmentProgress, notification: MessageNotification
+    ) -> MessageNotification:
         return progress.answered_notification(notification, self)
 
     def answered(self, notification: MessageNotification) -> MessageNotification:
@@ -277,10 +312,16 @@ class SourceEvidence:
     grouped by frozen recipient. Equality over all of them is the window's change test."""
 
     claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
-    consumption: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(default_factory=dict)
-    responses: Mapping[ThreadLookup, AssignmentResponse] = field(default_factory=lambda: MappingProxyType({}))
+    consumption: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(
+        default_factory=dict
+    )
+    responses: Mapping[ThreadLookup, AssignmentResponse] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
 
-    def answered(self, recipient: ThreadLookup, notification: MessageNotification) -> MessageNotification:
+    def answered(
+        self, recipient: ThreadLookup, notification: MessageNotification
+    ) -> MessageNotification:
         return self.responses.get(recipient, UnansweredResponse()).answered(notification)
 
     def consumed_progress(self, recipient: ThreadLookup,
@@ -290,10 +331,6 @@ class SourceEvidence:
         for attempt in self.consumption.get(recipient, ()):
             progress = attempt.consumed_progress(progress)
         return progress
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -307,10 +344,12 @@ class NotificationAssignmentRead:
 
     selection: NotificationSelection
     rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
-    consumption: Mapping[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = field(
-        default_factory=lambda: MappingProxyType({}))
+    consumption: Mapping[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = (
+        field(default_factory=lambda: MappingProxyType({}))
+    )
     responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
-        default_factory=lambda: MappingProxyType({}))
+        default_factory=lambda: MappingProxyType({})
+    )
 
     @property
     def sources(self) -> tuple[Delivered, ...]:
@@ -334,10 +373,14 @@ class NotificationAssignmentRead:
             consumption[source][lookup] = facts
         for row in self.rows:
             claims.setdefault(row[0].source, []).append(row)
-        return {source: SourceEvidence(
-                    tuple(claims[source]), MappingProxyType(consumption[source]),
-                    MappingProxyType(responses[source]))
-                for source in claims}
+        return {
+            source: SourceEvidence(
+                tuple(claims[source]),
+                MappingProxyType(consumption[source]),
+                MappingProxyType(responses[source]),
+            )
+            for source in claims
+        }
 
     def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:
         return any(previous != fresh.get(source, SourceEvidence())
@@ -374,8 +417,15 @@ class NotificationWindow(ABC):
     read_marks: tuple[NotificationReadMark, ...] = ()
 
     def remaining(self, reference: MessageReference) -> int:
-        return next((page.remaining for read in self.reads for page in read.selection.pages
-                     if page.source.message.reference == reference), 0)
+        return next(
+            (
+                page.remaining
+                for read in self.reads
+                for page in read.selection.pages
+                if page.source.message.reference == reference
+            ),
+            0,
+        )
 
     @classmethod
     def chunks[T](cls, items: Iterable[T]) -> Iterator[tuple[T, ...]]:

@@ -1,7 +1,6 @@
 """Source-bound historical display values. These carry no delivery authority."""
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
 
 import re
 import shutil
@@ -15,11 +14,13 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.repo import Checkout
+
 from .bus import Bus
-from .child_process import Platform
 from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
+from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
@@ -34,11 +35,15 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
-from .notification_evidence import NotificationWindow
+from .notification_evidence import (
+    FirstRecipient,
+    NotificationWindow,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
 from .page_traversal import HistoryCursor, OlderTraversal
-from .notification_evidence import OutcomeViewer, FirstRecipient, RecipientCursor
 from .presentation import MessageNotification
-from .notification_evidence import RecipientLimit
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
@@ -365,10 +370,15 @@ class HistorySource:
         source.validate()
         return source
 
-    def notification_references(self, sources: tuple[HistorySource, ...],
-                                references: Sequence[MessageReference],
-                                viewer: OutcomeViewer, *, after: RecipientCursor = FirstRecipient(),
-                                limit: RecipientLimit = RecipientLimit()) -> NotificationWindow:
+    def notification_references(
+        self,
+        sources: tuple[HistorySource, ...],
+        references: Sequence[MessageReference],
+        viewer: OutcomeViewer,
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
+    ) -> NotificationWindow:
         """Read this namespace within its archive's current catalogue read, as this viewer
         may see it."""
 
@@ -376,9 +386,16 @@ class HistorySource:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
-            Bus(Bus.path_in(root)), references,
-            partial(MessageNotification.recorded_delivery_window, root, self.provenance,
-                    viewer=viewer, after=after, limit=limit),
+            Bus(Bus.path_in(root)),
+            references,
+            partial(
+                MessageNotification.recorded_delivery_window,
+                root,
+                self.provenance,
+                viewer=viewer,
+                after=after,
+                limit=limit,
+            ),
         )
         self.validate()
         return result

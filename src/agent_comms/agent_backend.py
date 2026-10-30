@@ -229,7 +229,6 @@ class InputRequest(TurnInboxItem):
         return (self.input_id,)
 
 
-
 @dataclass(frozen=True)
 class SendNow(TurnInboxItem):
     """Ask the running turn to place these queued steering inputs immediately.
@@ -238,7 +237,6 @@ class SendNow(TurnInboxItem):
     """
 
     input_ids: tuple[InputId, ...]
-
 
 
 @dataclass(frozen=True)
@@ -253,13 +251,11 @@ class UseSettings(TurnInboxItem):
     thinking_level: ThinkingLevelField
 
 
-
 @dataclass(frozen=True)
 class ClearQueue(TurnInboxItem):
     """Clear only these queued user inputs, never delivered bus inputs."""
 
     input_ids: tuple[InputId, ...]
-
 
 
 class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compaction"):
@@ -316,14 +312,18 @@ class InputStartListener(ABC):
     @abstractmethod
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
 
-
     async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
         """An unowned input has no durable ordinary disposition to acknowledge."""
+        return None
 
     async def following_context_committed(
-        self, public_id: InputId, sent_text: str, context: NativeContextProof,
+        self,
+        public_id: InputId,
+        sent_text: str,
+        context: NativeContextProof,
     ) -> None:
         """An unowned following input has no durable ordinary disposition."""
+        return None
 
 
 class NoInputStartListener(InputStartListener):
@@ -337,8 +337,6 @@ class NoInputStartListener(InputStartListener):
 
 
 NO_INPUT_START_LISTENER = NoInputStartListener()
-
-
 
 
 class RunsTurns(ABC):
@@ -495,4 +493,3 @@ class NewThreadBackend(ThreadServingBackend, declared_name=None):
                 f"exactly one backend must serve new threads, found "
                 f"{[member.__name__ for member in members]}")
         return members[0]
-

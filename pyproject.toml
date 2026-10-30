@@ -143,6 +143,8 @@ extend-immutable-calls = [
     "agent_comms.transcripts.LatestPage",
     "agent_comms.transcripts.AtFrontier",
     "agent_comms.transcripts.LivePageSource",
+    "agent_comms.notification_evidence.FirstRecipient",
+    "agent_comms.notification_evidence.RecipientLimit",
 ]
 
 [tool.mypy]

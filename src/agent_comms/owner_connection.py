@@ -6,29 +6,29 @@ import asyncio
 import json
 import os
 import socket
-from functools import partial
-from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, IO, Self, cast
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from .command import Command
-from .declared_family import DeclaredFamily
-from .tool_result import DeclaredReply
+from functools import partial
+from pathlib import Path
+from typing import IO, TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
+from .command import Command
 from .coordinator import Coordination
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
-from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .jsonl_stream import JsonlStreamReader
+from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .comms import Comms
     from .child_process import ProcessIdentity
+    from .comms import Comms
     from .registry_document import RegistryEntry
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
@@ -166,7 +166,9 @@ class OwnerConnection:
     def require_identity(self, owner: ThreadIncarnation) -> None:
         """The incarnation this connection captured is the one the caller holds."""
         if self._identity != owner:
-            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+            raise OwnerIdentityChangedError(
+                "The owner incarnation changed while preparing the request."
+            )
 
     def _owner_entry(self) -> RegistryEntry:
         if self._closed:
@@ -297,7 +299,9 @@ class OwnerReplyConnection(OwnerConnection):
         """
         thread = comms.registry.require(owner.name)
         if thread.incarnation != owner:
-            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+            raise OwnerIdentityChangedError(
+                "The owner incarnation changed while preparing the request."
+            )
         reading.require_native_owner(thread)
         connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
         connection.require_identity(owner)
@@ -305,7 +309,10 @@ class OwnerReplyConnection(OwnerConnection):
 
     @classmethod
     async def answer[Result](
-        cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading[Result],
+        cls,
+        comms: Comms,
+        owner: ThreadIncarnation,
+        reading: OwnerReading[Result],
     ) -> Result:
         """One reading from the held owner; the connection closes whatever the outcome."""
         connection = await asyncio.to_thread(cls.held, comms, owner, reading)

@@ -12,7 +12,9 @@ class NativeFileArtifact(DeclaredFamily, affix="FileArtifact"):
 
 
 @dataclass(frozen=True)
-class Utf8FileWriteArtifact(NativeFileArtifact, NativeIntegerBounds, declared_name="utf8_file_write"):
+class Utf8FileWriteArtifact(
+    NativeFileArtifact, NativeIntegerBounds, declared_name="utf8_file_write"
+):
     operation_path: str
     digest: TextDigest
     byte_count: int

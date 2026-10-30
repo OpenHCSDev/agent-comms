@@ -7,8 +7,8 @@ from typing import TYPE_CHECKING, Never
 
 from . import turn_failure as failures
 from .agent_backend import TurnInboxItem
-from .native_pi import NativePiInputNotSent
 from .native_input_proof import NativeInputCommit
+from .native_pi import NativePiInputNotSent
 
 if TYPE_CHECKING:
     from .backend import NativeSession

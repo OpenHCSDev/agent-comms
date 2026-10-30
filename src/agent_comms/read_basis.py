@@ -6,35 +6,38 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 """
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
 
-from .bus_tables import AwaitingAnswerSource
-from .messages import MessageInput
-
-from .class_fact import ClassFact
 import asyncio
 import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from itertools import product
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
+
+from agent_comms.repo import Checkout
 
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, RecordMember, PathText, SingleFieldValue, SubclassUnion, ThreadLookup
-from .mentions import ThreadMention
+from .field_codec import (
+    FieldCodec,
+    NullMember,
+    PathText,
+    SingleFieldValue,
+    SubclassUnion,
+)
 from .launch_runtime import CallingThreadUnavailable
+from .mentions import ThreadMention
 from .message_reference import MessageReference
+from .messages import MessageInput
 from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
 from .private_path import FileObservation, MissingFile
-from .projection_source import ProducedRow, ProjectionSource
+from .projection_source import ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -185,8 +188,11 @@ class DisplayIdentity(DisplayCut):
     @property
     def notification_identity(self) -> DisplayIdentity:
         """The captured viewer/source cut, without an unrelated channel/DM payload."""
-        return DisplayIdentity(viewer=self.viewer, history_revision=self.history_revision,
-                               bus_identity=self.bus_identity)
+        return DisplayIdentity(
+            viewer=self.viewer,
+            history_revision=self.history_revision,
+            bus_identity=self.bus_identity,
+        )
 
     def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
         return DisplayOutcomes(self.viewer, self.bus_identity)
@@ -222,7 +228,9 @@ class SelectedDisplay(ABC):
         return self.identity.notification_identity
 
     @abstractmethod
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None: ...
+    def acknowledge(
+        self, views: HistoryViews, page: MessagePage, *, worktree: Checkout
+    ) -> None: ...
 
     def select(self, page: MessagePage, sequences: Collection[int]) -> MessagePage:
         selected = frozenset(sequences)
@@ -300,9 +308,11 @@ class HistoricalSelection(SelectedDisplay):
 
     @property
     def identity(self):
-        return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
-                               history_revision=self.history_revision,
-                               bus_identity=self.displayed.displayed.bus_identity)
+        return DisplayIdentity(
+            viewer=self.displayed.displayed.viewer_identity,
+            history_revision=self.history_revision,
+            bus_identity=self.displayed.displayed.bus_identity,
+        )
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
@@ -350,7 +360,6 @@ class LineOutput:
 if TYPE_CHECKING:
     import sqlite3
 
-    from .private_registry_guard import RegistryPrivacy
     from .bus import Bus, BusReader, BusSnapshot
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -361,6 +370,7 @@ if TYPE_CHECKING:
     from .message_page import MessagePage, PageBounds
     from .messages import Message, MessageKind
     from .presentation import BusPresentation
+    from .private_registry_guard import RegistryPrivacy
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot, UserThreadLookup
@@ -1077,9 +1087,10 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         return f"{{sender}} IN ({marks})", names
 
     def includes(self, message: Message) -> bool:
-        return (message.sender in self.first_names
-                or (message.sender in self.second_names and any(
-                    message.awaits_answer_from(ThreadTarget(name)) for name in self.first_names)))
+        return message.sender in self.first_names or (
+            message.sender in self.second_names
+            and any(message.awaits_answer_from(ThreadTarget(name)) for name in self.first_names)
+        )
 
 
 @dataclass(frozen=True, slots=True)

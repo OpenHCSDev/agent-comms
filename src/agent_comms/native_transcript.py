@@ -6,15 +6,15 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Generator, Sequence
 from contextlib import closing, contextmanager, nullcontext
-from itertools import takewhile
 from dataclasses import dataclass
+from itertools import takewhile
 from math import inf
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Never
 
 from .errors import RelationViolationError
-from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
 from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextJournal, NativeContextProof, NativeInputLocation
 
 if TYPE_CHECKING:
     from .native_output import NativeRecordLocation
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from agent_comms.native_session_files import NativeSessionFiles
+
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
@@ -44,7 +45,7 @@ from .turn_item import FreshNativeId, NativeItemId
 
 def reverse_records(
     path: Path, before: int, *, floor: int = 0, stream=None
-) -> Generator[tuple[int, int, bytes], None, None]:
+) -> Generator[tuple[int, int, bytes]]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
 
     Record size is independent of scan-buffer size. In particular, images/tool
@@ -373,7 +374,11 @@ class NativeTranscript(TranscriptSource):
                      for identity in record.annotation_id.present())
 
     def require_publication_context(
-        self, user: MessageEntry, *, session_entry_start: int, files: NativeSessionFiles,
+        self,
+        user: MessageEntry,
+        *,
+        session_entry_start: int,
+        files: NativeSessionFiles,
     ) -> NativeContextProof:
         """Corroborate the existing native producer's context, without replay.
 
@@ -389,11 +394,18 @@ class NativeTranscript(TranscriptSource):
             try:
                 proof = NativeContextJournal.for_input(db, user.require_input_id())
             except NativePiUnavailable as missing:
-                raise MalformedRecord("Native publication has no committed context inclusion") from missing
-            return proof.corroborate(self.path.absolute(), NativeInputLocation(
-                user.require_input_id(), header.id, user.id.require_present(),
-                session_entry_start=session_entry_start,
-            ))
+                raise MalformedRecord(
+                    "Native publication has no committed context inclusion"
+                ) from missing
+            return proof.corroborate(
+                self.path.absolute(),
+                NativeInputLocation(
+                    user.require_input_id(),
+                    header.id,
+                    user.id.require_present(),
+                    session_entry_start=session_entry_start,
+                ),
+            )
 
     def inputs_for(self, records: Sequence[NativeRecord], *, floor: int = 0) -> tuple[NativeRecord, ...]:
         """Find the user input behind each record in one reverse walk for the batch.

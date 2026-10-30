@@ -11,14 +11,14 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms import field_codec
 
-from .channel_targets import CommandTarget
 from .bus import Bus
 from .bus_tables import MessageIdentitySource
+from .channel_targets import CommandTarget
 from .coordination_database import CoordinationStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
-from .harness_delivery_states import Outcome, UnconfirmedOutcome
 from .errors import RelationViolationError
 from .field_codec import GoalId, InputId, RootId, TurnId
+from .harness_delivery_states import Outcome, UnconfirmedOutcome
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -36,12 +36,19 @@ from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOr
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
-from .native_input_proof import NativeContextProof
 from .messages import MessageInput
+from .native_input_proof import NativeContextProof
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
 from .typed_table import (
-    Column, DurableStore, Generated, Index, StoreRows, TextStorage, TypedTable, sql_literal,
+    Column,
+    DurableStore,
+    Generated,
+    Index,
+    StoreRows,
+    TextStorage,
+    TypedTable,
+    sql_literal,
 )
 
 if TYPE_CHECKING:
@@ -328,7 +335,6 @@ class InputDispositions(DurableStore):
     def in_turn(self, turn_id: TurnId) -> InputDocument:
         return self._select('"turn_id" = ?', (turn_id,))
 
-
     @staticmethod
     def bus_key(message: MessageInput, owner: Thread) -> InputKey:
         return message.role.response_policy(message).disposition_key(message, owner)
@@ -454,8 +460,13 @@ class InputDispositions(DurableStore):
         )
 
     def context_committed(
-        self, keys: tuple[InputKey, ...], *, lease: TurnLeaseFence,
-        sent_text: str, context: NativeContextProof, snapshot: RegistrySnapshot,
+        self,
+        keys: tuple[InputKey, ...],
+        *,
+        lease: TurnLeaseFence,
+        sent_text: str,
+        context: NativeContextProof,
+        snapshot: RegistrySnapshot,
     ) -> InputDocument:
         """A corroborated input proves only its exact original key batch, atomically.
 
@@ -464,17 +475,29 @@ class InputDispositions(DurableStore):
         """
         if not keys:
             raise RelationViolationError("Context acknowledgement has no original input keys")
+
         def acknowledge(document: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
             owner = snapshot.require(lease.identity.incarnation.name)
-            if (owner.require_turn_lease() != lease
-                    or snapshot.claim_generation(owner.name) != lease.claimed_generation):
-                raise RelationViolationError("Context acknowledgement lost its original live turn lease")
+            if (
+                owner.require_turn_lease() != lease
+                or snapshot.claim_generation(owner.name) != lease.claimed_generation
+            ):
+                raise RelationViolationError(
+                    "Context acknowledgement lost its original live turn lease"
+                )
             document.originals(keys)
-            return DocumentChange.to(document.transition(
-                keys, lambda row: row.context_committed(
-                    lease, sent_text, context, snapshot=snapshot,
-                ),
-            ))
+            return DocumentChange.to(
+                document.transition(
+                    keys,
+                    lambda row: row.context_committed(
+                        lease,
+                        sent_text,
+                        context,
+                        snapshot=snapshot,
+                    ),
+                )
+            )
+
         return self._update(*_members("key", keys), acknowledge)
 
     def settle_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
