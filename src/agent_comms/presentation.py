@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Annotated, ClassVar
@@ -50,6 +51,7 @@ from .field_codec import (
     projected,
 )
 from .goal_presentation import GoalExecution
+from .goal_waits import GoalWaits
 from .locked_store import GoalWakeFile
 from .mentions import MentionCandidate
 from .message_page import (
@@ -741,7 +743,7 @@ class ThreadRecord(CliResult):
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
-        waits = goals.waits.read()
+        waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
         observed = agents.all_activity(snapshot.active_threads(threads), snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name),
@@ -806,7 +808,7 @@ class ThreadView(ThreadRecord, PresentMember, ThreadPresence):
         if not threads:
             return ()
         runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
-        waits = goals.waits.read()
+        waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name), activities[thread.name],
