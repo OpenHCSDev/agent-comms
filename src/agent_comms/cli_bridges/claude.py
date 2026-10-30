@@ -35,7 +35,7 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
 
     @classmethod
     def environment_session(cls) -> str:
-        return SessionHook.environment_session()
+        return WatchClaim.environment_session()
 
     async def watch_operation(self, operation: Watch) -> None:
         state = WatchClaim(self.address.thread).state()
