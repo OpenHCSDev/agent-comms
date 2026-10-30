@@ -1272,6 +1272,7 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
 
     watch: str
     error: str = field(compare=False)
+    failed_at: float = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -1279,7 +1280,8 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
 
     @classmethod
     def from_passes(cls, passes: ServicePasses) -> tuple[Self, ...]:
-        return tuple(cls(watch=watch, since=failed.since, error=failed.error)
+        return tuple(cls(watch=watch, since=failed.since, error=failed.error,
+                         failed_at=failed.failed_at)
                      for watch, failed in sorted(passes.failing.items()))
 
     def began(self) -> float:
