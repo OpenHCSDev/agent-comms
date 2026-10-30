@@ -454,6 +454,18 @@ class ClearedDeal(DealTrigger):
 
 
 @dataclass(frozen=True)
+class PrimedDeal(DealTrigger):
+    """The owner asked for the rules again with /prime; the variant says which readers dealt."""
+
+    variant: str
+    """The /prime variant as the owner spells it (full, no-papers, no-indictment, light)."""
+
+    def reason(self) -> str:
+        return (f"Re-dealt on purpose: the owner ran /prime ({self.variant}). Nothing broke and"
+                " nothing compacted; he wants these read fresh, now.")
+
+
+@dataclass(frozen=True)
 class RefreshDeal(DealTrigger):
     """A declared share of the context window filled before any compaction."""
 
