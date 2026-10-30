@@ -24,7 +24,8 @@ from .acp_extension import (
     encode_updates,
 )
 from .activity import FailedWakeDiagnostic
-from .agent_backend import AgentBackend, ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
+from .agent_backend import AgentBackend
+from .turn_inbox import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier

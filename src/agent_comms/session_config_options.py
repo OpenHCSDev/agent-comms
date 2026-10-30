@@ -13,7 +13,7 @@ from .coordination_errors import Refused
 from acp.schema import (ConfigOptionUpdate, SessionConfigOptionSelect,
                         SessionConfigSelectOption, SetSessionConfigOptionResponse)
 
-from .agent_backend import UseSettings
+from .turn_inbox import UseSettings
 from .bus import Bus
 from .child_process import join_retirement
 from .config_options import (CatalogConfigOption,

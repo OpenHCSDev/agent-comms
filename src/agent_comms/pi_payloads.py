@@ -64,6 +64,11 @@ from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
+from .tool_result import DeclaredReply
+from .turn_context import (
+    ContextSourceText, MeasuredNativeSegment, PreviewProvenance, Provenance,
+    SegmentManifest, TurnContext,
+)
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import (
     AssistantTranscript,
@@ -1177,6 +1182,14 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
         """Only Pi's session-state reply answers a state query."""
         raise ValueError(f"{type(self).__name__} is not Pi's session state")
 
+    def require_compaction(self) -> CompactionData:
+        """Only Pi's compact reply supplies a compaction result."""
+        raise ValueError(f"{type(self).__name__} is not Pi's compaction result")
+
+    def require_context(self) -> NativeContextData:
+        """Only Pi's context inspection reply supplies native context sources."""
+        raise ValueError(f"{type(self).__name__} is not Pi's native context")
+
     def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
         return ()
 
@@ -1189,6 +1202,57 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
     @classmethod
     def wire_member(cls, value):
         return cls if cls is not PiResponseData else cls.member_named(value.get("kind"))
+
+
+@dataclass(frozen=True)
+class NativeContextData(StrictFields, PiResponseData, DeclaredReply):
+    counter: str
+    identity: NativeSessionIdentity
+    segments: tuple[MeasuredNativeSegment, ...]
+
+    def require_context(self) -> NativeContextData:
+        return self
+
+    def observation(self) -> PreviewProvenance:
+        """Return the SDK's original observation, without deriving its digest."""
+        originals = {observation for segment in self.segments
+                     for source in segment.provenance
+                     for observation in source.preview_observations()}
+        if len(originals) != 1:
+            raise ValueError("Native context has no unambiguous current preview observation")
+        (original,) = originals
+        self.identity.require_same_session(original.identity)
+        return original
+
+    def public_source_text(self, comms, observation: PreviewProvenance,
+                           segment: int, source: Provenance) -> ContextSourceText:
+        if observation != self.observation():
+            raise ValueError("Current native preview changed since the selected observation")
+        if not 0 <= segment < len(self.segments):
+            raise ValueError("Source has no selected context segment")
+        selected = self.segments[segment].require_source(source)
+        return ContextSourceText(selected.public_description(), selected.public_text(comms))
+
+    def recorded_public_text(self, expected: SegmentManifest) -> str:
+        self.identity.require_same_session(expected.sources.native_identity())
+        originals = {}
+        for original in expected.original_values():
+            originals.setdefault(original.sha256, []).append(original)
+        values = {}
+        for segment in self.segments:
+            if not any(segment.matches_recorded(original)
+                       for original in originals.get(segment.sha256, ())):
+                raise ValueError("Recorded SDK source is outside the selected original value")
+            values.setdefault(segment.sha256, []).append(segment)
+        return expected.recorded_public_text(values)
+
+    def for_turn(self, owner, turn):
+        return TurnContext(owner.incarnation, turn, self.segments)
+
+    def require_session_file(self, session_file: str) -> NativeContextData:
+        if self.identity.session_file != session_file:
+            raise ValueError("Context inspection belongs to a different selected native session")
+        return self
 
 
 @dataclass(frozen=True)
@@ -1336,6 +1400,9 @@ class ThinkingLevelsData(PiResponseData):
 
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
+    def require_compaction(self) -> CompactionData:
+        return self
+
     summary: str | None = None
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     first_kept_entry_id: Annotated[

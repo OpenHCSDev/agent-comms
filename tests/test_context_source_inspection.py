@@ -11,7 +11,8 @@ import pytest
 from agent_comms.session_file import NoSessionFile
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
+from agent_comms.native_turn_context import NativeContextManifestData
+from agent_comms.pi_payloads import NativeContextData
 from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnIdentity

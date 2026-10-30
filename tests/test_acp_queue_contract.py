@@ -144,7 +144,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.agent_backend import ClearQueue, SendNow
+    from agent_comms.turn_inbox import ClearQueue, SendNow
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
 
     comms, agent, _, _ = _owner(tmp_path)

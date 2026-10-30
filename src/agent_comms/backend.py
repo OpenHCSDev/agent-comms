@@ -46,7 +46,8 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener, TurnInbox
+from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
+from .turn_inbox import TurnInbox
 from .coordinator import Coordination
 from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder

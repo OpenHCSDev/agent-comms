@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
 from . import turn_failure as failures
-from .agent_backend import TurnInboxItem
+from .turn_inbox import TurnInboxItem
 from .native_pi import NativePiInputNotSent
 
 if TYPE_CHECKING:

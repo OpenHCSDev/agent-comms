@@ -18,10 +18,7 @@ from .coordination_errors import Refused
 
 from .acp_extension import QueueItem
 
-from .agent_backend import (
-    InputContent,
-    InputRequest,
-)
+from .turn_inbox import InputContent, InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
 from .context_segments.wake import DeliveredMessageSegment
@@ -50,7 +47,7 @@ from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFo
 
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
-    from .agent_backend import InputContent, TurnInbox
+    from .turn_inbox import InputContent, TurnInbox
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment

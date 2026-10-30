@@ -384,8 +384,51 @@ class MaintenanceOperator(ProcessIdentity, declared_name=None):
         return cls(identity.pid, identity.start_time)
 
 
+class NoMaintenanceWitness(NullMember):
+    """An absent file, not a malformed or incomplete enabled witness."""
+
+    def read_state(self, state: MaintenanceState | NoMaintenanceWitness, root: Path) -> MaintenanceStatus:
+        return state.without_marker()
+
+    def without_marker(self) -> MaintenanceStatus:
+        return MaintenanceStatus()
+
+    def require_marker(self, marker: MaintenanceMarker, root: Path) -> MaintenanceState:
+        raise RelationViolationError("Maintenance witness incomplete; new turns held")
+
+    def applied_to(self, state: MaintenanceState) -> MaintenanceState:
+        return state
+
+
+class MaintenanceWitness:
+    """Private witness decoding shared by the marker, state and target declarations."""
+
+    @classmethod
+    def observe_file(cls, path: Path) -> Self | NoMaintenanceWitness:
+        try:
+            descriptor = PrivateFileRole.read(
+                path, RelationViolationError("Maintenance witness is not private and regular"))
+        except FileNotFoundError:
+            return NoMaintenanceWitness()
+        except OSError as error:
+            raise RelationViolationError("Maintenance witness is inaccessible") from error
+        try:
+            info = os.fstat(descriptor)
+            if info.st_size > 4096:
+                raise RelationViolationError("Maintenance witness is not private and regular")
+            with os.fdopen(descriptor, "rb") as stream:
+                descriptor = -1
+                value = FieldCodec.decode(cls, FieldCodec.parse(stream.read()))
+        except (OSError, MalformedRecord) as error:
+            raise RelationViolationError("Maintenance witness is invalid") from error
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        return value
+
+
 @dataclass(frozen=True, kw_only=True)
-class MaintenanceMarker(DurableFile):
+class MaintenanceMarker(DurableFile, MaintenanceWitness):
     filename = ".maintenance-enabled"
     version: Literal[2]
     root: str
@@ -394,6 +437,10 @@ class MaintenanceMarker(DurableFile):
     def __post_init__(self):
         if not 0 < self.generation < 1 << 63:
             raise ValueError("Maintenance generation is outside its allocation domain")
+
+    def read_state(self, state: MaintenanceState | NoMaintenanceWitness, root: Path) -> MaintenanceStatus:
+        held = state.require_marker(self, root)
+        return HoldTarget.observe_file(HoldTarget.path_in(root)).applied_to(held)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -418,6 +465,9 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
         if self.phase.holder_dead(self):
             return await barrier.release_dead_async(self)
         return self
+
+    def without_marker(self) -> MaintenanceStatus:
+        raise RelationViolationError("Maintenance witness incomplete; new turns held")
 
     def require_marker(self, marker: MaintenanceMarker, root: Path) -> MaintenanceState:
         if (
@@ -466,7 +516,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HoldTarget(DurableFile):
+class HoldTarget(DurableFile, MaintenanceWitness):
     """The runtime a hold admits, kept beside the witness. Only runtimes that know targets
     read this file, so the witness keeps the shape every runtime that may still observe,
     restore or recover this root reads. It applies only to the witness write that stamped it:
@@ -526,29 +576,6 @@ class MaintenanceBarrier(MaintenanceIngress):
     def witness_paths(self) -> tuple[Path, ...]:
         return self.marker_path, self.state_path, self.target_path
 
-    @staticmethod
-    def _read(path: Path, declaration):
-        try:
-            descriptor = PrivateFileRole.read(
-                path, RelationViolationError("Maintenance witness is not private and regular"))
-        except FileNotFoundError:
-            return None
-        except OSError as error:
-            raise RelationViolationError("Maintenance witness is inaccessible") from error
-        try:
-            info = os.fstat(descriptor)
-            if info.st_size > 4096:
-                raise RelationViolationError("Maintenance witness is not private and regular")
-            with os.fdopen(descriptor, "rb") as stream:
-                descriptor = -1
-                value = FieldCodec.decode(declaration, FieldCodec.parse(stream.read()))
-        except (OSError, MalformedRecord) as error:
-            raise RelationViolationError("Maintenance witness is invalid") from error
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        return value
-
     def _current_unlocked(self) -> MaintenanceStatus:
         """Reuse an unchanged witness, never a timed permission or a writable mirror.
 
@@ -566,15 +593,9 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def _read_witness(self) -> MaintenanceStatus:
         """Decode one changed paired witness; incomplete publication always refuses."""
-        marker = self._read(self.marker_path, MaintenanceMarker)
-        state = self._read(self.state_path, MaintenanceState)
-        if marker is None and state is None:
-            return MaintenanceStatus()  # Never-enabled roots have the same READY phase.
-        if marker is None or state is None:
-            raise RelationViolationError("Maintenance witness incomplete; new turns held")
-        state = state.require_marker(marker, self.registry_path.parent)
-        target = self._read(self.target_path, HoldTarget)
-        return state if target is None else target.applied_to(state)
+        marker = MaintenanceMarker.observe_file(self.marker_path)
+        state = MaintenanceState.observe_file(self.state_path)
+        return marker.read_state(state, self.registry_path.parent)
 
     def current_unlocked(self) -> MaintenanceStatus:
         return self._current_unlocked().observed(self)

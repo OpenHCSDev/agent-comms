@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms import backend
 from agent_comms.acp import CommsAgent
-from agent_comms.agent_backend import InputContent
+from agent_comms.turn_inbox import InputContent
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import AcpSessionId, InputId, OrderId, TurnId

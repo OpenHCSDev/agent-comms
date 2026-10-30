@@ -11,13 +11,8 @@ from unittest.mock import patch
 
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
-from agent_comms.agent_backend import (
-    InputContent,
-    InputRequest,
-    NoInputStartListener,
-    SteerInputPolicy,
-    TurnInbox,
-)
+from agent_comms.agent_backend import NoInputStartListener
+from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy, TurnInbox
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination

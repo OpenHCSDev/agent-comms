@@ -20,11 +20,8 @@ from agent_comms.following_inputs import OwnerFollowingInputs
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from . import agent_events as events
-from .agent_backend import (
-    InputContent,
-    InputStartListener,
-    TurnInbox,
-)
+from .agent_backend import InputStartListener
+from .turn_inbox import InputContent, TurnInbox
 from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused

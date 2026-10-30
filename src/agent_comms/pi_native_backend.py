@@ -21,17 +21,8 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
 from agent_comms.pi_payloads import PiOmitted, PiResponseData
 
-from .agent_backend import (
-    CompactionOutcome,
-    FailedCompaction,
-    Forks,
-    InputContent,
-    Interrupts,
-    NewThreadBackend,
-    NothingToCompaction,
-    PlacedCompaction,
-    RuntimeLocation,
-)
+from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
+from .turn_inbox import InputContent
 from .coordinator import Coordination
 from .field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
@@ -310,7 +301,7 @@ class PiNativeBackend(
         """Ask Pi's own engine to compact through its ``compact`` RPC."""
         try:
             command = Compact(custom_instructions=PiOmitted.from_input(instructions))
-            data = await self.inspect(thread, command)
+            data = (await self.inspect(thread, command)).require_compaction()
         except NativePiUnavailable as error:
             return FailedCompaction(str(error))
         if data.summary is None:

@@ -22,7 +22,7 @@ from .acp_failure import (
     FailureSource,
     UnrecordedFailureSource,
 )
-from .agent_backend import SendNow, TurnInbox
+from .turn_inbox import SendNow, TurnInbox
 from .agent_events import CompactionEvent
 from .child_process import ProcessIdentity
 from .context_reading import ContextReading

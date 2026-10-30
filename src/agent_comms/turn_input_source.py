@@ -12,7 +12,7 @@ from agent_comms.turn_goal_permission import TurnGoalPermission
 
 from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
-from .agent_backend import BusyInputPolicy, SteerInputPolicy
+from .turn_inbox import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput

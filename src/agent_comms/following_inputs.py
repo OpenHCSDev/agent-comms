@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 from .field_codec import AcpSessionId, InputId
 from .acp_extension import LiveQueueScope
-from .agent_backend import TurnInbox
+from .turn_inbox import TurnInbox
 from .coordinator import Coordination
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity

@@ -43,10 +43,11 @@ from .messages import Message
 from .native_input_owner import RegistryOwner
 from .owned_turn import OwnedTurn
 from .pi_commands import (
+    NativeQuery,
     AgentCommsInspectContext,
     AgentCommsInspectContextSegment,
 )
-from .pi_payloads import StateData
+from .pi_payloads import NativeContextData, StateData
 from .queued_input import InitialInput
 from .pi_rule_gate import PiRedeal
 from .routing import NoTurnRouting, Routing
@@ -56,6 +57,7 @@ from .runtime import (
 )
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
+from .turn_context import SegmentManifest
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
@@ -77,18 +79,21 @@ RELAY_PREFIX = "!relay "
 
 class CompactionObservation(MroDispatch):
     """All selected/native compaction callers update the existing turn owner."""
-    def __init__(self, runner, session_id: AcpSessionId, lease, phase):
+    def __init__(
+        self, runner: TurnRunner, session_id: AcpSessionId,
+        lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
         self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
 
-    async def publish(self, phase):
+    async def publish(self, phase: TurnPhase) -> None:
         await self.runner.transition_turn(self.session_id, self.lease, phase)
 
     @handles(events.CompactionStart)
-    async def start(self, event):
+    async def start(self, event: events.CompactionStart) -> None:
         await self.publish(self.phase.compacting())
 
     @handles(events.CompactionFinish)
-    async def end(self, event):
+    async def end(self, event: events.CompactionFinish) -> None:
         await self.publish(self.phase.compaction_ended())
 
 
@@ -143,10 +148,10 @@ class TurnRunner:
         await observe(await Coordination.run_worker(partial(
             self.comms.registry.require, self.sessions.require(session_id))))
 
-    async def observe_compaction(self, session_id: AcpSessionId, event) -> None:
+    async def observe_compaction(self, session_id: AcpSessionId, event: events.CompactionEvent) -> None:
         await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
 
-    async def compacted(self, session_id: AcpSessionId, event, thread: Thread) -> None:
+    async def compacted(self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread) -> None:
         await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
@@ -187,16 +192,18 @@ class TurnRunner:
         await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
-    async def inspect_context(self, session_id: AcpSessionId, thread):
+    async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:
         return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
 
-    async def inspect_context_segment(self, session_id: AcpSessionId, thread, manifest):
+    async def inspect_context_segment(self, session_id: AcpSessionId, thread: Thread, manifest: SegmentManifest) -> str:
         request = AgentCommsInspectContextSegment.for_manifest(manifest)
         context = await self.inspect_native_request(session_id, thread, request)
         return context.recorded_public_text(manifest)
 
-    async def inspect_native_request(self, session_id: AcpSessionId, thread, request):
-        context = await self.backend_for(session_id, thread).inspect(thread, request)
+    async def inspect_native_request(
+        self, session_id: AcpSessionId, thread: Thread, request: NativeQuery,
+    ) -> NativeContextData:
+        context = (await self.backend_for(session_id, thread).inspect(thread, request)).require_context()
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
