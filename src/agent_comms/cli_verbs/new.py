@@ -13,7 +13,12 @@ from typing import Annotated, ClassVar
 
 
 @dataclass(frozen=True, kw_only=True)
-class NewThreadCliCommand(ThreadCreationCliCommand, declared_name="new"):
+class NewThreadContext(ThreadLaunchSettings):
+    """The launch settings a project offers before the creator names the child."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class NewThreadCliCommand(NewThreadContext, ThreadCreationCliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
     tags: Annotated[GivenTags, Argument()]
@@ -21,6 +26,6 @@ class NewThreadCliCommand(ThreadCreationCliCommand, declared_name="new"):
     @classmethod
     def project_bindings(cls, comms: Comms, project: Checkout) -> tuple[PendingCommandBinding, ...]:
         defaults = NativeThreadDefaults()
-        return (PendingCommandBinding(cls, ThreadLaunchSettings(
+        return (PendingCommandBinding(NewThreadContext(
             project=project, model=defaults.model,
             thinking_level=defaults.thinking_level)),)

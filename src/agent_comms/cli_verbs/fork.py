@@ -27,6 +27,6 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, ForkContext, Thr
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> PendingCommandBinding:
-        return PendingCommandBinding(cls, ForkContext(
+        return PendingCommandBinding(ForkContext(
             parent=thread.name, project=thread.worktree,
             model=thread.model, thinking_level=thread.thinking_level))

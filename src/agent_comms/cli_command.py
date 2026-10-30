@@ -147,23 +147,24 @@ class CatalogBinding(CommandBinding):
 
 @dataclass(frozen=True)
 class CommandContext(CatalogSelection):
-    """A declaration of supplied fields, not an alternate command editor."""
+    """A declaration of supplied fields, not an alternate command editor; the one declared
+    command inheriting it owns the fields it lacks."""
+
+    @classmethod
+    def command(cls) -> type[CliCommand]:
+        (command,) = CliCommand.members_with(cls)
+        return command
 
 
 @dataclass(frozen=True)
 class PendingCommandBinding(CatalogBinding):
     """Only supplied context, borrowing the concrete command's declared fields."""
 
-    command: type[CliCommand]
     context: CommandContext
-
-    def __post_init__(self) -> None:
-        if not issubclass(self.command, type(self.context)):
-            raise TypeError('A pending context must be a declared parent of its command')
 
     @property
     def declaration(self) -> type[CliCommand]:
-        return self.command
+        return type(self.context).command()
 
     @property
     def catalog_context(self) -> CatalogSelection:
