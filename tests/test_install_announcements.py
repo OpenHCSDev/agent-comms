@@ -15,7 +15,6 @@ from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
-from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
@@ -137,7 +136,6 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
 
 def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(private_comms):
     # No thread carries the comms tag and nobody created it: CommsTag declares the channel.
-    CommanderHeartbeat.register(private_comms.registry)
     probe = InstallReportProbe(private_comms.root, "\n".join(
         UpgradeRefused("stopped before carrying").lines()))
     probe.run()
@@ -146,7 +144,6 @@ def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(priv
     original = private_comms.registry.require("installer")
     probe.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
-    assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
 
 
 def test_a_read_back_that_differs_from_before_the_carry_refuses():

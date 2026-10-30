@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .service_sender import ServiceSender
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -14,9 +13,7 @@ if TYPE_CHECKING:
     from .todos import OwnerRequest
 
 
-class CommanderService(ServiceSender):
-    sender = "commander-heartbeat"
-
+class CommanderService:
     @classmethod
     def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
         """The oldest open request makes a live holder owed service, even before its first beat."""

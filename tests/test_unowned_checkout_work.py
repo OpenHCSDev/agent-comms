@@ -163,7 +163,6 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     c.transcripts.external('idle').finish(
         turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
             'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
-    CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c
 
