@@ -624,6 +624,15 @@ class GitCommit:
     message: str
 
 
+@dataclass(frozen=True)
+class CommitSelection:
+    """One revision walk, independent of the problem-message filter applied to it."""
+
+    refs: tuple[str, ...]
+    excluded: tuple[str, ...]
+    first_parent: bool = False
+
+
 class CheckoutHistory:
     """A pass's selected refs and immutable commit graph, never a command-output cache.
 
@@ -634,6 +643,9 @@ class CheckoutHistory:
     def __init__(self, checkout: Checkout) -> None:
         self.checkout = checkout
         self.required: set[str] = set()
+        self._ancestry: dict[str, int] = {}
+        self._bases: dict[int, tuple[str, ...]] = {}
+        self._walks: dict[CommitSelection, tuple[GitCommit, ...]] = {}
 
     @cached_property
     def refs(self) -> dict[str, GitReference]:
@@ -642,6 +654,14 @@ class CheckoutHistory:
             "--format=%(refname)%00%(objectname)%00%(symref)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
             "HEAD", "refs/heads/", "refs/remotes/",
         ).splitlines())}
+
+    def require_read(self) -> dict[str, GitReference]:
+        """Read the ref cut, propagating unreadable-checkout errors to its caller."""
+        return self.refs
+
+    @property
+    def head(self) -> GitReference:
+        return self.refs["HEAD"]
 
     def include(self, *heads: str) -> None:
         """Prepare acquired objects before observation; an already read graph stays immutable."""
@@ -672,6 +692,8 @@ class CheckoutHistory:
         for name in (revision, f"refs/heads/{revision}", f"refs/remotes/{revision}"):
             if name in self.refs:
                 return self.refs[name].commit
+        if revision in self.graph:
+            return revision
         matches = tuple(sha for sha in self.graph if sha.startswith(revision))
         if len(matches) != 1:
             raise UnavailableCommitError(self.checkout.path, (revision,))
@@ -683,56 +705,98 @@ class CheckoutHistory:
     def references(self, prefix: str) -> tuple[str, ...]:
         return tuple(name for name in self.refs if name.startswith(prefix))
 
-    def ancestors(self, *revisions: str) -> set[str]:
-        """Reachability over the admitted graph; shallow boundaries remain graph leaves."""
-        pending = [self.resolve(revision) for revision in revisions]
-        found: set[str] = set()
-        while pending:
-            sha = pending.pop()
-            if sha not in found:
-                found.add(sha)
-                pending.extend(parent for parent in self.graph[sha].parents if parent in self.graph)
-        return found
+    @cached_property
+    def positions(self) -> dict[str, int]:
+        return {sha: position for position, sha in enumerate(self.graph)}
+
+    @cached_property
+    def records(self) -> tuple[GitCommit, ...]:
+        return tuple(self.graph.values())
+
+    def bit(self, sha: str) -> int:
+        return 1 << self.positions[sha]
+
+    def selected(self, bits: int) -> Iterator[GitCommit]:
+        while bits:
+            first = bits & -bits
+            yield self.records[first.bit_length() - 1]
+            bits ^= first
+
+    def ancestors(self, *revisions: str) -> int:
+        """Memoized compact reachability; shallow boundaries are graph leaves."""
+        combined = 0
+        for revision in revisions:
+            head = self.resolve(revision)
+            if head not in self._ancestry:
+                pending = [head]
+                found = 0
+                while pending:
+                    sha = pending.pop()
+                    bit = self.bit(sha)
+                    if found & bit:
+                        continue
+                    if sha in self._ancestry:
+                        found |= self._ancestry[sha]
+                        continue
+                    found |= bit
+                    pending.extend(parent for parent in self.graph[sha].parents
+                                   if parent in self.graph)
+                self._ancestry[head] = found
+            combined |= self._ancestry[head]
+        return combined
 
     def contains(self, ancestor: str, revision: str) -> bool:
-        return self.resolve(ancestor) in self.ancestors(revision)
+        return bool(self.ancestors(revision) & self.bit(self.resolve(ancestor)))
+
+    def walk(self, selection: CommitSelection) -> tuple[GitCommit, ...]:
+        """Traverse each selection once; problem filters share the resulting commit order."""
+        if selection not in self._walks:
+            seen = self.ancestors(*selection.excluded)
+            pending: list[tuple[float, int, str]] = []
+            sequence = 0
+            for ref in selection.refs:
+                commit = self.commit(ref)
+                heapq.heappush(pending, (-commit.at, sequence, commit.sha))
+                sequence += 1
+            commits: list[GitCommit] = []
+            while pending:
+                _at, _sequence, sha = heapq.heappop(pending)
+                bit = self.bit(sha)
+                if seen & bit:
+                    continue
+                seen |= bit
+                commit = self.graph[sha]
+                commits.append(commit)
+                parents = commit.parents[:1] if selection.first_parent else commit.parents
+                for parent in parents:
+                    if parent in self.graph and not seen & self.bit(parent):
+                        heapq.heappush(pending, (-self.graph[parent].at, sequence, parent))
+                        sequence += 1
+            self._walks[selection] = tuple(commits)
+        return self._walks[selection]
 
     def commits(self, refs: tuple[str, ...], *excluded: str,
                 pattern: str = "", first_parent: bool = False) -> Iterator[GitCommit]:
-        """Git's newest-first revision walk, excluding complete ancestor closures."""
-        seen = self.ancestors(*excluded)
-        pending: list[tuple[float, int, str]] = []
-        sequence = 0
-        for ref in refs:
-            commit = self.commit(ref)
-            heapq.heappush(pending, (-commit.at, sequence, commit.sha))
-            sequence += 1
+        """Filter a captured newest-first walk without traversing the graph again."""
         matching = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
-        while pending:
-            _at, _sequence, sha = heapq.heappop(pending)
-            if sha in seen:
-                continue
-            seen.add(sha)
-            commit = self.graph[sha]
-            if matching.search(commit.message):
-                yield commit
-            parents = commit.parents[:1] if first_parent else commit.parents
-            for parent in parents:
-                if parent not in seen and parent in self.graph:
-                    heapq.heappush(pending, (-self.graph[parent].at, sequence, parent))
-                    sequence += 1
+        return (commit for commit in self.walk(CommitSelection(refs, excluded, first_parent))
+                if matching.search(commit.message))
 
     def merge_base(self, left: str, right: str) -> tuple[str, ...]:
         """Best common ancestors: a common ancestor of another candidate is not best."""
         common = self.ancestors(left) & self.ancestors(right)
-        redundant: set[str] = set()
-        for sha in common:
-            redundant.update(parent for parent in self.graph[sha].parents if parent in common)
-        best = common - redundant
-        return tuple(sorted(best, key=lambda sha: self.graph[sha].at, reverse=True))
+        if common not in self._bases:
+            best = common
+            for commit in self.selected(common):
+                for parent in commit.parents:
+                    if parent in self.graph:
+                        best &= ~self.bit(parent)
+            self._bases[common] = tuple(commit.sha for commit in sorted(
+                self.selected(best), key=lambda commit: commit.at, reverse=True))
+        return self._bases[common]
 
     def count(self, head: str, *excluded: str) -> int:
-        return len(self.ancestors(head) - self.ancestors(*excluded))
+        return (self.ancestors(head) & ~self.ancestors(*excluded)).bit_count()
 
 
 @dataclass(frozen=True)
