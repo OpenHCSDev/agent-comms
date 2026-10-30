@@ -1354,6 +1354,14 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
 
+    def remote_refs(self) -> tuple[str, ...]:
+        """Every published remote reference this history holds; a retired checkout has none."""
+        return ()
+
+    def unpublished_commits(self, todo: Todo, refs: tuple[str, ...]) -> tuple[ProgressPoint, ...]:
+        """Problem commits no remote reference reaches."""
+        return self.read_commits(todo, refs, *self.remote_refs())
+
     def read_commits(self, todo: Todo, refs: tuple[str, ...],
                      *excluded: str) -> tuple[ProgressPoint, ...]:
         """Consume this capture's selected refs inside its checkout failure boundary."""
@@ -1428,6 +1436,9 @@ class PresentCheckout(ProgressCheckout):
 
     def require_read(self) -> None:
         self.head
+
+    def remote_refs(self) -> tuple[str, ...]:
+        return self.branches.history.references("refs/remotes/")
 
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
@@ -1701,7 +1712,7 @@ class MeasuredProgressSource(ProgressSource):
                   worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
         source = super().from_refs(todo, pulls, checkout, worktrees, refs)
         return replace(source,
-                       unpublished_commits=checkout.read_commits(todo, refs, "--remotes"),
+                       unpublished_commits=checkout.unpublished_commits(todo, refs),
                        recorded_readings=checkout.readings(source, refs))
 
 
