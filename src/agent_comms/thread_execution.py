@@ -109,8 +109,9 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
                      for candidate in thread.work_state.candidates(executor))
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when its commander's heartbeat reads it as a unit."""
+    def turn_owners(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when it works its own turns: the heartbeat reads it as a unit, and as a
+        commander it receives its own board."""
         return (thread,)
 
     @classmethod
@@ -221,8 +222,8 @@ class SubagentExecution(ExternalThreadExecution):
         return ()
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A child acts inside its parent's turn, so the parent's own card covers it."""
+    def turn_owners(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A child acts inside its parent's turn, so the parent's own card and board cover it."""
         return ()
 
     @classmethod

@@ -326,7 +326,7 @@ class CommanderHud(ToolResult):
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
         board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
-                      for entry in packet.board(comms, commander))
+                      for entry in packet.board(comms))
         return cls(owner, tuple(units), phases,
                    OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
                    forks, CodexUsage.read(), board)

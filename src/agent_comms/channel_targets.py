@@ -688,3 +688,9 @@ class DeclaredTag(DeclaredFamily, affix="Tag"):
 class CommsTag(DeclaredTag):
     """The channel the fleet coordinates on: installer reports, Core's strike announcements
     and the commander's posts address it."""
+
+
+class CommandersTag(DeclaredTag):
+    """The commanders of this bus: a member acts under its own name and receives the
+    heartbeat board. A child inherits its parent's tags, so membership alone does not make a
+    turn owner; ThreadExecution.turn_owners answers that."""

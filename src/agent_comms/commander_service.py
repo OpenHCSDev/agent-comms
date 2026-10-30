@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .channel_targets import CommandersTag
+from .channels import ChannelMemberIndex
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -29,10 +31,30 @@ class CommanderService:
         )
 
     @classmethod
-    def actors(cls, snapshot: RegistrySnapshot, commander: str) -> frozenset[str]:
-        """Every name the commander or one of its forks publishes under."""
-        return frozenset(name for actor in (commander, *(fork.name for fork in cls.forks(snapshot, commander)))
-                         for name in snapshot.names_for(actor))
+    def members(cls, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered commander and every #commanders member, each once."""
+        return tuple(dict.fromkeys((
+            *snapshot.commander_project.commanders(snapshot),
+            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name],
+        )))
+
+    @classmethod
+    def actors(cls, snapshot: RegistrySnapshot) -> frozenset[str]:
+        """Every name a commander or one of its forks publishes under: any commander's recorded
+        action disposes of a line on the one shared board."""
+        return frozenset(
+            name for commander in cls.members(snapshot)
+            for actor in (commander, *cls.forks(snapshot, commander.name))
+            for name in snapshot.names_for(actor.name))
+
+    @classmethod
+    def recipients(cls, snapshot: RegistrySnapshot, commander: Thread) -> tuple[Thread, ...]:
+        """The board's commander, then every other live commander that works its own turns:
+        one board read, one packet each. A fork works inside its parent's turn and gets none."""
+        return tuple(dict.fromkeys((commander, *(
+            owner for member in cls.members(snapshot) if member.process_alive
+            for owner in member.execution.turn_owners(member)
+        ))))
 
     @classmethod
     def commanders(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:

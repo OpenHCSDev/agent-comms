@@ -40,7 +40,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
@@ -261,8 +261,8 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
     lead = comms.registry.require("lead").incarnation
     assert CommanderUpdate.latest(comms, lead) == (board.task,)
-    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms, "lead")
-    assert lead_hud(comms).board == board.task.board(comms, "lead")
+    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms)
+    assert lead_hud(comms).board == board.task.board(comms)
     assert raw.reference in everything_to_lead(comms)
     # The next pass derives from the typed board, so nothing is restated as new.
     beat(comms, (failing,))
@@ -660,7 +660,7 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
     assert max(map(len, message.body.splitlines())) < 300
     assert len(message.task.handled) == 12
-    assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
+    assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
 
 
@@ -675,3 +675,28 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
         thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+
+
+def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
+    """#commanders declares who commands: one board read, one packet per live member under its
+    own incarnation. A thread outside the channel, and a fork that inherited the tag but works
+    inside its parent's turn, get none."""
+    comms = notification_bus
+    live = ProcessIdentity.capture(os.getpid())
+    for name, tags in (("worker", {"comms", CommandersTag.declared_name}), ("outsider", {"comms"})):
+        comms.registry.register(replace(comms.registry.require(name), tags=frozenset(tags),
+                                        process_identity=live))
+    fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(fork, process_identity=live))
+    assert CommandersTag.declared_name in comms.registry.require("worker-fork").tags
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,))
+    lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
+    worker = comms.registry.require("worker").incarnation
+    worker_packet, = CommanderUpdate.latest(comms, worker)
+    assert worker_packet.commander == worker
+    assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
+    assert CommanderUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
+    assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
+        comms.registry.require("lead").incarnation, worker}
