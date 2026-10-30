@@ -16,6 +16,7 @@ from typing import Annotated, ClassVar, Self
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
 from .commander.order import CommanderContext
+from .native_build_inputs import DetachedChildStdio
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -747,8 +748,7 @@ class IntegrationRun:
                 command,
                 cwd=self.checkout.path,
                 env=environment,
-                output=output,
-                stderr=subprocess.STDOUT,
+                stdio=DetachedChildStdio(stdout=output),
                 pass_fds=start.descriptors(),
                 runtime=runtime,
             ) as child:

@@ -109,7 +109,7 @@ class OwnerRestartHandoff:
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
-            return lifecycle._launch_owner(
+            return lifecycle.launching_owner(
                 thread, self.agent_bin.restarted(lifecycle, source.binary, runtime),
                 self.agent_args.restarted(source.arguments),
                 environment=self.runtime.apply_runtime(source.environment),
@@ -124,7 +124,7 @@ class OwnerRestartHandoff:
         if any(owner.launch.interpreter != str(runtime.interpreter) for owner in self.owners):
             raise RelationViolationError('Original restoration requires the acquired source interpreter')
 
-        return self._launch(lifecycle, lambda thread, source: lifecycle._launch_owner(
+        return self._launch(lifecycle, lambda thread, source: lifecycle.launching_owner(
             thread, source.binary, GivenArguments(source.arguments), environment=source.environment,
             launch_runtime=runtime,
         ))
@@ -135,10 +135,12 @@ class OwnerRestartHandoff:
         snapshot = lifecycle.registry.snapshot()
         # Close the entire witness set before ANY replacement launch.
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
-        return tuple(OwnerRestartResult(
-            thread.name, owner.launch.process.pid,
-            launch(thread, owner.launch).require_process().pid,
-        ) for thread, owner in zip(threads, self.owners, strict=True))
+        with ExitStack() as launches:
+            results = tuple(OwnerRestartResult(
+                thread.name, owner.launch.process.pid,
+                launches.enter_context(launch(thread, owner.launch)).require_process().pid,
+            ) for thread, owner in zip(threads, self.owners, strict=True))
+        return results
 
 
 @dataclass(frozen=True)

@@ -135,7 +135,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         return [message for message in read_history(comms) if message.sender == "recipient"]
 
     try:
-        comms.owners.start("recipient")
+        comms.owners.start_many(("recipient",))
         until(lambda: len(replies()) == 1 and not comms.registry.require('recipient').executing)
         assert replies()[0].body == "BOOTSTRAP_REPLY_1" and replies()[0].target == "sender"
         original = comms.registry.require("recipient")
@@ -144,7 +144,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         assert Path(session).is_file()
         comms.owners.stop("recipient")
         assert not comms.registry.require("recipient").process_alive
-        comms.owners.start("recipient")
+        comms.owners.start_many(("recipient",))
         assert comms.registry.require("recipient").process_identity != original.process_identity
         second = comms.messaging.send("sender", "recipient", "BOOTSTRAP_SECOND").message
         until(lambda: len(replies()) == 2 and not comms.registry.require('recipient').executing)

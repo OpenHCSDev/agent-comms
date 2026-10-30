@@ -429,13 +429,16 @@ query($owner: String!, $name: String!, $after: String) {
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """One complete published-ref cut per remote for this reader, not one call per branch."""
-        if remote not in self._remote_heads:
-            self._remote_heads[remote] = {
+        if remote in self._remote_heads:
+            return self.selected_heads(remote, reference)
+        with Repo.acquiring():
+            heads = {
                 reference: head
                 for head, reference in (line.split() for line in self._git(
                     "ls-remote", "--refs", remote,
                 ).splitlines())
             }
+        self._remote_heads[remote] = heads
         return self.selected_heads(remote, reference)
 
     def selected_heads(self, remote: str, reference: str) -> tuple[str, ...]:
@@ -463,8 +466,9 @@ query($owner: String!, $name: String!, $after: String) {
         return self._git("show", "--no-patch", "--format=%B", head)
 
     def prepare_pull_request(self, base: str, head: str) -> None:
-        self.remote_heads(Repo.remote, f"refs/heads/{base}")
-        Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
+        with Repo.acquiring():
+            self.remote_heads(Repo.remote, f"refs/heads/{base}")
+            Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
 
     def pull_request_base(self, base: str, head: str) -> str:
         base_head = self._pull_request_base(base)
@@ -483,14 +487,16 @@ query($owner: String!, $name: String!, $after: String) {
 
     def prepare_upstreams(self) -> None:
         """Acquire all declared publications in one remote cut and one object batch per remote."""
-        references: dict[str, set[str]] = {}
-        for upstream in self.upstreams.values():
-            for remote, reference in upstream.publication_inputs():
-                references.setdefault(remote, set()).add(reference)
-        for remote, refs in references.items():
-            heads = tuple(dict.fromkeys(
-                head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
-            Repo.require_commits(self.checkout, remote, *heads)
+        with Repo.acquiring():
+            references: dict[str, set[str]] = {}
+            for upstream in self.upstreams.values():
+                for remote, reference in upstream.publication_inputs():
+                    references.setdefault(remote, set()).add(reference)
+            for remote, refs in references.items():
+                Repo.enter_phase()
+                heads = tuple(dict.fromkeys(
+                    head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
+                Repo.require_commits(self.checkout, remote, *heads)
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
@@ -689,16 +695,17 @@ query($owner: String!, $name: String!, $after: String) {
     def read(self, snapshot: RegistrySnapshot) -> tuple[WorkBranch, ...]:
         """Every branch with commits not on main, most recently committed first."""
         owner, name = self.repository
-        refs = {
-            ref.removeprefix("refs/heads/"): oid
-            for oid, ref in (
-                line.split() for line in self._git("ls-remote", "--heads", Repo.remote).splitlines()
-            )
-        }
+        with Repo.acquiring():
+            refs = {
+                ref.removeprefix("refs/heads/"): oid
+                for oid, ref in (
+                    line.split() for line in self._git("ls-remote", "--heads", Repo.remote).splitlines()
+                )
+            }
+            Repo.require_commits(self.checkout, Repo.remote, *refs.values())
         main = refs[self.main]
         # Git already owns commit ancestry. Ask it once for all locally named
         # commits, rather than asking GitHub to compare every branch separately.
-        Repo.require_commits(self.checkout, Repo.remote, *refs.values())
         commits = {
             oid: (int(ahead), date)
             for oid, date, ahead, _behind in (

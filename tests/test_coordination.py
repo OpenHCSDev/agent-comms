@@ -10,6 +10,7 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
+from agent_comms.native_build_inputs import ConfiguredChildStdio
 from agent_comms.child_process import SpawnedProcess
 from bus_record_fixture import (
     OWNER_LOOKUP, RECIPIENT_LOOKUP, RENAMED_OWNER_LOOKUP, UNRELATED_LOOKUP,
@@ -502,9 +503,8 @@ print("ready")
     children = [
         SpawnedProcess.launch(
             (sys.executable, "-c", script, str(path)),
-            stdin=subprocess.PIPE,
-            output=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdio=ConfiguredChildStdio(
+                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
         ).process
         for _ in range(2)
     ]
