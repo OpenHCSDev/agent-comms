@@ -473,8 +473,9 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
 
     def review_head(self, ctx: order.CommanderContext, request: PullRequestHead,
                     linked: HeadReviewOrder) -> HeadReviewed:
-        return ctx.call(CommsHeadVerdictTool(request=request,
-                                           operation=self.head_operation(), order=linked))
+        return CommsHeadVerdictTool(
+            request=request, operation=self.head_operation(), order=linked,
+        ).apply(ctx.comms, ctx.actor.as_thread(ctx.commander))
 
     @abstractmethod
     def head_operation(self) -> HeadVerdict: ...

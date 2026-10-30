@@ -31,6 +31,7 @@ from .field_codec import (
     WireRequired,
     WireValue,
 )
+from .participant_identity import FrozenRecipientIdentity
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
@@ -79,7 +80,6 @@ from .turn_lease import (
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
-    from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
     from .rule_deal import DealtSources, RuleDeal
 
@@ -1209,7 +1209,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         return thread.role.displayed_recipient_effect(reads, message, thread, self, document)
 
     def recipient(
-        self, recipient: FrozenRecipient, original: Delivered
+        self, recipient: FrozenRecipientIdentity, original: Delivered
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
@@ -1218,7 +1218,7 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)
-        if recipient not in original.recipients:
+        if not any(recipient.same_identity(frozen) for frozen in original.recipients):
             raise UnregisteredThreadError("Recipient lookup is not in the original message.")
         return RetiredRecipient(lookup)
 

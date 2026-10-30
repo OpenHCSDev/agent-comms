@@ -62,10 +62,10 @@ from .turn_input_source import (
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
+from .cursor_publication import CursorDelivery
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
-    from .cursor_publication import CursorDelivery
     from .turn_runner import TurnRunner
 
 

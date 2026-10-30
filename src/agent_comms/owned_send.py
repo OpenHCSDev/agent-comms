@@ -28,6 +28,7 @@ from .envelope_claim_transitions import NativeClaim
 from .field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared
 from .reservation_rules import ReservationRule, ReservationViolationError
+from .native_input_proof import NativeContextProof
 from .tool_denial import SelectedToolDenied
 from .turn_input_source import (
     OriginalTurnInput,
@@ -40,7 +41,6 @@ if TYPE_CHECKING:
 
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
-    from .native_input_proof import NativeContextProof
     from .registry_document import RegistrySnapshot
     from .threads import Thread
     from .turn_goal_permission import TurnGoalPermission

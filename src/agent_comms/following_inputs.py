@@ -11,6 +11,7 @@ from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .queued_input import DeliveredInput, InputHandoffRefused
+from .owned_send import OwnedSend
 from .thread_identity import ClaimedIdentity
 from .turn_input_source import AcceptedFollowingInput
 
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
     from .input_drain import InputDrain
     from .tracked_turn import TrackedTurnSession
-    from .owned_send import OwnedSend
 
 
 class FollowingInputs:

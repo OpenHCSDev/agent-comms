@@ -23,12 +23,12 @@ from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
-    from .thread_identity import OwnerIdentity, ThreadIncarnation
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
 

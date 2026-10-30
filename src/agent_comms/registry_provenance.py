@@ -9,7 +9,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
 
@@ -19,9 +19,7 @@ from .messages import PublicSender
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import Thread, ThreadProvenance
-
-if TYPE_CHECKING:
-    from .audience_manifest import FrozenRecipient
+from .participant_identity import FrozenRecipientIdentity
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -239,7 +237,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
-    def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
+    def historical_recipient(self, recipient: FrozenRecipientIdentity) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
         if thread is not None and thread.incarnation.selects_lookup(recipient.recipient_lookup):

@@ -32,6 +32,7 @@ from .field_codec import (
     NativeContext,
 )
 from .native_integer import PositiveNativeIntegerBounds
+from .native_input_proof import NativeContextProof
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import SqlStorage, TextStorage
@@ -48,7 +49,6 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
-    from .native_input_proof import NativeContextProof
     from .transcript_events import TranscriptEvent
 
 

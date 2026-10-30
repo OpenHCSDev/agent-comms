@@ -30,6 +30,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
+from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
@@ -37,7 +38,6 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.work_branches import WorkBranches
 
 if TYPE_CHECKING:
-    from agent_comms.installer.commands import InstallCommands
     from agent_comms.installer.upgrade import Stack
 
 

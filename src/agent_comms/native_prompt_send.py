@@ -19,6 +19,8 @@ from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
 from .publication_measurements import PublicationMeasurements
+from .native_input_proof import NativeContextProof
+from .native_entries import NativeEvidenceScope
 from .field_codec import AcpSessionId
 from .coordination_errors import CoordinationError
 from agent_comms.errors import RelationViolationError
@@ -26,8 +28,6 @@ from agent_comms.errors import RelationViolationError
 if TYPE_CHECKING:
     from .input_drain import InputDrain
     from .owned_send import OwnedSend
-    from .native_input_proof import NativeContextProof
-    from .native_entries import NativeEvidenceScope
     from .tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0

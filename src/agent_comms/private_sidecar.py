@@ -30,10 +30,10 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.locked_store import DurableFile, SQLiteFile
 
 from .field_codec import FieldCodec
+from .image_input import ImageInput
 
 if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
-    from .image_input import ImageInput
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import ExclusiveLock, StoreOwner

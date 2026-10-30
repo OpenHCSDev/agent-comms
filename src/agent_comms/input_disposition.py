@@ -36,6 +36,7 @@ from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOr
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
+from .native_input_proof import NativeContextProof
 from .messages import MessageInput
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
@@ -47,7 +48,6 @@ if TYPE_CHECKING:
     from .bus import BusReader
     from .channel_input_batch import SingleInputBatch
     from .private_registry_guard import RegistryPrivacy
-    from .native_input_proof import NativeContextProof
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .threads import Thread
     from .turn_lease import TurnLeaseFence

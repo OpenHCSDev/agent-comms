@@ -29,6 +29,7 @@ from .field_codec import (
 )
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextProof, NativeInputCommit
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
@@ -59,8 +60,6 @@ if TYPE_CHECKING:
     from .pending_requests import PendingRequest
     from .launch_runtime import RestartEnvironment
     from .native_entries import NativeEvidenceScope
-    from .native_input_proof import NativeContextProof
-    from .pi_events import InputCommitted
 
 
 class SessionSnapshot:
@@ -213,7 +212,7 @@ class Prompt(PiCommand):
         WireName("streamingBehavior"),
     ] = None
 
-    async def input_committed(self, session: TurnSession, event: InputCommitted) -> None:
+    async def input_committed(self, session: TurnSession, event: NativeInputCommit) -> None:
         await session.original_committed(event)
 
     async def context_committed(
@@ -251,7 +250,7 @@ class FollowingPrompt(Prompt, declared_name=None):
 
     input: Annotated[InputRequest, WireTransient()]
 
-    async def input_committed(self, session: TurnSession, event: InputCommitted) -> None:
+    async def input_committed(self, session: TurnSession, event: NativeInputCommit) -> None:
         """This accepted following input cannot restart the original prompt or inbox."""
 
     async def context_committed(

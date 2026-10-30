@@ -48,6 +48,9 @@ from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener, TurnInbox
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
+from .native_entries import NativeEvidenceScope
+from .native_session_files import NativeSessionFiles
 from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
@@ -55,9 +58,9 @@ from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
-from .native_input_proof import NativeContextProof
+from .native_input_proof import NativeContextProof, NativeInputCommit
 from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
-from .native_session_reopen import SessionRetention
+from .native_session_reopen import PiSessionId, SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
@@ -78,10 +81,6 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnW
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
-    from .cursor_publication import CursorDelivery
-    from .native_entries import NativeEvidenceScope
-    from .native_session_files import NativeSessionFiles
-    from .native_session_reopen import PiSessionId
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import AssistantMessage, UserMessage
 
@@ -693,7 +692,7 @@ class TurnSession(NativeSession):
             raise NativePiUnavailable("A tracked following input reused an in-scope native identity")
         self.contexts[command.input_id] = TrackedInputContext(command)
 
-    async def original_committed(self, event: pi.InputCommitted) -> None:
+    async def original_committed(self, event: NativeInputCommit) -> None:
         """An ordinary original already started through its matched MessageStart."""
 
     async def original_context_committed(

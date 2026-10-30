@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .declared_family import DeclaredFamily
 from .field_codec import InputId
 from .image_input import ImageInput
+from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .session_revision import NoSessionObservation, SessionObservation
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
 
     from .agent_events import AgentEvent
     from .launch_runtime import LaunchRuntime
-    from .native_input_proof import NativeContextProof
     from .owned_turn import TurnDelivery
     from .threads import Thread
     from .transcript_sources import TranscriptSource

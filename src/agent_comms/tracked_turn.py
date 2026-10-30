@@ -27,7 +27,8 @@ from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_failures import NativePiUnavailable
 from .native_package import VerifiedNativePackage
-from .native_input_proof import NativeContextProof
+from .native_input_proof import NativeContextProof, NativeInputCommit
+from .native_entries import NativeEvidenceScope
 from .native_pi import (
     NativeEmptyAnswer,
     NativePiPromptRejected,
@@ -52,7 +53,6 @@ if TYPE_CHECKING:
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
-    from .native_entries import NativeEvidenceScope
     from .pi_native_backend import PersistentPiSession
     from .pi_payloads import UserMessage
     from .turn_failure import TurnFailure
@@ -439,7 +439,7 @@ class TrackedTurnSession(TurnSession):
     def reject_prompt(self, response):
         raise NativePiPromptRejected(response)
 
-    async def original_committed(self, event: pi.InputCommitted) -> None:
+    async def original_committed(self, event: NativeInputCommit) -> None:
         self.prompt_state = self.prompt_state.start(event)
         await self.following.open(self)
 

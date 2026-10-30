@@ -1142,7 +1142,7 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
-        if not source.holds(todo):
+        if source.github != todo.repo:
             sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
                      f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(

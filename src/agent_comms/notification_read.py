@@ -8,14 +8,14 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .notification_assignment import NotificationAssignment
+from .activity import ObservedActivity
+from .registry_provenance import DeletedThread
 from .notification_evidence import NoNotificationWindow, NotificationWindow
 from .revision_views import ActivityView, NotificationEvidenceView
 
 if TYPE_CHECKING:
-    from .activity import ObservedActivity
     from .comms import Comms
     from .presentation import WireRevision
-    from .registry_provenance import DeletedThread
 
 
 @dataclass(frozen=True)

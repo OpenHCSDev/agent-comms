@@ -348,7 +348,6 @@ class LineOutput:
 
 
 if TYPE_CHECKING:
-    from .threads import ThreadProvenance
     import sqlite3
 
     from .private_registry_guard import RegistryPrivacy
