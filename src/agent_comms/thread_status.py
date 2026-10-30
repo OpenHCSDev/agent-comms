@@ -70,6 +70,8 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     archived: ClassVar[bool] = False
     # Whether a role slot in this lifecycle may take a new occupant: no one holds it now.
     vacant: ClassVar[bool] = False
+    # Whether this row's session still runs in its recorded process, keeping that host alive.
+    holds_process: ClassVar[bool] = False
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
@@ -179,7 +181,17 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
                                   status=InactiveThreadPresentationStatus())
 
 
-class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=None):
+class HostBoundPresence:
+    """A session still running in the recorded process: it keeps that host alive, and a
+    restart retires and relaunches it while the process lives."""
+
+    holds_process: ClassVar[bool] = True
+
+    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return thread.role.executor(thread) if thread.process_alive else ()
+
+
+class ActiveThreadPresence(HostBoundPresence, AlwaysListed, Visible, ThreadStatus, declared_name=None):
     """Shared semantics of running and idle owners; not a second state family."""
 
     receiving = True
@@ -210,9 +222,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
         if not thread.process_alive:
             return super().native_owner_binding(snapshot, thread)
         return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
-
-    def restart_candidates(self, thread: Thread) -> tuple[Thread, ...]:
-        return thread.role.executor(thread) if thread.process_alive else ()
 
     def deletable_threads(self, thread: Thread) -> tuple[Thread, ...]:
         return ()
@@ -295,6 +304,12 @@ class StoppedThreadStatus(Visible, ThreadStatus):
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.stopped
+
+
+class StoppingThreadStatus(HostBoundPresence, StoppedThreadStatus):
+    """Fenced against new work while its host completes the session. The binding stays
+    until that completion, so a restart cannot race it; a stop sent again completes a
+    session the host no longer holds."""
 
 
 class CliInboxPresence(AlwaysListed):
