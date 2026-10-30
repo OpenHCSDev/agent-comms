@@ -2591,12 +2591,10 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        # slots dataclasses recreate a class; its declaration contributes once.
+        # Readers beside a producer change neither its columns nor its output contract.
         source = "\0".join(sorted({
-            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
-            for owner in cls.producer_owners()
-        } | {
-            f"{owner.__module__}.{owner.__qualname__}\0{member}"
+            f"{owner.__module__}.{owner.__qualname__}\0"
+            f"{tuple((base.__module__, base.__qualname__) for base in owner.__mro__)}\0{member}"
             for owner, members in cls.producer_members()
             for member in members
         }))
@@ -2621,23 +2619,32 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     @classmethod
     def producer_members(cls) -> tuple[tuple[type, tuple[str, ...]], ...]:
-        """A writer's own statements redefining production members, not its other mechanisms.
+        """Column declarations and implementations of the declared output capabilities.
 
-        A send-time check on a message kind produces no route row, so editing it
-        must not rebuild every routed history row.
+        Tables contribute columns, not adjacent queries. Output capabilities supply the
+        names their inherited implementations override; column representations contribute
+        their encoding declarations. Every owner uses the same statement filter.
         """
-        members: list[tuple[type, tuple[str, ...]]] = []
+        columns = {column.name for column in cls._columns}
+        production = {
+            owner: set(columns) for owner in cls.__mro__
+            if issubclass(owner, ProjectionOutputs)
+        }
         for lineage in cls.producer_lineage():
-            production = {
+            names = {
                 name for owner in lineage if owner.produces_whole() for name in vars(owner)
             }
             for owner in lineage:
-                if not owner.produces_whole():
-                    declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
-                    members.append((owner, tuple(
-                        ast.unparse(statement) for statement in declaration.body
-                        if production & cls.bound_names(ast.unparse(statement))
-                    )))
+                production.setdefault(owner, set()).update(names)
+        for owner in cls.producer_owners():
+            production.setdefault(owner, set(vars(owner)))
+        members: list[tuple[type, tuple[str, ...]]] = []
+        for owner, names in production.items():
+            declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
+            members.append((owner, tuple(
+                ast.unparse(statement) for statement in declaration.body
+                if names & cls.bound_names(ast.unparse(statement))
+            )))
         return tuple(members)
 
     @staticmethod
