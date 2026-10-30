@@ -455,7 +455,7 @@ class CommanderContext(BaseModel):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
     def todos(self):
-        return self.comms.goals.todos.for_commander(self.incarnation)
+        return self.comms.goals.todos.board()
 
     def read_check(self, line: str) -> OrderCheck:
         if not (request := CheckRequest.parse(line)):
@@ -473,7 +473,7 @@ class CommanderContext(BaseModel):
     def units(self) -> frozenset[str]:
         """The current registry names of every unit this commander ordered."""
         snapshot = self.comms.registry.snapshot()
-        return frozenset(thread.name for unit in self.comms.goals.todos.units(self.incarnation)
+        return frozenset(thread.name for unit in self.comms.goals.todos.board_units()
                          for thread in snapshot.threads_for(unit.require_recorded()))
 
     def progress(self) -> dict[str, OrderProgress]:

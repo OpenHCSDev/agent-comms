@@ -3006,7 +3006,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """The document's selected problems and phase must agree. Whether the unit is free
         for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
         reading = context.plan_reading(
-            context.comms.goals.todos.history_for_commander(context.incarnation))
+            context.comms.goals.todos.board_history())
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
@@ -3435,7 +3435,7 @@ class OrderedHunt(Hunt):
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
         super().require_commander(store, commander)
         if not any(todo.id == self.sent
-                   for todo in store.held_for_commander(commander)):
+                   for todo in store.board_held()):
             raise TodoError("The hunt must name this commander's current order.")
 
 
@@ -4808,8 +4808,7 @@ class SupersededVerdict(ToolCallVerdict):
         return f"{super().story_text()} by {self.replacement}: {self.reason}"
 
     def prepare(self, goals, current):
-        replacing = [todo for todo in goals.todos.held_for_commander(
-                         self.actor.commanding_identity) if todo.id == self.replacement]
+        replacing = [todo for todo in goals.todos.board_held() if todo.id == self.replacement]
         if not replacing:
             raise TodoError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
@@ -6299,9 +6298,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return any(todo.pending for todo in self._select(
             '1', (), reader=partial(self.held_in, unit=owner)))
 
-    def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?",
-                            (commander.name, commander.wire_birth), reader=self._open)
+    def board(self) -> tuple[Todo, ...]:
+        """Every open order on the bus: one board, whichever commander wrote the order."""
+        return self._select("1", (), reader=self._open)
 
     @staticmethod
     def timers_up_in(held: Sequence[Todo], now: float,
@@ -6310,9 +6309,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(todo, progress))
 
-    def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
-            (commander.name, commander.wire_birth), reader=self._open)
+    def board_held(self) -> tuple[Todo, ...]:
+        return self._select("assignment IS NOT NULL", (), reader=self._open)
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',
@@ -6338,15 +6336,14 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             'and the declaration that replaces the copies.',
             DeclarationDerivation.requirement(declarations[1]), *rejected)))
 
-    def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+    def board_history(self) -> tuple[Todo, ...]:
+        return self._select("1", ())
 
 
-    def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:
-        """The threads this commander gives orders to: everyone who holds or held one of its
-        problems, by birth, so a renamed holder stays one unit."""
+    def board_units(self) -> frozenset[ThreadIncarnation]:
+        """Everyone who holds or held an order, by birth, so a renamed holder stays one unit."""
         return frozenset(
-            assignment.owner_identity for todo in self.history_for_commander(commander)
+            assignment.owner_identity for todo in self.board_history()
             for assignment in (*todo.current_holder.current_assignments(),
                                *todo.history.facts_for(todo.id).previous_holders))
 

@@ -992,7 +992,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
         snapshot = goals.registry.snapshot()
-        todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
+        todos = goals.todos.board()
         return tuple(
             rule
             for repo in snapshot.commander_project.repository_names()
@@ -1092,7 +1092,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        ordered = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+        ordered = comms.goals.todos.board()
         return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
 
     @classmethod
