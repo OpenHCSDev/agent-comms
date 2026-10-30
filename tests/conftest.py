@@ -59,7 +59,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
-pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
+pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
 
 class TranscriptRecords:

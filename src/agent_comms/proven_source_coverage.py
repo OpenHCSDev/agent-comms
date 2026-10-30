@@ -18,7 +18,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CoveragePage

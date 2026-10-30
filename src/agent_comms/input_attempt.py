@@ -20,6 +20,7 @@ from .field_codec import (
     WireOmitDefault,
     WireRequired,
 )
+from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -27,8 +28,10 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
-from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .lifecycle_capability import LifecycleCapability, Unresolved
+from .native_input_proof import NativeContextProof
+from .notification_evidence import ConsumptionEvidence
+from .notification_progress import DeliveryProgress, ShownToModelProgress
 from .reported_turn import ReportedTurnState
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
@@ -90,7 +93,7 @@ class UnchangedInput(InputTransition):
 
 
 @dataclass(frozen=True)
-class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
+class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, affix="Input"):
     exists: ClassVar[bool] = False
     accepts_reservation: ClassVar[bool] = False
     has_started: ClassVar[bool] = False
@@ -130,6 +133,22 @@ class InputAttempt(LifecycleCapability, DeclaredFamily, affix="Input"):
 
     def context_provenance(self) -> InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
+
+    def model_contexts(self) -> tuple[NativeContextProof, ...]:
+        return ()
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress
+
+    def context_committed(
+        self,
+        lease: TurnLeaseFence,
+        sent_text: str,
+        context: NativeContextProof,
+        *,
+        snapshot: RegistrySnapshot,
+    ) -> InputTransition:
+        raise RelationViolationError("Context acknowledgement lacks its started input")
 
     def bind(
         self, *, claim_scope: int, turn_id: TurnId, native_id: InputId, text: str
@@ -327,7 +346,6 @@ class StoredInput(InputAttempt):
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
 
-
 class RecoverableUnboundInput(StoredInput):
     def unbound_delivery(self, root_id: RootId) -> InputDelivery:
         return self.origin.delivery_reference(root_id)
@@ -445,6 +463,40 @@ class StartedInput(SentInput):
         """
         return self.matches_lease(lease, snapshot) and self.matches_native(
             turn_id=lease.turn_id, native_id=native_id, text=sent_text)
+
+    def context_committed(
+        self,
+        lease: TurnLeaseFence,
+        sent_text: str,
+        context: NativeContextProof,
+        *,
+        snapshot: RegistrySnapshot,
+    ) -> InputTransition:
+        if not self.started_for_native(lease, context.input_id, sent_text, snapshot=snapshot):
+            raise RelationViolationError(
+                "Context acknowledgement differs from its original input binding"
+            )
+        return self.record_context(context)
+
+    def record_context(self, context: NativeContextProof) -> InputTransition:
+        return MovedInput(self._transition(ContextConsumedInput, context=context))
+
+
+@dataclass(frozen=True)
+class ContextConsumedInput(StartedInput):
+    """The original started binding plus its first independently corroborated context."""
+
+    context: Annotated[NativeContextProof, PublicExclude(), WireRequired()]
+
+    def model_contexts(self) -> tuple[NativeContextProof, ...]:
+        return (self.context,)
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.model_consumed(ShownToModelProgress(self.context.committed_at_ms))
+
+    def record_context(self, context: NativeContextProof) -> InputTransition:
+        self.context.require_continuation(context)
+        return UnchangedInput(self)
 
 
 class NotSentInput(Unresolved, RecoverableUnboundInput):

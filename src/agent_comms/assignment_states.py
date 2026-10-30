@@ -26,11 +26,11 @@ from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, Engagement, FullWake, PassiveWake, WakePolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable
     from typing import Self
 
     from .agent_activity import RecipientActivity
-    from .audience_manifest import FrozenRecipient
+    from .frozen_recipient import FrozenRecipient
     from .bus_publication import Delivered
     from .coordination_tables.assignments import WakeAssignment
     from .coordination_tables.responses import ResponseObligation
@@ -141,13 +141,6 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         raise IdentityConflict("wake assignment is not completed")
 
     notification_state: ClassVar[type[ContextualProgress]] = ContextualProgress
-    records_conversation_response: ClassVar[bool] = False
-
-    def recorded_response(
-        self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: ThreadLookup
-    ) -> Delivered | None:
-        return None
-
     def notification(
         self,
         recipient: FrozenRecipient,
@@ -525,20 +518,6 @@ class DeliveredAssignment(
     """
 
     decision: PendingDecision
-    records_conversation_response = True
-
-    def recorded_response(
-        self, original: Delivered, replies: Sequence[Delivered], recipient_lookup: ThreadLookup
-    ) -> Delivered | None:
-        return next(
-            (
-                reply.message
-                for reply in replies
-                if reply.sender_lookup == recipient_lookup
-            ),
-            None,
-        )
-
     def notification(
         self,
         recipient: FrozenRecipient,

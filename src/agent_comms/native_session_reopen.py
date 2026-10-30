@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     from .native_child import PiSessionChild
     from .native_runtime_input import NativeRuntimeInput
     from .native_entries import NativeEvidenceRead
-    from agent_comms.native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .pi_native_backend import PersistentPiSession
 
 
@@ -27,6 +27,9 @@ class NativeReopenError(ValueError):
 class NativeSessionSelection:
     """The selected-id declaration owns the saved-session answer for an input."""
 
+    def require_recorded_session(self) -> PiSessionId:
+        raise MalformedRecord("Native reference lacks recorded session identity")
+
     def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity | NoSessionRetention:
         FieldCodec.decode(type(None), row.session_file)
         return NoSessionRetention()
@@ -34,6 +37,9 @@ class NativeSessionSelection:
 
 class PiSessionId(FreshNativeId, NativeSessionSelection):
     """The Pi session manager's saved session identity."""
+
+    def require_recorded_session(self) -> PiSessionId:
+        return self
 
     def selected_session(self, row: NativeRuntimeInput) -> NativeSessionIdentity:
         return row.require_session_identity()

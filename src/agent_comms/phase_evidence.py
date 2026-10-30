@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.head_review import HeadReview
+from agent_comms.head_review import MergeHeadReview
 from agent_comms.repo import Checkout, CheckoutHistory, GitCommandError, Repo
 
 if TYPE_CHECKING:
@@ -546,10 +546,11 @@ class ParityEvidence(AllEvidence):
 
 @dataclass(frozen=True)
 class BranchRule:
-    """An active rule GitHub applies to main: its ruleset and the status checks it requires."""
+    """An active GitHub rule, including its actual merge-queue requirement."""
 
     ruleset: int
     required: tuple[str, ...]
+    queue: bool
 
     def requires(self, check: str) -> bool:
         return check in self.required
@@ -565,10 +566,9 @@ class BypassActor:
 
 @dataclass(frozen=True)
 class RulesetGates(PhaseEvidence):
-    """Main requires HeadReview's exact status; only the owner's admin role may bypass.
+    """Main requires source review, explicit merge permission and the queue, without bypass.
 
-    The bypass hook demands a recorded verdict on that head. GitHub rules change
-    without a main commit, so read them once per reading, not per main commit.
+    GitHub policy changes without a main commit; read it once per reading.
     """
 
     def retained(self, previous: MainTree, current: MainTree) -> bool:
@@ -576,9 +576,9 @@ class RulesetGates(PhaseEvidence):
         return False
 
     rules_query: ClassVar[str] = (
-        "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context]}]"
+        "[.[] | {ruleset: .ruleset_id, required: [.parameters.required_status_checks[]?.context],"
+        " queue: (.type == \"merge_queue\")}]"
     )
-    owner_bypass: ClassVar[BypassActor] = BypassActor("RepositoryRole", 5)
     bypass_query: ClassVar[str] = (
         ".bypass_actors | map({"
         + ", ".join(entry.key for entry in FieldCodec.argument_fields(BypassActor))
@@ -591,18 +591,19 @@ class RulesetGates(PhaseEvidence):
             tuple[BranchRule, ...],
             self.api(main, f"rules/branches/{main.branch}", self.rules_query),
         )
-        return any(
-            self.owner_only_bypass(main, rule.ruleset)
-            for rule in rules
-            if rule.requires(HeadReview.context)
-        )
+        enforced = {ruleset for ruleset in {rule.ruleset for rule in rules}
+                    if self.no_bypass(main, ruleset)}
+        protected = tuple(rule for rule in rules if rule.ruleset in enforced)
+        return (all(any(rule.requires(context) for rule in protected)
+                    for context in MergeHeadReview.required_contexts())
+                and any(rule.queue for rule in protected))
 
-    def owner_only_bypass(self, main: MainTree, ruleset: int) -> bool:
+    def no_bypass(self, main: MainTree, ruleset: int) -> bool:
         actors = FieldCodec.decode(
             tuple[BypassActor, ...],
             self.api(main, f"rulesets/{ruleset}", self.bypass_query),
         )
-        return all(actor == self.owner_bypass for actor in actors)
+        return not actors
 
     @staticmethod
     def api(main: MainTree, path: str, query: str) -> object:
@@ -613,9 +614,9 @@ class RulesetGates(PhaseEvidence):
 
     def describe(self) -> str:
         return (
-            f"an active rule on {MainTree.branch} requires {HeadReview.context} directly"
-            " and only the owner's admin role can bypass it; the hook refuses that bypass"
-            " without a recorded ok verdict on the head"
+            f"active rules on {MainTree.branch} require "
+            + " and ".join(MergeHeadReview.required_contexts())
+            + " directly and an actual merge queue, with no bypass actors"
         )
 
 

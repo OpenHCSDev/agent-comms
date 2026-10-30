@@ -143,9 +143,10 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         shown = rows[:-1] if rows and rows[-1] == (len(lines) + 1, '') else rows
         if any(not 1 <= number <= len(lines) or lines[number - 1] != text for number, text in shown):
             return ()
-        return tuple(MonitorPart(id=self.message.message_id, sender=self.message.sender,
-                                 number=number - 1, total=len(self.slices),
-                                 body=self.slices[number - 2])
+        return tuple(MonitorPart.model_validate(dict(
+                         id=self.message.message_id, sender=self.message.sender,
+                         number=number - 1, total=len(self.slices),
+                         body=self.slices[number - 2]))
                      for number, _ in shown if number > 1)
 
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
@@ -755,7 +756,7 @@ class ReadResultObserved(ConfirmedDelivery):
             if not (tab and number.isdecimal()):
                 break
             rows.append((int(number), line))
-        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:]))
+        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
         return tuple(rows) if consecutive else ()
 
     async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:

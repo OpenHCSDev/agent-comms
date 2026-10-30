@@ -1663,7 +1663,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
                         references.extend(await part.confirm(self, read.record))
                     for unread in read.closing(notice):
                         for stored in await self.coordinator_read(exact.stored):
-                            stored.outcome.finished_with(unread)
+                            stored.monitor.finished_with(unread)
         return tuple(references)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:

@@ -22,8 +22,6 @@ from pydantic import BaseModel, JsonValue
 
 from .acp_extension import (
     GoalSnapshotReply,
-    TurnChangedUpdate,
-    UpdateMetadata,
 )
 
 from .agent_event_updates import AcpEventConsumer
@@ -38,6 +36,7 @@ from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
+from .order_tools import OwnerGoalRead
 from .owner_connection import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequest,
@@ -81,11 +80,6 @@ class CancelReply(DeclaredReply):
 @dataclass(frozen=True)
 class GoalReply(DeclaredReply):
     goal: Goal
-
-
-@dataclass(frozen=True)
-class GoalHistoryReply(RecordedGoalHistory):
-    pass
 
 
 @dataclass(frozen=True)
@@ -272,19 +266,6 @@ class CompactRuntimeRequest(AttachedResultRuntimeRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class InputDispositionsRuntimeRequest(AttachedResultRuntimeRequest):
-    include_history: bool = False
-
-    async def result(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
-        return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
-            ctx.name,
-            include_history=self.include_history,
-            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session),
-
-        ))
-
-
-@dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(
@@ -299,10 +280,9 @@ class DismissHistoricalInputsRuntimeRequest(AttachedResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(AttachedResultRuntimeRequest):
     goal_id: OneGoal | AllGoals = AllGoals()
 
-    async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalHistoryReply:
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> RecordedGoalHistory:
         return await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.recorded_history,
-            GoalHistoryReply, ctx.name, self.goal_id,
+            ctx.server.agent._comms.goals.recorded_history, ctx.name, self.goal_id,
         ))
 
 
@@ -312,19 +292,7 @@ class GoalSnapshotResultRuntimeRequest(AttachedResultRuntimeRequest):
 
     async def result(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         await self.change(ctx)
-        snapshot = await Coordination.run_worker(partial(
-            ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
-        ))
-        turn = await Coordination.run_worker(partial(
-            ctx.server.agent.turns.turn_state, ctx.session,
-        ))
-        return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
-
-
-@dataclass(frozen=True, kw_only=True)
-class GoalSnapshotRuntimeRequest(GoalSnapshotResultRuntimeRequest):
-    async def change(self, ctx: AttachedRuntimeRequestContext) -> None:
-        pass
+        return await OwnerGoalRead().owned(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
