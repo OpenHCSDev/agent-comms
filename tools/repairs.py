@@ -1,4 +1,4 @@
-"""Repairs for what the debt ratchet counts, built as Nominal Refactor Advisor plans.
+"""Repairs for what the NRA gate counts, built as Nominal Refactor Advisor plans.
 
 A repair declares the located measure whose occurrences it removes. It reads the files
 of the working tree, writes one NRA operation per occurrence it can remove and keeps
@@ -27,6 +27,7 @@ from typing import ClassVar
 
 from agent_comms_project import AgentCommsProject
 from module_layers import Package, TopLevelNames
+from nominal_refactor_advisor import audit
 from nominal_refactor_advisor.codemod import (
     CodemodPlanSequence,
     CodemodSourceSnapshot,
@@ -37,7 +38,6 @@ from nominal_refactor_advisor.codemod import (
 )
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.pinned_audit import audit
 
 type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type ImportNode = ast.Import | ast.ImportFrom
@@ -62,7 +62,7 @@ class OutsidePackage(Kept):
 class Repair(DeclaredFamily, ABC):
     """One measure's repair over some files of the working tree."""
 
-    repairs: ClassVar[type[audit.ratchet.LocatedSource]]
+    repairs: ClassVar[type[audit.gate.LocatedSource]]
 
     def __init__(self, repo: Path, paths: Iterable[str]) -> None:
         self.repo, self.paths = repo, sorted(paths)
@@ -431,7 +431,7 @@ def main() -> int:
             for measure in (repair.repairs for repair in Repair.members_with(Repair))
         }
     else:
-        found = audit.ratchet.compare(
+        found = audit.gate.compare(
             AgentCommsProject(repo),
             args.base,
             args.head,

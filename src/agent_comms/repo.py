@@ -448,7 +448,7 @@ class KeptBranchStart(CheckoutStart):
 class Checkout(SingleFieldValue, PresentMember):
     """A recorded working tree of one of our repositories.
 
-    Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
+    Its pinned submodules belong to the tree, and `git worktree
     add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
     and retired here and nowhere else."""
 
