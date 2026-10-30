@@ -48,16 +48,17 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
     def json_record(record: Mapping[str, object]) -> str:
         return FieldCodec.compact(record, ensure_ascii=False)
 
-    def stored_row(self, message: StoredWireMessage) -> bytes:
-        return self.row(message.decode())
+    def stored_rows(
+        self, source: StoredWireHistory, limit: WireExportLimit,
+        header_size: int, started_at: float, stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        """Render each selected row from its capability tables, decoded once."""
+        def rendered() -> Iterator[WireExportRow]:
+            for message in source.messages():
+                stats.source_messages += 1
+                yield WireExportRow(message.seq, message.timestamp, self.row(message))
 
-    def encoded_size(self, wire: str) -> int:
-        return len(self.row(StoredWireMessage.decode_wire(wire)))
-
-    def stored_size(self, source: StoredWireHistory) -> str:
-        function = self.declared_name + "_wire_export_size"
-        source.db.create_function(function, 1, self.encoded_size, deterministic=True)
-        return f'"{function}"(wire)'
+        return limit.select(rendered(), header_size, started_at, stats)
 
 
 class SelectableWireExportFormat(WireExportFormat):
@@ -75,6 +76,13 @@ class JsonlFormat(SelectableWireExportFormat):
 
     def row(self, message: Message) -> bytes:
         return self.row_prefix + self.json_record(Message.from_message(message).to_wire()).encode() + self.row_suffix
+
+    def stored_rows(
+        self, source: StoredWireHistory, limit: WireExportLimit,
+        header_size: int, started_at: float, stats: ExportSelectionStats,
+    ) -> Iterable[WireExportRow]:
+        """The stored wire text is this format's row, so the limit selects it in SQL."""
+        return limit.stored_rows(source, self, header_size, started_at, stats)
 
     def stored_row(self, message: StoredWireMessage) -> bytes:
         return self.row_prefix + message.wire.encode() + self.row_suffix
@@ -238,7 +246,7 @@ class WireExportLimit(DeclaredFamily, affix="Limit"):
         return None
 
     def stored_rows(
-        self, source: StoredWireHistory, format: WireExportFormat,
+        self, source: StoredWireHistory, format: JsonlFormat,
         header_size: int, started_at: float, stats: ExportSelectionStats,
     ) -> Iterable[WireExportRow]:
         stats.source_messages = source.count()
@@ -306,7 +314,7 @@ class MaxBytesLimit(WireExportLimit):
         return self.value
 
     def stored_rows(
-        self, source: StoredWireHistory, format: WireExportFormat,
+        self, source: StoredWireHistory, format: JsonlFormat,
         header_size: int, started_at: float, stats: ExportSelectionStats,
     ) -> Iterable[WireExportRow]:
         stats.source_messages = source.count()
@@ -575,8 +583,8 @@ class WireTranscriptExporter:
     ) -> WireExportProvenance:
         """Select the stored suffix, then write ascending rows without Message construction."""
         with observer.reading(source):
-            return self._export(destination, lambda stats, header: self.limit.stored_rows(
-                source, self.format, header, self.boundary.export_started_at, stats),
+            return self._export(destination, lambda stats, header: self.format.stored_rows(
+                source, self.limit, header, self.boundary.export_started_at, stats),
                 overwrite=overwrite, observer=observer)
 
     def _export(

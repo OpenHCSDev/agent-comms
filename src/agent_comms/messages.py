@@ -1235,13 +1235,6 @@ class StoredWireMessage:
     timestamp: float
     wire: str
 
-    @staticmethod
-    def decode_wire(wire: str) -> Message:
-        return Message.from_wire(FieldCodec.parse(wire))
-
-    def decode(self) -> Message:
-        return self.decode_wire(self.wire)
-
 
 @dataclass(frozen=True)
 class StoredWireHistory:
@@ -1259,6 +1252,16 @@ class StoredWireHistory:
         )) as cursor:
             for row in cursor:
                 yield StoredWireMessage(*row)
+
+    def messages(self, page: int = 256) -> Iterator[Message]:
+        """The selected rows' public messages, decoded once from their capability tables."""
+        with closing(self.db.execute(
+            f"SELECT seq FROM ({self.query}) ORDER BY seq", self.parameters,
+        )) as cursor:
+            while sequences := tuple(FieldCodec.decode(int, seq) for seq, in cursor.fetchmany(page)):
+                for record in BusCapability.at_sequences(self.db, sequences):
+                    for message in record.messages():
+                        yield Message.from_message(message)
 
     def count(self) -> int:
         return self.count_where("1")
