@@ -42,19 +42,21 @@ async def cli(programs, root, *arguments):
 
 
 class TestEndToEndLifecycle:
-    @pytest.mark.parametrize('operation,parent_arguments', [
-        ('new', ()), ('fork', ('--parent', 'parent')),
+    @pytest.mark.parametrize('operation,creation_arguments,expected_tags', [
+        ('new', ('--tags', 'chosen'), frozenset({'chosen'})),
+        ('new', ('--tags', ''), frozenset()),
+        ('fork', ('--parent', 'parent'), frozenset({'inherited'})),
     ])
     async def test_new_and_fork_require_a_declared_checkout(
-        self, native, source_programs, operation, parent_arguments,
+        self, native, source_programs, operation, creation_arguments, expected_tags,
     ):
         await native.author_history()
         comms = wire(native.root)
         await cli(source_programs, native.root, 'register', '--name', 'parent',
-                  '--worktree', str(native.project), '--execution', 'native')
+                  '--tags', 'inherited', '--worktree', str(native.project), '--execution', 'native')
         parent = comms.registry.require('parent')
         comms.threads.attach_session(parent, str(native.session), process=parent.process_identity)
-        command = (operation, '--name', 'probe', *parent_arguments)
+        command = (operation, '--name', 'probe', *creation_arguments)
         plain = native.project.parent / 'plain'
         plain.mkdir()
         for project_arguments in ((), ('--project', ''), ('--project', str(plain))):
@@ -66,7 +68,9 @@ class TestEndToEndLifecycle:
                                 '--project', str(native.project),
                                 '--model', 'response-local/fixture', '--thinking-level', 'off')
             assert created['created'] == 'probe'
-            assert comms.registry.require('probe').worktree == Checkout(native.project.resolve())
+            child = comms.registry.require('probe')
+            assert child.worktree == Checkout(native.project.resolve())
+            assert child.tags == expected_tags
         finally:
             for thread in comms.registry.snapshot().threads.values():
                 if thread.process_alive:
