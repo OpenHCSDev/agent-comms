@@ -10,7 +10,7 @@ from .class_fact import ClassFact
 import hashlib
 import math
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TypeVar
@@ -26,6 +26,7 @@ from .declared_family import (
 )
 from .errors import RelationViolationError
 from .field_codec import (
+    DisclosureIdentity,
     FieldCodec,
     TurnId,
     SingleFieldValue,
@@ -174,7 +175,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
     hands_out_released_work: ClassVar[bool] = False
     """Whether work this actor released goes to an idle unit without a commander turn."""
-    name: str
+    name: Annotated[str, DisclosureIdentity()]
 
     @property
     @abstractmethod
@@ -233,6 +234,15 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         A birthless member (Core's watcher) carries its own authority."""
         return self
 
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        """Whether this actor may act for ``creator``: change its orders, complete its owner
+        requests and answer what it received. Its own only, unless an authority says more."""
+        return creator == self.commanding_identity
+
+    def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
+        """Whose receipts this actor may answer: a birthless member received nothing."""
+        return ()
+
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
@@ -269,7 +279,7 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     still require ``current`` / ``resolved`` to prove the original alias lineage.
     """
 
-    name: str = field(compare=False)
+    name: Annotated[str, DisclosureIdentity()] = field(compare=False)
     created_at: float
 
     def __eq__(self, other: object) -> bool:
@@ -299,8 +309,16 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return self.lookup == lookup
 
+    def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
+        """Its own receipts, and those of every owner it acts for."""
+        return (self.lookup, *(owner.require_recorded().lookup
+                               for owner in owners if self.commands(owner)))
+
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
         return CommanderForkIdentity(self.name, self.created_at, authority)
+
+    def peer_for(self, authority: ThreadIncarnation) -> CommanderPeerIdentity:
+        return CommanderPeerIdentity(self.name, self.created_at, authority)
 
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
@@ -330,6 +348,19 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
     @property
     def commanding_identity(self) -> ThreadIncarnation:
         return self.authority
+
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        """A fork acts with its parent's authority, a commander peer's included."""
+        return self.authority.commands(creator)
+
+
+@dataclass(frozen=True, eq=False)
+class CommanderPeerIdentity(CommanderForkIdentity):
+    """A #commanders member: membership declares commander authority over every order on
+    the bus, so a retired or absent creator never orphans its orders. Records name the peer."""
+
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        return True
 
 
 class BirthlessIncarnation(

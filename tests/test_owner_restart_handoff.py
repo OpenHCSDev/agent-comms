@@ -11,15 +11,18 @@ import pytest
 
 from agent_comms.registry_document import ThreadRows
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
-from agent_comms.owner_lifecycle import OwnerRestartSelection, ProcessExitedOwnerCompletion
+from agent_comms.owner_lifecycle import (
+    OwnerReleaseEvidence, OwnerRestartSelection, ProcessExitedOwnerCompletion,
+    SessionRetiredOwnerCompletion,
+)
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
-from agent_comms.thread_identity import GenerationCounter
+from agent_comms.thread_identity import GenerationCounter, OwnerIdentity
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.native_arguments import ConfiguredBinary, InheritedArguments
 from agent_comms.threads import Thread
@@ -137,3 +140,31 @@ def test_retirement_capture_refuses_changed_original_incarnation(*, thread_regis
         RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch, ProcessExitedOwnerCompletion())
 
 
+
+
+def test_a_release_naming_no_process_retires_a_thread_that_holds_none(*, thread_registration):
+    # Stops before #3669 recorded a dead owner's release with no process; the thread
+    # holds none either, so it is retired and may start (no "no released process").
+    thread, snapshot = stopped(registry=thread_registration)
+    unbound = replace(thread, process_identity=NoProcess())
+    snapshot = replace(snapshot, threads=ThreadRows.from_threads({thread.name: unbound}))
+    release = OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, NoProcess(), 4, 5)
+    release.completion.require_loss(snapshot, release)
+    release.require_retired_for(snapshot)
+    held = replace(snapshot, threads=ThreadRows.from_threads({thread.name: thread}))
+    with pytest.raises(RelationViolationError):
+        release.require_retired_for(held)
+
+
+def test_a_retired_session_is_judged_by_the_registry_not_the_stopped_copy(*, thread_registration):
+    # A stop settles with the Thread it captured before the session retired, which still
+    # names the live process; retirement reads the registry, which holds none.
+    thread, snapshot = stopped(registry=thread_registration)
+    retired = OwnerIdentity(thread.incarnation, 3)
+    release = OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, thread.process_identity,
+                                   4, 5, SessionRetiredOwnerCompletion(retired))
+    unbound = replace(snapshot, threads=ThreadRows.from_threads(
+        {thread.name: replace(thread, process_identity=NoProcess())}))
+    release.require_retired_for(unbound)
+    with pytest.raises(RelationViolationError, match="acquired another process"):
+        release.require_retired_for(snapshot)

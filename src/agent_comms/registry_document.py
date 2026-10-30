@@ -637,10 +637,18 @@ class RegisteredCommanderProject(CommanderProject):
     repos: tuple[Repo, ...]
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The registered lead first, then every thread declared in #commanders."""
+        """The registered lead first, then every thread declared in #commanders. A commander
+        fork sits in that channel with its commander's tags but acts for it, never as one."""
         return tuple(dict.fromkeys((
             *self.leads(snapshot),
-            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name])))
+            *(thread for thread in
+              ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
+              if not thread.execution.commander_forks(thread)))))
+
+    def lead(self, snapshot: RegistrySnapshot) -> Thread:
+        """The one registered commander a fork is declared under."""
+        (thread,) = self.leads(snapshot)
+        return thread
 
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
@@ -917,15 +925,16 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.owners.rename(canonical, new_name)
         return canonical, new_name
 
-    def fence_idle_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
-        """Atomically deny new turns for exactly one idle owner before signaling.
+    def fence_restart_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
+        """Atomically deny new turns for exactly one idle or wedged owner before signaling.
 
         The outer wire lock alone cannot exclude a direct registry claim; this
-        check and the STOPPED transition share the registry's own lock.
+        check and the STOPPED transition share the registry's own lock. A wedged
+        turn's reference is dropped here exactly as stop's fence drops it.
         """
         current = self.require_active(expected.name)
         try:
-            current.require_idle()
+            current.require_restartable()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
@@ -936,6 +945,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             expected, StoppingThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
+        self.threads[expected.name] = current.without_turn()
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:

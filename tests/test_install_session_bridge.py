@@ -22,6 +22,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
@@ -372,7 +373,7 @@ def test_a_bridge_that_dies_during_pause_counts_as_stopped(tmp_path, bridge_home
     with SpawnedProcess.launch((sys.executable, '-c', (
         'import socket, sys; s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); '
         's.listen(); print(flush=True); peer, _ = s.accept(); peer.makefile("rb").readline()'),
-        str(claim.socket_path)), output=subprocess.PIPE) as dying:
+        str(claim.socket_path)), stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as dying:
         dying.process.stdout.readline()
         me = ProcessIdentity.capture(os.getpid())
         observed = SessionInformation(owner=me, process=dying.identity,

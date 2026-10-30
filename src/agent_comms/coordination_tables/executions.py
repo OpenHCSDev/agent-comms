@@ -354,11 +354,11 @@ class ExecutionRecord(
     created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
-    @projected(view="snapshot", name="status")
+    @projected(view=SnapshotExclude, name="status")
     def snapshot_status(self):
         return type(self.lifecycle)
 
-    @projected(view="snapshot", name="current_attempt_ordinal")
+    @projected(view=SnapshotExclude, name="current_attempt_ordinal")
     def snapshot_current_attempt_ordinal(self):
         return self.lifecycle.current_attempt_ordinal
 

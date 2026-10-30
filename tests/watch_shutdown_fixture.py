@@ -18,6 +18,8 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_bus import Watch, WatchPass
 from agent_comms.repo import Repo
 from source_revision_fixture import SourceRepository
+from agent_comms.work_branches import WorkBranches
+from git_shutdown_fixture import HeldGitHTTP
 from connector_shutdown_fixture import HeldCall
 
 
@@ -85,6 +87,31 @@ class PreparationShutdownWatch(JoinedShutdownWatch):
         Repo.require_commits(source.checkout, "origin", head)
         assert source.has_commit(head)
         self.commit(comms)
+
+
+class PublicationShutdownWatch(ReadWork, ShutdownWatch):
+    def prepare(self, comms: Comms) -> None:
+        source = SourceRepository.create(self.directory / "publication")
+        with HeldGitHTTP.serving(source.remote_path, "GET",
+                                 (self.directory / "entered").touch) as remote:
+            source.git(source.checkout, "config", "protocol.version", "0")
+            source.git(source.checkout, "remote", "set-url", "origin", remote.url)
+            source.git(source.checkout, "config", "branch.main.remote", "origin")
+            source.git(source.checkout, "config", "branch.main.merge", "refs/heads/main")
+            WorkBranches(source.checkout).prepare_upstreams()
+            (self.directory / "finished").touch()
+
+    def observe(self, comms: Comms, prepared: None) -> None:
+        (self.directory / "observed").touch()
+
+    def pass_body(self, comms: Comms, observed: None) -> None:
+        (self.directory / "published").touch()
+
+    @classmethod
+    def check_exit(cls, comms: Comms, directory: Path, elapsed: float) -> None:
+        assert elapsed < 5, f"Publication acquisition held shutdown for {elapsed:.3f}s"
+        assert not any((directory / name).exists()
+                       for name in ("finished", "observed", "published", "release"))
 
 
 @dataclass(frozen=True)

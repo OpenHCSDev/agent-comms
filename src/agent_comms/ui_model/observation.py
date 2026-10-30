@@ -495,7 +495,7 @@ class OwnerRead(AwaitedRead):
         if owner.incarnation != self.owner:
             raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
         return OwnerReplyConnection(
-            comms, owner.name, socket_path(comms.root, owner.require_process().pid),
+            comms, owner.incarnation, socket_path(comms.root, owner.require_process().pid),
         )
 
     async def ask(self, comms: Comms) -> object:

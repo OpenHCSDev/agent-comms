@@ -6,7 +6,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -35,7 +35,7 @@ from .launch_root import LaunchRoot
 from .input_key import AcpInputKey, InputKey
 from .field_codec import InputId
 from .input_disposition import InputDispositions
-from .launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
+from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment, SetVariable, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import (
@@ -205,9 +205,6 @@ class NoRelease(OwnerRelease):
 class ReleasedOwner(ThreadIncarnationRecord):
     process_identity: Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
-    def require_process(self) -> ProcessIdentity:
-        return self.process_identity.require(f"Thread {self.name!r} has no released process")
-
     def matches(self, expected: Thread) -> bool:
         return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
 
@@ -222,27 +219,37 @@ class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
 
     @abstractmethod
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None: ...
+                        process: ProcessState) -> None:
+        """``thread`` is the registry's current declaration; ``process`` is the released one."""
 
     def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
-        return release.matches(snapshot.require(release.name))
+        """The row still binds the released process or, once a dead owner's stop
+        unregistered it, none; a different process is a successor."""
+        current = snapshot.require(release.name)
+        return (release.incarnation() == current.incarnation
+                and not current.process_identity.conflicts_with(release.process_identity))
 
 
 @dataclass(frozen=True)
 class ProcessExitedOwnerCompletion(OwnerCompletion):
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None:
-        thread.require_local_process(process)
+                        process: ProcessState) -> None:
+        # The registry still binds the released process (a fenced self-release) or none
+        # (a stopped owner was unregistered). A release that names no process was
+        # recorded only after its stop saw the owner dead: nothing of it is alive.
+        if thread.process_identity.conflicts_with(process):
+            raise RelationViolationError("live owner is not the current process incarnation")
         if process.alive():
             raise RelationViolationError("Original owner survived retirement")
 
     def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
-        if release.require_process().alive():
+        if release.process_identity.alive():
             raise RelationViolationError("Released native owner process is still alive")
         current = snapshot.require(release.name)
         if release.matches(current):
             snapshot.status(current.name).require_inactive("Released native process is still the registry owner")
-        if snapshot.claim_generation(current.name) == release.after and not release.matches(current):
+        if (snapshot.claim_generation(current.name) == release.after
+                and current.process_identity.conflicts_with(release.process_identity)):
             raise RelationViolationError("Native release process differs from its original declaration")
 
 
@@ -251,7 +258,7 @@ class SessionRetiredOwnerCompletion(OwnerCompletion):
     owner: OwnerIdentity
 
     def require_retired(self, snapshot: RegistrySnapshot, thread: Thread,
-                        process: ProcessIdentity) -> None:
+                        process: ProcessState) -> None:
         current = snapshot.owner_identity(thread.name)
         if current.incarnation != self.owner.incarnation or current.generation <= self.owner.generation:
             raise RelationViolationError("Retired session still holds its original owner lease")
@@ -292,6 +299,11 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
             raise RelationViolationError("Completed retirement differs from the selected original owner")
         self.completion.require_loss(snapshot, self)
         return self.completion
+
+    def require_retired_for(self, snapshot: RegistrySnapshot) -> None:
+        """Judge the registry's current declaration, never a caller's pre-stop copy: a
+        retired session unregistered its process, so the released process is what retired."""
+        self.completion.require_retired(snapshot, snapshot.require(self.name), self.process_identity)
 
     def require_owner_loss(self, snapshot, owner_identity):
         """Attest only this recorded owner's release and dead process.
@@ -334,11 +346,12 @@ class OwnerReleaseStore(ThreadOwnedState, DurableStore):
             return
         with self.writing() as db:
             for original, before in owners:
-                thread = snapshot.require(original.name)
-                thread.turn_record.read().require_idle()
-                OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth,
-                                     thread.process_identity, before,
-                                     snapshot.claim_generation(thread.name)).upsert(db)
+                # A stopped dead owner is already unregistered in `snapshot`: the release
+                # names the process the original held, as record_session does.
+                original.turn_record.read().require_idle()
+                OwnerReleaseEvidence(original.name, original.incarnation.wire_birth,
+                                     original.process_identity, before,
+                                     snapshot.claim_generation(original.name)).upsert(db)
 
     def record_session(
         self, snapshot: RegistrySnapshot, original: Thread, before: int, owner: OwnerIdentity,
@@ -360,10 +373,10 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
-    def require_restart_idle(self, thread: Thread) -> None:
-        """Do not interrupt a live turn; an old attempt settles after owner release."""
+    def require_restartable(self, thread: Thread) -> None:
+        """Do not interrupt a working turn; a wedged one ends the way stop ends it."""
         try:
-            thread.turn_record.read().require_idle()
+            thread.require_restartable()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
@@ -429,28 +442,36 @@ class OwnerLifecycle:
         refusal = RelationViolationError("Explicit start is required for a stopped agent.")
         thread.role.require_executable(refusal)
         self.registry.status(thread.name).require_active(str(refusal))
-        return (
-            thread if thread.process_alive else self._launch_owner(
-                thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running())
-        )
+        if thread.process_alive:
+            return thread
+        with self.launching_owner(
+            thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running(),
+        ) as owner:
+            return owner
 
-    def start(
-        self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
+    def start_many(
+        self, names: Sequence[str], *, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
-    ) -> OwnerStartResult:
-        thread = self.registry.require(name)
-        thread.execution.require_native()
-        status = self.registry.status(thread.name)
-        refusal = RelationViolationError("Only visible agent threads can be started.")
-        thread.role.require_executable(refusal)
-        status.require_visible(str(refusal))
-        if status.holds_process and thread.process_alive:
-            status.require_active("Stopped owner session has not retired yet.")
-            return OwnerStartResult(thread.name, thread.require_process().pid, False)
-        owner = self._launch_owner(
-            thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
-        )
-        return OwnerStartResult(owner.name, owner.require_process().pid, True)
+    ) -> tuple[OwnerStartResult, ...]:
+        """Dispatch all selected owners before joining their shared host's replies."""
+        results = []
+        with ExitStack() as launches:
+            for name in names:
+                thread = self.registry.require(name)
+                thread.execution.require_native()
+                status = self.registry.status(thread.name)
+                refusal = RelationViolationError("Only visible agent threads can be started.")
+                thread.role.require_executable(refusal)
+                status.require_visible(str(refusal))
+                if status.holds_process and thread.process_alive:
+                    status.require_active("Stopped owner session has not retired yet.")
+                    results.append(OwnerStartResult(thread.name, thread.require_process().pid, False))
+                    continue
+                owner = launches.enter_context(self.launching_owner(
+                    thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
+                ))
+                results.append(OwnerStartResult(owner.name, owner.require_process().pid, True))
+        return tuple(results)
 
     @cached_property
     def launch_authority(self) -> RootLaunch:
@@ -517,28 +538,23 @@ class OwnerLifecycle:
             ))
         return tuple(requests)
 
-    def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
-        """Settle an owner that needs no signal, or capture the one that does."""
+    def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
+        """Fence the complete selection in one edit, before any retirement joins."""
         with self.registry.store.editing() as edit:
             snapshot = edit.original.snapshot
-            thread = edit.document.require(name)
-            thread.role.require_executable(
-                RelationViolationError("Only agent threads can be stopped.")
-            )
-            if thread.process_identity.allows_owner_start():
-                if not snapshot.status(thread.name).stopped:
-                    edit.document.unregister(thread.name)
-                    edit.commit()
-                return None
-            return thread, snapshot.claim_generation(thread.name)
-
-    def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
-        owners = tuple(owner for name in dict.fromkeys(names)
-                       if (owner := self._stop_selection(name)) is not None)
-        # Fence ingress first. Only the host's completed cleanup writes a release.
-        with self.registry.store.editing() as edit:
+            owners: list[tuple[Thread, int]] = []
+            for name in dict.fromkeys(names):
+                thread = edit.document.require(name)
+                thread.role.require_executable(
+                    RelationViolationError("Only agent threads can be stopped.")
+                )
+                if thread.process_identity.allows_owner_start():
+                    if not snapshot.status(thread.name).stopped:
+                        edit.document.unregister(thread.name)
+                else:
+                    owners.append((thread, snapshot.claim_generation(thread.name)))
             for thread, generation in owners:
-                edit.original.snapshot.require_stopping_owner(thread, generation)
+                snapshot.require_stopping_owner(thread, generation)
                 edit.document.fence_owner(thread.name)
             edit.commit()
             fenced = edit.original.snapshot
@@ -564,7 +580,8 @@ class OwnerLifecycle:
         self.launch_authority.check()
         return self.launch_authority
 
-    def _launch_owner(
+    @contextmanager
+    def launching_owner(
         self,
         thread: Thread,
         agent_bin: str,
@@ -572,12 +589,12 @@ class OwnerLifecycle:
         *,
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
-        environment: Mapping[str, str] | None = None,
-    ) -> Thread:
+        environment: Mapping[str, str] = INHERITED_ENVIRONMENT,
+    ) -> Iterator[Thread]:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
         RecoveryMonitorCapability.recover_owners(self, (thread,))
-        env = dict(os.environ if environment is None else environment)
+        env = dict(environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
@@ -600,11 +617,15 @@ class OwnerLifecycle:
                 raise RelationViolationError("Worker host retired before owner registration")
             owned = self._register_owner(edit, thread, host, initial_input)
             owner = edit.original.snapshot.owner_identity(owned.name)
-        OwnerConnection.exchange(self.root, host, StartOwnerRuntimeRequest(
+        with OwnerConnection.dispatching(self.root, host, StartOwnerRuntimeRequest(
             thread=owned.name, launch=RetainedOwnerLaunch(host, str(launch_runtime.interpreter), env),
             owner=owner,
-        ))
-        return owned
+        )) as response:
+            try:
+                yield owned
+            finally:
+                # Even a later launch failure must join every already-dispatched start.
+                OwnerConnection.reply(response)
 
     def _finish_stopped_owners(self, owners: Sequence[tuple[Thread, int]]) -> None:
         if not owners:

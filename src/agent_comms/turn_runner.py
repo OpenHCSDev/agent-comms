@@ -9,10 +9,7 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from acp.exceptions import RequestError
-from acp.schema import (
-    PromptRequest,
-    PromptResponse,
-)
+from acp.schema import PromptResponse
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
@@ -46,10 +43,11 @@ from .messages import Message
 from .native_input_owner import RegistryOwner
 from .owned_turn import OwnedTurn
 from .pi_commands import (
+    NativeQuery,
     AgentCommsInspectContext,
     AgentCommsInspectContextSegment,
 )
-from .pi_payloads import StateData
+from .pi_payloads import NativeContextData, StateData
 from .queued_input import InitialInput
 from .pi_rule_gate import PiRedeal
 from .routing import NoTurnRouting, Routing
@@ -59,6 +57,7 @@ from .runtime import (
 )
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
+from .turn_context import SegmentManifest
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
@@ -80,18 +79,21 @@ RELAY_PREFIX = "!relay "
 
 class CompactionObservation(MroDispatch):
     """All selected/native compaction callers update the existing turn owner."""
-    def __init__(self, runner, session_id, lease, phase):
+    def __init__(
+        self, runner: TurnRunner, session_id: AcpSessionId,
+        lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
         self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
 
-    async def publish(self, phase):
+    async def publish(self, phase: TurnPhase) -> None:
         await self.runner.transition_turn(self.session_id, self.lease, phase)
 
     @handles(events.CompactionStart)
-    async def start(self, event):
+    async def start(self, event: events.CompactionStart) -> None:
         await self.publish(self.phase.compacting())
 
     @handles(events.CompactionFinish)
-    async def end(self, event):
+    async def end(self, event: events.CompactionFinish) -> None:
         await self.publish(self.phase.compaction_ended())
 
 
@@ -108,7 +110,7 @@ class TurnRunner:
         self.runtime = runtime
         self.effects = effects
         # One backend per ACP session, of the bound thread's declared kind.
-        self.persistent_backends: dict[str, AgentBackend] = {}
+        self.persistent_backends: dict[AcpSessionId, AgentBackend] = {}
         self.goals = GoalScheduler(comms, effects)
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
@@ -116,19 +118,21 @@ class TurnRunner:
         self.inputs = inputs
         self.goals.bind(sessions, inputs)
 
-    def session_busy(self, session_id: str) -> bool:
+    def session_busy(self, session_id: AcpSessionId) -> bool:
         return self.inputs.state(session_id).turn_task.busy or self.turn_state(session_id).active.phase.busy
 
-    def turn_state(self, session_id: str) -> TurnState:
+    def turn_state(self, session_id: AcpSessionId) -> TurnState:
         if session_id not in self.sessions.published:
             return TurnState()
         return self.comms.registry.require(self.sessions.require(session_id)).turn_state
 
-    def owns_turn(self, session_id: str, turn_id: TurnId) -> bool:
+    def owns_turn(self, session_id: AcpSessionId, turn_id: TurnId) -> bool:
         state = self.turn_state(session_id)
         return state.active.phase.busy and state.active.id == turn_id
 
-    async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
+    async def transition_turn(
+        self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
         states = await Coordination.run_worker(partial(
             self.comms.agents.transition_turn, lease, phase
         ))
@@ -138,7 +142,7 @@ class TurnRunner:
             )
 
     async def on_published_thread(
-        self, session_id: str, observe: Callable[[Thread], Awaitable[None]],
+        self, session_id: AcpSessionId, observe: Callable[[Thread], Awaitable[None]],
     ) -> None:
         """Hand a published session's thread to `observe`; an unpublished session has none."""
         if session_id not in self.sessions.published:
@@ -146,13 +150,19 @@ class TurnRunner:
         await observe(await Coordination.run_worker(partial(
             self.comms.registry.require, self.sessions.require(session_id))))
 
-    async def observe_compaction(self, session_id: str, event) -> None:
+    async def observe_compaction(
+        self, session_id: AcpSessionId, event: events.CompactionEvent,
+    ) -> None:
         await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
 
-    async def compacted(self, session_id: str, event, thread: Thread) -> None:
+    async def compacted(
+        self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread,
+    ) -> None:
         await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
-            await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+            await CompactionObservation(
+                self, session_id, lease, thread.turn_record.read().phase,
+            ).dispatch(event)
 
     async def observe_context(
         self, session_id: AcpSessionId, usage: ContextUsage,
@@ -168,7 +178,7 @@ class TurnRunner:
         rules its role follows; its tool transports refuse other calls until they are read."""
         event.deal_rules(PiRedeal.of(self.comms, thread))
 
-    def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
+    def backend_for(self, session_id: AcpSessionId, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
         backend = thread.runtime.backend
         current = self.persistent_backends.get(session_id)
@@ -183,40 +193,44 @@ class TurnRunner:
         return current
 
     async def observe_selected_preparation(
-        self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
+        self, session_id: AcpSessionId, thread: Thread, state: StateData, info: events.AgentInfo,
     ) -> None:
         """Publish this attested saved owner through the shared info consumer."""
         state.model.require_selection(thread.model)
         await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
         await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(info)
 
-    async def inspect_context(self, session_id, thread):
+    async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:
         return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
 
-    async def inspect_context_segment(self, session_id, thread, manifest):
+    async def inspect_context_segment(
+        self, session_id: AcpSessionId, thread: Thread, manifest: SegmentManifest,
+    ) -> str:
         request = AgentCommsInspectContextSegment.for_manifest(manifest)
         context = await self.inspect_native_request(session_id, thread, request)
         return context.recorded_public_text(manifest)
 
-    async def inspect_native_request(self, session_id, thread, request):
-        context = await self.backend_for(session_id, thread).inspect(thread, request)
+    async def inspect_native_request(
+        self, session_id: AcpSessionId, thread: Thread, request: NativeQuery,
+    ) -> NativeContextData:
+        response = await self.backend_for(session_id, thread).inspect(thread, request)
+        context = response.require_context()
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
         self,
-        request: PromptRequest,
+        session_id: AcpSessionId,
         *,
+        text: str,
         images: tuple[ImageInput, ...],
         display_text: str | None = None,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
     ) -> PromptResponse:
-        session_id = request.session_id
         async with self.inputs.state(session_id).own_turn_task():
             try:
                 thread_name = await self.sessions.sync_identity(session_id)
                 await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
-                text = self.effects._prompt_text(request)
                 agent_task: str | None = None
                 relay_text: str | None = None
                 if text.startswith(AGENT_PREFIX):
@@ -262,7 +276,7 @@ class TurnRunner:
                 actor=OwnerInvocable,
             )
 
-    async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
+    async def cancel(self, session_id: AcpSessionId, **kwargs: JsonValue) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
             return
@@ -287,7 +301,7 @@ class TurnRunner:
 
     async def extension_ui_permission(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         turn_id: TurnId,
         controller: Controller | None,
         request: pi.DialogUiRequest,
@@ -320,7 +334,7 @@ class TurnRunner:
         return request.choice(selected)
 
     def acquire_turn(
-        self, resources: AsyncExitStack, session_id: str, thread_name: str,
+        self, resources: AsyncExitStack, session_id: AcpSessionId, thread_name: str,
         turn_id: TurnId, detail: str, routing: Routing = NoTurnRouting(),
     ) -> RegistryOwner:
         """Bind the exact installed lease to cleanup before worker delivery.
@@ -336,7 +350,7 @@ class TurnRunner:
         return owner
 
     def finish_turn(
-        self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
+        self, resources: AsyncExitStack, session_id: AcpSessionId, lease: TurnLeaseFence,
     ) -> TurnTranscriptUpdate:
         """Release the original CAS lease and retain its waiter cleanup."""
         terminal_fence = self.comms.agents.finish_turn(lease)
@@ -348,7 +362,7 @@ class TurnRunner:
 
     async def settle_turn(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         lease: TurnLeaseFence,
     ) -> None:
         """Settle after terminal publication, releasing waiters even if the UI fails.
@@ -362,7 +376,7 @@ class TurnRunner:
             ))
             await AcpEventConsumer(self.effects, session_id, self.runtime).dispatch(update)
 
-    def current_turn_update(self, session_id: str):
+    def current_turn_update(self, session_id: AcpSessionId):
         return TurnTranscriptUpdate(state=self.turn_state(session_id))
 
     async def publish_turn_state(self, consumer: AcpEventConsumer) -> None:
@@ -372,18 +386,18 @@ class TurnRunner:
         )
         await consumer.dispatch(update)
 
-    async def active_backend_turn(self, session_id: str) -> DrainTurn:
+    async def active_backend_turn(self, session_id: AcpSessionId) -> DrainTurn:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         return self.inputs.state(session_id).turn.for_owner(thread)
 
-    async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
+    async def close_idle_backend(self, session_id: AcpSessionId, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:
             if persistent is not None:
                 await persistent.close()
 
     @asynccontextmanager
-    async def idle_backend(self, session_id: str, thread: Thread):
+    async def idle_backend(self, session_id: AcpSessionId, thread: Thread):
         """Hold this session's turn and child acquisition until an idle effect ends.
 
         Configuration retirement remains conditional on an idle owner. Source
@@ -402,7 +416,7 @@ class TurnRunner:
             async with persistent.lock:
                 yield persistent
 
-    async def run_selected(self, session_id: str, execution: SelectedExecution):
+    async def run_selected(self, session_id: AcpSessionId, execution: SelectedExecution):
         """Selected work and fresh ACP input share this session's one turn lifetime.
 
         Only the live inbox transfers to the next native turn. Durable UNKNOWN
@@ -419,7 +433,9 @@ class TurnRunner:
                 )
                 try:
                     result = await execution.run(
-                        on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
+                        on_compaction=AcpEventConsumer(
+                            self.effects, session_id, self.runtime,
+                        ).dispatch,
                         pi_session=self.backend_for(session_id, owner),
                         following=following,
                     )
@@ -436,7 +452,7 @@ class TurnRunner:
 
     async def run_agent_turn(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         thread_name: str,
         task: str,
         *,

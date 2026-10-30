@@ -30,6 +30,7 @@ dependencies = [
     "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
     "packaging>=24",
     "pydantic>=2.13",
+    "python-introspect @ git+https://github.com/OpenHCSDev/python-introspect@main",
 ]
 
 [project.optional-dependencies]
@@ -61,7 +62,7 @@ agent-comms-codex-bridge = "agent_comms.cli_bridges.codex:main"
 agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
 agent-comms-integrate = "agent_comms.integration:main"
-agent-comms-commander-skill = "agent_comms_hooks.skill:SkillText.main"
+agent-comms-commander-skill = "agent_comms_hooks.watch:SkillText.main"
 agent-comms-commander-reread = "agent_comms_hooks.reread:ReminderProgram.main"
 agent-comms-commander-deferral-guard = "agent_comms_hooks.deferral:DeferralGuard.main"
 agent-comms-commander-bounded-waits = "agent_comms_hooks.bounded_waits:BoundedWaits.main"

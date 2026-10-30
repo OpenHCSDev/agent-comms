@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from agent_comms_hooks import ToolRefusedError
+from .cli_bridges.session_watch import WatchClaim
 
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandersTag
@@ -21,7 +22,6 @@ from .turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .registration import Registration
     from .head_review import HeadReviewOrder, PullRequestHead
     from .threads import Thread
     from .tool_request import ToolRequest
@@ -69,8 +69,12 @@ class ToolCaller(ABC):
     def subject(self, named: str) -> str:
         return named or self.own_thread()
 
-    def commanding(self, comms: Comms, commander: str) -> None:
+    def commanding(self, comms: Comms) -> None:
         """An ordinary caller needs no commander-child registration."""
+        return None
+
+    def join(self, comms: Comms, parent: str) -> None:
+        """An ordinary caller is nobody's child."""
         return None
 
     def retire(self, comms: Comms) -> None:
@@ -81,12 +85,6 @@ class ToolCaller(ABC):
 
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
-
-    def matches_thread(self, registry: Registration, name: str) -> bool:
-        return False
-
-    def may_reconfigure(self, comms: Comms, name: str) -> bool:
-        return comms.registry.status(name).permits_reconfiguration(self, comms.registry, name)
 
     @abstractmethod
     def require_directive(self, comms: Comms, body: str) -> None:
@@ -150,7 +148,7 @@ class ThreadCaller(ToolCaller):
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).incarnation
+        return comms.registry.require(self.name).acting_identity
 
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
@@ -183,9 +181,6 @@ class ThreadCaller(ToolCaller):
 
     def own_thread(self) -> str:
         return self.name
-
-    def matches_thread(self, registry: Registration, name: str) -> bool:
-        return registry.canonical_name(name) == registry.canonical_name(self.name)
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A unit's or a script's send is a message, not a directive."""
@@ -220,7 +215,7 @@ class ActsForCommander(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
 
 
 @dataclass(frozen=True)
@@ -229,7 +224,7 @@ class CommanderPeerCaller(ThreadCaller):
     the declaration, so its verdicts and orders record its own incarnation, never the
     registered commander's."""
 
-    def commanding(self, comms: Comms, commander: str) -> None:
+    def commanding(self, comms: Comms) -> None:
         if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
             raise ToolRefusedError(
                 f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
@@ -250,13 +245,40 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
     def commander(self, comms: Comms) -> Thread:
         return comms.registry.require(self.authority)
 
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return own.peer_for(self.commander(comms).incarnation)
+
 
 @dataclass(frozen=True)
 class CommanderForkCaller(ActsForCommander, SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
-    def commanding(self, comms: Comms, commander: str) -> None:
-        comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
+    def commanding(self, comms: Comms) -> None:
+        """A verb resumes the fork under the parent that spawned it, never under whichever
+        thread the bus records as commander."""
+        self.join(comms, self.spawner(comms))
+
+    def join(self, comms: Comms, parent: str) -> None:
+        """The SubagentStart hook declares the fork under the session that spawned it, in its
+        own process, before the fork's first call; the child inherits that parent's tags.
+        A connector grant names its holder, so a fork of another parent is refused."""
+        comms.registry.register_child(self.name, parent, CommanderForkExecution, comms.goals)
+
+    def spawner(self, comms: Comms) -> str:
+        """The parent the hook registered; before it has, the bus thread the calling Claude
+        session is bound to, which is the session that spawned this fork."""
+        if self.name in comms.registry:
+            parent, = comms.registry.require(self.name).parent.names()
+            return parent
+        claim = WatchClaim(WatchClaim.environment_session())
+        bindings = claim.state().bindings()
+        if not bindings:
+            raise ToolRefusedError(
+                f"{self.name} has no registered parent and Claude session {claim.thread}"
+                " has no bus binding to name one.")
+        binding, = bindings
+        return binding.bus
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
@@ -272,15 +294,18 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         return registered
 
     def recorded(self, comms: Comms) -> bool:
-        """Every commander verb that records announces it on the bus, so a fork that sent
-        nothing recorded nothing."""
-        return self.name in comms.bus.bus.activity_clocks().sent
+        """A fork's record in Core is what it sent on the bus or a head verdict it recorded:
+        a verdict on an orderless head posts nothing, yet Core holds it."""
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return (self.name in comms.bus.bus.activity_clocks().sent
+                or comms.goals.todos.recorded_head_review(own))
 
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
             raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: post what it found with"
+                f"{self.name} recorded nothing in Core: record a head verdict with"
+                f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
         self.end(comms)
 

@@ -242,3 +242,16 @@ def test_private_evidence_refuses_duplicate_keys():
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')
 
+
+async def test_channel_keeps_draining_the_child_pipe_while_core_handles_a_record():
+    """Node blocks on a full stdout pipe; Core's handling of one record must not fill it."""
+    source = asyncio.StreamReader()
+    channel = PiRpcChannel(source)
+    source.feed_data(b'{"type":"agent_start"}\n')
+    assert await channel.readline() == b'{"type":"agent_start"}\n'
+    source.feed_data(b"x" * 4 * 1024 * 1024 + b"\n")  # far past asyncio's pause threshold
+    await asyncio.sleep(0.05)  # Core is busy with the previous record; no readline runs
+    assert not source._buffer
+    source.feed_eof()
+    assert len(await channel.readline()) == 4 * 1024 * 1024 + 1
+    assert await channel.readline() == b""

@@ -17,14 +17,14 @@ from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms_hooks.read_gate import ReadGateProgram
 from agent_comms_hooks.reread import ReminderProgram
 from agent_comms_hooks.session import SessionEnded
-from agent_comms_hooks.skill import SkillText
+from agent_comms_hooks.watch import SkillText
 
 from ..comms import Comms
 from .hook_deferral import StopHook
 from .hook_forks import SessionSubagents, SubagentHook, SubagentStopHook
 from .hook_read_gate import GatedCall
-from .hook_reread import BoardReminder
-from .hook_skill import DeckStart
+from .hook_reread import ReminderCall
+from agent_comms_hooks.skill import DeckStart
 from ..cli_verbs.merge_review import ReviewedMerge
 from .shared import Binding
 from .monitor import MonitorPeer, MonitorService, SessionReady, SessionRefused, SessionReply, SessionRequest
@@ -96,15 +96,20 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
 
 @dataclass(frozen=True)
 class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=ReadGateProgram.wire_name()):
+    def decode_event(self, comms: Comms, binding: Binding, output: ResidentHookOutput) -> GatedCall:
+        return self.event_type().of(self.payload, output=output, comms=comms, binding=binding)
+
     def run_hook(self, event: GatedCall, comms: Comms, binding: Binding) -> None:
-        event.judge(comms, binding)
+        event.judge()
 
 
 @dataclass(frozen=True)
-class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.wire_name()):
-    def run_hook(self, event: BoardReminder, comms: Comms, binding: Binding) -> None:
-        number = GatedCall.of(self.payload, output=event.output).completed(comms, binding)
-        event.warn(*event.take(comms, binding, number))
+class ReminderRequest(ReminderProgram, HookRequest[ReminderCall], declared_name=ReminderProgram.wire_name()):
+    def decode_event(self, comms: Comms, binding: Binding, output: ResidentHookOutput) -> ReminderCall:
+        return self.event_type().of(self.payload, output=output, comms=comms, binding=binding)
+
+    def run_hook(self, event: ReminderCall, comms: Comms, binding: Binding) -> None:
+        event.warn(*event.take(comms, binding, event.completed()))
 
 
 @dataclass(frozen=True)

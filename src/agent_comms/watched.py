@@ -345,6 +345,7 @@ class ChangeSignal(ChangedSources, asyncio.Queue[SourceChange]):
     def __init__(self, loop: asyncio.AbstractEventLoop, *sources: ChangeSource):
         asyncio.Queue.__init__(self, maxsize=1)
         self.loop = loop
+        self.observed_paths: frozenset[Path] = frozenset()
         super().__init__(*sources)
 
     def _publish(self, change: SourceChange) -> None:
@@ -373,7 +374,7 @@ class ChangeSignal(ChangedSources, asyncio.Queue[SourceChange]):
 
     def prepare(self) -> None:
         self._drain()
-        self._take_paths()
+        self.observed_paths = self._take_paths()
         try:
             change = self.get_nowait()
         except asyncio.QueueEmpty:

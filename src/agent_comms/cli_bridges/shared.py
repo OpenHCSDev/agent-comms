@@ -1,6 +1,8 @@
 """Shared Core inbox delivery and process lifetime for external CLI adapters."""
 from __future__ import annotations
 
+from agent_comms_hooks.watch import SessionFailure
+
 from agent_comms.send_request import SendRequest
 
 import argparse
@@ -31,6 +33,7 @@ from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesT
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
     AttachedChild,
     OutlivesLauncherLifetime,
@@ -97,7 +100,6 @@ from .session_watch import (
     NoSessionBridge,
     SessionCommandError,
     SessionConnectionClosed,
-    SessionFailure,
     SessionRequestTimeout,
     WatchClaim,
     WatchRecord,
@@ -632,7 +634,8 @@ class Serve(Watch):
         offset = log.stat().st_size if log.exists() else 0
         with log.open('ab') as output:
             child = SpawnedProcess.launch(
-                command, env=runtime.environment(os.environ), output=output, runtime=runtime,
+                command, env=runtime.environment(os.environ),
+                stdio=DetachedChildStdio(stdout=output), runtime=runtime,
                 lifetime=OutlivesLauncherLifetime)
         announced = False
         while child.alive():
@@ -1099,7 +1102,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
 
     async def coordinator_read[Result](self, operation: Callable[[sqlite3.Connection], Result]) -> Result:
         def read() -> Result:
-            with CoordinationStore.opened_reader(CoordinationStore.path_in(Path(self.binding.root))) as db:
+            with self.comms.registry.store.coordinator_reader.reader_snapshot() as db:
                 return operation(db)
         return await self.comms.bus.when_open(read)
 
@@ -1138,7 +1141,11 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         """A transport may prepare its harness after the operation bound its reader."""
 
     async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
-        """A harness with no tool-call route takes a heartbeat packet like any message."""
+        """Every transport honors the packet's wake decision; passive display is not input."""
+        return await update.wake(self, message)
+
+    async def wake(self, message: messages.Message) -> type[Outcome]:
+        """The packet already owns its HUD text; every harness receives that original message."""
         return await self.deliver(message)
 
     async def accept(self, message: messages.Message) -> None:

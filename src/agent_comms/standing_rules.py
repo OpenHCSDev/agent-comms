@@ -42,6 +42,7 @@ from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.threads import Thread
 from agent_comms.todos import (
     HeadVerdict,
     MergeBlock,
@@ -49,7 +50,9 @@ from agent_comms.todos import (
     ProgressSource,
     StoredHeadReview,
 )
-from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError
+from agent_comms.work_branches import (
+    BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
+)
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -234,6 +237,10 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
 
     def attention(self) -> bool:
         return True
+
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return (ping,)
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """What a recorded action must touch to dispose of this rule's heartbeat line; a rule
@@ -602,6 +609,33 @@ class BranchGrowth(HeldBranchRule):
 
 
 @dataclass(frozen=True)
+class UnparsedBranch(HeldBranchRule):
+    """A held branch pushed src that Python cannot parse; its growth cannot be counted."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    unparsed: tuple[UnparsedSource, ...] = field(compare=False)
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(
+            cls(problem=held.problem, holder=held.holder,
+                repository=held.difference.repository,
+                branch=held.difference.branch, unparsed=held.difference.growth.unparsed)
+            for held in branches if held.difference.growth.unparsed
+        )
+
+    def line(self) -> str:
+        return (
+            f"UNPARSED {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem})"
+            f" pushed src that does not parse: {', '.join(u.listing() for u in self.unparsed)}."
+            " conflict markers pushed? -> fix the file and push"
+        )
+
+
+@dataclass(frozen=True)
 class ConflictingBranches(HeldBranchRule):
     """Two held branches that Git cannot merge: one row per pair, only for a real conflict.
 
@@ -631,7 +665,7 @@ class ConflictingBranches(HeldBranchRule):
                 other_branch=second.difference.branch, repository=first.difference.repository,
                 paths=conflicts)
             for first, second in HolderBranch.touching(branches)
-            if (conflicts := first.source.pulls.require_branch_conflicts(
+            if (conflicts := first.source.frame.pulls.require_branch_conflicts(
                 first.difference.head, second.difference.head))
         )
 
@@ -707,20 +741,30 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         cut = comms.registry.store.snapshot_with_authority()
         snapshot = cut.snapshot
         thread = snapshot.require(commander)
-        requests = comms.goals.todos.open_requests(thread.incarnation)
+        requests = comms.goals.todos.open_requests(thread.acting_identity)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(source, snapshot, held, commander, requests))
-        references = tuple(dict.fromkeys(reference for rule in opened
-                                         for reference in rule.session_questions()))
-        answered = comms.transcripts.answered_inputs(thread, references, cut.privacy)
+        questions: dict[str, tuple[Thread, dict[MessageReference, None]]] = {}
+        for rule in opened:
+            answerer = rule.session_answerer(thread)
+            _, references = questions.setdefault(answerer.name, (answerer, {}))
+            references.update(dict.fromkeys(rule.session_questions()))
+        answered = frozenset().union(*(
+            comms.transcripts.answered_inputs(answerer, tuple(references), cut.privacy)
+            for answerer, references in questions.values()
+        ))
         return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
                      and not rule.answered_in_session(answered))
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         """Ordinary owed answers still require their existing bus answer relation."""
         return ()
+
+    def session_answerer(self, reader: Thread) -> Thread:
+        """Whose transcript answers this debt's session questions: by default its reader's."""
+        return reader
 
     def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
         questions = self.session_questions()
@@ -843,14 +887,15 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
 
 
 class ReviewTimerUp(HeldOrderDue, FamilyScan):
-    """Each round of a held order's review timer is its own condition, so the heartbeat wakes
-    the commander once per round; the unit sees no timer and nothing is struck."""
+    """The timer owns the request and wake; the unit's ReviewDue row owns its display."""
+
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return ()
 
     @classmethod
     def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
-        return comms.goals.todos.timers_up_in(
-            frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
-        )
+        return frame.review_timers
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -1087,7 +1132,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                     *(f"order {holder.name}" for holder in self.holders))
                    or (self.unowned,))
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
-                f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
+                f" {why}, unchanged since {RecordedEventTime(self.moved).stamp()}. who owns it, or are we"
                 f" pretending it doesn't exist? -> {'; '.join(actions)}")
 
 
@@ -1139,7 +1184,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
         age = time.time() - cls.hunted(comms, commander)
-        return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
+        return f"no hunt in the last {cls.seconds // 60} min" if age > cls.seconds else None
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
@@ -1197,18 +1242,28 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     request: OwnerRequestId
     directive: RequestDirective
+    answerer: Thread = field(compare=False)
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         return (self.message.reference,)
+
+    def session_answerer(self, reader: Thread) -> Thread:
+        return self.answerer
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        """One debt whoever reads it: the request's commander answering clears it for every
+        peer and fork that inherits the request, and any of them may answer it themselves."""
+        reader = snapshot.require(commander)
+        names = snapshot.names_for(commander)
         return tuple(
-            cls(message=original, request=request.id, directive=directive)
+            cls(message=original, request=request.id, directive=directive,
+                answerer=snapshot.participant(request.commander.name).answering_thread(reader))
             for request in requests
-            for directive, original in request.directive_messages(source, snapshot.names_for(commander))
+            for directive, original in request.directive_messages(
+                source, names | snapshot.names_for(request.commander.name))
         )
 
     def answered_in(self) -> tuple[str, ...]:
@@ -1238,6 +1293,7 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
 
     watch: str
     error: str = field(compare=False)
+    failed_at: float = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
@@ -1245,7 +1301,8 @@ class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule
 
     @classmethod
     def from_passes(cls, passes: ServicePasses) -> tuple[Self, ...]:
-        return tuple(cls(watch=watch, since=failed.since, error=failed.error)
+        return tuple(cls(watch=watch, since=failed.since, error=failed.error,
+                         failed_at=failed.failed_at)
                      for watch, failed in sorted(passes.failing.items()))
 
     def began(self) -> float:

@@ -26,8 +26,8 @@ async def wait_for(path: Path):
 
 
 async def main(base: Path) -> None:
-    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
-    comms = wire()
+    root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    comms = wire(root.path)
     await wait_for(base / "registered")
     stopped = asyncio.Event()
     loop = asyncio.get_running_loop()

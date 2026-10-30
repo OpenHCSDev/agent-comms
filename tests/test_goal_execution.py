@@ -16,7 +16,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import NativeTurnError
 from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, GoalId
 from agent_comms.goal_actions import (
     PausedGoalAction,
     RetryGoalAction,
@@ -71,7 +71,7 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
 async def turn_on(comms, *, original_owner_input=False):
     agent = CommsAgent(comms, auto_wake=False)
     owner = comms.registry.require("worker")
-    session = "goal-execution-session"
+    session = AcpSessionId("goal-execution-session")
     await agent.sessions.bind_owned(owner, session)
     turn = OwnedTurn(
         agent.turns, session, owner.name, "Continue original work",

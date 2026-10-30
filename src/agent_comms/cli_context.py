@@ -14,7 +14,7 @@ from agent_comms.context_store import LATEST_CONTEXT
 from agent_comms.coordination_errors import Refused
 from agent_comms.field_codec import Argument
 from agent_comms.field_codec import FieldCodec
-from agent_comms.native_turn_context import NativeContextData
+from agent_comms.pi_payloads import NativeContextData
 from agent_comms.owner_connection import OwnerConnection
 from agent_comms.owner_connection import socket_path
 from agent_comms.turn_context import ContextManifest
@@ -53,7 +53,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
 
     def apply(self, ctx: Comms) -> CliResult:
         owner = ctx.registry.require(self.thread)
-        connection = OwnerConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+        connection = OwnerConnection(ctx, owner.incarnation, socket_path(ctx.root, owner.require_process().pid))
 
         async def inspect() -> CliResult:
             try:
@@ -71,7 +71,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
                                                  False, context, segments, str(error))
             finally:
                 await connection.close()
-            native_context = native.for_turn(owner, NextContextTurn())
+            native_context = native.for_turn(owner.incarnation, NextContextTurn())
             return NativeContextInspection(
                 "next-native-base-and-core-contributors; before future input and provider hooks",
                 False, context, segments, native_context.segments, native_context.render().provider,

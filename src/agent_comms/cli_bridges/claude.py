@@ -5,11 +5,9 @@ import asyncio
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator, BinaryIO
+from typing import AsyncIterator, BinaryIO
 
 from agent_comms.bus import Bus
-from agent_comms.harness_delivery_states import Outcome
-from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource
@@ -22,19 +20,14 @@ from .session_watch import WatchClaim
 from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
 from . import hook_requests  # Register the resident event declarations before serving the socket.
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
-
 class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
-    """Follow this Claude session's file without submitting an input.
+    """Follow the Claude session and deliver the original waking HUD through its native frame.
 
-    Heartbeat packets reach the session through the board its tool-call hook prints, which
-    this bridge derives from Core whenever the hook asks, not through the Monitor: the harness
-    frames Monitor events as routine background, so a line said once there scrolls away. The
-    Monitor gets the packet itself too, since an idle session runs no tool calls. It is the
-    same message the delivery attempt was begun for: a rewritten body hashes to another
-    message_id, which no attempt was stored under."""
+    Packet-owned wake behavior is shared with every bridge; tool-call board reads still derive
+    their current undisposed requests from Core rather than keeping another copy here.
+    The native frame receives the original message: rewriting its body changes the identity
+    the delivery attempt was stored under.
+    """
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
@@ -43,19 +36,12 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
 
     @classmethod
     def environment_session(cls) -> str:
-        return SessionHook.environment_session()
+        return WatchClaim.environment_session()
 
     async def watch_operation(self, operation: Watch) -> None:
         state = WatchClaim(self.address.thread).state()
         await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
         await super().watch_operation(operation)
-
-    async def deliver_board(self, update: CommanderUpdate, message: Message) -> type[Outcome]:
-        """The packet is on the bus, which is the board; only the session needs waking."""
-        return await update.wake(self, message)
-
-    async def wake(self, message: Message) -> type[Outcome]:
-        return await self.deliver(message)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""

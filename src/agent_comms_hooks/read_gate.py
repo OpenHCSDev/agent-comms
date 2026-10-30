@@ -1,5 +1,4 @@
 """PreToolUse is a lightweight request to the existing resident session owner."""
-
 from . import PermissionHookProgram
 from .watch import SessionHookProgram
 

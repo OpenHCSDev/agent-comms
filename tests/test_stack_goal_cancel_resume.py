@@ -16,7 +16,6 @@ from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, Rese
 from agent_comms.goals import Goal
 from agent_comms.goal_states import ActiveGoal, PausedGoal
 from agent_comms.input_attempt import StartedInput
-from agent_comms.runtime import RuntimeProxy, socket_path
 from compaction_loopback import LoopbackProvider
 from native_backend_fixture import native_backend_fixture
 from stored_inputs import stored_inputs
@@ -60,7 +59,7 @@ async def test_native_cancelled_goal_resume_requires_retry_before_fresh_input(tm
         requests = provider.requests
         async with native.open_owner(runtime_enabled=True, auto_wake=True, client=Client()) as (owner, session):
             comms = owner._comms
-            proxy = RuntimeProxy(owner, session, socket_path(comms.root, os.getpid()))
+            proxy = owner._create_runtime_proxy(comms.registry.require(session), session)
             await proxy.subscribe()
             owner.inputs.dispositions.record(
                 UNCERTAIN_SENTINEL_KEY, seq=None, owner=session, claim_scope=1,

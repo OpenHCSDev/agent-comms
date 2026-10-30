@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import SnapshotExclude
+
 from agent_comms.lifecycle_capability import Active, Complete
 
 from dataclasses import dataclass
@@ -234,7 +236,7 @@ class RecoverySnapshot:
             acknowledgement = ResponseObligation.response_record(self.publication_evidence, target)
             obligation.lifecycle.validate_publication(intent, acknowledgement)
 
-    @projected(view="snapshot")
+    @projected(view=SnapshotExclude)
     def can_retry(self) -> bool:
         return self.execution.lifecycle.can_retry(
             authorized=self.retry_authorized,

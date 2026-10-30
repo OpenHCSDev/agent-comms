@@ -88,7 +88,7 @@ class WorkDispatch:
         # A failed publication leaves a stopped unit and its checkout, not an
         # untracked running task. A failed/uncertain start never releases its order.
         self.publish(comms, child)
-        comms.owners.start(child.name)
+        comms.owners.start_many((child.name,))
         return comms.registry.require(child.name)
 
 
@@ -145,7 +145,7 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
+            request=NewestOpenRequest().for_order(comms.goals.todos, commander.acting_identity),
             commander=commander.name,
             assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),

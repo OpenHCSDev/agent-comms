@@ -27,6 +27,12 @@ class MessageAudience(StrEnum):
     MENTIONED = "mentioned"
     COLLECTIVE = "collective"
 
+    @property
+    def enters_running_turn(self) -> bool:
+        """A message to this unit reaches its running turn; a channel broadcast that names no
+        one waits for the turn to end and wakes the unit the ordinary way."""
+        return self is not MessageAudience.COLLECTIVE
+
 
 class NoWakeReason(StrEnum):
     UNMENTIONED_OBSERVER = "unmentioned_observer"

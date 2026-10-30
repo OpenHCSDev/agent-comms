@@ -40,6 +40,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -72,12 +73,14 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.nominal_census import NominalPlanReadings
+from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
     ClearingVerb,
@@ -89,6 +92,7 @@ from agent_comms.todos import (
     BluntText,
     CheckedDelivery,
     CleanHunt,
+    CorrectLinkTodo,
     DeliveryEvidence,
     DeliverySource,
     DirectiveText,
@@ -368,8 +372,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().leads(snapshot)
-        return thread.name
+        return snapshot.commander_project.require().lead(snapshot).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -385,7 +388,7 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReadings().prepare_reading(repository, todos, tuple(
+        return NominalPlanReadings().prepare_reading(repository, todos, tuple(
             phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
@@ -424,7 +427,19 @@ class CommanderContext(BaseModel):
                   answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            answerer=self.receipts).message
+
+    @property
+    def receipts(self) -> CommanderReceipts:
+        """Whose receipts this actor answers: its commander's, and those of every commander of
+        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
+        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
+        a retired commander's directives included."""
+        actor = self.actor_identity
+        owners = (self.incarnation, *(request.commander for request
+                                      in self.comms.goals.todos.open_requests(actor)))
+        return CommanderReceipts(actor, tuple(dict.fromkeys(owners)))
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -685,6 +700,7 @@ class Commander(CommanderContext):
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
+        self.comms.registry.status(unit).require_visible(f"{unit} cannot take an order.")
         document = document.resolved(finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
@@ -802,10 +818,9 @@ class Commander(CommanderContext):
             superseded_by)))
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo))
-        self.post(VerdictAudience((unit,)),
-             f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
+        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} Withdrawn: {withdrawal}. '
+                       'Stop that work; it counts against no one.', 'Withdrawal',
+                       VerdictAudience.of(unit, todo))
         print(withdrawal)
 
     def fire(self, unit: str, why: str) -> None:
@@ -851,7 +866,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        self.actor.commanding(ctx.comms, ctx.commander)
+        self.actor.commanding(ctx.comms)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
@@ -888,7 +903,11 @@ class DirectiveVerb(CommanderVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        # A peer acting for the commander owes that commander's asks too: debts follow the
+        # live commanders, so a retired creator's asks are never orphaned.
+        owers = tuple(dict.fromkeys((self.who(ctx), ctx.commander)))
+        opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
+        owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
         with ctx.comms.bus.bus.reading() as source:
@@ -897,6 +916,11 @@ class DirectiveVerb(CommanderVerb):
                     source.message_reference(identity)
                 except RowNotFoundError:
                     problems[f'--answers {identity}'] = 'unknown message id'
+                    continue
+                if identity not in owed:
+                    problems[f'--answers {identity}'] = (
+                        f'not an open ask owed by {" or ".join(owers)}; recording it would '
+                        'answer nothing')
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
@@ -1237,6 +1261,23 @@ class RunVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class UnlinkVerb(Reasoned, OrderVerb):
+    help = ("take a pull request off an open order that never held its work; keeps its holder, "
+            "review timer and strikes")
+    pid: Annotated[str, Argument(flags=("pid",))]
+    repo: Annotated[RepositoryName, Argument(flags=("repo",), options={"metavar": "OWNER/NAME"})]
+    number: Annotated[int, Argument(flags=("number",), options={"metavar": "PR"})]
+
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.get(self.pid)
+        link = PullRequestLink(self.repo, self.number)
+        ctx.call(CommsChangeProblemTool(problem=self.pid, operation=CorrectLinkTodo(
+            todo.revision, ctx.incarnation, self.why,
+            previous=todo.order.pull_requests, link=link)))
+        print(f'{self.pid}: order no longer links {link.url}')
+
+
+@dataclass(frozen=True, kw_only=True)
 class ServeVerb(OrderVerb):
     help = "name the plan phase an open order serves; keeps its id, review timer and strikes"
     pid: Annotated[str, Argument(flags=("pid",))]
@@ -1276,14 +1317,6 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
-
-
-@dataclass(frozen=True, kw_only=True)
-class JoinVerb(OrderVerb):
-    help = "register a commander fork before its first record"
-
-    def run(self, ctx: Commander) -> None:
-        print(f'{ctx.actor_name} registered')
 
 
 @dataclass(frozen=True, kw_only=True)

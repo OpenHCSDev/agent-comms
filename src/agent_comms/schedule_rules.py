@@ -12,6 +12,7 @@ from .declared_family import DeclaredFamily
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
+from .field_codec import AcpSessionId
 from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
@@ -30,19 +31,19 @@ class WakeOutcome(DeclaredFamily, TurnOutcome):
     """A completed wake owns whether observation should run again."""
 
     @abstractmethod
-    def settle(self, observer: Callable[[str], None], session_id: str) -> None: ...
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None: ...
 
 
 @dataclass(frozen=True)
 class WakeHeld(WakeOutcome):
     hold: MaintenanceStatus
 
-    def settle(self, observer: Callable[[str], None], session_id: str) -> None:
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
         """Maintenance reopening supplies the next wake."""
 
 
 class WakeDue(WakeOutcome):
-    def settle(self, observer: Callable[[str], None], session_id: str) -> None:
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
         observer(session_id)
 
 
@@ -56,7 +57,7 @@ class BackgroundWake(RuleCheck):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionScheduleCheck(RuleCheck):
-    session_id: str
+    session_id: AcpSessionId
     inputs: "InputDrain"
 
 

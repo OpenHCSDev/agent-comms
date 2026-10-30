@@ -1,5 +1,7 @@
 """External JSON shape selection belongs to the existing codec boundary."""
 
+from agent_comms.field_codec import StatusExclude
+
 from abc import abstractmethod
 from dataclasses import dataclass
 import json
@@ -85,7 +87,7 @@ def test_external_shape_family_uses_one_codec_for_children_and_new_cases():
     assert value.to_wire() == raw
     assert json.loads(json.dumps(value.to_wire())) == raw
     assert FieldCodec.encode(value) == raw
-    assert FieldCodec.project(value, "status") == raw
+    assert FieldCodec.project(value, StatusExclude) == raw
     assert ExternalValue.member_named("text") is TextValue
     assert FieldCodec.decode(type[ExternalValue], "text") is TextValue
     for invalid in (object(), {1: "bad key"}, float("nan")):

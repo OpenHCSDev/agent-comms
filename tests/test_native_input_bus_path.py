@@ -11,7 +11,7 @@ from time import perf_counter
 import agent_comms.native_package as native_package
 import pytest
 
-from agent_comms.agent_backend import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
+from agent_comms.turn_inbox import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
 from agent_comms.backend import NativeSession
 from agent_comms.child_process import Platform
 from agent_comms.field_codec import InputId

@@ -14,6 +14,7 @@ from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms import commander
 from agent_comms.commander.questions import UnansweredUnitAsks
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_service import CommanderService
 from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.comms import Comms
@@ -129,8 +130,12 @@ class InstallDue(UndatedStandingRule, FamilyScan):
 
     @staticmethod
     def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+        """The configured repositories the installed build carries and that still have their
+        checkout: a repository retired between installs (refactor-audit after the NRA
+        migration) leaves the build at the next install and never needs a second list."""
         return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
-                     if any(repo.github == record.repository for record in installed.commits))
+                     if repo.checked_out
+                     and any(repo.github == record.repository for record in installed.commits))
 
     @classmethod
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
@@ -176,10 +181,10 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         """Due is a disposition: the commander's `order install` launches."""
 
     def line(self) -> str:
-        oldest = int((time.time() - min(merge.at for merge in self.merges)) // 60)
+        oldest = RecordedEventTime(min(merge.at for merge in self.merges)).stamp()
         landing = ", ".join(f"#{row.number} {row.branch}" for row in self.landing) or "none"
         return (f"{self.headline} {len(self.merges)} merges sitting on {self.repo.to_wire()} main {self.main[:12]},"
-                f" installed is {self.installed[:12]}, oldest {oldest} min"
+                f" installed is {self.installed[:12]}, oldest merge at {oldest}"
                 f" ({'; '.join(merge.line for merge in self.merges)}; landing: {landing})."
                 f" {self.question} -> {self.action}")
 
@@ -246,7 +251,7 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
         store = comms.goals.todos
-        return tuple(cls(request) for request in store.open_requests(thread.incarnation)
+        return tuple(cls(request) for request in store.open_requests(thread.acting_identity)
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:
@@ -329,9 +334,8 @@ class PlanStalled(PlanRule):
         )
 
     def line(self) -> str:
-        hours = (time.time() - self.since) / 3600
         return (
-            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name} held {hours:.1f}h"
+            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name} held since {RecordedEventTime(self.since).stamp()}"
             f" and still not on main ({self.phase.plan.document}). what's actually holding it?"
             " -> find it and change that this wake: integrate steps that only land together,"
             " take it over, or reassign it"
@@ -383,8 +387,7 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
                 f"answer it in a message to {self.unit}")
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return (f"ANSWER {self.unit} asked {self.cited} {age} min ago. why is it still waiting on you?"
+        return (f"ANSWER {self.unit} asked {self.cited} at {RecordedEventTime(self.message.timestamp).stamp()}. why is it still waiting on you?"
                 f" -> {self.clearing_action()}")
 
 
@@ -602,9 +605,10 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
         return (*super().comparison_values(), self.previous.owner_identity)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        actor = comms.registry.require(commander).incarnation
         comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
-            self.todo.revision, comms.registry.require(commander).incarnation, self.previous,
-        ), commander)
+            self.todo.revision, actor, self.previous,
+        ), actor)
 
     def line(self) -> str:
         return (f"KEEP Core restored {self.previous.owner} as {self.todo.id}'s holder. why would you"
@@ -650,7 +654,8 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin):
 class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
-    seconds: ClassVar[int] = 180
+    seconds: ClassVar[float] = CommanderHeartbeat.completion_ceiling()
+    """A pass, the loop's sleep and a pass of slack: the heartbeat declares how long it takes."""
     since: float
     commander: RecordedThreadIncarnation
 

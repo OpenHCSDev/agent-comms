@@ -1,14 +1,36 @@
 """Real Git controls: acquisition is joined; comparison cannot mutate Git or hide absence."""
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import os
+import subprocess
+import sys
+import threading
+from concurrent.futures import Future
+from collections.abc import Callable
+from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from queue import Queue
 
 import pytest
 
-from agent_comms.native_build_inputs import GitLaunch
+from agent_comms.child_process import (
+    AsyncWork, ChildRetirementFailed, GitChildPermission, GitChildren, ObservedProcess,
+    OwnedGitOpening, ReadWork, SpawnedProcess, SynchronousProcess, join_retirement,
+)
+from agent_comms.native_build_inputs import (
+    ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled, GitLaunch,
+)
+from agent_comms.coordinator import Coordination
+from agent_comms.comms import Comms
+from agent_comms.message_bus import Watch
+from agent_comms.service_passes import ServicePassStore
+from git_shutdown_fixture import HeldGitHTTP, held_commit
+from agent_comms.nominal_census import NominalCensus, NominalPlanReadings
 from agent_comms.phase_evidence import (
     BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent,
     RetainedPlanReadings,
@@ -17,6 +39,10 @@ from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
+
+
+class RetainedNominalReadings(RetainedPlanReadings, NominalPlanReadings):
+    """The commander heartbeat's plan readings without the rest of the heartbeat."""
 
 
 @dataclass(frozen=True)
@@ -117,6 +143,19 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     assert case.snapshot() == prepared
 
 
+def test_a_detached_head_counts_its_unpublished_commits_instead_of_failing_the_read(git_preparation):
+    """A unit mid-rebase holds a detached HEAD; its checkout must not stop the whole pass."""
+    repo = git_preparation.repository
+    SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Unpublished work")
+    head = Repo.git(repo.checkout, "rev-parse", "HEAD").strip()
+    Repo.git(repo.checkout, "checkout", "--detach", "-q")
+    reader = WorkBranches(repo.checkout)
+    reader.prepare_upstreams()
+    difference = reader.difference(reader.origin_main)
+    (unpublished,) = difference.unpublished
+    assert (difference.branch, unpublished.head, unpublished.commits) == ("HEAD", head, 1)
+
+
 def test_upstream_preparation_batches_only_required_heads_per_remote(
     git_preparation: GitPreparation, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -212,7 +251,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     repo = case.repository
     head = case.commit_at_remote(case.source.main_commit, "Future plan", "refs/pull/99/head")
     evidence = CommitMerged(head)
-    plans = RetainedPlanReadings()
+    plans = RetainedNominalReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
     failed = plans.prepare_reading(repo, (), (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
@@ -230,7 +269,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
-    reading = RetainedPlanReadings().prepare_reading(repo, (), ())
+    reading = RetainedNominalReadings().prepare_reading(repo, (), ())
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
     assert not reading.holds(missing)
@@ -269,7 +308,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     trace = tmp_path / "observation.trace2.jsonl"
     monkeypatch.setenv("GIT_TRACE2_EVENT", str(trace))
     before = case.snapshot()
-    main = MainTree(repo, head)
+    main = MainTree(repo, head, NominalCensus())
     assert main.has("src/promised.py")
     assert not main.has("src/deleted.py")
     assert main.missing(paths) == (False, True, False)
@@ -285,7 +324,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     with pytest.raises(GitCommandError):
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
-    plans = RetainedPlanReadings()
+    plans = RetainedNominalReadings()
     failed = plans.prepare_reading(repo, (), (evidence,))
     plans.observe_reading(failed, (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)
@@ -308,3 +347,400 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
         "src/added.py": 1, "src/deleted.py": -1, "src/promised.py": 1,
     }
     assert case.snapshot() == prepared
+
+
+@pytest.mark.parametrize("method", ("GET", "POST"))
+async def test_shutdown_cancels_publication_http_and_prevents_next_remote(
+    git_preparation: GitPreparation, tmp_path: Path, method: str,
+) -> None:
+    case = git_preparation
+    repo = case.repository
+    missing = case.commit_at_remote(case.source.main_commit, "New remote head", "refs/heads/main")
+    assert not repo.has_commit(missing)
+    children = RegisteredChildren()
+    reader = WorkBranches(repo.checkout)
+    published = tmp_path / "published"
+    with HeldGitHTTP.serving(case.source.remote_path, method) as remote:
+        Repo.git(repo.checkout, "config", "protocol.version", "0")
+        Repo.git(repo.checkout, "remote", "set-url", "origin", remote.url)
+        Repo.git(repo.checkout, "remote", "add", "second", remote.url + "-never")
+        Repo.git(repo.checkout, "branch", "z-second", case.source.main_commit)
+        Repo.git(repo.checkout, "update-ref", "refs/remotes/second/main", case.source.main_commit)
+        Repo.git(repo.checkout, "config", "branch.z-second.remote", "second")
+        Repo.git(repo.checkout, "config", "branch.z-second.merge", "refs/heads/main")
+
+        def prepare() -> None:
+            reader.prepare_upstreams()
+            published.touch()
+
+        with OwnedGitOpening(children).bound():
+            pending = asyncio.create_task(Coordination.run_worker(prepare))
+        try:
+            assert await asyncio.to_thread(remote.entered.wait, 10)
+            child = await asyncio.to_thread(children.next_child)
+            handles = (child,)
+            members = child.platform.group_members(child.identity)
+            assert handles and len(members) > len(handles), "Actual Git HTTP helper was not captured"
+            shutdown = children.start_shutdown()
+            assert children.start_shutdown() is shutdown
+            await join_retirement(shutdown)
+            with pytest.raises(GitAcquisitionCancelled):
+                await pending
+            assert not published.exists()
+            assert not any(path.endswith("-never/info/refs") for _method, path in remote.requests)
+            assert all(child.retired for child in handles)
+            assert all(not member.alive() for member in members)
+            if method == "GET":
+                assert "origin" not in reader._remote_heads
+            with OwnedGitOpening(children).bound(), pytest.raises(GitAcquisitionCancelled):
+                reader.prepare_upstreams()
+        finally:
+            remote.release.set()
+            await join_retirement(children.start_shutdown())
+            await asyncio.gather(pending, return_exceptions=True)
+
+
+async def test_shutdown_retires_both_pipeline_children_and_readwork_child(
+    git_preparation: GitPreparation,
+) -> None:
+    case = git_preparation
+    repo = case.repository
+    with HeldGitHTTP.serving(case.source.remote_path, "GET") as remote:
+        Repo.git(repo.checkout, "config", "protocol.version", "0")
+        Repo.git(repo.checkout, "remote", "set-url", "origin", remote.url)
+        for work in (AsyncWork, ReadWork):
+            children = RegisteredChildren()
+            remote.entered.clear()
+
+            def pipeline() -> bytes:
+                with Repo.acquiring():
+                    return Repo._pipe(repo.checkout, ("ls-remote", "--refs", "origin"),
+                                      ("hash-object", "--stdin"), timeout=10).stdout
+
+            with OwnedGitOpening(children).bound():
+                pending = asyncio.create_task(work.run_async(pipeline))
+            try:
+                assert await asyncio.to_thread(remote.entered.wait, 10)
+                handles = (await asyncio.to_thread(children.next_child),
+                           await asyncio.to_thread(children.next_child))
+                await join_retirement(children.start_shutdown())
+                with pytest.raises(GitAcquisitionCancelled):
+                    await pending
+                assert all(child.retired for child in handles)
+            finally:
+                await join_retirement(children.start_shutdown())
+                await asyncio.gather(pending, return_exceptions=True)
+
+
+class RegisteredChildren(GitChildren):
+    """Expose actual registration through a bounded receipt, not private-state polling."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.registrations: Queue[SpawnedProcess] = Queue()
+
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+        super().register(child, permission)
+        self.registrations.put(child)
+
+    def next_child(self) -> SpawnedProcess:
+        return self.registrations.get(timeout=10)
+
+
+class PausedRegistration(RegisteredChildren):
+    def __init__(self) -> None:
+        super().__init__()
+        self.gated: Future[SpawnedProcess] = Future()
+        self.release = threading.Event()
+
+    def pause(self, child: SpawnedProcess) -> None:
+        self.gated.set_result(child)
+        if not self.release.wait(10):
+            raise TimeoutError("Gated launch control was never released")
+
+
+class BeforeRegistration(PausedRegistration):
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+        self.pause(child)
+        super().register(child, permission)
+
+
+class AfterRegistration(PausedRegistration):
+    def register(self, child: SpawnedProcess, permission: GitChildPermission) -> None:
+        super().register(child, permission)
+        self.pause(child)
+
+
+@pytest.mark.parametrize("collection", (BeforeRegistration, AfterRegistration))
+async def test_shutdown_closes_gated_launch_before_user_code(
+    collection: type[PausedRegistration], tmp_path: Path,
+) -> None:
+    children = collection()
+    executed = tmp_path / "executed"
+
+    def exchange() -> None:
+        with Repo.acquiring(), Repo.opening(
+            (sys.executable, "-c", "from pathlib import Path; import sys; Path(sys.argv[1]).touch()",
+             str(executed)), env=os.environ, stdio=DetachedChildStdio(
+                 stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as process:
+            process.communicate(timeout=10)
+
+    with OwnedGitOpening(children).bound():
+        pending = asyncio.create_task(AsyncWork.run_async(exchange))
+    try:
+        child = await asyncio.wait_for(asyncio.wrap_future(children.gated), 10)
+        assert child.alive() and not executed.exists()
+        await join_retirement(children.start_shutdown())
+        children.release.set()
+        with pytest.raises(GitAcquisitionCancelled):
+            await pending
+        assert child.retired and not executed.exists()
+    finally:
+        children.release.set()
+        await join_retirement(children.start_shutdown())
+        await asyncio.gather(pending, return_exceptions=True)
+
+
+async def test_shutdown_protects_entered_commit_push_worktree_and_later_child(
+    git_preparation: GitPreparation, tmp_path: Path,
+) -> None:
+    repo = git_preparation.repository
+    hooks = tmp_path / "hooks"
+    hooks.mkdir()
+    Repo.git(repo.checkout, "config", "core.hooksPath", str(hooks))
+    children = RegisteredChildren()
+    worktree = tmp_path / "protected-worktree"
+
+    def business() -> str:
+        SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Protected commit")
+        Repo.git(repo.checkout, "push", "origin", "HEAD:refs/heads/protected")
+        Repo.git(repo.checkout, "worktree", "add", "--detach", str(worktree), "HEAD")
+        head = Repo.git(worktree, "rev-parse", "HEAD").strip()
+        Repo.git(repo.checkout, "worktree", "remove", str(worktree))
+        return head
+
+    with held_commit(hooks) as gate, ExitStack() as replies:
+        with OwnedGitOpening(children).bound():
+            pending = asyncio.create_task(AsyncWork.run_async(business))
+        try:
+            connection, _address = await asyncio.to_thread(gate.accept)
+            reply = replies.enter_context(connection)
+            reply.settimeout(10)
+            reader = replies.enter_context(reply.makefile("rb"))
+            assert await asyncio.to_thread(reader.read, 5) == b"ready"
+            handles = (await asyncio.to_thread(children.next_child),)
+            await join_retirement(children.start_shutdown())
+            assert all(child.alive() for child in handles)
+            assert not pending.done(), "Shutdown abandoned the entered commit"
+            reply.sendall(b"go")
+            head = await pending
+            assert Repo.git(git_preparation.source.remote_path, "rev-parse", "refs/heads/protected").strip() == head
+            assert not worktree.exists()
+        finally:
+            replies.close()
+            await join_retirement(children.start_shutdown())
+            await asyncio.gather(pending, return_exceptions=True)
+
+
+async def test_shutdown_retires_exited_leaders_pipe_holder(tmp_path: Path) -> None:
+    children = RegisteredChildren()
+    leader: Future[SpawnedProcess] = Future()
+    holding = threading.Event()
+
+    def exchange() -> None:
+        with Repo.acquiring(), Repo.opening(
+            (sys.executable, "-c", "from git_shutdown_fixture import exited_leader; exited_leader()"),
+            env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(Path(__file__).parent),
+                                                          os.environ.get("PYTHONPATH", "")))),
+            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as process:
+            assert process.stdout is not None
+            assert process.stdout.readline() == b"pipe holder ready\n"
+            assert process.wait(timeout=10) == 0
+            child = children.next_child()
+            leader.set_result(child)
+            holding.set()
+            process.communicate(timeout=10)
+        (tmp_path / "published").touch()
+
+    with OwnedGitOpening(children).bound():
+        pending = asyncio.create_task(AsyncWork.run_async(exchange))
+    try:
+        assert await asyncio.to_thread(holding.wait, 10)
+        child = leader.result(timeout=0)
+        members = child.platform.group_members(child.identity)
+        assert not child.alive() and members
+        await join_retirement(children.start_shutdown())
+        with pytest.raises(GitAcquisitionCancelled):
+            await pending
+        assert child.retired and all(not member.alive() for member in members)
+        assert not (tmp_path / "published").exists()
+    finally:
+        await join_retirement(children.start_shutdown())
+        await asyncio.gather(pending, return_exceptions=True)
+
+
+@pytest.mark.parametrize("owned", (False, True), ids=("bootstrap", "core"))
+def test_git_opening_preserves_inherited_stdin(owned: bool) -> None:
+    payload = b"inherited descriptor, not DEVNULL\n"
+    read_fd, write_fd = os.pipe()
+    with os.fdopen(read_fd, "rb") as given:
+        with os.fdopen(write_fd, "wb") as producer:
+            producer.write(payload)
+        with SpawnedProcess.launch(
+            (sys.executable, "-c", "import sys; from git_shutdown_fixture import inherited_stdio; "
+             "inherited_stdio(sys.argv[1] == 'core')", "core" if owned else "bootstrap"),
+            env=dict(os.environ, PYTHONPATH=os.pathsep.join((str(Path(__file__).parent),
+                                                          os.environ.get("PYTHONPATH", "")))),
+            stdio=ConfiguredChildStdio(
+                stdin=given, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as child:
+            result = child.collect(timeout=10)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stdout == payload
+
+
+def test_git_bootstrap_opening_works_without_core_imports(git_preparation: GitPreparation) -> None:
+    source = Path(__file__).resolve().parents[1] / "src/agent_comms/native_build_inputs.py"
+    program = (
+        "import runpy,sys; module=runpy.run_path(sys.argv[1]); "
+        "r=module['GitLaunch']._run(sys.argv[2], 'rev-parse', 'HEAD'); "
+        "assert r.returncode == 0; "
+        "assert not any(n == 'agent_comms' or n.startswith('agent_comms.') for n in sys.modules); "
+        "sys.stdout.buffer.write(r.stdout)"
+    )
+    with SpawnedProcess.launch(
+        (sys.executable, "-I", "-c", program, str(source), str(git_preparation.repository.checkout)),
+        stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+    ) as child:
+        result = child.collect(timeout=10)
+    assert result.returncode == 0, result.stderr.decode(errors="replace")
+    assert result.stdout.decode().strip() == git_preparation.source.main_commit
+
+
+async def test_cancelled_watch_preserves_existing_service_failure(
+    comms: Comms, tmp_path: Path,
+) -> None:
+    failed = tmp_path / "failed-callback"
+
+    class CancelledWatch(Watch, declared_name=None):
+        async def run(self, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
+            raise GitAcquisitionCancelled("Private acquisition closed")
+
+        def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
+                   error: Exception) -> None:
+            failed.touch()
+
+    watch = CancelledWatch()
+    passes = ServicePassStore.at(comms.root)
+    passes.failed(type(watch).__name__, RuntimeError("An earlier genuine failure"))
+    before = passes.path.read_bytes()
+    with pytest.raises(asyncio.CancelledError):
+        await Coordination.watch_worker(watch, lambda: nullcontext(comms), passes)
+    assert passes.path.read_bytes() == before
+    assert not failed.exists()
+
+
+@pytest.mark.parametrize("count", (1, 2), ids=("single", "aggregate"))
+async def test_cancelled_git_retains_shared_physical_retirement_failure(count: int) -> None:
+    children = GitChildren()
+    handles: tuple[SpawnedProcess, ...] = ()
+
+    @contextmanager
+    def original_authority(child: SpawnedProcess):
+        # A real exited original cannot grant observed-process signal authority.
+        ObservedProcess(child.identity).require_stop_authority()
+        yield
+
+    try:
+        with pytest.raises(ChildRetirementFailed) as opening_failure:
+            with OwnedGitOpening(children).bound(), Repo.acquiring(), ExitStack() as exchanges:
+                for _ in range(count):
+                    process = exchanges.enter_context(Repo.opening(
+                        (sys.executable, "-c", "pass"), env=os.environ,
+                        stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+                    ))
+                    process.communicate(timeout=10)
+                    assert process.returncode == 0
+                with children.lock:
+                    handles = tuple(children.active)
+                assert len(handles) == count and all(child.retired for child in handles)
+                with pytest.raises(ChildRetirementFailed) as stopped:
+                    SynchronousProcess.stop_together(tuple(
+                        (child, partial(original_authority, child)) for child in handles))
+                failure = stopped.value
+                cause = failure.__cause__
+                if count == 1:
+                    assert isinstance(cause, ProcessLookupError)
+                else:
+                    assert isinstance(cause, ExceptionGroup)
+                    assert len(cause.exceptions) == count
+                    assert all(isinstance(error, ProcessLookupError) for error in cause.exceptions)
+                # Shutdown sets each acquisition's cancellation, then joins the
+                # original failed Futures. Also cancel the joining task itself.
+                async def cancelled_shutdown() -> None:
+                    shutdown = children.start_shutdown()
+                    caller = asyncio.current_task()
+                    assert caller is not None
+                    caller.cancel()
+                    await join_retirement(shutdown)
+
+                with pytest.raises(ChildRetirementFailed) as shutdown_failure:
+                    await asyncio.create_task(cancelled_shutdown())
+                assert shutdown_failure.value is failure
+                with children.lock:
+                    permissions = tuple(children.active.values())
+                for permission in permissions:
+                    with pytest.raises(GitAcquisitionCancelled):
+                        permission.completed()
+                # Scope exit reaches the same failed Future through GitChildren.retire.
+        assert opening_failure.value is failure
+        assert all(child in children.active for child in handles)
+    finally:
+        # These real children already exited. Failed attestation retains their
+        # registrations; releasing the test's pipe descriptors is not a stop claim.
+        for child in handles:
+            child.close_streams()
+
+
+async def test_owned_git_ordinary_timeout_and_nonzero_keep_their_errors(
+    git_preparation: GitPreparation,
+) -> None:
+    repo = git_preparation.repository
+    children = GitChildren()
+    with OwnedGitOpening(children).bound():
+        with pytest.raises(GitCommandError):
+            await AsyncWork.run_async(lambda: Repo.git(repo.checkout, "not-a-git-command"))
+    with HeldGitHTTP.serving(git_preparation.source.remote_path, "GET") as remote:
+        Repo.git(repo.checkout, "config", "protocol.version", "0")
+        Repo.git(repo.checkout, "remote", "set-url", "origin", remote.url)
+        with OwnedGitOpening(children).bound():
+            with pytest.raises(subprocess.TimeoutExpired):
+                await AsyncWork.run_async(lambda: Repo.git(
+                    repo.checkout, "ls-remote", "--refs", "origin", timeout=.5))
+    assert not children.active and not children.closing.is_set()
+
+
+def test_pushed_conflict_markers_are_the_branchs_fact_not_an_error(tmp_path):
+    """Foreign branch text that does not parse is reported with its path and line, and
+    refuses acceptance; it never escapes the heartbeat's growth count."""
+    checkout = tmp_path / "repo"
+    checkout.mkdir()
+    for argument in (("init", "-q", "-b", "main"), ("config", "user.email", "t@example.com"),
+                     ("config", "user.name", "t")):
+        Repo.git(checkout, *argument)
+    (checkout / "src").mkdir()
+    module = checkout / "src" / "owner.py"
+    module.write_text("value = 1\n")
+    Repo.git(checkout, "add", ".")
+    Repo.git(checkout, "commit", "-q", "-m", "base")
+    base = Repo.git(checkout, "rev-parse", "HEAD").strip()
+    module.write_text("<<<<<<< HEAD\nvalue = 1\n=======\nvalue = 2\n>>>>>>> other\n")
+    Repo.git(checkout, "commit", "-q", "-am", "conflict markers pushed")
+    head = Repo.git(checkout, "rev-parse", "HEAD").strip()
+    reader = WorkBranches(checkout)
+    growth = reader.source_growth(base, head, reader.changed(base, head))
+    assert [(source.path, source.line) for source in growth.unparsed] == [("src/owner.py", 1)]
+    with pytest.raises(WorkBranchError, match="src/owner.py:1"):
+        growth.require_parsed()

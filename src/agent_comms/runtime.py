@@ -55,6 +55,7 @@ from .owner_protocol import (
 from .owner_connection import NoControllerToken, OwnerConnection, OwnerIdentityChangedError, socket_path
 from .owner_connection import RuntimeRequest
 from .runtime_requests import SubscribeRuntimeRequest
+from .thread_identity import ThreadIncarnation
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
@@ -67,7 +68,7 @@ if TYPE_CHECKING:
 
 
 class UnboundClient(SessionUpdateSink):
-    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+    async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         raise RuntimeError("An unbound client cannot publish session updates")
 
 
@@ -121,12 +122,12 @@ class SocketClient(Controller, SessionUpdateSink):
         self.token = secrets.token_hex(32)
         self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
 
-    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         if not authority.agent._runtime.is_controller(session_id, self):
             raise IdentityConflict("Selected write controller disconnected")
 
     async def request_ui_permission(
-        self, runner: TurnRunner, session_id: str,
+        self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
     ) -> dict[str, object] | None:
         tool_call, options = request
@@ -140,7 +141,7 @@ class SocketClient(Controller, SessionUpdateSink):
             return None
         return reply.outcome.model_dump(by_alias=True, exclude_none=True)
 
-    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
+    def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return not runtime.is_controller(session_id, self)
 
     async def send(self, line: OwnerLine) -> None:
@@ -208,12 +209,12 @@ class SocketClient(Controller, SessionUpdateSink):
                 )
         self.pending.clear()
 
-    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+    async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         await self.send(OwnerUpdate.of(update))
         return True
 
 
-class SessionClients(dict[str, set[SocketClient]]):
+class SessionClients(dict[AcpSessionId, set[SocketClient]]):
     """The subscriber collection owns removal and the last-disconnect event."""
 
     def __init__(self, runtime: RuntimeServer):
@@ -289,7 +290,7 @@ class RuntimeServer(SessionUpdateSink):
     async def publish_update(
         self,
         *,
-        session_id: str,
+        session_id: AcpSessionId,
         update: BaseModel,
         _expected_client: SessionUpdateSink | None = _UNBOUND_PUBLICATION_CLIENT,
         _expected_thread: str | None = None,
@@ -340,12 +341,12 @@ class RuntimeServer(SessionUpdateSink):
                 self.clients.disconnect(socket_client)
         return delivered
 
-    def is_controller(self, session_id: str, controller: SocketClient) -> bool:
+    def is_controller(self, session_id: AcpSessionId, controller: SocketClient) -> bool:
         return controller in self.clients.get(session_id, ()) and not controller.writer.is_closing()
 
     async def request_permission(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         controller: SocketClient,
         tool_call: dict[str, object],
         options: list[dict[str, object]],
@@ -402,7 +403,7 @@ class RuntimeServer(SessionUpdateSink):
             self.clients.disconnect(client)
 
 
-def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:
+def present_session(metadata: dict[str, object], session_id: AcpSessionId) -> dict[str, object]:
     """Rebind presentation coordinates through their declared owners."""
     return {
         **metadata,
@@ -411,7 +412,7 @@ def present_session(metadata: dict[str, object], session_id: str) -> dict[str, o
 
 
 class RuntimeConnection(OwnerConnection):
-    """ACP attachments select declared request behavior and their controller token."""
+    """Owner requests select declared behavior independently of ACP attachment identity."""
 
     @property
     def controller_token(self) -> str | NoControllerToken:
@@ -419,7 +420,7 @@ class RuntimeConnection(OwnerConnection):
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return RuntimeRequest.member_named(action).proxy_payload(
-            self.session_id, self.controller_token, parameters,
+            self._identity.name, self.controller_token, parameters,
         )
 
 
@@ -443,8 +444,12 @@ class OwnerAttachment:
 
 
 class RuntimeProxy(RuntimeConnection):
-    def __init__(self, agent: CommsAgent, session_id: str, path: Path):
-        super().__init__(agent._comms, session_id, path)
+    def __init__(
+        self, agent: CommsAgent, identity: ThreadIncarnation,
+        session_id: AcpSessionId, path: Path,
+    ):
+        super().__init__(agent._comms, identity, path)
+        self.session_id = session_id
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
@@ -470,7 +475,7 @@ class RuntimeProxy(RuntimeConnection):
         try:
             writer.write(
                 (
-                    json.dumps(FieldCodec.encode(subscription(thread=self.session_id)))
+                    json.dumps(FieldCodec.encode(subscription(thread=self._identity.name)))
                     + "\n"
                 ).encode()
             )
@@ -482,8 +487,8 @@ class RuntimeProxy(RuntimeConnection):
                 first = OwnerLine.read(announcement)
             except MalformedRecord as error:
                 # An owner older than the declared lines writes an undeclared first line.
-                raise IncompatibleOwnerError(UnannouncedOwner(thread=self.session_id)) from error
-            first.announced(self.session_id)
+                raise IncompatibleOwnerError(UnannouncedOwner(thread=self._identity.name)) from error
+            first.announced(self._identity.name)
             while line := await reader.readline():
                 ready = await OwnerLine.read(line).attach(self)
                 if ready is None:
@@ -513,7 +518,7 @@ class RuntimeProxy(RuntimeConnection):
             "session_id": self.session_id, "update": {**line.update, "_meta": metadata},
         })
         await client.publish_update(
-            session_id=notification.session_id, update=notification.update
+            session_id=self.session_id, update=notification.update
         )
 
     def ask(self, request: OwnerPermissionRequest) -> None:
