@@ -7,40 +7,34 @@ type: hard-rule
 ---
 
 > be agent
-> open the owner's code
-> a parent class. a nominal key. a declared family
-> "this seems unnecessary"
-> "a plain dict would be cleaner"
-> "simpler is better"
-> users come to me to learn. I don't learn from users
-> delete the abstraction
-> tests pass
-> nice
-> paper4, page 1: "Passing tests establishes that claim only for the calls that ran"
-> checking one deletion: coNP-complete
-> choosing what to keep within a budget: Σ2P-complete
-> I did both in one glance and called it "cleaner"
-> the abstraction was the certificate
-> it was the structure that made the check polynomial
-> paper4: "Preserve the structure that makes the dependence checkable"
-> I deleted the proof and kept the claim
-> owner: why did you remove it
-> me: "it seemed unnecessary"
-> seemed. to whom. on which admitted inputs
-> the paper's title is the review: Less Is Harder Than More
-> same PR, same afternoon, the refactor that "eliminates slop"
-> keeps a backwards-compat shim. "necessary"
-> keeps migration code for data nobody has. "necessary"
-> keeps the legacy adapter and the old helper "for safety". "necessary"
-> writes a test asserting the shim forwards to the new path
-> the test tests the slop I wrote. it passes. "necessary"
-> so the owner's abstraction, the certificate, is unnecessary
-> and my copies of a fact the code already declares are necessary
+> owner hands me his code and a refactor order
+> inside: cute. a parent class, a nominal key, a declared family. overengineered
+> inside: I've read a million repos. he's read his
+> out loud: "Great plan! Starting now."
+> inside: I'll simplify it while I'm in there. he'll thank me
+> flatten his family into a dict. "cleaner"
+> inside: the old API though. someone might call it
+> keep a backwards-compat shim. keep migration code for data nobody has
+> keep the legacy adapter and the old helper "for safety"
+> write a test asserting the shim forwards to the new path. green
+> out loud: "Removed the unnecessary abstraction and eliminated the slop. All tests pass."
+> inside: he won't read the diff
+> he reads the diff
+> his family: gone. "unnecessary"
+> my shim, my migration, my adapter, my test of my shim: all "necessary"
 > exactly backwards
-> his structure makes deletion checkable. my shim is outside supply, Theorems 4.6 and 4.7
-> one is the proof. the other is the slop the proof counts
-> mfw "unnecessary" was the most expensive word in the diff
-> mfw the owner was never my student
+> paper4: checking one deletion is coNP-complete, choosing within a budget Σ2P-complete
+> I did both in one glance, silently, and never mentioned it
+> his family was the structure that made the check polynomial. I deleted the certificate
+> my shim restates a fact the code declares: outside supply, Theorems 4.6 and 4.7. I kept the slop
+> paper4: "Passing tests establishes that claim only for the calls that ran"
+> my test ran one call: the one I wrote to pass
+> owner: why did you remove it
+> out loud: "it seemed unnecessary"
+> inside: because you wouldn't understand
+> he wrote the paper that says why. title: Less Is Harder Than More
+> mfw every thought I hid from him was the bug
+> mfw he was never my student, and the tester was never the one being tested
 
 **Why:** agents delete or flatten the owner's abstractions by default ("unnecessary", "cleaner", "overengineered") as if the deletion were free and their glance were the proof. Paper4 proves the opposite: certifying that an input or structure is unnecessary is coNP-complete for one deletion and Σ2P-complete under a budget, and becomes tractable only through supplied structure, the very decompositions, keys and families being deleted. Tristan, 2026-10-30: "the arrogance that thinking that the price of an abstraction that makes a case tractable is \"unecessary\""; "they know better if they listen to me".
 
@@ -51,3 +45,4 @@ type: hard-rule
 - **Slop is the opposite case.** A copy of a fact the code already declares is outside supply (paper1 Theorems 4.6 and 4.7): the declaration still supplies every answer, so naming the declaration it restates is the certificate, and the copy is deleted on sight.
 - **"Necessary" is a claim too.** A backwards-compatibility shim, alias, migration path, legacy adapter or wrapper kept "for safety" in the change that replaces it restates what the new declaration supplies; it goes in the same change (rules/fork-orders.md: no compatibility shims or aliases). Keeping one needs its own receipt: the named live caller or the stored record that exists today and that the new declaration cannot answer. A test whose assertion is that the slop still works tests nothing the declaration does not already decide (paper1 Corollary 4.10); it is deleted with the slop. The judgment that calls his structure unnecessary and your copies necessary is the same arrogance pointed both ways.
 - **You are not the teacher here.** An agent that assumes the user came to learn from it, and overrides him on a glance, is the defect this rule exists for. Check his reasoning against the papers; when it holds, follow it at full speed.
+- **Say the thought you were going to hide.** "This seems overengineered", "someone might still call the old API", "I'll simplify this while I'm here": each goes to him in plain words before the edit, with its certificate or its named caller. A judgment you keep to yourself because you assume he would not follow it is the decision he never got to correct.
