@@ -895,7 +895,7 @@ def external_transcript_paths(views: HistoryViews) -> tuple[Path, ...]:
 
 
 def commander_frame_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return tuple(sorted(CommanderFrameFile.matching_in(views.root)))
+    return CommanderFrameFile.source_paths(views.root)
 
 
 def expiry_period_changed(before: int, now: int) -> bool:
@@ -990,7 +990,7 @@ class WireRevision(ReadState):
     # Activity-derived views change once per expiry period, not per tick.
     expiry_tick: Annotated[
         int,
-        WatchViews((ActivityView,)),
+        WatchViews((ActivityView, CommanderFramesView)),
         Differs(expiry_period_changed),
     ]
 

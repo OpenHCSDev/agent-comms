@@ -74,7 +74,7 @@ class WorkDispatch:
         Repo.git(repository.checkout, "fetch", "origin", "main")
         start = CheckoutStart.of(repository.checkout, f"auto/{name}", "origin/main")
         CreateCheckoutStorageEffect(checkout, repository, start).check(
-            StorageProjection(storage, candidate)
+            StorageProjection(storage, candidate, comms)
         )
         Checkout.add(repository.checkout, checkout, start)
         location = candidate.runtime.new_location(comms.root, checkout)

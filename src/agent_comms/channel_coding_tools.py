@@ -69,7 +69,7 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = self.thread
-        projection = StorageProjection(registry.storage_rule, thread)
+        projection = StorageProjection(registry.storage_rule, thread, self.comms)
         effects = await asyncio.to_thread(projection.check_call, call)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:

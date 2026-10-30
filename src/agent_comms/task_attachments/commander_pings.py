@@ -11,9 +11,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
-
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
@@ -23,12 +21,12 @@ from agent_comms.field_codec import FieldCodec, OrderId, PublicationExclude
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
-    CommanderUpdatePosition, ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
+    CommanderUpdatePosition, ConversationRole, Message, MessageRole, NoticeRole,
 )
 from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
-from agent_comms.task_sources import TaskAttachment
+from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
@@ -37,7 +35,6 @@ from agent_comms_hooks.board import BoardEntry
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from agent_comms.bus import BusReader
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
     from agent_comms.registry_document import RegistrySnapshot
@@ -211,7 +208,7 @@ class PublishedFacts(PublicationFacts):
 
 
 @dataclass(frozen=True)
-class CommanderUpdate(TaskAttachment, declared_name=None):
+class CommanderUpdate(OwnerNotice, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
@@ -260,11 +257,6 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     def undisposed(self, history: CommanderHistory, cut: float) -> tuple[Ping, ...]:
         """Read every subject through this pass's one captured actor/history reader."""
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
-
-    def require_publication(self, sender: str, registry: RegistrySnapshot,
-                            original_source: BusReader) -> None:
-        if registry.require(sender).incarnation != registry.require(CommanderService.sender).incarnation:
-            raise RelationViolationError("Only the commander heartbeat publishes its observations")
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
         if registry.require(target).incarnation != self.commander:
@@ -341,16 +333,8 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     def send(self, comms: Comms, now: float, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> Message:
-        from agent_comms.commander_heartbeat import CommanderHeartbeat
-
-        message = Message(
-            sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(hud),
-            type=InfoKind, role=self.role, task=replace(self, publication=publication),
-        )
-        return comms.bus.publisher.publish_ordinary(
-            message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
-        )
+        return replace(self, publication=publication).publish(
+            comms.messaging, ThreadTarget(self.commander.name), self.body(hud))
 
 
 @dataclass(frozen=True)

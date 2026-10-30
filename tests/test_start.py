@@ -57,4 +57,4 @@ def test_start_and_allocating_tools_keep_the_real_free_space_floor(tmp_path, mon
         with rule.room_for_start(thread, comms.root):
             pytest.fail("A stopped owner must not start below the volume floor")
     with pytest.raises(StorageDenied, match="10 GiB free"):
-        StorageProjection(rule, thread).check((AllocateStorageEffect(),))
+        StorageProjection(rule, thread, comms).check((AllocateStorageEffect(),))

@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
-from agent_comms.channel_targets import CommsTag
 from agent_comms import commander
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
+from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
@@ -30,12 +30,10 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
-from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
@@ -252,20 +250,6 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     def line(self) -> str:
         return (f"ADVANCE request {self.request.id.value} ({self.request.text}) has no order serving it."
                 " is anyone on it, or did we forget? -> order its next step or mark it done")
-
-
-@dataclass(frozen=True)
-class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
-    """The newest reply to an original from the requested participants."""
-
-    scope: RepliesDisplayScope
-    since: float
-    empty: ClassVar[tuple[Message, ...]] = ()
-
-    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
-        return source.latest_answer(
-            self.scope, since=self.since,
-        )
 
 
 class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
@@ -742,8 +726,7 @@ class CommanderDeaf(InboxUnavailable):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
-        comms.messaging.send(
-            CommanderService.sender, CommsTag.channel(), f"{commander}: {self.line()}")
+        FleetNotice().announce(comms.messaging, f"{commander}: {self.line()}")
 
 
 @dataclass(frozen=True)

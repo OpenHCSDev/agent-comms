@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterable
 from functools import cached_property
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
@@ -22,20 +22,19 @@ from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
-from agent_comms.coordinator import Coordination
 from agent_comms.disclosure_text import (
     AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
 )
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
-    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, WireTransient, projected,
+    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.order_story import OrderStory
-from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
@@ -273,10 +272,27 @@ class HudDisplayFacts:
     alarms: tuple[ViewSectionFacts, ...]
     alarm_membership: tuple[AlarmSection, ...]
     not_applied: tuple[str, ...]
+    failures: tuple[tuple[str, FailingPass], ...]
 
 
 @dataclass(frozen=True)
-class CommanderHud(ToolResult):
+class CommanderLoad(ServiceReading):
+    """Retained load with the same recorded service evidence as its published frame."""
+
+    load: OverloadDegradation
+
+    def retained_status(self) -> str:
+        if self.services.heartbeat_current(self.heartbeat):
+            return 'Retained board rows and load:'
+        return 'STALE retained board rows and load:'
+
+    @projected(view=WireExclude)
+    def header(self) -> tuple[str, ...]:
+        return (*self.service_status, self.retained_status(), str(self.load))
+
+
+@dataclass(frozen=True)
+class CommanderHud(CommanderLoad):
     """One disposable view of native records, shared by comms_hud and the commander board.
 
     TodoStore owns orders, review timers and strikes; OrderEditCountRead owns edit counts;
@@ -288,15 +304,10 @@ class CommanderHud(ToolResult):
     commander: ThreadIncarnation
     units: tuple[CommanderUnit, ...]
     phases: tuple[CommanderPhase, ...]
-    load: OverloadDegradation
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
     packets: tuple[CommanderUpdate, ...] = ()
     open_pings: tuple[Ping, ...] = field(kw_only=True)
-    heartbeat: Annotated[EventTime, WireTransient()] = field(
-        default_factory=UnrecordedEventTime, compare=False, kw_only=True,
-    )
-    """Read-time projection of ServicePassStore's clock; never written into the frame."""
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -346,10 +357,12 @@ class CommanderHud(ToolResult):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        return cls(owner, tuple(units), phases,
-                   OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks, usage, (delivery.packet,), open_pings=delivery.open_pings,
-                   heartbeat=ServicePassStore.at(comms.root).read().heartbeat_completed_at(owner))
+        passes = ServicePassStore.at(comms.root).read()
+        return cls(commander=owner, units=tuple(units), phases=phases,
+                   load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
+                   forks=forks, usage=usage, packets=(delivery.packet,),
+                   open_pings=delivery.open_pings, services=passes,
+                   heartbeat=passes.heartbeat_completed_at(owner))
 
     @property
     def board(self) -> tuple[BoardEntry, ...]:
@@ -376,7 +389,8 @@ class CommanderHud(ToolResult):
         ),))
 
     def status_strip(self, now: float) -> str:
-        return "\n".join(self.status_table(now).labelled_lines())
+        return "\n".join((*self.service_status, self.retained_status(),
+                          *self.status_table(now).labelled_lines()))
 
     @cached_property
     def display_facts(self) -> HudDisplayFacts:
@@ -390,6 +404,7 @@ class CommanderHud(ToolResult):
                   for section in alarms),
             alarms,  # Original ping equality retains hidden overflow membership, not paint-time age/text.
             tuple(line for packet in self.packets for line in packet.not_applied),
+            tuple(sorted(self.services.failing.items())),
         )
 
     @staticmethod
@@ -421,6 +436,9 @@ class CommanderHud(ToolResult):
     def frame(self) -> tuple[str, ...]:
         return self.hud_text(time.time())
 
+    def load_reading(self) -> CommanderLoad:
+        return CommanderLoad(self.load, services=self.services, heartbeat=self.heartbeat)
+
 
 
 
@@ -434,6 +452,7 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     """
 
     path: Path
+    reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
 
     record_type = CommanderHud
 
@@ -442,22 +461,18 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
 
     def empty(self) -> CommanderHud:
-        raise ToolRefusedError(f"Tristan frame missing: {self.path}")
+        raise BoardUnavailable(self.reading, f'Tristan frame missing: {self.path}')
 
     @classmethod
     def current(cls, comms: Comms, commander: str) -> CommanderHud:
         """Read the heartbeat's publication, never repeat its forge and history work."""
         owner = comms.registry.require(commander).incarnation.require_recorded()
         passes = ServicePassStore.at(comms.root).read()
-        completed = passes.heartbeat_completed_at(owner)
-        if not completed.since(time.time() - 3 * Coordination.watch_period):
-            raise ToolRefusedError(
-                f"Tristan stale for {owner.name} since {completed.clock()}: {passes.stall()}"
-            )
-        hud = cls.at(comms.root, owner).read()
+        health = ServiceReading().with_services(passes, owner)
+        hud = cls(cls.path_in(comms.root, lookup=str(owner.lookup)), reading=health).read()
         if hud.commander != owner:
-            raise ToolRefusedError(f"Tristan frame belongs to another incarnation of {owner.name}")
-        return replace(hud, heartbeat=completed)
+            raise BoardUnavailable(health, f'Tristan frame belongs to another incarnation of {owner.name}')
+        return hud.with_services(passes, owner)
 
     @classmethod
     def replace_all(cls, root: Path, huds: tuple[CommanderHud, ...]) -> None:
@@ -474,7 +489,10 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     @classmethod
     def read_all(cls, root: Path) -> tuple[CommanderHud, ...]:
         passes = ServicePassStore.at(root).read()
-        return tuple(sorted((replace(hud, heartbeat=passes.heartbeat_completed_at(
-            hud.commander.require_recorded()))
-            for path in cls.matching_in(root) for hud in (cls(path).read(),)),
+        health = ServiceReading(services=passes)
+        huds = tuple(sorted((hud.with_services(passes, hud.commander.require_recorded())
+            for path in cls.matching_in(root) for hud in (cls(path, reading=health).read(),)),
             key=lambda hud: hud.commander.name))
+        if not huds and passes.failing:
+            raise BoardUnavailable(health, 'no published commander frame.')
+        return huds

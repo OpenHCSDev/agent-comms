@@ -32,19 +32,19 @@ def example_hud() -> CommanderHud:
         (order,), 0, (), (),
     )
     commander = RecordedThreadIncarnation("lead", 1.0)
-    old = replace(RulePing.capture(ServicePassFailing("source", 900, "read refused")),
+    old = replace(RulePing.capture(ServicePassFailing(watch="source", since=900, error="read refused")),
                   since=RecordedEventTime(900))
-    new = replace(RulePing.capture(ServicePassFailing("review", 1000, "head needs review")),
+    new = replace(RulePing.capture(ServicePassFailing(watch="review", since=1000, error="head needs review")),
                   since=RecordedEventTime(1000))
     return CommanderHud(
-        commander, (
+        commander=commander, units=(
             worker,
             replace(worker, unit=RecordedThreadIncarnation("blocked", 3.0), state=Stuck),
             replace(worker, unit=RecordedThreadIncarnation("run-next", 4.0), state=AwaitingApplicationRun),
             replace(worker, unit=RecordedThreadIncarnation("idle", 5.0), state=Idle, orders=()),
-        ), (), OverloadDegradation(3, 1, 2), (),
-        CodexUsage(UnreadableUsage(reason="not requested in source example")),
-        (CommanderDecisions(commander, (old, new), (new,), (old,)),),
+        ), phases=(), load=OverloadDegradation(3, 1, 2), forks=(),
+        usage=CodexUsage(UnreadableUsage(reason="not requested in source example")),
+        packets=(CommanderDecisions(commander, (old, new), (new,), (old,)),),
         heartbeat=RecordedEventTime(990), open_pings=(),
     )
 
