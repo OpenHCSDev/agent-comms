@@ -1014,7 +1014,8 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
                 f" there unjudged. you read it yet?"
-                f" -> {self.clearing_commands()}")
+                f" -> judge ok/back/reviewing/superseded " + " ".join(
+                    f"--{name} {value}" for name, value in self.command_values().items()))
 
 
 @dataclass(frozen=True)
