@@ -52,7 +52,7 @@ def test_pending_new_binding_offers_missing_tags_without_constructing_the_comman
         binding.edited(NewThreadCliCommand.editor_arguments({'tags': ''}))
     tags = next(item for item in binding.editable_fields if item.name == 'tags')
     assert tags.required
-    assert tags.editor_default is None
+    assert type(tags) is UnsuppliedTargetField
     assert 'editor_default' not in tags.json_schema()
     assert tags.argument(None) == {}
     assert tags.argument('') == {'tags': ''}
