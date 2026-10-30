@@ -7,14 +7,13 @@ process dies, so a claim with a record and no holder is a watch that lapsed.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
@@ -22,7 +21,7 @@ from agent_comms.process_claim import ProcessSingleton
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
+from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard, SessionEndpoint
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -109,11 +108,8 @@ class HeldClaim:
 
 
 @dataclass(frozen=True)
-class WatchClaim:
+class WatchClaim(SessionEndpoint):
     """The kernel-held lifetime and saved re-arm command of one session's bridge watch."""
-
-    thread: str
-    home: Path = field(default_factory=Path.home)
 
     @staticmethod
     def environment_session() -> str:
@@ -125,38 +121,15 @@ class WatchClaim:
         return session
 
     @classmethod
-    def directory(cls, home: Path) -> Path:
-        return home / ".local/state/agent-comms/cli-watch"
-
-    @classmethod
     def endpoints(cls, home: Path) -> tuple[Path, ...]:
         """Live session endpoints share the claim directory, independent of --state."""
         return tuple(sorted(cls.directory(home).glob("*.sock")))
-
-    @property
-    def path(self) -> Path:
-        key = hashlib.sha256(self.thread.encode()).hexdigest()
-        return self.directory(self.home) / f"{key}.lock"
 
     @staticmethod
     def claims_in(directory: Path) -> tuple[Path, ...]:
         """Every session's claim lock in ``directory``; reader and launch claims carry a
         second suffix (``reader_claim``, ``launch_claim``)."""
         return tuple(sorted(path for path in directory.glob("*.lock") if len(path.suffixes) == 1))
-
-    @staticmethod
-    def record_beside(claim: Path) -> Path:
-        """The saved re-arm record, published whole; the lock file only holds the flock."""
-        return claim.with_suffix(".record")
-
-    @property
-    def record_path(self) -> Path:
-        return self.record_beside(self.path)
-
-    @property
-    def socket_path(self) -> Path:
-        # sockaddr_un is short. Keep the locator derived from the session claim.
-        return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
     def claim(self) -> ProcessSingleton:

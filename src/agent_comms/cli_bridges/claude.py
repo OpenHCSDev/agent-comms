@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import aclosing
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO
@@ -11,12 +12,15 @@ from agent_comms.bus import Bus
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource
+from agent_comms_hooks.bridged import BridgedToolCall
+from agent_comms_hooks.reread import ToolHookEvent
 from agent_comms_hooks.session import SessionHook
 from agent_comms_hooks.watch import WatchClaim
 
 from .history import ClaudeHistory
 from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import ClaudeJsonLines, RunningClaude
+from .monitor import MonitorPeer, MonitorService, SessionRefused, SessionReply, SessionRequest
 from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
 
 class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
@@ -74,6 +78,30 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
                         raise replaced
                     for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
+
+
+@dataclass(frozen=True)
+class HookAnswer(SessionReply, declared_name=BridgedToolCall.request):
+    """What a tool-call hook prints, decided here; its client decodes it with the standard
+    library."""
+
+    output: str
+
+
+@dataclass(frozen=True)
+class ToolCallHook(SessionRequest[HookAnswer], declared_name=BridgedToolCall.request):
+    """A tool-call hook of this session (the read gate, the reminder) asking this bridge, which
+    holds Core open, to decide Claude Code's record, so no hook process imports Core."""
+
+    record: str
+
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        """A hook's failure was its own process's exit; here it is that hook's refusal, never
+        an exception that would end the bridge serving every other call."""
+        try:
+            return HookAnswer(await asyncio.to_thread(ToolHookEvent.answered, self.record))
+        except (Exception, SystemExit) as error:
+            return SessionRefused(error=f"{type(error).__name__}: {error}")
 
 
 class Connect(Enrol):

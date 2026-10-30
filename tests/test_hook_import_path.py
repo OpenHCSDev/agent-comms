@@ -22,3 +22,15 @@ def test_per_call_hook_never_imports_the_facade(hook: str) -> None:
         capture_output=True, text=True, check=True,
     ).stdout.split()
     assert loaded == []
+
+
+@pytest.mark.parametrize("hook", ["agent_comms_hooks.bridged"])
+def test_tool_call_hook_client_imports_no_core(hook: str) -> None:
+    """The read gate and the reminder run on every tool call; the session bridge decides them,
+    so their client loads no agent_comms module at all."""
+    loaded = subprocess.run(
+        [sys.executable, "-c",
+         f"import sys, {hook}; print(' '.join(m for m in sys.modules if m.startswith('agent_comms.')))"],
+        capture_output=True, text=True, check=True,
+    ).stdout.split()
+    assert loaded == []

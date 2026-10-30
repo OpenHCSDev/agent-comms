@@ -330,11 +330,15 @@ def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_e
 
 
 def run_installed(monkeypatch, capsys, transcript):
-    from agent_comms_hooks import reread, skill
+    from agent_comms_hooks import skill
+    from agent_comms_hooks.reread import ToolHookEvent
+
+    def bridge_decides() -> None:
+        print(ToolHookEvent.answered(sys.stdin.read()), end="")
 
     def run(program, event):
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(hook_record(transcript, event))))
-        {"PostToolUse": reread, "SessionStart": skill}[event].main()
+        {"PostToolUse": bridge_decides, "SessionStart": skill.main}[event]()
         return capsys.readouterr().out
 
     return run

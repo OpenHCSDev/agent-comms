@@ -434,6 +434,8 @@ class MonitorService:
     bridge: LineMonitorBridge
     owner: ProcessIdentity
     stop: Callable[[], None]
+    request_limit: ClassVar[int] = 64 * 1024 * 1024
+    """A tool-call hook's record carries the tool's whole input and response."""
 
     async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         peer = MonitorPeer(reader, writer)
@@ -442,7 +444,8 @@ class MonitorService:
                 reply: SessionReply
                 try:
                     request = FieldCodec.decode(SessionRequest, FieldCodec.parse(await reader.readline()))
-                except MalformedRecord as error:
+                except (MalformedRecord, ValueError) as error:
+                    # ValueError: a request line past `request_limit`.
                     reply = SessionRefused(error=str(error))
                 else:
                     reply = await request.handle(self, peer)
@@ -459,7 +462,7 @@ class MonitorService:
         try:
             server = await asyncio.start_unix_server(
                 lambda reader, writer: clients.create_task(self.accept(reader, writer)),
-                str(path), start_serving=False,
+                str(path), start_serving=False, limit=self.request_limit,
             )
             async with server:
                 try:

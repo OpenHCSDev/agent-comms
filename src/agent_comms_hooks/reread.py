@@ -11,16 +11,24 @@ parse can stall it.
 In the commander's session the same call carries the RE-ARM line while its bridge runs with no Monitor
 reading it, since every other route to the commander goes through that dead reader, and the
 heartbeat's board, which the bridge derives from Core whenever this hook asks.
+
+Every tool call runs this and the read gate, so neither decides in the hook's own process:
+importing Core cost each call about two core-seconds per hook (2026-10-30, six agents keeping
+4-6 cores busy on hook startup). The session bridge, which holds Core open, decides both
+(ToolHookEvent); the hooks Claude Code runs are its standard-library clients
+(agent_comms_hooks.bridged).
 """
 
 from __future__ import annotations
 
 import json
-import sys
+from abc import abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import ClassVar
 
-from agent_comms_hooks import ClaudeHookProgram
+from agent_comms.declared_family import DeclaredFamily
+from agent_comms_hooks import HookOutput
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import DeckReader, DeckStart
 
@@ -61,23 +69,35 @@ class BoardReminder(DeafReminder):
         return super().taken(reader) + reader.board(self.session_id)
 
 
-class ReminderProgram(ClaudeHookProgram):
-    events = ("PostToolUse",)
+class ToolHookEvent(DeclaredFamily):
+    """What the session bridge decides for one of its session's tool-call hooks; a member
+    declares the event Claude Code names in the record."""
 
     @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
+    def answered(cls, line: str) -> str:
+        """The answer the hook prints for this record, as its own process would have."""
+        record = json.loads(line)
+        event = cls.member_named(record["hook_event_name"])()
+        return HookOutput.captured(lambda: event.decide(record))
+
+    @abstractmethod
+    def decide(self, record: Mapping[str, object]) -> None:
+        """Answer this event through the hook's output."""
 
 
-def main() -> None:
+class BeforeToolCall(ToolHookEvent, declared_name="PreToolUse"):
+    """The read gate judges the call before it runs."""
+
+    def decide(self, record: Mapping[str, object]) -> None:
+        GatedCall.of(record).judge()
+
+
+class AfterToolCall(ToolHookEvent, declared_name="PostToolUse"):
     """A completed tool call first records what it read for the read gate, then takes its
     reminder; both decode the one record Claude Code sent."""
-    record = json.load(sys.stdin)
-    GatedCall.of(record).completed()
-    hook = BoardReminder.decode(record)
-    if texts := hook.take():
-        hook.warn(*texts)
 
-
-if __name__ == "__main__":
-    main()
+    def decide(self, record: Mapping[str, object]) -> None:
+        GatedCall.of(record).completed()
+        hook = BoardReminder.decode(record)
+        if texts := hook.take():
+            hook.warn(*texts)

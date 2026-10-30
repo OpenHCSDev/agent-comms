@@ -9,17 +9,42 @@ Code's settings from these declarations.
 
 from __future__ import annotations
 
+import io
 import json
 import pkgutil
 import sys
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, field, fields
 from functools import cache
 from importlib import import_module
 from importlib.metadata import entry_points
 from pathlib import Path
-from typing import ClassVar, Self, get_type_hints
+from typing import ClassVar, Self, TextIO, get_type_hints
+
+
+class HookOutput:
+    """Where a hook's one answer goes: its own process's stdout, or, for a tool-call hook the
+    session bridge decides, the text the bridge sends back to the hook's client to print.
+    A context variable, so concurrent decisions in the bridge's threads never share one."""
+
+    current: ClassVar[ContextVar[TextIO]] = ContextVar("hook_output")
+
+    @classmethod
+    def stream(cls) -> TextIO:
+        return cls.current.get(sys.stdout)
+
+    @classmethod
+    def captured(cls, decide: Callable[[], None]) -> str:
+        """What `decide` answers, as the hook process would have printed it."""
+        answer = io.StringIO()
+        token = cls.current.set(answer)
+        try:
+            decide()
+        finally:
+            cls.current.reset(token)
+        return answer.getvalue()
 
 
 @dataclass(frozen=True)
@@ -70,7 +95,8 @@ class ClaudeHook(HookRecord):
 
     def respond(self, **fields: str) -> None:
         """Claude Code's answer to this event: its event name plus the given fields."""
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}),
+              file=HookOutput.stream())
 
     def warn(self, *texts: str) -> None:
         """One event has one JSON answer, however many sources supply its context."""
