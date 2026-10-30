@@ -263,7 +263,7 @@ class BusReader(RouteCounts, ABC):
         self, predicate: str = "1", parameters: tuple[object, ...] = (),
         *, through: int,
     ) -> Iterator[StoredWireHistory]:
-        """Stream declared public wire fields from one read snapshot, without Messages."""
+        """The public history selected on one read snapshot; each format reads its own rows."""
         with self.observing() as db:
             query = Message.stored_wire_query(db, MessageIdentitySource)
             query = (f'SELECT seq, timestamp, wire FROM ({query}) '
@@ -272,14 +272,9 @@ class BusReader(RouteCounts, ABC):
 
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""
-        with self.reading() as source:
-            after, through = 0, source.revision()
-            while after < through:
-                records = source.since(after, 100)
-                for record in records:
-                    for message in record.messages():
-                        yield Message.from_message(message)
-                after = records[-1].seq
+        with self.observing() as db:
+            yield from BusCapability.public_messages(
+                db, (row.seq for row in BusRow.stream(db, order_by=("seq",))))
 
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""

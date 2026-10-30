@@ -19,7 +19,7 @@ from contextlib import closing
 from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
 from inspect import get_annotations
-from itertools import accumulate
+from itertools import accumulate, batched
 from typing import (
     TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
     get_origin,
@@ -457,6 +457,16 @@ class BusCapability(TypedRow, ProjectionSource):
         )
         return (record for _, record in BusCapability.stored_records(
             db, f"{header}>?" + predicate + f" ORDER BY {header}", (after, *parameters)))
+
+    @staticmethod
+    def public_messages(
+        db: sqlite3.Connection, sequences: Iterable[int], page: int = 100,
+    ) -> Iterator[Message]:
+        """The public messages of these ascending records, assembled one joined page at a time."""
+        for chunk in batched(sequences, page):
+            for record in BusCapability.at_sequences(db, chunk):
+                for message in record.messages():
+                    yield Message.from_message(message)
 
     @staticmethod
     def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusRecord, ...]:
@@ -1229,7 +1239,7 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
 
 @dataclass(frozen=True)
 class StoredWireMessage:
-    """One public encoded envelope from a held SQLite read, with no decoded Message."""
+    """One public envelope as its stored wire text, read on a held SQLite snapshot."""
 
     seq: int
     timestamp: float
@@ -1244,46 +1254,20 @@ class StoredWireHistory:
     query: str
     parameters: tuple[object, ...]
 
-    def rows(self, *, after: int = 0, descending: bool = False) -> Iterator[StoredWireMessage]:
-        order = "DESC" if descending else "ASC"
+    def rows(self) -> Iterator[StoredWireMessage]:
         with closing(self.db.execute(
-            f"SELECT seq, timestamp, wire FROM ({self.query}) WHERE seq >= ? ORDER BY seq {order}",
-            (*self.parameters, after),
+            f"SELECT seq, timestamp, wire FROM ({self.query}) ORDER BY seq", self.parameters,
         )) as cursor:
             for row in cursor:
                 yield StoredWireMessage(*row)
 
-    def messages(self, page: int = 256) -> Iterator[Message]:
+    def messages(self) -> Iterator[Message]:
         """The selected rows' public messages, decoded once from their capability tables."""
         with closing(self.db.execute(
             f"SELECT seq FROM ({self.query}) ORDER BY seq", self.parameters,
         )) as cursor:
-            while sequences := tuple(FieldCodec.decode(int, seq) for seq, in cursor.fetchmany(page)):
-                for record in BusCapability.at_sequences(self.db, sequences):
-                    for message in record.messages():
-                        yield Message.from_message(message)
-
-    def count(self) -> int:
-        return self.count_where("1")
-
-    def count_where(self, predicate: str, parameters: tuple[object, ...] = ()) -> int:
-        return FieldCodec.decode(int, self.db.execute(
-            f"SELECT count(*) FROM ({self.query}) WHERE {predicate}",
-            (*self.parameters, *parameters)).fetchone()[0])
-
-    def newest_suffix(self, size: str, capacity: int) -> int:
-        """SQLite sums encoded byte lengths newest-first; Python retains only a sequence."""
-        first = self.db.execute(f"SELECT COALESCE(max(seq), 0) + 1 FROM ({self.query})",
-                                self.parameters).fetchone()[0]
-        with closing(self.db.execute(
-            f"SELECT seq, sum({size}) OVER (ORDER BY seq DESC ROWS UNBOUNDED PRECEDING) "
-            f"FROM ({self.query})", self.parameters,
-        )) as cursor:
-            for sequence, retained_bytes in cursor:
-                if retained_bytes > capacity:
-                    break
-                first = sequence
-        return FieldCodec.decode(int, first)
+            yield from BusCapability.public_messages(
+                self.db, (FieldCodec.decode(int, seq) for seq, in cursor))
 
 
 class PublicRecord(BusRecord):
