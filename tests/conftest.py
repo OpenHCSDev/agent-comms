@@ -426,7 +426,6 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
@@ -438,16 +437,27 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
                 url=str(source.remote_path), vcs_info=CommitRecord(commit_id=source.main_commit),
             ),
         )
-    runtime = tmp_path / 'installed-runtime'
-    (runtime / 'bin').mkdir(parents=True)
-    (runtime / 'bin/python').symlink_to(sys.executable)
-    RuntimeResolution(
+    return record_installed_runtime(tmp_path / 'installed-runtime', RuntimeResolution(
         core_commit=repository.git(repository.checkout, 'rev-parse', 'HEAD').strip(),
         packages=packages,
-    ).save(runtime)
-    current = durable_home / '.local/share/agent-comms/current'
-    current.parent.mkdir(parents=True)
-    current.symlink_to(runtime, target_is_directory=True)
+    ))
+
+
+def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> LaunchRuntime:
+    """The one test writer of an installation: interpreter, resolution and HOME's pointer.
+
+    A later record re-points the pointer, as a reinstall does, so fixtures that each install
+    a build can share one HOME.
+    """
+    from agent_comms.launch_runtime import LaunchRuntime
+
+    (runtime / 'bin').mkdir(parents=True)
+    (runtime / 'bin/python').symlink_to(sys.executable)
+    resolution.save(runtime)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.unlink(missing_ok=True)
+    pointer.symlink_to(runtime, target_is_directory=True)
     return LaunchRuntime.installed()
 
 

@@ -248,7 +248,7 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
         store = comms.goals.todos
-        return tuple(cls(request) for request in store.open_requests(thread.incarnation)
+        return tuple(cls(request) for request in store.open_requests(thread.acting_identity)
                      if not store.serving_orders(request.id))
 
     def line(self) -> str:

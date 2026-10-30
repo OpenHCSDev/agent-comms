@@ -11,19 +11,32 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorRow, CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionReference
 from agent_comms.coordination_tables.recovery import RecoveryAudit
-from agent_comms.typed_table import Column, TypedTable
+from agent_comms.typed_table import Column, ForeignKey, TypedTable
 
 pytestmark = pytest.mark.refactor_guard
 SOURCE = Path(__file__).resolve().parents[2] / "src" / "agent_comms"
 
 
-def test_recovery_audit_inherits_changes_to_execution_restriction(monkeypatch):
+def test_recovery_audit_inherits_changes_to_execution_restriction():
+    assert issubclass(RecoveryAudit, ExecutionReference)
     restriction = replace(ExecutionReference.references()[0], deferred=True)
-    monkeypatch.setattr(
-        ExecutionReference, "references", classmethod(lambda cls: (restriction,))
-    )
 
-    assert restriction.sql(RecoveryAudit) in RecoveryAudit.ddl()[0]
+    class DeferredExecutionReference(ExecutionReference):
+        @classmethod
+        def references(cls) -> tuple[ForeignKey, ...]:
+            return (restriction,)
+
+    class RecoveryAuditProbe(
+        DeferredExecutionReference,
+        RecoveryAudit,
+        declared_name="recovery_execution_restriction_probe",
+    ):
+        pass
+
+    try:
+        assert restriction.sql(RecoveryAuditProbe) in RecoveryAuditProbe.ddl()[0]
+    finally:
+        TypedTable.__registry__.pop(RecoveryAuditProbe.declared_name)
 
 
 def test_deleted_coordinator_aggregate_has_no_callers():
