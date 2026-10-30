@@ -23,7 +23,7 @@ from .acp_extension import (
     QueueScope,
     encode_updates,
 )
-from .activity import FailedWakeDiagnostic
+from .activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
 from .agent_backend import AgentBackend
 from .turn_inbox import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
@@ -261,8 +261,30 @@ class InputObservation(ABC):
                 state.observer.cancel()
 
     async def observe(self, session_id: AcpSessionId) -> None:
-        initial = await self._own_entry(session_id)
+        """Keep this session's input loop alive; observe_root reaches only a live one.
+
+        A contended read restarts recovery at the next real change. Any other death
+        is recorded as a stopped drain, so the board sees a deaf owner, not an idle one.
+        """
         state = self.state(session_id)
+        try:
+            while True:
+                try:
+                    await self._observe_inbox(session_id, state)
+                except DEFERRED_DRAIN_ERRORS:
+                    await state.observation_ready.wait()
+                    state.observation_ready.clear()
+        except Exception as error:
+            thread = self.sessions.require(session_id)
+            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+            await record_drain_failure(
+                self.comms, thread, snapshot.owner_identity(thread),
+                StoppedDrainDiagnostic, error,
+            )
+            raise
+
+    async def _observe_inbox(self, session_id: AcpSessionId, state: DrainedSession) -> None:
+        initial = await self._own_entry(session_id)
         entry = await self.begin_observation(state, initial.entry)
         bus = self.comms.bus.bus
         lookup = entry.thread.incarnation.require_recorded().lookup

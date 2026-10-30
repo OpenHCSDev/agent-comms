@@ -16,6 +16,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.rule_deal import Unengaged
+
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
@@ -534,22 +536,24 @@ def read_whole(transcript, source):
     gated(transcript, "Read", {"file_path": str(source)}).completed()
 
 
-def test_a_read_rule_is_answered_before_the_next_unread_file_opens(capsys, dealt_session):
+def test_a_batch_of_read_rules_is_answered_before_the_next_unread_file_opens(capsys, dealt_session):
     transcript, start = dealt_session
     papers = CommanderPackage.paper()
     rules = CommanderReader.rules()
     for paper in papers:
         read_whole(transcript, paper.resolve())  # a paper carries no rule name: no entry owed
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
-    read_whole(transcript, rules[0].path.resolve())
-    following = {"file_path": str(rules[1].path)}
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+        read_whole(transcript, rule.path.resolve())
+    following = {"file_path": str(rules[Unengaged.batch].path)}
     assert refused(capsys, gated(transcript, "Read", following))
     # Re-reading what was read stays open, and so does the audit, by Read, Write and Edit.
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0])}))
     for tool in ("Read", "Write", "Edit"):
         assert not refused(capsys, gated(transcript, tool, {"file_path": str(start.audit)}))
-    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
+    start.audit.write_text(answered_audit(CommanderReader, rules[:Unengaged.batch]))
     assert not refused(capsys, gated(transcript, "Read", following))
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # the rest stay unread
 

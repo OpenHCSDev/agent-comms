@@ -15,9 +15,11 @@ from agent_comms.activity import (
     NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
 )
 from agent_comms.comms import wire
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import AcpSessionId, TurnId
+from agent_comms.queued_input import DeliveredInput
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
@@ -38,7 +40,7 @@ def owner_view(comms):
 
 @pytest.mark.parametrize("broken", ["missing", "drifted"])
 async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, broken):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     path = comms.root / "coordination.sqlite3"
     saved = tmp_path / "current-schema.sqlite3"
     shutil.copy2(path, saved)
@@ -103,7 +105,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
 
 
 async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
 
     with pytest.raises(OSError):
@@ -131,7 +133,7 @@ async def test_successful_drain_clears_failure_during_active_turn(tmp_path):
     UnavailableDrainDiagnostic, StoppedDrainDiagnostic, NativeInputDrainDiagnostic,
 ])
 async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     # A different producer recorded this before the observer existed. There is
     # no process-local failure state for the new observer to inherit.
@@ -153,7 +155,7 @@ async def test_restarted_observer_recovers_retained_diagnostic(tmp_path, kind):
 
 
 async def test_settled_observer_recovers_another_path_failure(tmp_path):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     try:
         agent.inputs.ensure_live_drain("beta")
@@ -174,7 +176,7 @@ async def test_settled_observer_recovers_another_path_failure(tmp_path):
 
 @pytest.mark.parametrize("recurs", [False, True])
 async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
@@ -200,7 +202,7 @@ async def test_successful_earlier_drain_preserves_newer_error(tmp_path, recurs):
 
 
 async def test_predecessor_success_cannot_clear_replacement_owner_failure(tmp_path):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
@@ -219,7 +221,7 @@ async def test_predecessor_success_cannot_clear_replacement_owner_failure(tmp_pa
 
 
 async def test_cancelled_drain_keeps_original_failure(tmp_path):
-    comms, agent, _ = _session(tmp_path)
+    comms, agent, *_ = _session(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     first = UnavailableDrainDiagnostic(owner, "OSError", "first failure", recorded_at=1.0)
     comms.agents.set_drain_diagnostic("beta", owner, first)
@@ -260,3 +262,51 @@ def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
     assert UnitDeaf.violations(comms, "beta") == ()
     if deaf:
         assert found[0].broke_after(100.0)
+
+
+async def test_contended_startup_read_leaves_the_observer_listening(tmp_path, monkeypatch):
+    """One busy read while recovering must not leave a live owner deaf until its next restart."""
+    comms, agent, *_ = _session(tmp_path)
+    recover = DeliveredInput.recover_interrupted
+    attempts = []
+
+    async def busy_once(*arguments):
+        attempts.append(arguments)
+        if len(attempts) == 1:
+            raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
+        return await recover(*arguments)
+
+    monkeypatch.setattr(DeliveredInput, "recover_interrupted", busy_once)
+    try:
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
+        await until(lambda: attempts)
+        await asyncio.sleep(0.1)
+        assert agent.inputs.state(AcpSessionId("beta")).observing()
+        agent.inputs.wake_observer(AcpSessionId("beta"))
+        await until(lambda: len(attempts) == 2)
+        await until(
+            lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+        )
+    finally:
+        await agent.shutdown()
+
+
+async def test_a_dead_observer_shows_as_a_deaf_owner(tmp_path, monkeypatch):
+    """The fleet stall of 2026-10-30: a TypeError killed every loop and the board showed idle."""
+    comms, agent, *_ = _session(tmp_path)
+
+    async def broken(*arguments):
+        raise TypeError("Expected <class 'str'>, received AcpSessionId")
+
+    monkeypatch.setattr(DeliveredInput, "recover_interrupted", broken)
+    try:
+        agent.inputs.ensure_live_drain(AcpSessionId("beta"))
+        await until(
+            lambda: owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
+        )
+        readiness = owner_view(comms).activity.readiness
+        assert isinstance(readiness.source_diagnostic(), StoppedDrainDiagnostic)
+        assert readiness.unavailable_since()
+        assert not agent.inputs.state(AcpSessionId("beta")).observing()
+    finally:
+        await agent.shutdown()
