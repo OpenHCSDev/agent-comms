@@ -635,7 +635,7 @@ class TranscriptPageRead(
             page_source=self.page_source,
         )
 
-    def read_as(self, comms: Comms, reader: ReadAuthority) -> TranscriptSnapshotUpdate:
+    def apply(self, comms: Comms, reader: ReadAuthority) -> TranscriptSnapshotUpdate:
         return TranscriptSnapshotUpdate.from_read(self.capture_as(comms, reader))
 
 
@@ -662,7 +662,7 @@ class CommanderUnitRead(
     unit: Annotated[ThreadIncarnation, *tool_field("Unit incarnation on that card")]
     orders: Annotated[tuple[OrderId, ...], *tool_field("The card's orders, exactly as published")]
 
-    def read_as(self, comms: Comms, reader: ReadAuthority) -> CommanderUnitDetail:
+    def apply(self, comms: Comms, reader: ReadAuthority) -> CommanderUnitDetail:
         snapshot = comms.registry.snapshot()
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError(

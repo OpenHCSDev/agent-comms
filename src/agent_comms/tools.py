@@ -699,7 +699,7 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
         if not caller.outcome_viewer(comms.registry).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
         window = LiveNotificationRead(
-            (self.reference,), after=self.after, limit=self.limit).read_as(comms, caller)
+            (self.reference,), after=self.after, limit=self.limit).apply(comms, caller)
         page = window.outcomes.get((source.message.seq, source.message.message_id), ())
         return MessageOutcomes(
             source.message, page, window.remaining(self.reference),

@@ -40,7 +40,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import OperatorReader, OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
+from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
@@ -504,7 +504,7 @@ class TranscriptRequest[ResultT](ReadRequest):
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        return self.operation.capture_as(comms, OperatorReader())
+        return self.operation.capture_as(comms, NoDisplaySelection())
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -589,7 +589,7 @@ class ReadNotifications(ReadRequest):
     """The painted display this read serves; it decides whose read marks the window omits."""
 
     def read(self, comms: Comms) -> NotificationWindow:
-        return self.operation.read_as(comms, OperatorReader(self.display))
+        return self.operation.apply(comms, self.display)
 
 
 @dataclass(frozen=True)

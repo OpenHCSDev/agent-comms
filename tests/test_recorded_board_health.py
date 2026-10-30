@@ -13,12 +13,12 @@ from agent_comms.commander_hud import CommanderFrame
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import ToolCallId
 from agent_comms.locked_store import DocumentChange
-from agent_comms.order_tools import CommsCommanderLoadTool, CommsHudTool, CommsUnjudgedTool
+from agent_comms.order_tools import CommanderUnitRead, CommsCommanderLoadTool, CommsHudTool, CommsUnjudgedTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.todos import ProgressRead
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.ui_model.observation import ReadCommanderUnit
+from agent_comms.ui_model.observation import ReadOperation
 from agent_comms.ui_model.unit_state import UnitState
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 
@@ -100,9 +100,9 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
     assert hud.header[0] == 'no failure recorded, so no heartbeat is running'
     assert 'STALE retained' in hud.retained_status()
     card = hud.units[0]
-    request = ReadCommanderUnit(
-        root=str(comms.root), commander=owner, unit=card.unit,
-        orders=tuple(dict.fromkeys(order.order for order in card.orders)))
+    request = ReadOperation(str(comms.root), CommanderUnitRead(
+        commander=owner, unit=card.unit,
+        orders=tuple(dict.fromkeys(order.order for order in card.orders))))
     with pytest.raises(ToolRefusedError, match='no failure recorded, so no heartbeat is running'):
         request.read(comms)
 

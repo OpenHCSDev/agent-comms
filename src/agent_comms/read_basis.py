@@ -158,7 +158,7 @@ class ReadAuthority(ABC):
         raise CallingThreadUnavailable("This tool requires a thread caller.")
 
 
-class OperatorOutcomes:
+class OperatorOutcomes(ReadAuthority):
     """An unscoped operator reader sees every recipient outcome."""
 
     __slots__ = ()

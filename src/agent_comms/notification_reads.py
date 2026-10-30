@@ -34,7 +34,7 @@ class NotificationRead(UiRead[NotificationWindow], ABC):
 
 @dataclass(frozen=True)
 class LiveNotificationRead(NotificationRead):
-    def read_as(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
+    def apply(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
         return comms.views.message_notifications_for_references(
             reader.outcome_viewer(comms.registry),
             self.references,
@@ -52,7 +52,7 @@ class LiveNotificationRead(NotificationRead):
 class RecordedNotificationRead(NotificationRead):
     source: HistorySourceKey
 
-    def read_as(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
+    def apply(self, comms: Comms, reader: ReadAuthority) -> NotificationWindow:
         with comms.bus.history.read_sources() as sources:
             source = HistorySource.require(sources, self.source)
             return source.notification_references(
