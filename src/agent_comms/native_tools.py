@@ -216,6 +216,9 @@ class BashTool(ExecuteAction, CodingTool):
 class MutatingPathTool(EditAction, PathTool):
     claim_type: ClassVar[type[FileClaimPath]]
 
+    def judge_under(self, gate: PiRuleGate) -> None:
+        gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
+
     def _parse_resource(self):
         return self.claim_type(Path(self.path))
 
@@ -261,9 +264,6 @@ class WriteTool(MutatingPathTool, CodingTool):
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return (ReplacementEdit(old_text='', new_text=self.content),)
-
-    def judge_under(self, gate: PiRuleGate) -> None:
-        gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
 
     claim_type = WritableFileClaim
 
