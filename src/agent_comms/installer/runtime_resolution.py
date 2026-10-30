@@ -20,7 +20,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 
 if TYPE_CHECKING:
-    from agent_comms.installer.upgrade import Stack
+    from agent_comms.installer.runtime_stack import RuntimeStack
 
 
 class RuntimePackage(DeclaredFamily, affix="Package"):
@@ -155,7 +155,7 @@ class ResolvedLock(BaseModel):
 class UnbuiltRuntime:
     prefix: Path
 
-    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
+    def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
 
 
@@ -179,7 +179,7 @@ class RuntimeResolution(BaseModel):
         return cls.at(prefix)
 
     @classmethod
-    def capture(cls, stack: Stack, core: str) -> RuntimeResolution:
+    def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:
         packages = stack.probe(InstalledPackagesProbe(core))
         return cls(core_commit=core, packages=packages)
 
@@ -199,7 +199,7 @@ class RuntimeResolution(BaseModel):
             )
         return result
 
-    def matches(self, lock: Path, stack: Stack, core: str) -> bool:
+    def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its
