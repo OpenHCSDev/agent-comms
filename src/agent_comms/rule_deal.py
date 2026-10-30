@@ -4,7 +4,8 @@ but reading them and writing the audit that answers them is refused until it has
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
 path forward, whatever runs the agent. Reading alone is passive too, so each rule read is answered
-in the audit, by a verbatim greentext quote and what it did, before the next unread file opens.
+in the audit, by a verbatim greentext quote and what it did, before more than `Unengaged.batch`
+rules stand unanswered; a paper carries no rule, so all its parts open in one batch.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -743,7 +744,7 @@ class ToolGate(RuleDeal):
 
 
 class AnswersDealtRules(ToolGate, owes=(Unengaged,)):
-    """Each rule read is answered in the audit before the next unread file opens."""
+    """Each rule read is answered in the audit; at most `Unengaged.batch` stand unanswered."""
 
 
 class ReadsDealtSources(ToolGate, owes=(Unread,)):
@@ -755,7 +756,7 @@ class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
 
 
 class DealtRuleGate(AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
-    """Read a file, answer it, read the next, then finish the audit: the gate every backend runs."""
+    """Read a batch, answer it, read the next, then finish the audit: the gate every backend runs."""
 
 
 @dataclass(frozen=True)

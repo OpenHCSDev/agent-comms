@@ -575,6 +575,19 @@ def test_a_parallel_batch_opens_a_batch_of_rules_and_refuses_the_next(capsys, de
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}))
 
 
+def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session):
+    """Every part of a paper is judged before any read of it completes, and none waits on an
+    audit answer, so the whole paper and the first rules read in one call."""
+    transcript, _ = dealt_session
+    papers = CommanderPackage.paper()
+    for part in papers:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(part.resolve())}))
+    rules = CommanderReader.rules()
+    for rule in rules[:Unengaged.batch]:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}))
+
+
 def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
     """On 2026-10-30 a session opened the indictment and two rules first and never read the
     papers: the next dealt file opens, any later one is refused and named the next to read."""
