@@ -145,7 +145,7 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
             comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path),
                                           model=DeclaredModel("response-local/fixture")))
             await Coordination.run_worker(partial(
-                comms.owners.start, name,
+                comms.owners.start_many, (name,),
                 agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
@@ -371,7 +371,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
-                await Coordination.run_worker(partial(comms.owners.start, name, agent_args=GivenArguments(tuple(arguments))))
+                await Coordination.run_worker(partial(comms.owners.start_many, (name,), agent_args=GivenArguments(tuple(arguments))))
             original = comms.registry.require(name)
             await ready(original)
             originals.append(original)
