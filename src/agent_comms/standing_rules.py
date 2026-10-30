@@ -57,7 +57,6 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import Goals
     from agent_comms.heartbeat_frame import HeartbeatFrame
     from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.task_attachments.commander_pings import Ping
     from agent_comms.todos import (
         OrderClaim,
         OwnerRequest,
@@ -237,7 +236,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         return True
 
     @classmethod
-    def alarm_pings(cls, ping: Ping) -> tuple[Ping, ...]:
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
         return (ping,)
 
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
@@ -636,7 +635,7 @@ class ConflictingBranches(HeldBranchRule):
                 other_branch=second.difference.branch, repository=first.difference.repository,
                 paths=conflicts)
             for first, second in HolderBranch.touching(branches)
-            if (conflicts := first.source.pulls.require_branch_conflicts(
+            if (conflicts := first.source.frame.pulls.require_branch_conflicts(
                 first.difference.head, second.difference.head))
         )
 
@@ -851,7 +850,7 @@ class ReviewTimerUp(HeldOrderDue, FamilyScan):
     """The timer owns the request and wake; the unit's ReviewDue row owns its display."""
 
     @classmethod
-    def alarm_pings(cls, ping: Ping) -> tuple[Ping, ...]:
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
         return ()
 
     @classmethod

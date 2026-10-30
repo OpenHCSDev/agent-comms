@@ -9,7 +9,7 @@ import time
 from collections.abc import Iterable
 from functools import cached_property
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 

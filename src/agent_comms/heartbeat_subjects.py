@@ -16,6 +16,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from agent_comms.todos import HeadVerdict, StoredHeadReview
@@ -23,7 +24,6 @@ from agent_comms.todos import HeadVerdict, StoredHeadReview
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.plan_phases import OrderPhase
-    from agent_comms.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
