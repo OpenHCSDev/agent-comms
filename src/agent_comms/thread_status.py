@@ -27,6 +27,9 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
+    from .message_reference import MessageReference
+    from .messaging import Messaging
+    from .turn_item import SourceTurn
     from .registration import Registration
     from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
@@ -52,6 +55,15 @@ class SelfRenaming:
 class Visible:
     """A presence that can be addressed, started and pinned in channels."""
 
+    def reply(
+        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+    ) -> tuple[MessageReference, ...]:
+        return (messaging.send(
+            sender=sender, target=target, body=body,
+            answers=answers, source_turn=source_turn,
+        ).message.reference,)
+
     def allows_owner_control(self) -> bool:
         return True
 
@@ -76,6 +88,13 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
+
+    def reply(
+        self, messaging: Messaging, sender: str, target: str, body: str, *,
+        answers: tuple[MessageReference, ...], source_turn: SourceTurn,
+    ) -> tuple[MessageReference, ...]:
+        """Unavailable recipients retain their answer in the transcript, not a new DM."""
+        return ()
 
     def registered(self, thread: Thread, last_seen: float) -> ThreadStatus:
         return self
