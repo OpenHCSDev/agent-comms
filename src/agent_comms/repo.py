@@ -25,7 +25,6 @@ from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .todos import Todo
-    from .work_branches import WorkBranches
 
 
 class RepositorySelection(ABC):
@@ -629,16 +628,14 @@ class BranchUpstream(DeclaredFamily):
         """Only published upstreams supply remote/reference acquisition requirements."""
         return ()
 
-    def require_prepared(self, reader: WorkBranches) -> None:
-        """An absent or local upstream requires no published remote head."""
-
     def tracking_name(self) -> str:
         return ""
 
-    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
+    def unpushed(self, history: CheckoutHistory, head: str,
+                 published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
         # A local, absent or deleted upstream cannot make its stale tracking ref publication.
         tracking = self.tracking_name()
-        count = reader.history.unpublished(head, tracking)
+        count = history.unpublished(head, tracking)
         return (UnpushedHead(head, count, tracking),) if count else ()
 
 
@@ -670,17 +667,13 @@ class PublishedUpstream(TrackedUpstream):
     def publication_inputs(self) -> tuple[tuple[str, str], ...]:
         return ((self.remote, self.reference),)
 
-    def require_prepared(self, reader: WorkBranches) -> None:
-        for head in reader.selected_heads(self.remote, self.reference):
-            reader.history.commit(head)
-
-    def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
-        published = reader.selected_heads(self.remote, self.reference)
+    def unpushed(self, history: CheckoutHistory, head: str,
+                 published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
         if published:
             (remote_head,) = published
-            count = reader.history.count(head, remote_head)
+            count = history.count(head, remote_head)
             return (UnpushedHead(head, count, self.tracking),) if count else ()
-        return super().unpushed(reader, head)
+        return super().unpushed(history, head, published)
 
 
 @dataclass(frozen=True)
@@ -721,17 +714,17 @@ class GitHead(ABC):
 
     @classmethod
     def listed(cls, record: str) -> GitHead:
-        fields = tuple(field.partition(" ") for field in record.split("\0"))
-        (path,) = tuple(value for name, _, value in fields if name == "worktree")
-        (sha,) = tuple(value for name, _, value in fields if name == cls.reference)
-        symbolic = next((value for name, _, value in fields if name == "branch"), "")
+        # Git's porcelain record is one "name value" line per attribute, decoded once here.
+        fields = dict(field.partition(" ")[::2] for field in record.split("\0"))
+        path, sha = fields["worktree"], fields[cls.reference]
+        symbolic = fields.get("branch", "")
         checkout = Checkout(Path(path).resolve())
         commit = GitCommitText.decode(sha)
         if not commit.strip("0"):
             return UnbornGitHead(checkout, symbolic)
         if symbolic:
             return AttachedGitHead(checkout, sha=commit, symbolic=symbolic)
-        if ("detached", "", "") not in fields:
+        if "detached" not in fields:
             raise ValueError(f"Git HEAD in {path} has neither a branch nor a detached declaration")
         return DetachedGitHead(checkout, commit)
 

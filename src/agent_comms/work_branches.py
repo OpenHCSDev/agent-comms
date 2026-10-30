@@ -511,13 +511,20 @@ query($owner: String!, $name: String!, $after: String) {
         if branch not in self.upstreams:
             raise WorkBranchError(f"Unprepared branch {branch!r} in {self.checkout}")
         upstream = self.upstreams[branch]
-        upstream.require_prepared(self)
+        for published in self.published(upstream):
+            self.history.commit(published)
         return upstream
+
+    def published(self, upstream: BranchUpstream) -> tuple[str, ...]:
+        """The upstream's heads in this reader's prepared remote cut; none when unpublished."""
+        return tuple(head for remote, reference in upstream.publication_inputs()
+                     for head in self.selected_heads(remote, reference))
 
     def unpushed(self, branch: str, head: str) -> tuple[UnpushedHead, ...]:
         """Capture publication at the source reader, never through another clone's refs."""
         self.history.commit(head)
-        return self.require_upstream(branch).unpushed(self, head)
+        upstream = self.require_upstream(branch)
+        return upstream.unpushed(self.history, head, self.published(upstream))
 
     @cached_property
     def repository(self) -> tuple[str, str]:
