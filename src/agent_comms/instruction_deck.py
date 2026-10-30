@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import fcntl
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,6 +14,7 @@ from agent_comms_hooks import ClaudeTranscriptHook
 from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
 from .declared_family import DeclaredFamily
 from .field_codec import boundary_decoder
+from .store_files import StoreGuard
 
 class GateNotices(DeclaredFamily):
     """The existing call record's leading byte owns which first event remains to report."""
@@ -66,7 +66,7 @@ class RecordedGateCall:
         return self.notices.first_read() if first else ()
 
 
-class DealtCalls(ClaudeTranscriptHook):
+class DealtCalls(ClaudeTranscriptHook, StoreGuard):
     """One byte per completed/refused call, retaining the existing .calls representation.
 
     The leading byte also records that a refusal occurred. Its remaining bytes are
@@ -91,8 +91,8 @@ class DealtCalls(ClaudeTranscriptHook):
         their ordinals. Keep this session's lock through publication so the read notice
         cannot overtake the refusal it answers. Ordinary tool completions only append.
         """
-        fd = os.open(self.calls, os.O_CREAT | os.O_RDWR, 0o600)
-        with os.fdopen(fd, "r+b", buffering=0) as record:
-            fcntl.flock(record, fcntl.LOCK_EX)
-            notices = GateNotices.from_marker(record.read(1))
-            yield RecordedGateCall(notices, self.count_call(), record)
+        with self.write_guard(self.calls):
+            fd = os.open(self.calls, os.O_CREAT | os.O_RDWR, 0o600)
+            with os.fdopen(fd, "r+b", buffering=0) as record:
+                notices = GateNotices.from_marker(record.read(1))
+                yield RecordedGateCall(notices, self.count_call(), record)
