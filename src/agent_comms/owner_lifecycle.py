@@ -226,7 +226,7 @@ class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
         """The row still binds the released process or, once a dead owner's stop
         unregistered it, none; a different process is a successor."""
         current = snapshot.require(release.name)
-        return (release.incarnation() == current.incarnation
+        return (release.incarnation == current.incarnation
                 and not current.process_identity.conflicts_with(release.process_identity))
 
 

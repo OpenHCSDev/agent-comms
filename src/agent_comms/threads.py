@@ -20,6 +20,7 @@ from .field_codec import (
     Argument,
     Description,
     FieldCodec,
+    JsonValue,
     NullMember,
     RegistrationPolicy,
     SingleFieldValue,
@@ -639,7 +640,7 @@ class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
     def executing(self) -> bool:
         return bool(self.turn_record.items_with(Executing, self))
 
-    def to_wire(self) -> dict[str, object]:
+    def to_wire(self) -> dict[str, JsonValue]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""
         return FieldCodec.encode(self)
 
