@@ -138,6 +138,18 @@ class RegistryCut(RegistrySelection):
     snapshot: RegistrySnapshot
     privacy: RegistryPrivacy
 
+    @contextmanager
+    def entry_current(self, name: str) -> Iterator[None]:
+        """Retain a decision that read only this thread's entry through a bounded write.
+
+        Other threads' writes (every live owner's heartbeat) leave the decision intact,
+        so they never stale it; any change to this entry does.
+        """
+        with self.store.guarded_read():
+            if self.store.entry_unlocked(name) != self.snapshot.entry(name):
+                raise StaleFence(f"registry entry {name!r} changed after this decision read it")
+            yield
+
 
 @dataclass(frozen=True, slots=True)
 class RegistryPairCut[Peer](RegistryCut):
@@ -446,6 +458,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
+
+    def entry_unlocked(self, name: str) -> RegistryEntry:
+        """This thread's current entry; the caller holds the registry guard."""
+        return self._decode_revision(self._capture_unlocked()).document.entry(name)
 
     def current_entry(self, name: str) -> AbstractContextManager[RegistryEntryRevision]:
         """Retain one current participant without materializing unrelated declarations."""
