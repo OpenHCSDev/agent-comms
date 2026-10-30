@@ -213,7 +213,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         """Require this original birth and return its current canonical incarnation."""
         original = self.require_recorded()
         current = snapshot.incarnation(original.name)
-        if current != original:
+        if not original.current(snapshot):
             raise UnregisteredThreadError(
                 f"Thread {original.name!r} no longer has its recorded birth."
             )
@@ -223,11 +223,13 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         """Follow retained rename aliases only for this exact historical owner."""
         if not self.current(snapshot):
             return self
-        return snapshot.threads[snapshot.canonical_name(self.name)].incarnation
+        return snapshot.incarnation(self.name)
 
     def current(self, snapshot: RegistryProvenance) -> bool:
-        thread = snapshot.threads.get(snapshot.canonical_name(self.name))
-        return thread is not None and thread.incarnation == self
+        try:
+            return snapshot.incarnation(self.name) == self
+        except UnregisteredThreadError:
+            return False
 
     def recorded_or(
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
@@ -256,8 +258,10 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         The registry owns aliases and birth. A stored name does not supply or
         manufacture either fact, including after a name is reused.
         """
-        thread = snapshot.threads.get(snapshot.canonical_name(name))
-        return thread is not None and self.resolved(snapshot) == thread.incarnation
+        try:
+            return self.resolved(snapshot) == snapshot.incarnation(name)
+        except UnregisteredThreadError:
+            return False
 
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""

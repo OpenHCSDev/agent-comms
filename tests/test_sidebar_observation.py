@@ -17,6 +17,7 @@ from agent_comms.display_references import CurrentDisplayReferences, HistoricalD
 from agent_comms.historical_views import HistorySource
 from agent_comms.registry_document import HistoricalRootPurpose
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_text import GivenThreadText
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, UnobservedUnread
 from agent_comms.threads import Thread
@@ -228,6 +229,56 @@ def test_current_reference_acquires_only_captured_incarnations(comms, declare_re
     assert references.find("#comms")[0].reference.name == "#comms"
 
 
+@pytest.mark.parametrize("entry", (
+    FieldCodec.field_plan(Thread, "goal"), FieldCodec.field_plan(Thread, "role"),
+))
+def test_cold_shape_and_birth_capture_do_not_acquire_unrequested_goal_fields(
+    comms, declare_reference, entry,
+):
+    original = declare_reference()
+    captured = comms.registry.snapshot()
+    raw = captured.threads.to_wire()
+    raw[original.name][entry.key] = []
+    rows = ThreadRows.from_wire(raw)
+    assert not rows._captured
+    assert not rows._decoded
+    snapshot = replace(captured, threads=rows)
+    assert snapshot.incarnation(original.name) == original.incarnation
+    assert original.incarnation.lookup in snapshot.by_lookup
+    assert not snapshot.threads._decoded
+    with pytest.raises(MalformedRecord):
+        snapshot.threads.determining(original.name)
+    with pytest.raises(InvalidRegistryDocument):
+        snapshot.by_lookup[original.incarnation.lookup]
+
+
+def test_lookup_metadata_is_carried_from_snapshot_through_data_only_revision(
+    comms, declare_reference,
+):
+    original = declare_reference(status=RunningThreadStatus())
+    declare_reference("unrelated")
+    before = comms.registry.snapshot()
+    lookup = original.incarnation.lookup
+    original_index = before.by_lookup
+    metadata = before.threads._lookup_names
+    changed = comms.registry.update_thread(
+        original.name, lambda thread: replace(thread, task=GivenThreadText("data-only edit")),
+    )
+    after = comms.registry.snapshot()
+    assert after.by_lookup[lookup] == changed
+    assert after.threads._lookup_names is metadata
+    assert original_index[lookup] == original
+    assert tuple(after.by_lookup) == tuple(after.incarnation(name).require_recorded().lookup
+                                         for name in after.threads)
+    comms.registry.rename(original.name, "renamed")
+    renamed = comms.registry.snapshot()
+    assert renamed.by_lookup[lookup].name == "renamed"
+    assert original_index[lookup].name == original.name
+    assert after.by_lookup[lookup].name == original.name
+    assert tuple(renamed.by_lookup) == tuple(renamed.incarnation(name).require_recorded().lookup
+                                           for name in renamed.threads)
+
+
 @pytest.mark.parametrize("entry,value", (
     (FieldCodec.field_plan(Thread, "name"), "invalid name"),
     (FieldCodec.field_plan(Thread, "created_at"), []),
@@ -239,7 +290,7 @@ def test_captured_reference_rows_refuse_malformed_determining_fields(declare_ref
     raw = FieldCodec.encode_fields(original)
     raw[entry.key] = value
     with pytest.raises(MalformedRecord):
-        ThreadRows.from_wire({original.name: raw})
+        ThreadRows.from_wire({original.name: raw}).determining(original.name)
 
 
 def test_captured_reference_rows_refuse_unknown_or_absent_required_fields(declare_reference):
@@ -249,7 +300,7 @@ def test_captured_reference_rows_refuse_unknown_or_absent_required_fields(declar
     del missing_birth[FieldCodec.field_plan(Thread, "created_at").key]
     for malformed in ({**raw, "undeclared_field": "refuse"}, missing_birth):
         with pytest.raises(MalformedRecord):
-            ThreadRows.from_wire({original.name: malformed})
+            ThreadRows.from_wire({original.name: malformed}).determining(original.name)
 
 
 def test_current_reference_source_projection_keeps_historical_identity(comms, declare_reference):

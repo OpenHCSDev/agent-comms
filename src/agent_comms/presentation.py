@@ -27,7 +27,7 @@ from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
-from .display_order import ChannelSort, NameChannelSort
+from .display_order import ChannelSort, NameChannelSort, ThreadSort
 from .display_references import CurrentDisplayReferences
 from .external_transcript import ExternalTranscript
 from .field_codec import (
@@ -724,6 +724,9 @@ class ThreadRecord(CliResult):
 class NoThreadView(NullMember):
     """A named navigation target has no captured thread presentation."""
 
+    def sort_key(self, order: type[ThreadSort], target: str, sent: float) -> tuple[float, float, str]:
+        return order.key(target, 0, 0, 0)
+
 
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord, PresentMember):
@@ -749,6 +752,9 @@ class ThreadView(ThreadRecord, PresentMember):
             goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
+
+    def sort_key(self, order: type[ThreadSort], target: str, sent: float) -> tuple[float, float, str]:
+        return order.key(target, self.thread.birth, self.activity.timestamp, sent)
 
     @property
     def presentation(self) -> ThreadPresentation:

@@ -379,13 +379,7 @@ class SortableRelationshipGroup(RelationshipGroup):
         order = cls.selected_order(context.orders)
 
         def key(item: RelationshipEntry) -> tuple[float, float, str]:
-            people = item.person.present()
-            return order.key(
-                item.target,
-                sum(person.thread.birth for person in people),
-                sum(person.activity.timestamp for person in people),
-                sum(context.sent.get(item.target, 0) for _ in people),
-            )
+            return item.person.sort_key(order, item.target, context.sent.get(item.target, 0))
 
         return cls({entry.target: entry for entry in sorted(entries.values(), key=key)}, order)
 
