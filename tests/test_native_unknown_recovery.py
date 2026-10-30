@@ -203,8 +203,8 @@ async def test_launch_recovers_before_reserving_replacement_pid(
             pointer = CurrentExecutions.require(store.session._connection, owner_lookup=old.incarnation.lookup)
             execution_id = pointer.execution_id.require("fixture must hold a starting attempt")
         with LaunchRoot.from_path(released_starting).selected():
-            result = await Coordination.run_worker(partial(
-                comms.owners.start, "beta", agent_bin=GivenBinary("pi"),
+            (result,) = await Coordination.run_worker(partial(
+                comms.owners.start_many, ("beta",), agent_bin=GivenBinary("pi"),
             ))
             owner = comms.registry.require("beta")
             try:

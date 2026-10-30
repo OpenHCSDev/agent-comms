@@ -138,16 +138,23 @@ class RegistryCut(RegistrySelection):
     snapshot: RegistrySnapshot
     privacy: RegistryPrivacy
 
-    @contextmanager
-    def entry_current(self, name: str) -> Iterator[None]:
-        """Retain a decision that read only this thread's entry through a bounded write.
 
-        Other threads' writes (every live owner's heartbeat) leave the decision intact,
-        so they never stale it; any change to this entry does.
-        """
+@dataclass(frozen=True, slots=True)
+class RegistryEntriesCut(RegistryCut):
+    """A complete cut whose decisions read only these threads' entries.
+
+    Other threads' writes (every live owner's heartbeat) leave such a decision
+    intact, so they never stale it; any change to one of these entries does.
+    """
+
+    names: frozenset[str]
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
         with self.store.guarded_read():
-            if self.store.entry_unlocked(name) != self.snapshot.entry(name):
-                raise StaleFence(f"registry entry {name!r} changed after this decision read it")
+            for name in self.names:
+                if self.store.entry_unlocked(name) != self.snapshot.entry(name):
+                    raise StaleFence(f"registry entry {name!r} changed after this decision read it")
             yield
 
 
@@ -393,6 +400,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
+
+    def entries_cut(self, names: frozenset[str]) -> RegistryEntriesCut:
+        cut = self.snapshot_with_authority()
+        return RegistryEntriesCut(self, cut.revision, cut.snapshot, cut.privacy, names)
 
     def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.

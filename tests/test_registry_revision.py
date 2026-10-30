@@ -42,16 +42,17 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     registry.register(Thread("worker", frozenset(), Checkout(tmp_path)))
     registry.register(Thread("neighbour", frozenset(), Checkout(tmp_path)))
-    cut = registry.store.snapshot_with_authority()
+    whole = registry.store.snapshot_with_authority()
+    cut = registry.store.entries_cut(frozenset({"worker"}))
     registry.unregister("neighbour")
     with pytest.raises(StaleFence):
-        with cut.current():
+        with whole.current():
             pass
-    with cut.entry_current("worker"):
+    with cut.current():
         pass
     registry.unregister("worker")
     with pytest.raises(StaleFence):
-        with cut.entry_current("worker"):
+        with cut.current():
             pass
 
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
