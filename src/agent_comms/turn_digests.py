@@ -210,8 +210,8 @@ class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
         return super().read()
 
     def native(self) -> frozenset[MessageReference]:
-        return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
-            self.references)
+        return self.privacy.native_answered(
+            HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy), self.references)
 
     def external(self) -> frozenset[MessageReference]:
         return ExternalTranscript(self.root, self.thread.incarnation).answered_inputs(self.references)

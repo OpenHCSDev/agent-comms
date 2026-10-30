@@ -37,9 +37,8 @@ from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import AcpSessionId, FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.runtime import RuntimeProxy
 from agent_comms.thread_identity import NoObservedTurn, TurnFence
 from delivery_owner_fixture import canonical_agent
 
@@ -481,11 +480,12 @@ async def test_real_pi_mcp_acp_link(case, tmp_path, monkeypatch, native_runtime_
 
                 owner.on_connect(Audit())  # Passive evidence sink, never a permission controller.
                 session = await owner.new_session(cwd=str(project), mcp_servers=[])
-                session_id = session.session_id
+                session_id = FieldCodec.decode(AcpSessionId, session.session_id)
                 attached = canonical_agent(owner._comms, auto_wake=False)
                 retirement.push_async_callback(attached.shutdown)
                 attached.on_connect(Attachment())
-                proxy = RuntimeProxy(attached, session_id, owner._runtime.path)
+                proxy = attached._create_runtime_proxy(
+                    owner._comms.registry.require(session_id), session_id)
                 retirement.push_async_callback(proxy.close)
                 await proxy.subscribe()
                 assert not attachment_settled.is_set()  # Initial idle replay is not this turn.

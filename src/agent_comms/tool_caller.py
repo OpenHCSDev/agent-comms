@@ -59,13 +59,6 @@ class ToolCaller(ReadAuthority):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
-    @abstractmethod
-    def own_thread(self) -> str:
-        """The thread a tool acts on when its call names none."""
-
-    def subject(self, named: str) -> str:
-        return named or self.own_thread()
-
     def commanding(self, comms: Comms) -> None:
         """An ordinary caller needs no commander-child registration."""
         return None

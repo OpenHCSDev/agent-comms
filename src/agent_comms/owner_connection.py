@@ -56,21 +56,20 @@ class RuntimeRequestContext:
     server: RuntimeServer
     reader: asyncio.StreamReader
     client: SocketClient
-    session: AcpSessionId
     name: str
-
-    @property
-    def session_id(self) -> str:
-        """The ACP transport's text representation of the original session."""
-        return str(self.session)
 
     async def send(self, line: OwnerLine) -> None:
         await self.client.send(line)
 
 
+@dataclass(frozen=True)
+class AttachedRuntimeRequestContext(RuntimeRequestContext):
+    session: AcpSessionId
+
+
 @dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(
-    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+class RuntimeRequest[Ctx: RuntimeRequestContext](
+    DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
 ):
     family_discriminator: ClassVar[str] = "action"
     thread: str
@@ -82,28 +81,43 @@ class RuntimeRequest(
     ) -> dict[str, object]:
         return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
 
+    @abstractmethod
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> Ctx: ...
+
+
+class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
             raise RelationViolationError("This process no longer owns the thread.")
         return owner
 
-    async def bind(self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient) -> RuntimeRequestContext:
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> AttachedRuntimeRequestContext:
         entry = (await Coordination.run_worker(partial(
             server.agent._comms.registry.entry, self.thread,
         ))).entry
         owner = self.require_owner(entry)
         session_id = server.agent.sessions.require_owned_session(entry)
-        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
+        return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
 
 
-class ResultRuntimeRequest(RuntimeRequest):
-    async def apply(self, ctx: RuntimeRequestContext) -> None:
+class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
+    async def apply(self, ctx: Ctx) -> None:
         reply = await self.result(ctx)
         await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
 
     @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
+    async def result(self, ctx: Ctx) -> DeclaredReply: ...
+
+
+class AttachedResultRuntimeRequest(
+    ResultRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest
+):
+    pass
 
 
 class OwnerConnection:
@@ -152,15 +166,14 @@ class OwnerConnection:
         return OwnerLine.read(line).reply()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
-        return self.wire_request(action, self.session_id, parameters)
+        return self.wire_request(action, self._identity.name, parameters)
 
-    def __init__(self, comms: Comms, session_id: str, path: Path):
-        self.session_id = session_id
+    def __init__(self, comms: Comms, identity: ThreadIncarnation, path: Path):
+        self._identity = identity
         self.path = path
         self._comms = comms
         self._closed = False
         self._requests: set[asyncio.Task] = set()
-        self._identity = comms.registry.entry(session_id).entry.thread.incarnation
         self._root_identity = comms.root.stat()
 
     def require_identity(self, owner: ThreadIncarnation) -> None:
@@ -180,7 +193,7 @@ class OwnerConnection:
         if not same_root:
             raise OwnerIdentityChangedError("Wire root changed; open a new attachment.")
         try:
-            entry = self._comms.registry.entry(self.session_id).entry
+            entry = self._comms.registry.entry(self._identity.name).entry
         except UnregisteredThreadError as error:
             raise OwnerIdentityChangedError(
                 "Thread identity changed; open a new attachment."
@@ -194,10 +207,10 @@ class OwnerConnection:
         try:
             self._owner_entry().require_owner_process(owner, process)
         except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+            raise ConnectionError(f"Cannot attach {self._identity.name!r}: {error}") from error
         if not process.alive():
             raise ConnectionError(
-                f"Owner {process.pid} for {self.session_id!r} exited before attachment; "
+                f"Owner {process.pid} for {self._identity.name!r} exited before attachment; "
                 f"request not sent. Startup output: {self._comms.root / 'diagnostics'}"
             )
 
@@ -209,7 +222,7 @@ class OwnerConnection:
             entry.status.require_active()
             process = entry.thread.require_process()
         except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+            raise ConnectionError(f"Cannot attach {self._identity.name!r}: {error}") from error
         owner = entry.owner_identity
         path = socket_path(self._comms.root, process.pid)
 

@@ -10,7 +10,7 @@ from collections import deque
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from functools import partial
+from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -588,20 +588,26 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
     def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
     ) -> MessagePage:
-        page = self._source_page(view, presentation, bounds)
-        pages = deque((page,))
-        while (following := bounds.after(page)) is not None:
-            part = self._source_page(view, presentation, following)
-            if part.selection.history_revision != page.selection.history_revision:
+        # One traversal asks once whether live messages follow its archives.
+        live_follows = cache(lambda: bool(view.live_page(presentation, PageBounds(limit=1)).messages))
+        first = self._source_page(view, presentation, bounds, live_follows)
+        pages = deque((first,))
+        # Each part extends the traversal's edge, so the remaining budget and continuation
+        # follow from the newest part; the pages are combined once, at the end.
+        following = bounds.after(first)
+        while following is not None:
+            part = self._source_page(view, presentation, following, live_follows)
+            if part.selection.history_revision != first.selection.history_revision:
                 raise HistoricalSourceChanged("Historical sources changed; reload history")
-            if not bounds.fits(len(page.messages) + len(part.messages)):
+            if not following.fits(len(part.messages)):
                 break
             bounds.traversal.append(pages, part)
-            page = MessagePage.combine(tuple(pages))
-        return page
+            following = following.after(part)
+        return MessagePage.combine(tuple(pages)) if len(pages) > 1 else first
 
     def _source_page(
-        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds,
+        live_follows: Callable[[], bool],
     ) -> MessagePage:
         historical = bounds.traversal.historical
         if not self.sources() and not historical:
@@ -612,11 +618,10 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                 view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
             )
             if history.messages:
-                latest = view.live_page(presentation, PageBounds(limit=1))
                 return replace(
                     history,
                     selection=replace(history.selection, history_revision=history_revision),
-                    has_newer=history.has_newer or bool(latest.messages),
+                    has_newer=history.has_newer or live_follows(),
                 )
             selected = history if historical else page
             result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))

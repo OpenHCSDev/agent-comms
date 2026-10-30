@@ -143,7 +143,7 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return False
 
-    def recipient_activity(self, agents, snapshot, thread):
+    def recipient_activity(self, activity, snapshot, thread):
         from .agent_activity import UnavailableRecipientActivity
 
         return UnavailableRecipientActivity()
@@ -167,10 +167,10 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
 
-    def recipient_activity(self, agents, snapshot, thread):
+    def recipient_activity(self, activity, snapshot, thread):
         from .agent_activity import LiveRecipientActivity
 
-        return LiveRecipientActivity(thread, agents.activity_of(thread.name, snapshot=snapshot))
+        return LiveRecipientActivity(thread, activity[thread.name])
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return replacement.replaces(self)

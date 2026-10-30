@@ -47,7 +47,8 @@ from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener, TurnInbox
+from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
+from .turn_inbox import TurnInbox, TurnInboxItem
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
@@ -278,6 +279,22 @@ class NativeSession(MroDispatch, ABC):
         self.explicit_interrupt = False
         self.started_during_abort: list[events.FollowingInputStarted] = []
         self.finished = self.skip = False
+
+    def refuse(self, item: TurnInboxItem) -> None:
+        """Refuse one unwritten operation through its most specific nominal handler."""
+        next(self.handlers_for(item))(item)
+
+    @handles(TurnInboxItem)
+    def refuse_queued_input(self, item: TurnInboxItem) -> None:
+        for input_id in item.carried_inputs:
+            self.rejected_commands.append(events.FollowingInputRefused(id=input_id))
+            self.rejected_signal.set()
+
+    @handles(UnwrittenPrompt)
+    def refuse_original_prompt(self, item: UnwrittenPrompt) -> None:
+        self.output.record_failure(failures.InputMissing("Original input was cleared before send."))
+        self.finish_request()
+        self.rejected_signal.set()
 
     def accept_tool_round(self, message: AssistantMessage) -> None:
         self.tool_socket.announce(message.parts)

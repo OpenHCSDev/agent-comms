@@ -14,7 +14,7 @@ from agent_comms import field_codec
 from .bus import Bus
 from .bus_tables import MessageIdentitySource
 from .channel_targets import CommandTarget
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .errors import RelationViolationError
 from .field_codec import GoalId, InputId, RootId, TurnId
@@ -34,7 +34,7 @@ from .input_attempt import (
 from .input_key import InputKey, InputKeyText, TurnInputKey
 from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
-from .locked_store import DocumentChange
+from .locked_store import DocumentChange, PublishedProperty
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .native_input_proof import NativeContextProof
@@ -283,12 +283,16 @@ class InputDispositions(DurableStore):
     def lookup(self, key: InputKey) -> InputAttempt:
         return self.read((key,)).lookup(key)
 
+    @PublishedProperty
+    def coordinator_reader(self) -> ReadableStore:
+        return ReadableStore(CoordinationStore.path_in(self.root))
+
     def harness_attempts(self, entries: tuple[RegistryEntry, ...]) -> tuple[ReservedInput, ...]:
         """Uncertain harness attempts for these entries' frozen incarnations, as the inputs
         they are. Derived on every read and never stored by reading."""
         owners = {entry.thread.incarnation.require_recorded().lookup: entry for entry in entries}
         outcomes = Outcome.members_with(UnconfirmedOutcome)
-        with CoordinationStore.opened_reader(CoordinationStore.path_in(self.root)) as db:
+        with self.coordinator_reader.reader_snapshot() as db:
             attempts = HarnessDelivery.select(
                 db,
                 where=(f'"recipient_lookup" IN ({", ".join("?" for _ in owners)}) '

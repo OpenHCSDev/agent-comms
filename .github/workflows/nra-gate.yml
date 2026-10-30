@@ -214,6 +214,19 @@ jobs:
       # A hand gh auto-merge request cannot turn source acceptance into that permission.
       - name: Only the captured combined carrier may merge
         run: PYTHONPATH=src python -m agent_comms.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
+      # A verdict names the pull request head, not the merge group's own commit.
+      - name: The commander's verdict on the queued head is success
+        if: github.event_name == 'merge_group'
+        shell: bash
+        run: |
+          [[ $QUEUE_REF =~ /pr-([0-9]+)- ]]
+          head=$(gh api "repos/$GITHUB_REPOSITORY/pulls/${BASH_REMATCH[1]}" --jq .head.sha)
+          verdict=$(gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "agent-comms/review")][0].state // "none"')
+          echo "PR #${BASH_REMATCH[1]} head $head: agent-comms/review=$verdict"
+          [[ $verdict == success ]]
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success \
+            -f context=agent-comms/review -f "description=Verdict on head $head"
 
   nra-gate:
     name: debt-${{ matrix.kind }}

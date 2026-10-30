@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Never
 
 from . import turn_failure as failures
-from .agent_backend import TurnInboxItem
 from .native_input_proof import NativeInputCommit
+from .turn_inbox import TurnInboxItem
 from .native_pi import NativePiInputNotSent
 
 if TYPE_CHECKING:
@@ -62,11 +62,6 @@ class UnwrittenPrompt(QueuedOperation):
 
     def dispatch(self):
         return UnacknowledgedPrompt()
-
-    def refuse(self, inputs, session):
-        session.output.record_failure(failures.InputMissing("Original input was cleared before send."))
-        session.finish_request()
-        session.rejected_signal.set()
 
     def raise_native_failure(self, error, attestation) -> Never:
         raise NativePiInputNotSent(error, attestation) from error

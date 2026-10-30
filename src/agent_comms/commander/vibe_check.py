@@ -227,7 +227,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def enforce(self, comms: Comms, commander: str) -> None:
         units = sorted(owner.name for owner in self.units)
         for unit in units:
-            comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
+            if not any(goal.state.protected for goal in comms.registry.require(unit).goal):
+                comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
         ChokeholdNotice.burst_once(comms, commander, self.burst(units), self.ignored())
 
     def ignored(self) -> str:

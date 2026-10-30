@@ -31,10 +31,10 @@ from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyCo
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
-from agent_comms.field_codec import RootId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import (
-    RuntimeConnection, RuntimeProxy, present_session, socket_path,
+    RuntimeConnection, present_session, socket_path,
 )
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -48,9 +48,11 @@ from agent_comms.threads import Thread
 
 async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
     process = ProcessIdentity.capture(os.getpid())
-    declare_owner(comms, "reply-loss", process)
+    owner = declare_owner(comms, "reply-loss", process)
     async with silent_socket(comms, process) as received:
-        connection = RuntimeConnection(comms, "reply-loss", socket_path(comms.root, process.pid))
+        connection = RuntimeConnection(
+            comms, owner.incarnation, socket_path(comms.root, process.pid),
+        )
         try:
             with pytest.raises(OwnerReplyLostError) as lost:
                 await connection.request("cancel")
@@ -220,7 +222,7 @@ async def test_subscription_replay_uses_requested_alias(
     proxy = None
     try:
         response = await owner.new_session(str(tmp_path))
-        original = response.session_id
+        original = FieldCodec.decode(AcpSessionId, response.session_id)
         timestamp = "2026-10-20T00:00:00.000Z"
         journal = tmp_path / "history.jsonl"
         journal.write_text("".join(json.dumps(record) + "\n" for record in (
@@ -234,8 +236,8 @@ async def test_subscription_replay_uses_requested_alias(
             store.participants.register(thread.incarnation.lookup, committed=True)
         comms.threads.attach_session(thread, str(journal), process=thread.process_identity)
         comms.threads.rename_managed_thread(original, "renamed", owner=ProcessIdentity.capture(os.getpid()))
-        requested = original if request_original else "renamed"
-        proxy = RuntimeProxy(client, requested, socket_path(comms.root, os.getpid()))
+        requested = original if request_original else AcpSessionId("renamed")
+        proxy = client._create_runtime_proxy(comms.registry.require(requested), requested)
         await proxy.subscribe()
         snapshots = [(session, fact) for session, update in updates
                      for fact in decode_updates(update.get("_meta"))
@@ -331,7 +333,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     new_address = addresses.enter_context(PrivateSocketRole.address(new_path))
     old_server = await asyncio.start_unix_server(handler("old"), path=old_address)
     new_server = None
-    proxy = RuntimeProxy(client, "worker", old_path)
+    proxy = client._create_runtime_proxy(comms.registry.require("worker"), AcpSessionId("worker"))
     try:
         await proxy.subscribe()
         await until(

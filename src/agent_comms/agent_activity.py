@@ -175,14 +175,17 @@ class AgentActivity:
         snapshot: RegistrySnapshot,
     ) -> Mapping[ThreadLookup, RecipientActivity]:
         """Acquire one bounded window's recipients from the original sends."""
-        observations: dict[ThreadLookup, RecipientActivity] = {}
+        selected = {}
         for original, recipient in recipients:
             lookup = recipient.recipient_lookup
-            if lookup in observations:
-                continue
-            selected = snapshot.recipient(recipient, original)
-            observations[lookup] = selected.activity(self, snapshot)
-        return observations
+            if lookup not in selected:
+                selected[lookup] = snapshot.recipient(recipient, original)
+        captured = self.all_activity(
+            (thread for recipient in selected.values() for thread in recipient.activity_threads()),
+            snapshot=snapshot,
+        )
+        return {lookup: recipient.activity(captured, snapshot)
+                for lookup, recipient in selected.items()}
 
     def _emit_activity(self, activity: Activity) -> None:
         snapshot = self.registry.snapshot()

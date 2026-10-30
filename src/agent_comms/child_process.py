@@ -36,7 +36,7 @@ from contextlib import (
 )
 from contextvars import copy_context
 from dataclasses import dataclass
-from functools import cached_property, partial
+from functools import cache, cached_property, partial
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
@@ -305,6 +305,16 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
+        return cls.current() if pid == os.getpid() else Platform.current().identity(pid)
+
+    @classmethod
+    def current(cls) -> ProcessIdentity:
+        """The caller's immutable birth; a fork selects its own PID, not its parent's."""
+        return cls._current(os.getpid())
+
+    @staticmethod
+    @cache
+    def _current(pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
 
     def allows_owner_start(self) -> bool:
@@ -591,6 +601,8 @@ class Platform(DeclaredFamily, affix="Platform"):
         """Wait for a member's exit or the caller's remaining deadline."""
 
     def matches(self, identity: ProcessIdentity) -> bool:
+        if identity.runs_here():
+            return identity == ProcessIdentity.current()
         try:
             return self.identity(identity.pid) == identity
         except ProcessLookupError:

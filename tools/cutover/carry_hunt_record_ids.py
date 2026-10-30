@@ -27,7 +27,7 @@ class HuntRecordIds(Carry):
         self.require_confined(path)
         if not path.exists():
             return Carried(0)
-        with TodoStore.opened_reader(path) as db:
+        with TodoStore(self.root).reader_snapshot() as db:
             if not HuntRecord.present(db):
                 return Carried(0)
             refused = tuple(stored for (stored,) in db.execute(

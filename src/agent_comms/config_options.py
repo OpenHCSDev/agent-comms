@@ -314,12 +314,12 @@ class ConfigOptions:
         return cls(RetainedOwnerLaunch.configured(), resolve_comms_route(LaunchRoot.current().path))
 
     async def observe_authentication(
-        self, session_id: AcpSessionId, publish: Callable[[str], Awaitable[object]],
+        self, session_id: AcpSessionId, publish: Callable[[AcpSessionId], Awaitable[object]],
     ) -> None:
         """The session retires this configuration's watch with its other producers."""
         async with aclosing(Bus.watch_sources(FileSource(self.launch.configuration.native_config / "auth.json"))) as observations:
             async for _ in observations:
-                await publish(str(session_id))
+                await publish(session_id)
 
     def native_environment(
         self, thread: Thread, snapshot: RegistrySnapshot,

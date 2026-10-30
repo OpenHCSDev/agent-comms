@@ -33,7 +33,7 @@ from .field_codec import FieldCodec
 from .image_input import ImageInput
 
 if TYPE_CHECKING:
-    from .agent_backend import StreamingInputPolicy
+    from .turn_inbox import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import ExclusiveLock, StoreOwner
