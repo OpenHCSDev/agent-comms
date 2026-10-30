@@ -4245,6 +4245,10 @@ class HeadVerdict(HeadReview, declared_name=None):
     preparation_field: ClassVar[str] = '--head'
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
 
+    def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
+        """The read this decision stands on: an open PR at the reviewed head."""
+        return request.current()
+
     @classmethod
     def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
         """Source review cannot authorize even the owner's direct merge path."""
@@ -4454,6 +4458,10 @@ class SupersededHeadVerdict(DecidedHeadVerdict):
 
     def supersedes(self) -> bool:
         return True
+
+    def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
+        """Dropping a head is how a closed PR's lost commits get their recorded reason."""
+        return request.closed_or_open()
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{super().description(reviewer, subject)} (replaced by {self.replacement})"

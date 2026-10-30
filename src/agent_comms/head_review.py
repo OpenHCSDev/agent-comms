@@ -85,9 +85,9 @@ class PullRequestHead:
             raise RecordProblems(problems)
         return cls(held[0].repo, pr, head)
 
-    @classmethod
-    def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
-        """Read GitHub's head, its base branch and draft state in one request."""
+    @staticmethod
+    def forge_read(repo: RepositoryName, pr: int) -> str:
+        """GitHub's head, base branch, draft state and state in one request."""
         read = repo.rest(
             f"pulls/{pr}",
             "--jq",
@@ -95,7 +95,11 @@ class PullRequestHead:
         )
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
-        return OpenPullRequestHead.from_forge(repo, pr, read.stdout)
+        return read.stdout
+
+    @classmethod
+    def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
+        return OpenPullRequestHead.from_forge(repo, pr, cls.forge_read(repo, pr))
 
     def change_identity(self, reader: WorkBranches, base: str) -> PullRequestChange:
         """Compare the PR's patch, never the unrelated changes in its base tree.
@@ -118,6 +122,17 @@ class PullRequestHead:
     def current(self) -> OpenPullRequestHead:
         """GitHub's read of the PR, refused unless the reviewed head is still its head."""
         current = self.at(self.repo, self.pr)
+        if not current.holds(self.head):
+            raise ToolRefusedError(
+                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
+            )
+        return current
+
+    def closed_or_open(self) -> ReadPullRequestHead:
+        """GitHub's read in whatever state the PR is in, refused unless this is still its head:
+        a closed PR's head can only be dropped, so nothing here may arm or integrate it."""
+        head, base, *_ = self.forge_read(self.repo, self.pr).split()
+        current = ReadPullRequestHead(self.repo, self.pr, head, base=base)
         if not current.holds(self.head):
             raise ToolRefusedError(
                 f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
