@@ -301,7 +301,9 @@ class RetainedPlanReadings(PlanReadings):
         return current
 
     def retain(self, reading: PlanReading) -> None:
-        retained = reading.following(reading.todos, reading.main)
+        # Keep the pinned commit, parsed modules and stable answers, not the pass's graph.
+        retained = reading.following(reading.todos, replace(
+            reading.main, history=Checkout(reading.main.repo.checkout).read()))
         with self.lock:
             self.plans = (*(plan for plan in self.plans
                             if plan.main.repo != retained.main.repo), retained)

@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
@@ -2759,7 +2759,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Undelivered orders provide no observed delivery duration."""
         return iter(())
 
-    def untouched(self, touched: Sequence[str]) -> int:
+    def untouched(self, touched: Collection[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
             return any(path.endswith(name.lstrip("/")) or name.endswith("/" + path)

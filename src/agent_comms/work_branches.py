@@ -145,6 +145,33 @@ class SourceGrowth:
     limit: ClassVar[int] = 40
     tree: ClassVar[str] = "src/"
 
+    @classmethod
+    @lru_cache(maxsize=512)
+    def capture(cls, checkout: Path, base: str, head: str, files: frozenset[str], *,
+                timeout: float) -> SourceGrowth:
+        """Immutable tree growth, cached without retaining a pass's branch reader."""
+        paths = tuple(path for path in sorted(files)
+                      if path.startswith(cls.tree) and path.endswith(".py"))
+        if not paths:
+            return cls(())
+        # Only a tree-proved added/deleted side contributes zero, never a missing blob.
+        sources = tuple(
+            (path, blob, weight)
+            for commit, weight in ((base, -1), (head, 1))
+            for path, blob in Repo.tree_objects(checkout, commit, paths).items()
+        )
+        contents = Repo.blobs(checkout, *(blob for _path, blob, _weight in sources),
+                              timeout=timeout)
+        growth = dict.fromkeys(paths, 0)
+        unparsed: list[UnparsedSource] = []
+        for (path, _blob, weight), content in zip(sources, contents, strict=True):
+            try:
+                growth[path] += weight * CodeLines.of(content.decode())
+            except SyntaxError as error:
+                # A pushed branch is foreign text: the parse refusal is the branch's fact.
+                unparsed.append(UnparsedSource.of(path, error))
+        return cls(tuple(growth.items()), tuple(unparsed))
+
     @property
     def total(self) -> int:
         return sum(lines for _path, lines in self.files)
@@ -403,7 +430,7 @@ query($owner: String!, $name: String!, $after: String) {
     def read_checkout(self) -> CheckoutRead:
         """Whether git can open this checkout at all; the one probe every reader asks first."""
         try:
-            self.history.refs
+            self.history.require_read()
         except GitCommandError as error:
             return UnreadableCheckoutRead(self.checkout, str(error))
         return ReadableCheckoutRead(self)
@@ -591,7 +618,7 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(
                 f"HEAD reflog in {self.checkout} has no readable movement time"
             ) from unread
-        branch = self.history.refs["HEAD"].symbolic.removeprefix("refs/heads/") or "HEAD"
+        branch = self.history.head.symbolic.removeprefix("refs/heads/") or "HEAD"
         bases = self.history.merge_base(main, head)
         if not bases:
             raise WorkBranchError(f"Unrelated main and HEAD in {self.checkout}")
@@ -600,41 +627,13 @@ query($owner: String!, $name: String!, $after: String) {
         files = self.changed(base, head)
         return BranchDifference(
             RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,
-            self.source_growth(base, head, files), self.unpushed(branch, head),
+            SourceGrowth.capture(self.checkout, base, head, files, timeout=self.timeout),
+            self.unpushed(branch, head),
         )
 
     def changed(self, base: str, head: str) -> frozenset[str]:
         return frozenset(path for path in self._git(
             "diff", "--name-only", "-z", "--no-renames", base, head).split("\0") if path)
-
-    @lru_cache(maxsize=512)
-    def source_growth(self, base: str, head: str, files: frozenset[str]) -> SourceGrowth:
-        """Git owns both trees; each changed src module is counted once on each side.
-
-        Both commits are immutable, so one pair is counted once per process: the
-        heartbeat asks again every pass and the answer cannot move until a SHA does.
-        """
-        paths = tuple(path for path in sorted(files)
-                      if path.startswith(SourceGrowth.tree) and path.endswith(".py"))
-        if not paths:
-            return SourceGrowth(())
-        # Only a tree-proved added/deleted side contributes zero, never a missing blob.
-        sources = tuple(
-            (path, blob, weight)
-            for commit, weight in ((base, -1), (head, 1))
-            for path, blob in Repo.tree_objects(self.checkout, commit, paths).items()
-        )
-        contents = Repo.blobs(self.checkout, *(blob for _path, blob, _weight in sources),
-                              timeout=self.timeout)
-        growth = dict.fromkeys(paths, 0)
-        unparsed: list[UnparsedSource] = []
-        for (path, _blob, weight), content in zip(sources, contents, strict=True):
-            try:
-                growth[path] += weight * CodeLines.of(content.decode())
-            except SyntaxError as error:
-                # A pushed branch is foreign text: the parse refusal is the branch's fact.
-                unparsed.append(UnparsedSource.of(path, error))
-        return SourceGrowth(tuple(growth.items()), tuple(unparsed))
 
     def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:
         """A pull request head against its declared base branch, so a request stacked on
@@ -642,7 +641,8 @@ query($owner: String!, $name: String!, $after: String) {
         self._git("fetch", "-q", "--no-write-fetch-head", Repo.remote,
                   branch, f"refs/pull/{pr}/head")
         base = self._git("merge-base", f"refs/remotes/{Repo.remote}/{branch}", head).strip()
-        return self.source_growth(base, head, self.changed(base, head))
+        return SourceGrowth.capture(self.checkout, base, head, self.changed(base, head),
+                                    timeout=self.timeout)
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]

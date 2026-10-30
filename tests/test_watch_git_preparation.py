@@ -37,7 +37,7 @@ from agent_comms.phase_evidence import (
 )
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
-from agent_comms.work_branches import WorkBranchError, WorkBranches
+from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
 
 
@@ -321,7 +321,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     changed = reader.changed(base, head)
     assert changed == frozenset(paths)
     with pytest.raises(UnavailableCommitError):
-        reader.source_growth(base, head, changed)
+        SourceGrowth.capture(repo.checkout, base, head, changed, timeout=reader.timeout)
     with pytest.raises(GitCommandError):
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
@@ -344,7 +344,8 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     plans.observe_reading(recovered, (evidence,))
     assert recovered.main.commit == failed.main.commit == head
     assert recovered.read(evidence) == EvidenceFound(True)
-    assert dict(reader.source_growth(base, head, changed).files) == {
+    assert dict(SourceGrowth.capture(
+        repo.checkout, base, head, changed, timeout=reader.timeout).files) == {
         "src/added.py": 1, "src/deleted.py": -1, "src/promised.py": 1,
     }
     assert case.snapshot() == prepared
@@ -741,7 +742,8 @@ def test_pushed_conflict_markers_are_the_branchs_fact_not_an_error(tmp_path):
     Repo.git(checkout, "commit", "-q", "-am", "conflict markers pushed")
     head = Repo.git(checkout, "rev-parse", "HEAD").strip()
     reader = WorkBranches(checkout)
-    growth = reader.source_growth(base, head, reader.changed(base, head))
+    growth = SourceGrowth.capture(reader.checkout, base, head, reader.changed(base, head),
+                                  timeout=reader.timeout)
     assert [(source.path, source.line) for source in growth.unparsed] == [("src/owner.py", 1)]
     with pytest.raises(WorkBranchError, match="src/owner.py:1"):
         growth.require_parsed()
