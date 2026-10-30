@@ -88,7 +88,7 @@ class WorkDispatch:
         # A failed publication leaves a stopped unit and its checkout, not an
         # untracked running task. A failed/uncertain start never releases its order.
         self.publish(comms, child)
-        comms.owners.start(child.name)
+        comms.owners.start_many((child.name,))
         return comms.registry.require(child.name)
 
 

@@ -76,6 +76,13 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
             self.revision == revision and (self.start <= seen or self.records >= self.limit)
         )
 
+    def presents(self, revision: FileRevision, seen: int) -> bool:
+        """Whether the stored replies answer this revision while its delta prepares: it is
+        counted, or it only appended to an indexed revision, whose replies all remain."""
+        return self.counts(revision, seen) or any(
+            indexed.holds_cut(revision, indexed.size) and self.counts(indexed, seen)
+            for indexed in self.revision.revisions())
+
     def continues(self, revision: FileRevision) -> bool:
         return self.revision == revision
 
@@ -664,7 +671,7 @@ class TranscriptReadState(RuntimeFile, PublishedSQLiteFile, ThreadOwnedState):
             for source, revision in present.items():
                 if seen[source] == revision.size:
                     per_file[source] = Counted(0)
-                elif not indexes[source].counts(revision, seen[source]):
+                elif not indexes[source].presents(revision, seen[source]):
                     per_file[source] = Indexing()
                 else:
                     ends[source] = seen[source]
