@@ -12,7 +12,7 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
@@ -22,9 +22,6 @@ from .errors import MissingSourceLine
 from .field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
-
-if TYPE_CHECKING:
-    from .todos import Todo
 
 
 class RepositorySelection(ABC):
@@ -171,8 +168,6 @@ class Repo(GitLaunch, BaseModel, WireValue):
         that git would resolve to the enclosing repository instead."""
         return (self.checkout / ".git").exists()
 
-    def holds(self, todo: Todo) -> bool:
-        return self.github == todo.repo
 
     def default_branch(self) -> str:
         """The origin's declared default, never a guessed branch name."""
@@ -215,6 +210,10 @@ class Repo(GitLaunch, BaseModel, WireValue):
             except GitCommandError as error:
                 raise UnavailableCommitError(checkout, missing, f"remote {remote}: {error}") from error
             cls.require_local_commits(checkout, *objects)
+
+    def acquire(self, *objects: str) -> None:
+        """Acquire exact commits from this repository's own remote."""
+        self.require_commits(self.checkout, self.remote, *objects)
 
     @classmethod
     def unservable_commits(cls, checkout: Path | str, remote: str,
@@ -337,8 +336,13 @@ class Repo(GitLaunch, BaseModel, WireValue):
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
         url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
+        return cls(checkout=checkout, github=cls.repository_url(url))
+
+    @staticmethod
+    def repository_url(url: str) -> RepositoryName:
+        """The same Git-origin identity for a checkout and a declared stack source."""
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
-        return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
+        return RepositoryName.from_wire("/".join(github))
 
 
 class CheckoutHoldsWorkError(ValueError):

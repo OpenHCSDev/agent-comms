@@ -318,6 +318,16 @@ class TableReference(Reference):
         )
 
 
+@dataclass(frozen=True, slots=True)
+class RequestedKeys:
+    """One batch of distinct declared keys: the ``requested`` VALUES table they bind, and
+    the null-safe join that drives the table's index from it."""
+
+    values: str
+    join: str
+    bindings: tuple[object, ...]
+
+
 @dataclass(frozen=True)
 class Column(FieldDirective):
     """Constraints on a field; its name and type remain on the dataclass field."""
@@ -2388,9 +2398,20 @@ class TypedTable(
         """Rows equal to any of these named keys under the same null-safe IS equality select()
         uses: the requested keys drive an indexed join, one batch per the connection's own
         variable limit, each distinct key probed once."""
+        return [row for requested in cls.requested_keys(db, keys) for row in cls.iterate(db.execute(
+            f"WITH {requested.values} "
+            f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
+            requested.bindings))]
+
+    @classmethod
+    def requested_keys(cls, db: sqlite3.Connection,
+                       keys: Sequence[Mapping[str, object]]) -> Iterator[RequestedKeys]:
+        """The distinct named keys, encoded by their declared columns, in batches that fit the
+        connection's own variable limit; each batch joins this table as ``FROM requested
+        JOIN <table> ON ...`` under select()'s null-safe IS equality."""
         bound = tuple(dict.fromkeys(cls._bound(key) for key in keys))
         if not bound:
-            return []
+            return
         field_sets = {tuple(item.name for item in selected) for selected, _ in bound}
         if len(field_sets) != 1:
             raise ValueError(f"{cls.__name__} keys name different fields: {sorted(field_sets)}")
@@ -2401,11 +2422,11 @@ class TypedTable(
                               for item, alias in zip(selected, aliases, strict=True))
         probe = "(" + ",".join("?" for _ in selected) + ")"
         batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(selected)
-        return [row for chunk in batched(bound, batch) for row in cls.iterate(db.execute(
-            f"WITH requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)}) "
-            f"SELECT {cls.qualified(*cls.column_projection())} FROM requested "
-            f"JOIN {table} ON {joined}",
-            tuple(value for _, values in chunk for value in values)))]
+        for chunk in batched(bound, batch):
+            yield RequestedKeys(
+                f"requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)})",
+                f"FROM requested JOIN {table} ON {joined}",
+                tuple(value for _, values in chunk for value in values))
 
     @classmethod
     def _query(

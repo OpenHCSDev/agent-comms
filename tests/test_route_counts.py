@@ -9,7 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.audience_manifest import freeze_audience
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import Bus, PrivateRecord
 from agent_comms.comms import Comms
 from agent_comms.field_codec import ThreadLookup

@@ -36,16 +36,29 @@ class GitHubFixture:
         data[repository.to_wire()]["requests"][str(row.number)] = {"body": body, "listed": FieldCodec.encode(row)}
         self.path.write_text(json.dumps(data))
 
+    def refuse_read(self, repository: RepositoryName, number: int, refusal: str) -> None:
+        """An existing remote PR is inaccessible at GitHub's actual process boundary."""
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
+        self.path.write_text(json.dumps(data))
+
+    def create_next(self, repository: RepositoryName, row: ListedPullRequest) -> None:
+        """The external forge will create this real checkout's declared PR, not edit another."""
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()]["next_creation"] = FieldCodec.encode(row)
+        self.path.write_text(json.dumps(data))
+
+    def refuse_status(self, repository: RepositoryName, head: str, context: str,
+                      refusal: str, *, state: str = "") -> None:
+        data = json.loads(self.path.read_text())
+        data[repository.to_wire()].setdefault("status_refusals", {}).setdefault(head, {})[context] = {
+            "state": state, "message": refusal}
+        self.path.write_text(json.dumps(data))
+
     def refuse_arm(self, repository: RepositoryName, number: int, refusal: str) -> None:
         """GitHub's answer when enabling auto-merge on this pull request fails."""
         data = json.loads(self.path.read_text())
         data[repository.to_wire()]["requests"][str(number)]["arm_refusal"] = refusal
-        self.path.write_text(json.dumps(data))
-
-    def refuse_status(self, repository: RepositoryName, refusal: str) -> None:
-        """GitHub's answer to every commit-status post in this repository, as when archived."""
-        data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["status_refusal"] = refusal
         self.path.write_text(json.dumps(data))
 
     def calls(self) -> tuple[tuple[str, ...], ...]:

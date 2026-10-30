@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import PresenceExclude
-from agent_comms.repo import Checkout
-
-from .activity import ActivityCapture, ObservedActivity
-from .activity_clocks import ChannelActivity
 import logging
 import time
 from abc import abstractmethod
@@ -15,6 +10,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
 
+from agent_comms.field_codec import PresenceExclude
+from agent_comms.repo import Checkout
+
+from .activity import ActivityCapture, ObservedActivity
+from .activity_clocks import ChannelActivity
 from .catalog_store import ChannelCatalog
 from .cli_result import CliResult
 from .context_segments.retained import RetainedSegment
@@ -30,10 +30,9 @@ from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
-
 if TYPE_CHECKING:
-    from .registry_provenance import DeletedThread
     from .historical_views import HistoricalThread, HistorySource
+    from .registry_provenance import DeletedThread
 from agent_comms.thread_presentation import NoThreadPresentation, ThreadPresentation
 
 from .agent_activity import AgentActivity
@@ -58,8 +57,14 @@ from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .notification_evidence import (
+    FirstRecipient,
+    NotificationWindow,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
 from .page_traversal import LiveCursor
-from .notification_evidence import NotificationWindow
 from .presentation import (
     BusPresentation,
     ChannelView,
@@ -68,7 +73,6 @@ from .presentation import (
     InboxRead,
     MessageNotification,
     NoRevision,
-    OutcomeViewer,
     ReadState,
     ThreadRecord,
     ThreadView,
@@ -224,10 +228,22 @@ class HistoryViews:
         return {name: capture.activity[name] for name in wanted if name in capture.activity}
 
     def message_notifications_for_references(
-        self, viewer: OutcomeViewer, references: Sequence[MessageReference],
+        self,
+        viewer: OutcomeViewer,
+        references: Sequence[MessageReference],
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
     ) -> NotificationWindow:
         return MessageNotification.references(
-            self.root, self.registry, self.bus.bus, references, viewer=viewer)
+            self.root,
+            self.registry,
+            self.bus.bus,
+            references,
+            viewer=viewer,
+            after=after,
+            limit=limit,
+        )
 
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: DisplayViewer = AnonymousViewer()) -> MessagePage:

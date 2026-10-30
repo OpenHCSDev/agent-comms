@@ -44,6 +44,7 @@ dev = [
     "ruff==0.16.0",
     "mypy==2.3.0",
     "uv==0.13.1",
+    "tomli-w==1.2.0",
 ]
 
 [project.urls]
@@ -137,7 +138,15 @@ src = ["src", "tests"]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
 
 [tool.ruff.lint.flake8-bugbear]
-extend-immutable-calls = ["agent_comms.store_files.ExclusiveLock", "agent_comms.importing.ImportLimits"]
+extend-immutable-calls = [
+    "agent_comms.store_files.ExclusiveLock",
+    "agent_comms.importing.ImportLimits",
+    "agent_comms.transcripts.LatestPage",
+    "agent_comms.transcripts.AtFrontier",
+    "agent_comms.transcripts.LivePageSource",
+    "agent_comms.notification_evidence.FirstRecipient",
+    "agent_comms.notification_evidence.RecipientLimit",
+]
 
 [tool.mypy]
 warn_return_any = true
