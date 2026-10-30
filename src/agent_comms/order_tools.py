@@ -402,7 +402,9 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         "Only the holder may claim a pending order; this does not accept its delivery."
     )
     problem: Annotated[str, *tool_field("Held problem ID")]
-    pull_request: Annotated[int, *tool_field("Pull request number in the problem's repository")]
+    pull_request: Annotated[PullRequestLink, *tool_field(
+        "The delivering pull request: its repository (owner/name) and number"
+    )]
     head: Annotated[str, *tool_field("Claimed head commit")]
     report: Annotated[DeliveryReport, *tool_field(
         "Delivery report: the slop you killed or the broken thing you fixed, with file:line, "
@@ -415,9 +417,8 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
         # The identical call resumes a retained claim's publication; nothing is claimed again.
-        link = PullRequestLink(todo.repo, self.pull_request)
         for claim in todo.order.commander_claims():
-            if claim.resumed_by(link, self.head, self.report.text):
+            if claim.resumed_by(self.pull_request, self.head, self.report.text):
                 resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
                 return TodoChanged(resumed, resumed.strike_count)

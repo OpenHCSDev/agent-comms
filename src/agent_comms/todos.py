@@ -3191,12 +3191,12 @@ class OrderClaim:
 
     @classmethod
     def for_order(
-        cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
+        cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
         report: str, answer: MessageReference, *, store: TodoStore,
     ) -> OrderClaim:
         request = store.owner_request(todo.request.require())
         return cls(
-            PullRequestLink(todo.repo, number), head,
+            pull_request, head,
             Message(actor.name, request.commander.name, report, InfoKind, answers=(answer,)),
         )
 

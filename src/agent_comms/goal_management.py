@@ -9,7 +9,7 @@ from .agent_events import (
 
 from .errors import StaleAttemptError
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
@@ -35,10 +35,10 @@ from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
+    GoalWait,
     GoalWaitRecovery,
     GoalWaitReview,
     GoalWaits,
-    RecordedGoalWait,
     StandbyReview,
 )
 from .native_input_owner import GoalLaunchOwner
@@ -316,10 +316,12 @@ class Goals(GoalWaitRecovery):
     def _goal_snapshot(self, name: str) -> GoalSnapshot:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
-        return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.read())
+        # One owner's wait is one keyed row; decoding every wait to pick it cost 70% of each
+        # goal_changed, once per hosted session on every goal store change (2026-10-30).
+        return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.resolve)
 
     def snapshot_for(self, owner: Thread, snapshot: RegistrySnapshot,
-                     waits: dict[str, RecordedGoalWait]) -> GoalSnapshot:
+                     wait: Callable[[GoalDeclaration], GoalWait]) -> GoalSnapshot:
         """All goal readers build the same source from the original records."""
         for goal in owner.goal:
             store = self.open_goal_store()
@@ -328,7 +330,7 @@ class Goals(GoalWaitRecovery):
             with store.reader_snapshot() as connection:
                 generation = Generation.require_in(connection, goal.id)
                 source = GoalExecutionSource(
-                    goal, GoalWaits.for_goal(goal, waits), generation,
+                    goal, wait(goal), generation,
                     generation.lifecycle.evidence(connection, generation),
                     owner, snapshot, self.agents,
                 )
