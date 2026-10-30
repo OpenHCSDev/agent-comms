@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand, CommandBinding
-    from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
@@ -177,7 +176,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return (NoChannel(),)
 
@@ -393,7 +392,7 @@ class ThreadTarget(NamedTarget):
         return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return declaration.selection_channels(channel, self.name)
 
