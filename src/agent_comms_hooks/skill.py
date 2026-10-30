@@ -331,6 +331,18 @@ class DeckStart(DealtDeck):
         self.deal(type(reader), prompts)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
+    def widened(self, reader: DeckReader) -> tuple[str, ...]:
+        """The deck of this session's role is the one record of the role it was dealt. A
+        session whose role changed finds none of its kind and is dealt only the files the role
+        adds, keeping what it read and wrote, since its context was never lost; a session bound
+        after it started is dealt in full and told so."""
+        deck = self.deck(reader)
+        if deck.exists():
+            return ()
+        said = self.current().widen(self, type(reader), lambda: self.dealt(reader), ())
+        deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
+        return said
+
     def notice(self) -> str:
         names = [thread.name for _, _, thread in self.commanders()]
         return ("Commander: " + ", ".join(names) + "." if names
