@@ -133,6 +133,12 @@ class Messaging:
         user = self.user_identity(worktree)
         return self._publish_user(user, target, body, task)
 
+    def send_owner_notice(self, target: NamedTarget, body: str, notice: TaskAttachment, *,
+                          role: MessageRole) -> Message:
+        """Core speaks in the owner's voice, under his own thread; the notice task, not the sender,
+        says nobody typed it, so it directs nothing and adds no owner words to any task."""
+        return self._publish_user(self.user_identity(Checkout(self.root)), target, body, notice, role=role)
+
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: Checkout,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                             change: TaskChange = OriginalTaskChange()) -> Message:

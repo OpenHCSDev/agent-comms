@@ -10,7 +10,7 @@ import argparse
 import time
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from functools import cache
 from itertools import combinations
@@ -36,7 +36,7 @@ from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import GitCommandError
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
@@ -411,8 +411,39 @@ class LostTools(UndatedStandingRule):
                 " who took them, and why? -> restore its required tools")
 
 
+class HolderBranch:
+    """A holder's branch difference; two of them may write the same files in parallel."""
+
+    holder: ThreadIncarnation
+    difference: BranchDifference
+
+    @staticmethod
+    def touching[Branch: HolderBranch](
+        branches: Sequence[Branch],
+    ) -> Iterator[tuple[Branch, Branch]]:
+        """Each pair of branches writing a common file of one repository, once. Indexing by
+        (repository, file) selects them; any other pair cannot conflict, and a pair on one
+        branch or under one holder that does conflict is still a conflict to resolve."""
+        sharing: dict[tuple[RepositoryName, str], list[int]] = {}
+        for position, branch in enumerate(branches):
+            for path in branch.difference.files:
+                sharing.setdefault((branch.difference.repository, path), []).append(position)
+        pairs = dict.fromkeys(pair for group in sharing.values() for pair in combinations(group, 2))
+        return ((branches[left], branches[right]) for left, right in pairs)
+
+
 @dataclass(frozen=True)
-class HeldBranch:
+class PreparedBranch(HolderBranch):
+    """One held order's captured branch difference, before the cut, in its repository."""
+
+    holder: ThreadIncarnation
+    todo: Todo
+    difference: BranchDifference
+    repository: Path
+
+
+@dataclass(frozen=True)
+class HeldBranch(HolderBranch):
     """One order still writing source, joined to its own allocated checkout. Only the branch
     difference and publication are captured from that worktree before observation; its unit
     may retire it mid-frame. Later PR comparisons use the order's repository, which outlives
@@ -455,6 +486,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
                 pulls: ProgressRead) -> None:
         storage = comms.registry.storage_rule
+        prepared: list[PreparedBranch] = []
         for held in holds.live:
             todo = held.todo
             directory = todo.order.checked().check.directory
@@ -465,10 +497,18 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                 path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
                 if path.is_dir():
                     pulls.checkout(path).branches.prepare_upstreams()
-                    pulls.branch_difference(path)
+                    prepared.append(PreparedBranch(held.holder, todo, pulls.branch_difference(path),
+                                                   pulls.checkout(directory).path))
             except (OSError, GitCommandError,
                     WorkBranchError, TimeoutExpired) as error:
-                pulls.unread(todo, error)
+                pulls.unread((todo,), error)
+        for member in cls.members_with(cls):
+            member.prepare_captured(tuple(prepared), pulls)
+
+    @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        """A member that needs more than each branch's own difference reads it here, before
+        the cut; its scan consumes only what this captured."""
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -555,8 +595,12 @@ class BranchGrowth(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class SharedFileBranches(HeldBranchRule):
-    """Different held branches touch the same repository-relative file."""
+class ConflictingBranches(HeldBranchRule):
+    """Two held branches that Git cannot merge: one row per pair, only for a real conflict.
+
+    Two branches touching the same file is ordinary parallel work; the row exists only
+    when ``git merge-tree`` of their heads conflicts, and merging one into the other clears
+    it, so no row asks a question nothing can answer."""
 
     problem: str
     holder: ThreadIncarnation
@@ -565,28 +609,33 @@ class SharedFileBranches(HeldBranchRule):
     other_holder: ThreadIncarnation
     other_branch: str
     repository: RepositoryName
-    path: str
+    paths: tuple[str, ...] = field(compare=False)
+
+    @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        for first, second in HolderBranch.touching(prepared):
+            pulls.branch_conflicts(first.repository, first.difference.head, second.difference.head)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
-        found = []
-        for first, second in combinations(branches, 2):
-            left, right = first.difference, second.difference
-            if (first.holder == second.holder or left.repository != right.repository
-                    or left.branch == right.branch):
-                continue
-            found.extend(cls(problem=first.problem, holder=first.holder, branch=left.branch,
-                             other_problem=second.problem, other_holder=second.holder,
-                             other_branch=right.branch, repository=left.repository, path=path)
-                         for path in sorted(left.files & right.files))
-        return tuple(found)
+        return tuple(
+            cls(problem=first.problem, holder=first.holder, branch=first.difference.branch,
+                other_problem=second.problem, other_holder=second.holder,
+                other_branch=second.difference.branch, repository=first.difference.repository,
+                paths=conflicts)
+            for first, second in HolderBranch.touching(branches)
+            if (conflicts := first.source.pulls.require_branch_conflicts(
+                first.difference.head, second.difference.head))
+        )
 
     def line(self) -> str:
-        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} {self.other_problem}"
-                f" both touch {self.repository.to_wire()}:{self.path}. who goes first? -> sequence"
-                " them")
+        return (f"CONFLICT {self.holder.name} {self.problem} ({self.branch}) and"
+                f" {self.other_holder.name} {self.other_problem} ({self.other_branch}) do not merge"
+                f" in {self.repository.to_wire()}: {', '.join(self.paths)}. -> merge one into the"
+                " other and resolve")
 
 
+@dataclass(frozen=True)
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 
@@ -1177,26 +1226,26 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan):
+class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule, FamilyScan):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
-    since: float
     error: str = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        failing = ServicePassStore.at(comms.root).read().failing
+        return cls.from_passes(ServicePassStore.at(comms.root).read())
+
+    @classmethod
+    def from_passes(cls, passes: ServicePasses) -> tuple[Self, ...]:
         return tuple(cls(watch=watch, since=failed.since, error=failed.error)
-                     for watch, failed in sorted(failing.items()))
+                     for watch, failed in sorted(passes.failing.items()))
 
     def began(self) -> float:
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}:"
-                f" {self.error}. is anyone fixing it, or letting it pile up?"
-                " -> fix the owner of the failing read this wake")
+        return self.failure_line(self.watch)
 
 @dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):

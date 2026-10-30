@@ -141,6 +141,29 @@ class CommanderUpdatePosition(BusProjectionTables):
 
 
 @dataclass(frozen=True)
+class EscalationPosition(BusProjectionTables):
+    """Where each escalation line sits, by the commander birth it addresses and when it was sent.
+    It shares the owner's thread with every message he types, so this rebuildable projection, not
+    the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    at: float
+    indexes = (Index(("commander_lookup", "at")),)
+
+    @classmethod
+    def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
+             before: float) -> tuple[BusRecord, ...]:
+        """Every escalation line to that commander birth in [since, before], newest first."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),
+            (FieldCodec.encode(commander), since, before))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
 class ClaimOperations(BusProjectionTables):
     """An acquisition's consumed operation refers to its original claim row."""
 

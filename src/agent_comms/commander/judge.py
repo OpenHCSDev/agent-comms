@@ -466,7 +466,6 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
         return UnquotedHeadReview.of(todo, self.head_evidence())
 
     def act(self, ctx: order.Commander) -> None:
-        self.gate(ctx)
         self.subject(ctx).run(self, ctx)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
