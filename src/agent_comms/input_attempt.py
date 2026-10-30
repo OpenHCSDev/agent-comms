@@ -20,6 +20,7 @@ from .field_codec import (
     WireOmitDefault,
     WireRequired,
 )
+from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .input_origin import (
     InputDelivery,
     InputOrigin,
@@ -27,7 +28,6 @@ from .input_origin import (
     UnattributedInputOrigin,
     UndeliveredInput,
 )
-from .input_key import InputKey, InputKeyText, PublicInputKeyText
 from .lifecycle_capability import LifecycleCapability, Unresolved
 from .native_input_proof import NativeContextProof
 from .notification_evidence import ConsumptionEvidence
@@ -141,8 +141,12 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
         return progress
 
     def context_committed(
-        self, lease: TurnLeaseFence, sent_text: str, context: NativeContextProof,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        sent_text: str,
+        context: NativeContextProof,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> InputTransition:
         raise RelationViolationError("Context acknowledgement lacks its started input")
 
@@ -342,7 +346,6 @@ class StoredInput(InputAttempt):
         return replace(self, goal_reviews={**self.goal_reviews, goal_id: decision})
 
 
-
 class RecoverableUnboundInput(StoredInput):
     def unbound_delivery(self, root_id: RootId) -> InputDelivery:
         return self.origin.delivery_reference(root_id)
@@ -462,11 +465,17 @@ class StartedInput(SentInput):
             turn_id=lease.turn_id, native_id=native_id, text=sent_text)
 
     def context_committed(
-        self, lease: TurnLeaseFence, sent_text: str, context: NativeContextProof,
-        *, snapshot: RegistrySnapshot,
+        self,
+        lease: TurnLeaseFence,
+        sent_text: str,
+        context: NativeContextProof,
+        *,
+        snapshot: RegistrySnapshot,
     ) -> InputTransition:
         if not self.started_for_native(lease, context.input_id, sent_text, snapshot=snapshot):
-            raise RelationViolationError("Context acknowledgement differs from its original input binding")
+            raise RelationViolationError(
+                "Context acknowledgement differs from its original input binding"
+            )
         return self.record_context(context)
 
     def record_context(self, context: NativeContextProof) -> InputTransition:

@@ -15,11 +15,10 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 
+from .class_fact import ClassFact
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordination_tables.responses import ResponseObligation
-from .class_fact import ClassFact
-from .turn_item import FreshNativeId
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
@@ -32,7 +31,7 @@ from .field_codec import (
     ToolCallId,
 )
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .turn_item import FreshNativeId
+from .native_input_proof import NativeContextRecord, NativeInputLocation
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,
@@ -40,14 +39,11 @@ from .native_input_record import (
     NativeInputPosition,
     NativeInputRecord,
     NativeStageStorage,
-    NumberNativeColumn,
     RecordedNativePosition,
-    TextNativeColumn,
     TriageNativeExecution,
     UnrecordedNativeColumn,
     UnrecordedNativePosition,
 )
-from .native_input_proof import NativeContextRecord, NativeInputLocation
 from .native_session_reopen import (
     NativeSessionIdentity,
     NoPiSessionId,
@@ -60,6 +56,7 @@ from .selected_triage import (
     TriageDecisionRecord,
 )
 from .tool_denial import SelectedToolDenied
+from .turn_item import FreshNativeId
 from .typed_table import (
     Column,
     FrozenColumn,
@@ -138,9 +135,17 @@ class NativeRuntimeInput(
     @staticmethod
     def write_once_columns(cls: type[NativeRuntimeInput]) -> tuple[str, ...]:
         # The declared context group is immutable, not the later triage verdict.
-        return ('sent_owner_claimed_generation', 'session_id', 'session_file', 'verdict',
-                *(plan.name for plan in FieldCodec.field_plans(cls)
-                  if NativeContext.single(plan.annotation)))
+        return (
+            "sent_owner_claimed_generation",
+            "session_id",
+            "session_file",
+            "verdict",
+            *(
+                plan.name
+                for plan in FieldCodec.field_plans(cls)
+                if NativeContext.single(plan.annotation)
+            ),
+        )
 
     required_update_columns = ('sent_owner_claimed_generation',)
 
@@ -358,10 +363,12 @@ class NativeRuntimeInput(
         current = type(self).require(db, input_id=self.input_id)
         current.reference.require_recorded()
         current.verdict.require_undecided()
-        updated = self.update(db, where="input_id=? AND verdict IS NULL",
-                              parameters=(self.input_id,), verdict=verdict)
+        updated = self.update(
+            db, where="input_id=? AND verdict IS NULL", parameters=(self.input_id,), verdict=verdict
+        )
         if updated.rowcount != 1:
             raise StaleFence("native triage verdict was previously settled")
+
 
 class SelectedSlotState(DeclaredFamily, affix="Slot"):
     """Consumption is irreversible; only a matching live terminal can acknowledge it."""

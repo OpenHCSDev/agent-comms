@@ -27,7 +27,6 @@ import argparse
 import ast
 import atexit
 import inspect
-from io import StringIO
 import shutil
 import subprocess
 import sys
@@ -38,22 +37,21 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 from functools import cache, cached_property
+from io import StringIO
 from pathlib import Path
 
 from mypy.config_parser import parse_config_file
 from mypy.options import Options
-
-from agent_comms.field_codec import FieldCodec, boundary_decoder
-from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
-from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
-from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Repo
-from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
-
 from nominal_refactor_advisor import audit
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.field_codec import boundary_decoder
+from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
+from agent_comms.installer.commands import InstallCommands
+from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources
+from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
+from agent_comms.repo import Repo
+from agent_comms.repository_name import RepositoryName
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -363,7 +361,8 @@ class StackClient(StackSources):
         into = Path(tempfile.mkdtemp(prefix="debt-ratchet-clients-"))
         atexit.register(shutil.rmtree, into, True)
         (into / "stack").mkdir()
-        (into / "stack/pyproject.toml").write_text(Repo.git(repo, "show", f"{head}:stack/pyproject.toml"))
+        declared = Repo.git(repo, "show", f"{head}:stack/pyproject.toml")
+        (into / "stack/pyproject.toml").write_text(declared)
         with InstallCommands() as commands:
             return cls.fetched(into / "stack", into, uv=uv, python=python, commands=commands)
 
@@ -394,7 +393,7 @@ class StackClient(StackSources):
         selected-file union across the two returned sets, not a phantom main clone.
         """
         clients = []
-        for name, (url, branch) in cls.sources(stack).items():
+        for name, (url, _branch) in cls.sources(stack).items():
             source = inputs.source(Repo.repository_url(url))
             checkout = side.require_materialized(directory, source)
             cls.require_package(metadata[source.repository], name)
@@ -476,7 +475,8 @@ class MaterializedClients(ClientSources):
         core_source = self.inputs.source(CorePackage.repository)
         return {side: StackClient.materialized(
                     side.require_materialized(self.directory, core_source) / "stack",
-                    self.directory, side, self.inputs, self.projects(side)) for side in Side.sides()}
+                    self.directory, side, self.inputs, self.projects(side))
+                for side in Side.sides()}
 
     def requires_clients(self) -> bool:
         # A companion can change while the local Core patch is unchanged.
@@ -497,7 +497,8 @@ class MaterializedClients(ClientSources):
                      compared=tuple(peer.checkout for peer in clients
                                     if origins[peer.checkout] == origins[client.checkout]
                                     and peer.checkout != client.checkout),
-                     dependencies=tuple(peer.checkout for peer in cuts[side] if peer.checkout != client.checkout))
+                     dependencies=tuple(peer.checkout for peer in cuts[side]
+                                        if peer.checkout != client.checkout))
                      for client in cuts[side])
 
 
@@ -855,7 +856,8 @@ def main() -> int:
         "--report", type=Path, help="with --check, also write the layer report to this file"
     )
     parser.add_argument("--ci-inputs", type=Path,
-                        help="use the integration entrypoint's already-materialized exact source input")
+                        help="use the integration entrypoint's already-materialized"
+                             " exact source input")
     arguments = parser.parse_args()
     with tempfile.TemporaryDirectory() as clones, InstallCommands() as commands:
         if arguments.ci_inputs:
@@ -866,7 +868,9 @@ def main() -> int:
                                            Path(sys.executable))
             package = Package(core, resource.cuts[HeadSide])
             base = BaseSide.require_materialized(arguments.ci_inputs, local)
-            if arguments.base and Repo.git(ROOT, "rev-parse", arguments.base).strip() != local.baseline.commit:
+            if arguments.base and (
+                Repo.git(ROOT, "rev-parse", arguments.base).strip() != local.baseline.commit
+            ):
                 raise ValueError("The outgoing wire must check this input's actual captured base")
         else:
             package = Package(ROOT, StackClient.fetched(ROOT / "stack", Path(clones),

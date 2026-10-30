@@ -43,11 +43,26 @@ from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import DisclosedRecord, FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
+from .field_codec import (
+    DisclosedRecord,
+    FieldCodec,
+    FieldDirective,
+    Id128,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireRequired,
+)
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .native_build_inputs import (
-    AsyncStdioOptions, ChildStdio, ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled,
-    GitLaunch, GitOpening, StdioOptions,
+    AsyncStdioOptions,
+    ChildStdio,
+    ConfiguredChildStdio,
+    DetachedChildStdio,
+    GitAcquisitionCancelled,
+    GitLaunch,
+    GitOpening,
+    StdioOptions,
 )
 from .sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
@@ -523,7 +538,7 @@ class Platform(DeclaredFamily, affix="Platform"):
             os.fchmod(descriptor, permissions)
 
     @contextmanager
-    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path]:
         with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
             parent = Path(directory) / "d"
             parent.symlink_to(path.parent, target_is_directory=True)
@@ -634,7 +649,7 @@ class LinuxPlatform(PidfdHandles, Platform):
         return None
 
     @contextmanager
-    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path]:
         yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
 
     def parent_death_binding(self) -> int:
@@ -2307,8 +2322,12 @@ class SpawnedProcess(SynchronousProcess):
 
     @classmethod
     def run(
-        cls, command: tuple[str, ...], *, timeout: float,
-        cwd: str | Path, env: dict[str, str],
+        cls,
+        command: tuple[str, ...],
+        *,
+        timeout: float,
+        cwd: str | Path,
+        env: dict[str, str],
         runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> subprocess.CompletedProcess[bytes]:
         """A one-shot interpreter exchange, including forced descendant retirement.
@@ -2319,8 +2338,13 @@ class SpawnedProcess(SynchronousProcess):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         deadline = time.monotonic() + timeout
-        with cls.launch(command, cwd=cwd, env=env, runtime=runtime, stdio=DetachedChildStdio(
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)) as child:
+        with cls.launch(
+            command,
+            cwd=cwd,
+            env=env,
+            runtime=runtime,
+            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))
             finally:
@@ -2569,5 +2593,3 @@ class ControllingTerminalCommand(ChildCommand):
     def run(self) -> None:
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         os.execvpe(self.command[0], self.command, os.environ)
-
-

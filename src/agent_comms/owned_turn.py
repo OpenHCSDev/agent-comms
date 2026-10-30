@@ -13,7 +13,6 @@ from dataclasses import (
     replace,
 )
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from agent_comms.following_inputs import OwnerFollowingInputs
@@ -29,6 +28,7 @@ from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
 from .field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
@@ -62,7 +62,6 @@ from .turn_input_source import (
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
-from .cursor_publication import CursorDelivery
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
@@ -421,11 +420,10 @@ class OwnedTurn:
         return True
 
     async def run(self) -> None:
-        async with AsyncExitStack() as resources:
-            async with AsyncExitStack() as permit_cleanup:
-                if not await self.acquire(resources, permit_cleanup):
-                    return
-                await self.run_native()
+        async with AsyncExitStack() as resources, AsyncExitStack() as permit_cleanup:
+            if not await self.acquire(resources, permit_cleanup):
+                return
+            await self.run_native()
 
     def settle_unbound(self):
         """Read the result of the input owner's exact retirement transaction."""

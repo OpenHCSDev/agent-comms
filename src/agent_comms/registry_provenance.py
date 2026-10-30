@@ -16,10 +16,10 @@ from agent_comms.field_codec import FieldCodec, ThreadLookup
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
+from .participant_identity import FrozenRecipientIdentity
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import Thread, ThreadProvenance
-from .participant_identity import FrozenRecipientIdentity
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -237,7 +237,9 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
-    def historical_recipient(self, recipient: FrozenRecipientIdentity) -> ArchivedRecipient | RetiredRecipient:
+    def historical_recipient(
+        self, recipient: FrozenRecipientIdentity,
+    ) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
         if thread is not None and thread.incarnation.selects_lookup(recipient.recipient_lookup):

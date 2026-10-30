@@ -10,14 +10,14 @@ import sys
 import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
-from functools import cached_property
 from email import policy
 from email.parser import BytesParser
+from functools import cached_property
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from zipfile import ZipFile
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from urllib.parse import parse_qsl, urlsplit
+from zipfile import ZipFile
 
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 from packaging.markers import Marker, default_environment
@@ -29,10 +29,15 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec, GitCommitText, boundary_decoder
-from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
-from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.probes.packages import (
+    DistributionVersionsProbe,
+    GitPin,
+    InstalledPackagesProbe,
+    PackagePin,
+    PackageRecord,
+)
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
@@ -57,11 +62,14 @@ class ProjectMetadata:
     def from_wheel(cls, wheel: Path) -> ProjectMetadata:
         name, version, _, _ = parse_wheel_filename(wheel.name)
         with ZipFile(wheel) as archive:
-            entries = tuple(entry for entry in archive.infolist()
-                            if entry.filename.endswith(".dist-info/METADATA"))
+            entries = tuple(
+                entry
+                for entry in archive.infolist()
+                if entry.filename.endswith(".dist-info/METADATA")
+            )
             if len(entries) != 1:
                 raise ValueError(f"{wheel} requires exactly one dist-info/METADATA")
-            entry, = entries
+            (entry,) = entries
             components = entry.filename.split("/")
             if len(components) != 2:
                 raise ValueError(f"Malformed wheel metadata path: {entry.filename}")
@@ -72,11 +80,13 @@ class ProjectMetadata:
             message = BytesParser(policy=policy.default).parsebytes(archive.read(entry))
         if message.defects:
             raise ValueError(f"Malformed wheel metadata: {message.defects}")
+
         def required(header: str) -> str:
             values = message.get_all(header, [])
             if len(values) != 1 or not str(values[0]).strip():
                 raise ValueError(f"Wheel metadata requires exactly one {header}")
             return str(values[0]).strip()
+
         actual = canonicalize_name(required("Name"), validate=True)
         actual_version = Version(required("Version"))
         Version(required("Metadata-Version"))
@@ -85,17 +95,24 @@ class ProjectMetadata:
         python = message.get_all("Requires-Python", [])
         if len(python) > 1:
             raise ValueError("Duplicate Requires-Python metadata")
-        extra_values = tuple(canonicalize_name(str(value), validate=True)
-                             for value in message.get_all("Provides-Extra", []))
+        extra_values = tuple(
+            canonicalize_name(str(value), validate=True)
+            for value in message.get_all("Provides-Extra", [])
+        )
         if len(set(extra_values)) != len(extra_values):
             raise ValueError("Duplicate Provides-Extra metadata")
-        return cls(actual, actual_version, SpecifierSet(str(python[0]) if python else ""),
-                   tuple(Requirement(str(value)) for value in message.get_all("Requires-Dist", [])),
-                   frozenset(extra_values))
+        return cls(
+            actual,
+            actual_version,
+            SpecifierSet(str(python[0]) if python else ""),
+            tuple(Requirement(str(value)) for value in message.get_all("Requires-Dist", [])),
+            frozenset(extra_values),
+        )
 
     @classmethod
-    def acquire(cls, checkout: Path, *, uv: Path, python: Path,
-                commands: InstallCommands, output: Path) -> ProjectMetadata:
+    def acquire(
+        cls, checkout: Path, *, uv: Path, python: Path, commands: InstallCommands, output: Path
+    ) -> ProjectMetadata:
         """Build once through the selected frontend; output never lives in a source cut."""
         output = output.resolve()
         checkout = checkout.resolve()
@@ -107,16 +124,20 @@ class ProjectMetadata:
         output.mkdir(parents=True, exist_ok=True)
         with TemporaryDirectory(prefix="metadata-", dir=output) as temporary:
             try:
-                commands.run(uv, "build", "--wheel", "--out-dir", temporary,
-                             "--python", python, checkout)
+                commands.run(
+                    uv, "build", "--wheel", "--out-dir", temporary, "--python", python, checkout
+                )
                 wheels = tuple(Path(temporary).glob("*.whl"))
                 if len(wheels) != 1:
-                    raise ValueError(f"Backend produced {len(wheels)} wheels for {checkout}, expected one")
-                wheel, = wheels
+                    raise ValueError(
+                        f"Backend produced {len(wheels)} wheels for {checkout}, expected one"
+                    )
+                (wheel,) = wheels
                 return cls.from_wheel(wheel)
             finally:
                 if Repo.git(checkout, "rev-parse", "HEAD").strip() != before or Repo.git(
-                        checkout, "status", "--porcelain"):
+                    checkout, "status", "--porcelain"
+                ):
                     raise ValueError(f"Backend moved or dirtied captured source: {checkout}")
 
     def with_all_extras(self, requirement: str) -> str:
@@ -210,24 +231,36 @@ class LockedGitLocation:
             raise ValueError("Malformed Git query escaping")
         parameters: list[GitQuery] = []
         seen: set[str] = set()
-        for key, text in parse_qsl(source.query, keep_blank_values=True, strict_parsing=True, errors="strict"):
+        for key, text in parse_qsl(
+            source.query, keep_blank_values=True, strict_parsing=True, errors="strict"
+        ):
             if key in seen:
                 raise ValueError(f"Duplicate Git query parameter: {key}")
             seen.add(key)
-            parameters.append(FieldCodec.decode_document(GitQuery.member_named(key), {"value": text}))
-        selectors = tuple(selector for parameter in parameters for selector in parameter.selectors())
-        locations = tuple(location for parameter in parameters for location in parameter.locations())
+            parameters.append(
+                FieldCodec.decode_document(GitQuery.member_named(key), {"value": text})
+            )
+        selectors = tuple(
+            selector for parameter in parameters for selector in parameter.selectors()
+        )
+        locations = tuple(
+            location for parameter in parameters for location in parameter.locations()
+        )
         if len(selectors) > 1:
             raise ValueError("A locked Git source requires one unambiguous ref selector")
-        selector, = selectors or (GitSelection(),)
-        package, = locations or (GitPackageLocation(),)
-        return cls(source._replace(query="", fragment="").geturl(), source.fragment, selector, package)
+        (selector,) = selectors or (GitSelection(),)
+        (package,) = locations or (GitPackageLocation(),)
+        return cls(
+            source._replace(query="", fragment="").geturl(), source.fragment, selector, package
+        )
 
 
 class UvRecord(BaseModel):
     """Decode consumed TOML fields strictly and preserve every unrelated UV/tool option."""
 
-    model_config = ConfigDict(extra="allow", strict=True, validate_by_alias=True, validate_by_name=False)
+    model_config = ConfigDict(
+        extra="allow", strict=True, validate_by_alias=True, validate_by_name=False
+    )
 
     def document(self) -> dict[str, object]:
         # Python mode preserves TOML date/time and arrays, not just JSON-shaped options.
@@ -239,8 +272,13 @@ class UvSourceOptions(UvRecord):
 
     marker: str = ""
 
-    def materialize(self, original: Path, core: Path,
-                    projects: dict[RepositoryName, tuple[Path, ProjectMetadata]], name: str) -> UvSourceOptions:
+    def materialize(
+        self,
+        original: Path,
+        core: Path,
+        projects: dict[RepositoryName, tuple[Path, ProjectMetadata]],
+        name: str,
+    ) -> UvSourceOptions:
         return self
 
     def retained_options(self) -> dict[str, object]:
@@ -257,27 +295,43 @@ class UvGitSource(UvSourceOptions):
     git: str
 
     def retained_options(self) -> dict[str, object]:
-        return self.model_dump(mode="python", by_alias=True, exclude=set(GitQuery.names()), exclude_unset=True)
+        return self.model_dump(
+            mode="python", by_alias=True, exclude=set(GitQuery.names()), exclude_unset=True
+        )
 
 
 class UvTrackedSource(UvGitSource):
     branch: str
 
-    def materialize(self, original: Path, core: Path,
-                    projects: dict[RepositoryName, tuple[Path, ProjectMetadata]], name: str) -> UvSourceOptions:
+    def materialize(
+        self,
+        original: Path,
+        core: Path,
+        projects: dict[RepositoryName, tuple[Path, ProjectMetadata]],
+        name: str,
+    ) -> UvSourceOptions:
         GitSource.require_branches(name, (self.branch,))
         checkout, metadata = projects[Repo.repository_url(self.git)]
         StackSources.require_package(metadata, name)
-        options = self.model_dump(mode="python", by_alias=True, exclude_unset=True,
-                                  exclude=set(type(self).model_fields) - set(UvSourceOptions.model_fields))
+        options = self.model_dump(
+            mode="python",
+            by_alias=True,
+            exclude_unset=True,
+            exclude=set(type(self).model_fields) - set(UvSourceOptions.model_fields),
+        )
         return UvLocalSource.model_validate({**options, "path": str(checkout), "editable": True})
 
 
 class UvLocalSource(UvSourceOptions):
     path: str
 
-    def materialize(self, original: Path, core: Path,
-                    projects: dict[RepositoryName, tuple[Path, ProjectMetadata]], name: str) -> UvSourceOptions:
+    def materialize(
+        self,
+        original: Path,
+        core: Path,
+        projects: dict[RepositoryName, tuple[Path, ProjectMetadata]],
+        name: str,
+    ) -> UvSourceOptions:
         checkout = (original / self.path).resolve()
         if checkout != core or name != CorePackage.distribution:
             raise ValueError(f"Uncaptured local source {name}: {checkout}")
@@ -296,8 +350,13 @@ class UvIndexSource(UvSourceOptions):
 class UvConditionalSources(RootModel[list[UvSourceOptions]]):
     """Conditional source arrays pass through intact; an exact pin cannot replace them."""
 
-    def materialize(self, original: Path, core: Path,
-                    projects: dict[RepositoryName, tuple[Path, ProjectMetadata]], name: str) -> UvConditionalSources:
+    def materialize(
+        self,
+        original: Path,
+        core: Path,
+        projects: dict[RepositoryName, tuple[Path, ProjectMetadata]],
+        name: str,
+    ) -> UvConditionalSources:
         return self
 
     def retained_options(self) -> dict[str, object]:
@@ -312,8 +371,16 @@ class UvIndex(UvRecord):
 
 class UvProjectSettings(UvRecord):
     package: bool = True
-    sources: dict[str, UvRevisionSource | UvTrackedSource | UvLocalSource | UvIndexSource
-                  | UvGitSource | UvSourceOptions | UvConditionalSources]
+    sources: dict[
+        str,
+        UvRevisionSource
+        | UvTrackedSource
+        | UvLocalSource
+        | UvIndexSource
+        | UvGitSource
+        | UvSourceOptions
+        | UvConditionalSources,
+    ]
     overrides: list[str] = Field(default_factory=list, alias="override-dependencies")
     constraints: list[str] = Field(default_factory=list, alias="constraint-dependencies")
     indexes: list[UvIndex] = Field(default_factory=list, alias="index")
@@ -355,6 +422,7 @@ class UvProjectTools(UvRecord):
 
 class PrivateUvProject(UvRecord):
     """One transient, lossless projection of the actual captured virtual project."""
+
     project: UvProjectRoot
     tool: UvProjectTools
 
@@ -363,16 +431,26 @@ class PrivateUvProject(UvRecord):
         return FieldCodec.decode(cls, tomllib.loads(path.read_text()))
 
     def enrich(self, metadata: ProjectMetadata) -> None:
-        if not any(canonicalize_name(Requirement(text).name) == metadata.name
-                   for text in self.project.dependencies):
+        if not any(
+            canonicalize_name(Requirement(text).name) == metadata.name
+            for text in self.project.dependencies
+        ):
             raise ValueError("The private checker requires the declared Core runtime root")
-        self.project.dependencies = [metadata.with_all_extras(text) for text in self.project.dependencies]
+        self.project.dependencies = [
+            metadata.with_all_extras(text) for text in self.project.dependencies
+        ]
         self.tool.uv.overrides = [metadata.with_all_extras(text) for text in self.tool.uv.overrides]
 
-    def materialize(self, original: Path, core: Path,
-                    projects: dict[RepositoryName, tuple[Path, ProjectMetadata]]) -> None:
+    def materialize(
+        self,
+        original: Path,
+        core: Path,
+        projects: dict[RepositoryName, tuple[Path, ProjectMetadata]],
+    ) -> None:
         for name, source in tuple(self.tool.uv.sources.items()):
-            self.tool.uv.sources[name] = source.materialize(original, core, projects, canonicalize_name(name))
+            self.tool.uv.sources[name] = source.materialize(
+                original, core, projects, canonicalize_name(name)
+            )
 
 
 class RequirementMarker(MroDispatch):
@@ -433,11 +511,18 @@ class StackSources:
         documents = tuple(tomllib.loads(text) for text in (baseline, candidate))
         local_names = cls.local_packages(*documents)
         environment = cls.marker_environment(Path(sys.executable))
-        contracts = tuple(frozenset(str(requirement) for requirement in cls.virtual_requirements(document, environment)
-                                    if canonicalize_name(requirement.name) not in local_names)
-                          for document in documents)
+        contracts = tuple(
+            frozenset(
+                str(requirement)
+                for requirement in cls.virtual_requirements(document, environment)
+                if canonicalize_name(requirement.name) not in local_names
+            )
+            for document in documents
+        )
         if contracts[0] != contracts[1]:
-            raise ValueError("External runtime dependency migration is unsupported by this common environment")
+            raise ValueError(
+                "External runtime dependency migration is unsupported by this common environment"
+            )
 
     @staticmethod
     @boundary_decoder
@@ -454,21 +539,35 @@ class StackSources:
         return frozenset(names)
 
     @classmethod
-    def virtual_requirements(cls, document: dict[str, object], environment: dict[str, str]) -> tuple[Requirement, ...]:
+    def virtual_requirements(
+        cls, document: dict[str, object], environment: dict[str, str]
+    ) -> tuple[Requirement, ...]:
         """Only package=false roots have a declarative (non-wheel) runtime contract."""
         match document:
-            case {"project": {"dependencies": list() as dependencies, **project},
-                  "tool": {"uv": {"package": False}}}:
+            case {
+                "project": {"dependencies": list() as dependencies, **project},
+                "tool": {"uv": {"package": False}},
+            }:
                 python = SpecifierSet(FieldCodec.decode(str, project.get("requires-python", "")))
                 ProjectMetadata.require_python(python)
-                return tuple(requirement for requirement in map(
-                    Requirement, FieldCodec.decode(tuple[str, ...], dependencies))
-                    if RequirementMarker.active(requirement.marker, environment, ("",)))
-        raise ValueError("A virtual runtime root requires tool.uv.package=false and project dependencies")
+                return tuple(
+                    requirement
+                    for requirement in map(
+                        Requirement, FieldCodec.decode(tuple[str, ...], dependencies)
+                    )
+                    if RequirementMarker.active(requirement.marker, environment, ("",))
+                )
+        raise ValueError(
+            "A virtual runtime root requires tool.uv.package=false and project dependencies"
+        )
 
     @classmethod
-    def active_requirements(cls, document: dict[str, object], projects: tuple[ProjectMetadata, ...],
-                            environment: dict[str, str]) -> tuple[Requirement, ...]:
+    def active_requirements(
+        cls,
+        document: dict[str, object],
+        projects: tuple[ProjectMetadata, ...],
+        environment: dict[str, str],
+    ) -> tuple[Requirement, ...]:
         """Monotone local-extra closure, retaining original marked/extras-bearing edges."""
         local = {project.name: project for project in projects}
         if len(local) != len(projects):
@@ -495,8 +594,11 @@ class StackSources:
             if not added:
                 continue
             previous.update(added)
-            pending.extend(edge for edge in project.requirements
-                           if RequirementMarker.active(edge.marker, environment, added))
+            pending.extend(
+                edge
+                for edge in project.requirements
+                if RequirementMarker.active(edge.marker, environment, added)
+            )
         return tuple(sorted(active, key=str))
 
     @staticmethod
@@ -609,8 +711,11 @@ class GitSource(LockSource):
         return GitPin(version, self.location.revision)
 
     def project_source(self) -> UvRevisionSource:
-        return UvRevisionSource(git=self.location.repository, rev=self.location.revision,
-                                **self.location.package.fields())
+        return UvRevisionSource(
+            git=self.location.repository,
+            rev=self.location.revision,
+            **self.location.package.fields(),
+        )
 
     def retain(self, name: str, marker: str, uv: UvProjectSettings) -> None:
         super().retain(name, marker, uv)
@@ -658,8 +763,11 @@ class VersionedPackage(LockedPackage):
         return (self,) if self.active() else ()
 
     def require_retained(self, actual: VersionedPackage) -> None:
-        if (canonicalize_name(self.name) != canonicalize_name(actual.name) or self.version != actual.version
-                or self.source.project_source() != actual.source.project_source()):
+        if (
+            canonicalize_name(self.name) != canonicalize_name(actual.name)
+            or self.version != actual.version
+            or self.source.project_source() != actual.source.project_source()
+        ):
             raise ValueError(f"Private solve changed retained source/version for {self.name}")
 
     def constrain(self, uv: UvProjectSettings) -> None:

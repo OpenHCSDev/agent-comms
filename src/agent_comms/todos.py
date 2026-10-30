@@ -105,11 +105,11 @@ from agent_comms.head_review import (
     IntegrationInput,
     MergeArm,
     MergeHeadReview,
-    UnpromotedHeadReview,
     OpenPullRequestHead,
     PreparedHeadReview,
     PullRequestHead,
     ReadPullRequestHead,
+    UnpromotedHeadReview,
     UntouchedMergeArm,
 )
 from agent_comms.launch_runtime import LaunchRuntime
@@ -2628,8 +2628,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
         """Any order that holds a head takes a decision on it, or a reviewer's mark first."""
-        return (ReviewedHeadVerdict, QualifiedHeadVerdict, RejectedHeadVerdict,
-                UnderReviewHeadVerdict)
+        return (
+            ReviewedHeadVerdict,
+            QualifiedHeadVerdict,
+            RejectedHeadVerdict,
+            UnderReviewHeadVerdict,
+        )
 
     def under_review(self, record: OrderHeadReviewRecord) -> CheckedProblemOrder:
         """Only a claim owes a delivery verdict; elsewhere the head record is the whole mark."""
@@ -6135,7 +6139,8 @@ class OwnerRequestStore(DurableStore):
     def _select(self, where: str, parameters: tuple, *,
                 reader: Callable[[sqlite3.Connection, str, tuple], CapturedRows[Todo]] = Todo.capture_rows,
                 ) -> tuple[Todo, ...]:
-        """Capture selected rows and their aggregates together; decode after releasing the snapshot."""
+        """Capture selected rows and their aggregates together; decode after releasing
+        the snapshot."""
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
@@ -6349,7 +6354,8 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 owners = linked.get(head.pr, ())
                 if len(owners) > 1 or not (owners or head in approved):
                     raise TodoError(
-                        f"{head.repo.to_wire()}#{head.pr} has neither unique Todo nor saved root source authority")
+                        f"{head.repo.to_wire()}#{head.pr} has neither unique Todo"
+                        " nor saved root source authority")
 
     def open_orders(self) -> tuple[Todo, ...]:
         """Every open order, whichever commander created it: their links say which requests

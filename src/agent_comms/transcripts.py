@@ -117,7 +117,9 @@ class TranscriptCursor(DeclaredFamily, affix="TranscriptCursor"):
     def matches_runtime(self, runtime: RuntimeLocation) -> bool:
         return self.session_file == runtime.read_key
 
-    def require_readable(self, runtime: RuntimeLocation, reader: TranscriptSource, size: int) -> None:
+    def require_readable(
+        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+    ) -> None:
         if not self.matches_runtime(runtime) or not reader.valid_offset(self.offset, size):
             raise TranscriptChanged()
 
@@ -268,7 +270,9 @@ class WireTranscriptCursor(NativeTranscriptCursor):
 class PagePosition(DeclaredFamily, affix=""):
     """Where a bounded transcript page starts: the latest page, or one side of a read cursor."""
 
-    def require_readable(self, runtime: RuntimeLocation, reader: TranscriptSource, size: int) -> None:
+    def require_readable(
+        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+    ) -> None:
         """The latest page has no cursor to validate."""
 
     def within(self, frontier: TranscriptCursor) -> bool:
@@ -300,7 +304,9 @@ class CursorPage(PagePosition, declared_name=None):
 
     cursor: TranscriptCursor
 
-    def require_readable(self, runtime: RuntimeLocation, reader: TranscriptSource, size: int) -> None:
+    def require_readable(
+        self, runtime: RuntimeLocation, reader: TranscriptSource, size: int,
+    ) -> None:
         self.cursor.require_readable(runtime, reader, size)
 
     def within(self, frontier: TranscriptCursor) -> bool:
@@ -580,7 +586,8 @@ class TranscriptRead:
     @contextmanager
     def publication_source(cls, root: Path) -> Iterator[Connection | None]:
         privacy = RegistryStore.at(root).privacy()
-        with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(cls, privacy) as db:
+        store = CoordinationStore.observed(CoordinationStore.path_in(root))
+        with store.observing(cls, privacy) as db:
             yield db
 
     @classmethod

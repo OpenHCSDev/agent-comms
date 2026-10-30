@@ -31,8 +31,8 @@ from .field_codec import (
     MalformedRecord,
     NativeContext,
 )
-from .native_integer import PositiveNativeIntegerBounds
 from .native_input_proof import NativeContextProof
+from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
 from .typed_table import SqlStorage, TextStorage
@@ -367,7 +367,9 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         """An unrecorded context grants no committed-input identity."""
 
-    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+    def acknowledge_context(
+        self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof
+    ) -> None:
         """The first verified entry is immutable; later settlement does not own it."""
         row.write_context(db, context)
 
@@ -400,17 +402,22 @@ class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
     def acquire(cls, row: NativeInputContext) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
-            result = FieldCodec.construct(cls, dict(
-                input_id=row.context_value("input_id"),
-                stage=row.reference_stage,
-                session_id=row.reference_session_id,
-                request_generation=row.context_value("request_generation"),
-            ))
+            result = FieldCodec.construct(
+                cls,
+                dict(
+                    input_id=row.context_value("input_id"),
+                    stage=row.reference_stage,
+                    session_id=row.reference_session_id,
+                    request_generation=row.context_value("request_generation"),
+                ),
+            )
             return result
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
 
-    def acknowledge_context(self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof) -> None:
+    def acknowledge_context(
+        self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof
+    ) -> None:
         row.require_context_proof().require_continuation(context)
 
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:

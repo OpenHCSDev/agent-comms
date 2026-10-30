@@ -8,17 +8,18 @@ from __future__ import annotations
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
-from collections.abc import Sequence
+
+from nominal_refactor_advisor import audit
 
 from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import StackSources
-from nominal_refactor_advisor import audit
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -87,8 +88,11 @@ class PullRequestHead:
     @classmethod
     def at(cls, repo: RepositoryName, pr: int) -> OpenPullRequestHead:
         """Read GitHub's head, its base branch and draft state in one request."""
-        read = repo.rest(f"pulls/{pr}", "--jq",
-                         '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
+        read = repo.rest(
+            f"pulls/{pr}",
+            "--jq",
+            '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state',
+        )
         if read.returncode:
             raise ToolRefusedError(read.stderr.strip() or f"#{pr} could not be read.")
         return OpenPullRequestHead.from_forge(repo, pr, read.stdout)
@@ -135,7 +139,9 @@ class SourceCheckout(Checkout, ABC):
 
     @classmethod
     @abstractmethod
-    def materialize(cls, source: IntegrationSource, repository: Repo, path: Path) -> SourceCheckout: ...
+    def materialize(
+        cls, source: IntegrationSource, repository: Repo, path: Path
+    ) -> SourceCheckout: ...
 
 
 @dataclass(frozen=True)
@@ -147,10 +153,16 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
     candidate_tree: Annotated[str, GitCommitText]
 
     def __post_init__(self) -> None:
-        for commit in (self.baseline.commit, self.candidate_tree, *(head.head for head in self.heads)):
+        for commit in (
+            self.baseline.commit,
+            self.candidate_tree,
+            *(head.head for head in self.heads),
+        ):
             GitCommitText.decode(commit)
             if len(commit) != 40 or commit != commit.lower():
-                raise MalformedRecord("Integration inputs require full lowercase 40-hex Git identities.")
+                raise MalformedRecord(
+                    "Integration inputs require full lowercase 40-hex Git identities."
+                )
         if any(head.repo != self.repository for head in self.heads):
             raise MalformedRecord("Every integration member must belong to its source repository.")
         if len({head.pr for head in self.heads}) != len(self.heads):
@@ -165,7 +177,9 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
     @staticmethod
     def main_head(repository: Repo) -> str:
         reference_name = f"refs/heads/{WorkBranches.main}"
-        rows = Repo.git(repository.checkout, "ls-remote", "--exit-code", "origin", reference_name).splitlines()
+        rows = Repo.git(
+            repository.checkout, "ls-remote", "--exit-code", "origin", reference_name
+        ).splitlines()
         if len(rows) != 1:
             raise ToolRefusedError(f"No unique main in {repository.github.to_wire()}")
         commit, reference = rows[0].split()
@@ -188,8 +202,9 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
         if self.heads:
             raise ToolRefusedError("An ordinary comparison cannot supply companion overlays")
 
-    def materialize_head(self, repository: Repo, path: Path, tested: str,
-                         checkout: type[SourceCheckout]) -> SourceCheckout:
+    def materialize_head(
+        self, repository: Repo, path: Path, tested: str, checkout: type[SourceCheckout]
+    ) -> SourceCheckout:
         return checkout.materialize(self, repository, path)
 
     @property
@@ -218,9 +233,13 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
         self.require_origin(repository)
         repository.acquire(self.baseline.commit, candidate, *(head.head for head in self.heads))
         if not Repo.descends(repository.checkout, self.baseline.commit, candidate) or any(
-                not Repo.descends(repository.checkout, head.head, candidate) for head in self.heads):
+            not Repo.descends(repository.checkout, head.head, candidate) for head in self.heads
+        ):
             raise ToolRefusedError("The resolved candidate dropped a captured source parent")
-        if Repo.git(repository.checkout, "rev-parse", f"{candidate}^{{tree}}").strip() != self.candidate_tree:
+        if (
+            Repo.git(repository.checkout, "rev-parse", f"{candidate}^{{tree}}").strip()
+            != self.candidate_tree
+        ):
             raise ToolRefusedError("The resolved candidate tree differs from its captured source")
 
     def require_candidate(self, repository: Repo, carrier: PullRequestHead) -> None:
@@ -244,16 +263,28 @@ class MergedIntegrationSource(IntegrationSource):
         repository.acquire(self.baseline.commit, *(head.head for head in self.heads))
         commit = self.baseline.commit
         for head in self.heads:
-            tree = Repo.git(repository.checkout, "merge-tree", "--write-tree", commit, head.head).strip()
-            commit = Repo.git(repository.checkout, "commit-tree", tree,
-                              "-p", commit, "-p", head.head,
-                              "-m", "Validate captured source combination").strip()
+            tree = Repo.git(
+                repository.checkout, "merge-tree", "--write-tree", commit, head.head
+            ).strip()
+            commit = Repo.git(
+                repository.checkout,
+                "commit-tree",
+                tree,
+                "-p",
+                commit,
+                "-p",
+                head.head,
+                "-m",
+                "Validate captured source combination",
+            ).strip()
         return Repo.git(repository.checkout, "rev-parse", f"{commit}^{{tree}}").strip()
 
     def require_tree(self, repository: Repo) -> None:
         self.require_origin(repository)
         if self.expected_tree(repository) != self.candidate_tree:
-            raise ToolRefusedError(f"{self.repository.to_wire()} candidate tree is not its captured combination")
+            raise ToolRefusedError(
+                f"{self.repository.to_wire()} candidate tree is not its captured combination"
+            )
 
 
 @dataclass(frozen=True)
@@ -272,8 +303,9 @@ class LocalIntegrationSource(MergedIntegrationSource):
         if self.heads != (carrier,):
             raise ToolRefusedError("An ordinary comparison requires its exact local carrier")
 
-    def materialize_head(self, repository: Repo, path: Path, tested: str,
-                         checkout: type[SourceCheckout]) -> SourceCheckout:
+    def materialize_head(
+        self, repository: Repo, path: Path, tested: str, checkout: type[SourceCheckout]
+    ) -> SourceCheckout:
         return checkout.create(repository, path, tested)
 
 
@@ -285,11 +317,16 @@ class ResolvedIntegrationSource(IntegrationSource):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        if (self.carrier.repo != self.repository or len(self.carrier.head) != 40
-                or self.carrier.head != self.carrier.head.lower()):
+        if (
+            self.carrier.repo != self.repository
+            or len(self.carrier.head) != 40
+            or self.carrier.head != self.carrier.head.lower()
+        ):
             raise MalformedRecord("A resolved source requires its exact full carrier identity")
         if any(head.same_pull_request(self.carrier) for head in self.heads):
-            raise MalformedRecord("A resolved companion carrier is separate from its source members")
+            raise MalformedRecord(
+                "A resolved companion carrier is separate from its source members"
+            )
 
     @property
     def candidate_commit(self) -> str:
@@ -330,7 +367,7 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         selected = tuple(local for source in self.sources for local in source.local_sources)
         if len(selected) != 1:
             raise MalformedRecord("Integration inputs require exactly one local source.")
-        local, = selected
+        (local,) = selected
         return local
 
     @property
@@ -340,30 +377,41 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
     def require_repositories(self, repositories: tuple[RepositoryName, ...]) -> None:
         """The actual stack declaration supplies coverage, never a caller's package roster."""
         if {source.repository for source in self.sources} != set(repositories):
-            raise ToolRefusedError("Integration inputs omit a declared stack source or name an unknown one.")
+            raise ToolRefusedError(
+                "Integration inputs omit a declared stack source or name an unknown one."
+            )
 
     def source(self, repository: RepositoryName) -> IntegrationSource:
         selected = tuple(source for source in self.sources if source.repository == repository)
         if len(selected) != 1:
-            raise ToolRefusedError(f"Integration inputs do not uniquely select {repository.to_wire()}.")
+            raise ToolRefusedError(
+                f"Integration inputs do not uniquely select {repository.to_wire()}."
+            )
         return selected[0]
 
     @staticmethod
-    def declared_repositories(core: Repo, baseline: str, candidate: str) -> tuple[RepositoryName, ...]:
+    def declared_repositories(
+        core: Repo, baseline: str, candidate: str
+    ) -> tuple[RepositoryName, ...]:
         """Actual declarations on both sides own the universe, including added/removed clients."""
-        return tuple(sorted({core.github, *IntegrationInput.source_urls(core, baseline, candidate)},
-                            key=lambda name: name.key))
+        return tuple(
+            sorted(
+                {core.github, *IntegrationInput.source_urls(core, baseline, candidate)},
+                key=lambda name: name.key,
+            )
+        )
 
     @staticmethod
     def source_urls(core: Repo, baseline: str, candidate: str) -> dict[RepositoryName, str]:
         urls: dict[RepositoryName, str] = {}
         for commit in (baseline, candidate):
             declared = StackSources.declared_sources(
-                Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml"))
+                Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml")
+            )
             identities = tuple(Repo.repository_url(url) for url, branch in declared.values())
             if len(set(identities)) != len(identities):
                 raise ToolRefusedError("One stack cut declares a Git repository more than once")
-            for url, branch in declared.values():
+            for url, _branch in declared.values():
                 identity = Repo.repository_url(url)
                 if identity == core.github:
                     raise ToolRefusedError("The stack repeats Core as a Git companion source")
@@ -392,7 +440,8 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
                 if not HeadReview.accepted(head.repo, head.head):
                     raise ToolRefusedError(
                         f"{head.repo.to_wire()}#{head.pr} at {head.head} has no accepted exact-head "
-                        "source review; pending qualification cannot promote the carrier.")
+                        "source review; pending qualification cannot promote the carrier."
+                    )
 
     @property
     def combined(self) -> bool:
@@ -476,8 +525,12 @@ class CombinedInput(IntegrationInput):
         if self.local.repository != self.carrier.repo:
             raise MalformedRecord("The local source must belong to the captured carrier repository")
         if len(self.carrier.head) != 40 or self.carrier.head != self.carrier.head.lower():
-            raise MalformedRecord("A combined carrier requires its full prepublication Git identity")
-        if any(head.same_pull_request(self.carrier) for source in self.sources for head in source.heads):
+            raise MalformedRecord(
+                "A combined carrier requires its full prepublication Git identity"
+            )
+        if any(
+            head.same_pull_request(self.carrier) for source in self.sources for head in source.heads
+        ):
             raise MalformedRecord("The combined carrier is separate from every source member")
 
     def require_local_candidate(self, core: Repo, carrier: PullRequestHead) -> None:
@@ -492,16 +545,23 @@ class CombinedInput(IntegrationInput):
         core.acquire(self.carrier.head, carrier.head)
         source = self.local
         source.require_origin(core)
-        self.require_repositories(self.declared_repositories(core, source.baseline.commit, carrier.head))
+        self.require_repositories(
+            self.declared_repositories(core, source.baseline.commit, carrier.head)
+        )
         source.require_ancestry(core, self.carrier.head)
         source.require_ancestry(core, carrier.head)
         if reader.commit_parents(carrier.head) != (self.carrier.head,):
-            raise ToolRefusedError("The published carrier must directly preserve its captured prepublication head")
+            raise ToolRefusedError(
+                "The published carrier must directly preserve its captured prepublication head"
+            )
         if self.from_message(reader.commit_message(carrier.head)) != (self,):
-            raise ToolRefusedError("The current carrier does not contain this exact canonical input")
+            raise ToolRefusedError(
+                "The current carrier does not contain this exact canonical input"
+            )
         StackSources.require_compatible(
             Repo.git(core.checkout, "show", f"{source.baseline.commit}:stack/pyproject.toml"),
-            Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml"))
+            Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml"),
+        )
 
 
 class Side(DeclaredFamily, affix="Side"):
@@ -517,7 +577,7 @@ class Side(DeclaredFamily, affix="Side"):
     @classmethod
     def materializing(cls, measured: type[audit.gate.Side]) -> type[Side]:
         """The one cut holding the revision an audit side measures."""
-        cut, = (side for side in cls.sides() if side.measures is measured)
+        (cut,) = (side for side in cls.sides() if side.measures is measured)
         return cut
 
     @classmethod
@@ -556,7 +616,8 @@ class HeadSide(Side):
         if Repo.git(checkout, "rev-parse", "HEAD^{tree}").strip() != source.candidate_tree:
             raise ToolRefusedError("Materialized candidate is not the captured source tree")
         if not Repo.descends(checkout, source.baseline.commit, "HEAD") or any(
-                not Repo.descends(checkout, head.head, "HEAD") for head in source.heads):
+            not Repo.descends(checkout, head.head, "HEAD") for head in source.heads
+        ):
             raise ToolRefusedError("Materialized candidate dropped a captured source parent")
 
 
@@ -650,8 +711,9 @@ class ReadyPullRequestHead(OpenPullRequestHead):
 class HeadReviewRelation(DeclaredFamily):
     """Order relationships share one declaration family and compose their capabilities."""
 
-    def root_sources(self, record: HeadReviewRecord,
-                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+    def root_sources(
+        self, record: HeadReviewRecord, commander: ThreadIncarnation
+    ) -> tuple[PullRequestHead, ...]:
         """Only an orderless relationship supplies authority outside current Todo links."""
         return ()
 
@@ -669,15 +731,17 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         return tuple(todo for todo in todos if todo.order.holds_head(request))
 
     @abstractmethod
-    def require_reviewer(self, goals: Goals, request: PullRequestHead,
-                         actor: ThreadIncarnation) -> None: ...
+    def require_reviewer(
+        self, goals: Goals, request: PullRequestHead, actor: ThreadIncarnation
+    ) -> None: ...
 
     def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
         return actor
 
     @abstractmethod
-    def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
-                      actor: ThreadIncarnation) -> HeadReviewRecord: ...
+    def record_review(
+        self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict, actor: ThreadIncarnation
+    ) -> HeadReviewRecord: ...
 
 
 @dataclass(frozen=True)
@@ -745,30 +809,39 @@ class MergeHeadReview(HeadReview, declared_name=None):
         return (*super().required_contexts(), cls.context)
 
     @classmethod
-    def require_combined(cls, request: PullRequestHead,
-                         repositories: tuple[Repo, ...]) -> IntegrationInput:
+    def require_combined(
+        cls, request: PullRequestHead, repositories: tuple[Repo, ...]
+    ) -> IntegrationInput:
         repository = Repo.selected(repositories, request.repo.to_wire())
         captured = IntegrationInput.from_message(
-            WorkBranches(repository.checkout).commit_message(request.head))
+            WorkBranches(repository.checkout).commit_message(request.head)
+        )
         if not captured:
-            raise ToolRefusedError("Only a captured combined carrier may merge; accept individual source with judge ok")
-        inputs, = captured
+            raise ToolRefusedError(
+                "Only a captured combined carrier may merge; accept individual source with judge ok"
+            )
+        (inputs,) = captured
         inputs.validate(repositories, request)
         inputs.require_source_reviews()
         return inputs
 
     @classmethod
-    def require_merge(cls, request: PullRequestHead,
-                      repositories: tuple[Repo, ...]) -> IntegrationInput:
+    def require_merge(
+        cls, request: PullRequestHead, repositories: tuple[Repo, ...]
+    ) -> IntegrationInput:
         inputs = cls.require_combined(request, repositories)
         cls.require_permission(request)
         return inputs
 
     @classmethod
     def require_permission(cls, request: PullRequestHead) -> None:
-        if not (HeadReview.accepted(request.repo, request.head)
-                and cls.accepted(request.repo, request.head)):
-            raise ToolRefusedError("The exact combined carrier has no explicit reviewed merge promotion")
+        if not (
+            HeadReview.accepted(request.repo, request.head)
+            and cls.accepted(request.repo, request.head)
+        ):
+            raise ToolRefusedError(
+                "The exact combined carrier has no explicit reviewed merge promotion"
+            )
 
 
 @dataclass(frozen=True)
@@ -784,8 +857,9 @@ class PromotedHeadReview(MergeHeadReview):
     def description(self, reviewer: str, subject: str) -> str:
         return f"Explicitly promoted by {reviewer} on {subject}"
 
-    def require_sources(self, goals: Goals, request: PullRequestHead,
-                        reviewer: ThreadIncarnation) -> None:
+    def require_sources(
+        self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation
+    ) -> None:
         project = goals.registry.snapshot().commander_project.require()
         if reviewer.commanding_identity != project.commander:
             raise ToolRefusedError("Only this root's commander may promote the combined carrier")
@@ -801,8 +875,10 @@ class PromotedHeadReview(MergeHeadReview):
         self.post(request.repo, request.head, record.actor.name, f"#{request.pr}")
         try:
             self.require_merge(request, repositories)
-        except (ToolRefusedError, GitCommandError):
-            UnpromotedHeadReview().post(request.repo, request.head, record.actor.name, f"#{request.pr}")
+        except ToolRefusedError, GitCommandError:
+            UnpromotedHeadReview().post(
+                request.repo, request.head, record.actor.name, f"#{request.pr}"
+            )
             raise
         return current.arm()
 

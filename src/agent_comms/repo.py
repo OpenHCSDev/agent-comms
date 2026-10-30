@@ -20,6 +20,7 @@ from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
+
 class RepositorySelection(ABC):
     """A repository choice is applied by the native project it configures."""
 

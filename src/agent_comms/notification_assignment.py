@@ -21,14 +21,20 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from .input_disposition import InputDispositions
 from .message_reference import MessageReference
+from .notification_evidence import (
+    AssignmentResponse,
+    ConsumptionEvidence,
+    NotificationAssignmentRead,
+    NotificationSelection,
+    NotificationWindow,
+    UnansweredResponse,
+)
 from .notification_progress import (
     AssignmentProgress,
     QueuedProgress,
     SentProgress,
     ShownToModelProgress,
 )
-from .notification_evidence import AssignmentResponse, ConsumptionEvidence, NotificationAssignmentRead, NotificationWindow, UnansweredResponse
-from .notification_evidence import NotificationSelection
 from .private_registry_guard import RegistryPrivacy
 from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
@@ -183,17 +189,22 @@ class NotificationAssignment(NotificationSource):
         """Acquire fresh bounded rows once; retained reads own their equality."""
         # A retained read owns its recipient cut. Re-reading a different viewer's
         # superset would both decode it and report a permanent false change.
-        return tuple(read for read in reads
-                     if read.differs_from(cls.read(root, read.selection).evidence))
+        return tuple(
+            read for read in reads if read.differs_from(cls.read(root, read.selection).evidence)
+        )
 
     @classmethod
     def resolve(cls, read: NotificationAssignmentRead) -> tuple[NotificationAssignment, ...]:
-        return tuple(cls(assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms))
-                     for assignment, activity in read.rows)
+        return tuple(
+            cls(assignment, activity.resolve(pending_at_ms=assignment.updated_at_ms))
+            for assignment, activity in read.rows
+        )
 
     @classmethod
     def for_deliveries(
-        cls, selection: NotificationSelection, records: Iterable[NotificationAssignment],
+        cls,
+        selection: NotificationSelection,
+        records: Iterable[NotificationAssignment],
     ) -> Iterator[tuple[Delivered, tuple[NotificationSource, ...]]]:
         """Match notification assignments to messages and the recorded recipients this
         viewer may see; an invisible recipient allocates no placeholder."""
@@ -214,7 +225,9 @@ class NotificationAssignment(NotificationSource):
             yield original, tuple(sources)
 
     @classmethod
-    def capture_responses(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
+    def capture_responses(
+        cls, root: Path, read: NotificationAssignmentRead
+    ) -> NotificationAssignmentRead:
         """Capture bounded independent replies after releasing the coordinator snapshot.
 
         A reply belongs to its original/frozen author, not to a claim lifecycle or
@@ -235,16 +248,21 @@ class NotificationAssignment(NotificationSource):
         return replace(read, responses=MappingProxyType(responses))
 
     @classmethod
-    def capture_inputs(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
+    def capture_inputs(
+        cls, root: Path, read: NotificationAssignmentRead
+    ) -> NotificationAssignmentRead:
         """Capture the selected recipients' stored inputs after releasing the coordinator snapshot.
 
         An ordinary or following turn that took the original into the model proves it by its
         own input row, keyed as the delivery recorded it; one keyed read covers the window.
         """
         registry = RegistryStore.at(root).snapshot()
-        keys = {InputDispositions.bus_key(page.source.message, thread): key
-                for page in read.selection.pages for key, recipient in page.entries
-                for thread in registry.recipient(recipient, page.source).input_owners()}
+        keys = {
+            InputDispositions.bus_key(page.source.message, thread): key
+            for page in read.selection.pages
+            for key, recipient in page.entries
+            for thread in registry.recipient(recipient, page.source).input_owners()
+        }
         rows = InputDispositions(root).read(tuple(keys)).rows
         consumption = dict(read.consumption)
         for key, row in rows.items():
@@ -253,13 +271,17 @@ class NotificationAssignment(NotificationSource):
         return replace(read, consumption=MappingProxyType(consumption))
 
     @classmethod
-    def capture_detached(cls, root: Path, read: NotificationAssignmentRead) -> NotificationAssignmentRead:
+    def capture_detached(
+        cls, root: Path, read: NotificationAssignmentRead
+    ) -> NotificationAssignmentRead:
         """Every bus-side evidence read that follows the coordinator snapshot."""
         return cls.capture_inputs(root, cls.capture_responses(root, read))
 
     @classmethod
     def capture(
-        cls, connection: sqlite3.Connection, selection: NotificationSelection,
+        cls,
+        connection: sqlite3.Connection,
+        selection: NotificationSelection,
         privacy: RegistryPrivacy,
     ) -> NotificationAssignmentRead:
         """Probe only selected frozen keys before joining any claim/context/proof.
@@ -279,59 +301,78 @@ class NotificationAssignment(NotificationSource):
         # Each batch's selected frozen keys select their assignments through the
         # recipient/seq index; message_id corroborates the exact original, and native-input
         # membership is selected once per batch by its assignment index.
-        for requested in WakeAssignment.requested_keys(connection, tuple(
-                {"recipient_lookup": lookup, "wire_seq": reference.seq,
-                 "message_id": reference.message_id}
-                for lookup, reference in keys)):
-            rows.extend(WakeAssignment.joined(
-                connection.execute(
-                    f"WITH {requested.values}, "
-                    f"w AS MATERIALIZED (SELECT * {requested.join}), "
-                    f"context AS MATERIALIZED ({context}) "
-                    f"SELECT {columns},context.triage_inflight,"
-                    "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
-                    "p.seq AS response_seq, p.message_id AS response_message_id, "
-                    "p.received_at_ms AS response_received_at_ms "
-                    "FROM w "
-                    "JOIN context ON context.assignment_id=w.assignment_id "
-                    f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
-                    "ON pointer.owner_lookup=w.recipient_lookup "
-                    f"LEFT JOIN {PublicationEvidence.declared_name} p "
-                    "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target",
-                    requested.bindings,
-                ),
-                AssignmentActivityEvidence,
-            ))
-        consumption: dict[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = {}
+        for requested in WakeAssignment.requested_keys(
+            connection,
+            tuple(
+                {
+                    "recipient_lookup": lookup,
+                    "wire_seq": reference.seq,
+                    "message_id": reference.message_id,
+                }
+                for lookup, reference in keys
+            ),
+        ):
+            rows.extend(
+                WakeAssignment.joined(
+                    connection.execute(
+                        f"WITH {requested.values}, "
+                        f"w AS MATERIALIZED (SELECT * {requested.join}), "
+                        f"context AS MATERIALIZED ({context}) "
+                        f"SELECT {columns},context.triage_inflight,"
+                        "pointer.execution_id IS NOT NULL AS queued,context.context_committed_at_ms,"
+                        "p.seq AS response_seq, p.message_id AS response_message_id, "
+                        "p.received_at_ms AS response_received_at_ms "
+                        "FROM w "
+                        "JOIN context ON context.assignment_id=w.assignment_id "
+                        f"LEFT JOIN {CurrentExecutions.declared_name} pointer "
+                        "ON pointer.owner_lookup=w.recipient_lookup "
+                        f"LEFT JOIN {PublicationEvidence.declared_name} p "
+                        "ON p.execution_id=w.execution_id AND p.exact_target=w.exact_target",
+                        requested.bindings,
+                    ),
+                    AssignmentActivityEvidence,
+                )
+            )
+        consumption: dict[
+            tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]
+        ] = {}
         for attempt in HarnessDelivery.for_recipients(connection, keys):
             key = (attempt.recipient_lookup, attempt.reference)
             consumption[key] = (*consumption.get(key, ()), attempt.monitor)
         return NotificationAssignmentRead(
-            selection, tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
-            MappingProxyType(consumption))
+            selection,
+            tuple(sorted(rows, key=lambda row: (-row[0].wire_seq, row[0].recipient))),
+            MappingProxyType(consumption),
+        )
 
     @classmethod
-    def read(
-        cls, root: Path, selection: NotificationSelection
-    ) -> NotificationAssignmentRead:
+    def read(cls, root: Path, selection: NotificationSelection) -> NotificationAssignmentRead:
         """Capture this viewer's assignment evidence through the single observing
         connection owner."""
         privacy = RegistryStore.at(root).privacy()
         with CoordinationStore.observed(CoordinationStore.path_in(root)).observing(
-            cls, selection, privacy,
+            cls,
+            selection,
+            privacy,
         ) as result:
             captured = result
         return cls.capture_detached(root, captured)
 
     @classmethod
     def missing_store(
-        cls, store: MissingStore, selection: NotificationSelection, privacy: RegistryPrivacy,
+        cls,
+        store: MissingStore,
+        selection: NotificationSelection,
+        privacy: RegistryPrivacy,
     ) -> NotificationAssignmentRead:
         return privacy.missing_notification_assignments(selection)
 
     @classmethod
     def invalid_store(
-        cls, store: InvalidStore, selection: NotificationSelection, privacy: RegistryPrivacy,
+        cls,
+        store: InvalidStore,
+        selection: NotificationSelection,
+        privacy: RegistryPrivacy,
     ) -> NoReturn:
         raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
