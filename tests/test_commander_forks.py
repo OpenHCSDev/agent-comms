@@ -19,6 +19,7 @@ import pytest
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from agent_comms.change_report import FileLine, NamedRepository
+from agent_comms.channel_targets import CommandersTag
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
@@ -91,7 +92,7 @@ from agent_comms.thread_execution import CommanderForkExecution
 
 
 @pytest.fixture
-def fork_bus(tmp_path, configured_repository):
+def fork_bus(tmp_path, configured_repository, monkeypatch):
     request_goal_id = GoalId.mint()
     retained_goal_id = GoalId.mint()
     source = SourceRepository.create(tmp_path / "source")
@@ -149,6 +150,9 @@ def fork_bus(tmp_path, configured_repository):
     )
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
+    # The forks run in lead's Claude session: one no hook registered takes lead as parent.
+    WatchClaim("commander").enrol(WatchRecord("lead", str(copied), (), tmp_path / "state"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "commander")
     return wire(copied), source, order
 
 
@@ -961,7 +965,6 @@ def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PATH", f"{scripts}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "commander.jsonl"
-    WatchClaim("commander").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
 
     def run(program, event, **stop):
         record = {"session_id": "commander", "hook_event_name": event,
@@ -993,6 +996,29 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     run(forks.started, "SubagentStart")
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
+
+
+def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_commander(
+        subagent_hook, tmp_path, monkeypatch):
+    """The bus records lead as commander; a fork the hook registered under a peer commander's
+    session acts through a commander verb and stays that peer's child."""
+    comms, run = subagent_hook
+    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+                                  comms.registry.require("lead").worktree,
+                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
+                                  execution=ExternalThreadExecution))
+    WatchClaim("peer-session").enrol(WatchRecord("peer", str(comms.root), (), tmp_path / "peer"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "peer-session")
+    record = {"session_id": "peer-session", "hook_event_name": "SubagentStart",
+              "transcript_path": str(tmp_path / "peer.jsonl"), "agent_id": "a2",
+              "agent_type": "general-purpose"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
+    forks.started()
+    found = tmp_path / "found.txt"
+    found.write_text("The fork recorded its finding.")
+    said = command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a2")
+    assert said.returncode == 0, said.stderr
+    assert comms.registry.require("claude-a2").parent.named("peer")
 
 
 def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(

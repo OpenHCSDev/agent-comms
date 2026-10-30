@@ -852,7 +852,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        self.actor.commanding(ctx.comms, ctx.commander)
+        self.actor.commanding(ctx.comms)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
