@@ -104,13 +104,13 @@ class ReadGateRequest(ReadGateProgram, HookRequest[GatedCall], declared_name=Rea
 class ReminderRequest(ReminderProgram, HookRequest[BoardReminder], declared_name=ReminderProgram.wire_name()):
     def run_hook(self, event: BoardReminder, comms: Comms, binding: Binding) -> None:
         number = GatedCall.of(self.payload, output=event.output).completed(comms, binding)
-        event.warn(*event.take(number))
+        event.warn(*event.take(comms, binding, number))
 
 
 @dataclass(frozen=True)
 class SkillRequest(SkillText, HookRequest[DeckStart], declared_name=SkillText.wire_name()):
     def run_hook(self, event: DeckStart, comms: Comms, binding: Binding) -> None:
-        event.warn(*event.take())
+        event.warn(*event.take(comms, binding))
 
 
 @dataclass(frozen=True)

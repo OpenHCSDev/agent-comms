@@ -5,10 +5,10 @@ import json
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .hook_skill import (
-    DeckReader,
-    DeckStart,
-)
+from .hook_skill import DeckStart
+from ..comms import Comms
+from ..instruction_deck import DeckReader
+from ..registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
@@ -17,10 +17,11 @@ class SliceReminder(DeckStart):
 
     every: ClassVar[int] = 5
 
-    def taken(self, reader: DeckReader, number: int) -> tuple[str, ...]:
+    def taken(self, reader: DeckReader, number: int, comms: Comms,
+              snapshot: RegistrySnapshot) -> tuple[str, ...]:
         deck = self.deck(reader)
         if not deck.exists():
-            return self.dealt(reader)  # the session was bound, or changed role, after it started
+            return self.dealt(reader, comms, snapshot)  # the session was bound, or changed role, after it started
         if not number or number % self.every:
             return ()
         slices = json.loads(deck.read_text(encoding="utf-8"))
@@ -32,8 +33,9 @@ class DeafReminder(SliceReminder):
     """Beside the deck's slice, the RE-ARM line while the commander session's bridge has no
     Monitor reading it. The line rides the next tool call, never the bridge it reports dead."""
 
-    def taken(self, reader: DeckReader, number: int) -> tuple[str, ...]:
-        return super().taken(reader, number) + reader.deaf(self.session_id)
+    def taken(self, reader: DeckReader, number: int, comms: Comms,
+              snapshot: RegistrySnapshot) -> tuple[str, ...]:
+        return super().taken(reader, number, comms, snapshot) + reader.deaf(self.session_id)
 
 
 @dataclass(frozen=True)
@@ -43,5 +45,6 @@ class BoardReminder(DeafReminder):
     The bridge derives current lines from Core and owns their delivery evidence.
     """
 
-    def taken(self, reader: DeckReader, number: int) -> tuple[str, ...]:
-        return super().taken(reader, number) + reader.board(self.session_id)
+    def taken(self, reader: DeckReader, number: int, comms: Comms,
+              snapshot: RegistrySnapshot) -> tuple[str, ...]:
+        return super().taken(reader, number, comms, snapshot) + reader.board(self.session_id)
