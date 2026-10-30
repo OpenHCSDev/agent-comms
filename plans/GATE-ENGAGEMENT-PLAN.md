@@ -85,7 +85,7 @@ In the existing gate tests (`tests/test_commander_skill_hook.py`, `tests/conftes
 - `ToolGateState(State)`: `enforce`, `permits_read`, and what a start or a context report does to the deal. `Open`, its session-never-dealt case `Undealt`, and `Blocked(cause)`.
 - `RuleDeal(State)`: a deal is a state. `state()` is `current().answer(self)`.
 - `Owed(State)`: one thing a deal still requires, with its `before` and `reason` words and `permits_read`. Cases `Unengaged`, `Unread`, `Unaudited`; `state()` is `Blocked(self)`.
-- Requirement parents are declaration only: `class ReadsDealtSources(ToolGate, owed=Unread)`. `__init_subclass__` collects them in MRO order; `DealtRuleGate` lists `AnswersDealtRules` first, so an unanswered rule shuts the next file before "unread" is ever said.
+- Requirement parents are declaration only: `class ReadsDealtSources(ToolGate, owes=(Unread,))`. `__init_subclass__` collects them in MRO order; `DealtRuleGate` lists `AnswersDealtRules` first, so an unanswered rule shuts the next file before "unread" is ever said.
 - `DealRecord` (`.deal.json`) is persisted data, decoded once. It runs the one walk: the first owed case wins, none means `Open`. `UndealtRecord` is the record of no deal on disk.
 - `judge_read`: the audit always opens; a file not dealt gets the full answer; a dealt file asks `state().permits_read(path)`.
 - Edit of the audit is judged like Write on both backends, so answering a rule does not rewrite the file.

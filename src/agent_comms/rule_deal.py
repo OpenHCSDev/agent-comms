@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -303,8 +304,8 @@ class DealRecord:
 
     def answer(self, deal: RuleDeal) -> ToolGateState:
         """The first requirement still owed holds the gate; with none owed it is open."""
-        owed = (owes.owed_by(deal, self) for owes in deal.requirements)
-        return next((case.state() for case in owed if case is not None), Open())
+        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self))
+        return next(owed, Open()).state()
 
 
 class UndealtRecord(DealRecord):
@@ -329,7 +330,7 @@ class Owed(State):
 
     @classmethod
     @abstractmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Self | None:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
         """This case, when the deal owes it."""
 
     @property
@@ -354,15 +355,14 @@ class Unengaged(Owed):
     before: ClassVar[str] = "answering the rule you just read"
 
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Self | None:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
         read = record.read_by(deal)
         audit = SessionAudit.read(deal.audit)
         for source in read:
             if source.stem in record.due.rules and (
                 fault := audit.fault() or audit.entry(source.stem).unengaged(source)
             ):
-                return cls(record, deal.audit, source, fault, read)
-        return None
+                yield cls(record, deal.audit, source, fault, read)
 
     @property
     def reason(self) -> str:
@@ -384,10 +384,11 @@ class Unread(Owed):
     before: ClassVar[str] = "reading"
 
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Self | None:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
         read = record.read_by(deal)
         remaining = tuple(source for source in record.dealt if source not in read)
-        return cls(record, deal.audit, remaining) if remaining else None
+        if remaining:
+            yield cls(record, deal.audit, remaining)
 
     @property
     def reason(self) -> str:
@@ -407,9 +408,10 @@ class Unaudited(Owed):
     before: ClassVar[str] = "writing the required audit"
 
     @classmethod
-    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Self | None:
+    def owed_by(cls, deal: RuleDeal, record: DealRecord) -> Iterator[Self]:
         refusal = record.due.refusal(SessionAudit.read(deal.audit))
-        return cls(record, deal.audit, refusal) if refusal else None
+        if refusal:
+            yield cls(record, deal.audit, refusal)
 
     @property
     def reason(self) -> str:
@@ -423,17 +425,17 @@ class RuleDeal(State):
     owner_prompts: ClassVar[int] = 6
     """How many of the person's own last prompts a deal puts back in front of the session."""
 
+    owes: ClassVar[tuple[type[Owed], ...]] = ()
+    """What this class itself declares the deal can owe; a requirement parent names its case."""
+
     requirements: ClassVar[tuple[type[Owed], ...]] = ()
-    """What this deal can owe, in MRO order: each parent declares its case with `owed=`."""
+    """Everything this deal can owe, each class's declaration in MRO order."""
 
-    declared_owed: ClassVar[type[Owed]]
-
-    def __init_subclass__(cls, owed: type[Owed] | None = None, **options: object) -> None:
+    def __init_subclass__(cls, owes: tuple[type[Owed], ...] = (), **options: object) -> None:
         super().__init_subclass__(**options)
-        if owed is not None:
-            cls.declared_owed = owed
+        cls.owes = owes
         cls.requirements = tuple(
-            vars(base)["declared_owed"] for base in cls.__mro__ if "declared_owed" in vars(base)
+            case for base in cls.__mro__ if issubclass(base, RuleDeal) for case in base.owes
         )
 
     @property
@@ -535,15 +537,15 @@ class ToolGate(RuleDeal):
         """Deliver this refusal to the model the way the backend refuses a tool call."""
 
 
-class AnswersDealtRules(ToolGate, owed=Unengaged):
+class AnswersDealtRules(ToolGate, owes=(Unengaged,)):
     """Each rule read is answered in the audit before the next unread file opens."""
 
 
-class ReadsDealtSources(ToolGate, owed=Unread):
+class ReadsDealtSources(ToolGate, owes=(Unread,)):
     """Every dealt file is read in full before anything else runs."""
 
 
-class AuditsDealtRules(ToolGate, owed=Unaudited):
+class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
     """After reading, the audit answers every dealt rule and prompt."""
 
 

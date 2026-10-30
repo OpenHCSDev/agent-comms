@@ -215,6 +215,7 @@ class BashTool(ExecuteAction, CodingTool):
 
 class MutatingPathTool(EditAction, PathTool):
     claim_type: ClassVar[type[FileClaimPath]]
+    declared_name: ClassVar[str]
 
     def judge_under(self, gate: PiRuleGate) -> None:
         gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
