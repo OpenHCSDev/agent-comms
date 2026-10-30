@@ -464,7 +464,9 @@ class DeliveredInput(QueuedInput):
         """Hand this owner's pending bus messages to its running turn.
 
         Pi takes each one after its current tool batch. A turn that cannot take
-        follow-ups leaves them pending for the ordinary wake after it ends.
+        follow-ups leaves them pending for the ordinary wake after it ends, and so
+        does every collective broadcast: a #comms post that names no one is not
+        this turn's input.
         """
         turn = await inputs.effects.turns.active_backend_turn(session_id)
         # Only the started member owns both the inbox and its original input.
@@ -476,7 +478,11 @@ class DeliveredInput(QueuedInput):
 
         def read(store: Coordination):
             with store.session.read():
-                assignments = pending_sealed_assignments(store, lookup, after_seq=after_seq)
+                assignments = tuple(
+                    assignment
+                    for assignment in pending_sealed_assignments(store, lookup, after_seq=after_seq)
+                    if assignment.audience.enters_running_turn
+                )
             with store.session.capture(bus) as boundary, bus.bus.reading() as source:
                 boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
                 originals = source.deliveries_for_references(tuple(
