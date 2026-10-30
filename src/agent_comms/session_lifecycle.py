@@ -46,6 +46,7 @@ from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
+from .pi_rule_gate import PiRedeal
 from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
@@ -209,6 +210,7 @@ class SessionLifecycle:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
         state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
+        await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
         self.published[session_id] = PublishedSession.of(thread)
         if self.runtime_enabled:
             await self.runtime.start()

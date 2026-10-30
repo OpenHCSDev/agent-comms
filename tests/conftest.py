@@ -8,6 +8,7 @@ from agent_comms.cli_bridges.session_watch import (
 from agent_comms.repo import Checkout
 import asyncio
 import fcntl
+import json
 import os
 import sqlite3
 import subprocess
@@ -19,6 +20,8 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pydantic import JsonValue
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
+from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.rule_deal import ReadSpan
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
 from contextlib import AsyncExitStack, contextmanager
@@ -222,6 +225,12 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
             resources.push_async_callback(listener.close)
             return listener
         yield create
+
+
+@pytest.fixture
+def undealt_gate(tmp_path: Path) -> PiRuleGate:
+    """A Pi rule gate never dealt any rules, so it lets every call run."""
+    return PiRuleGate(tmp_path / "scratch", tmp_path)
 
 
 @pytest.fixture
@@ -531,16 +540,45 @@ def wired(comms: Comms) -> Comms:
 
 
 
+def declare_fleet(comms: Comms, commander: Thread) -> Comms:
+    """The bus's commander project, naming `commander`: the one test owner of a fleet, for a
+    test whose goals need a commander to assign them."""
+    comms.registry.declare(commander)
+    comms.registry.set_commander_project(RegisteredCommanderProject(
+        comms.registry.require(commander.name).incarnation, ()))
+    return comms
+
+
+def answer_rules(comms: Comms, name: str) -> None:
+    """Deal a Pi unit its fleet rules and answer them, as a unit does before its first tool:
+    every dealt file read in full, then an audit answering every rule and prompt."""
+    deal = PiRedeal.of(comms, comms.registry.require(name))
+    deal.redeal()
+    answer_deal(deal)
+
+
+def answer_deal(deal: PiRedeal) -> None:
+    """Read every file of the current deal in full and write the audit answering it."""
+    for source in deal.current().sources():
+        deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
+    due = deal.current().due
+    deal.audit.write_text(json.dumps({
+        "rules": [{"rule": rule} for rule in sorted(due.rules)],
+        "owner_words": [{"words": words, "doing": "testing"} for words in due.owner_words],
+    }))
+
+
 @pytest.fixture
 def commander_bus(tmp_path):
-    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`."""
-    bus = wire(tmp_path / "bus")
-    for name in ("claude-code", "unit-x"):
-        bus.registry.declare(Thread(
-            name, frozenset(), Checkout(tmp_path),
-            model=DeclaredModel("anthropic/claude-opus-4-6")))
-    bus.registry.set_commander_project(RegisteredCommanderProject(
-        bus.registry.require("claude-code").incarnation, ()))
+    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`. Its
+    storage rule keeps scratch under the bus root, so no deal reaches the developer's home
+    whatever HOME holds when the bus is built."""
+    bus = declare_fleet(installed_comms(tmp_path / "bus"), Thread(
+        "claude-code", frozenset(), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    bus.registry.declare(Thread(
+        "unit-x", frozenset(), Checkout(tmp_path),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
     return bus
 
 

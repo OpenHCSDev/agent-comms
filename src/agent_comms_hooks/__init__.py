@@ -125,6 +125,16 @@ class ClaudeTranscriptHook(ClaudeHook):
         """What the audit must answer: every dealt rule and each owner prompt shown."""
         return Path(self.transcript_path).with_suffix(".audit-due.json")
 
+    @property
+    def stem(self) -> Path:
+        """A session's deal and deck files sit beside its transcript, each with its own suffix."""
+        return Path(self.transcript_path)
+
+    @property
+    def subagent_transcripts(self) -> Path:
+        """Claude Code keeps each subagent's transcript in this directory beside the session's."""
+        return Path(self.transcript_path).with_suffix("") / "subagents"
+
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""
         with open(self.transcript_path, "rb") as transcript:
