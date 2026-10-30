@@ -145,6 +145,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(tmp_path, native_runtime_
                 assert source.resource_owner(str(resource)) == UnclaimedResource()
             rows = list((root / "selected-write-plans").glob("*.json"))
             assert len(rows) == 1 and json.loads(rows[0].read_text())["status"] == "applied"
+            assert attached._selected_write_controllers == {}
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 selected = sealed_cohort_assignments(
                     store, beta.incarnation.lookup

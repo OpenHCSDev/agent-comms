@@ -127,7 +127,7 @@ class CommsTodoTool(ThreadToolRequest):
         todo = comms.goals.todos.get(self.problem)
         actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.commander(comms).name))
+            self.problem, self.operation_for(todo, actor, comms), actor))
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -162,9 +162,9 @@ class CommsVerdictTool(ThreadToolRequest):
     ]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        actor = caller.identity(comms)
         changed, = comms.goals.judge_calls(
-            (JudgedCall(self.problem, self.operation.authored_by(caller.identity(comms))),),
-            caller.commander(comms).name)
+            (JudgedCall(self.problem, self.operation.authored_by(actor)),), actor)
         return TodoChanged(changed, changed.strike_count)
 
 
@@ -183,7 +183,7 @@ class CommsVerdictsTool(ThreadToolRequest):
         return TodoList(comms.goals.judge_calls(
             tuple(replace(call, operation=call.operation.authored_by(actor))
                   for call in self.verdicts),
-            caller.commander(comms).name))
+            actor))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -382,7 +382,9 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         "Only the holder may claim a pending order; this does not accept its delivery."
     )
     problem: Annotated[str, *tool_field("Held problem ID")]
-    pull_request: Annotated[int, *tool_field("Pull request number in the problem's repository")]
+    pull_request: Annotated[PullRequestLink, *tool_field(
+        "The delivering pull request: its repository (owner/name) and number"
+    )]
     head: Annotated[str, *tool_field("Claimed head commit")]
     report: Annotated[DeliveryReport, *tool_field(
         "Delivery report: the slop you killed or the broken thing you fixed, with file:line, "
@@ -395,9 +397,8 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
         # The identical call resumes a retained claim's publication; nothing is claimed again.
-        link = PullRequestLink(todo.repo, self.pull_request)
         for claim in todo.order.commander_claims():
-            if claim.resumed_by(link, self.head, self.report.text):
+            if claim.resumed_by(self.pull_request, self.head, self.report.text):
                 resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
                 return TodoChanged(resumed, resumed.strike_count)

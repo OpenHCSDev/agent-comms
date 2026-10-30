@@ -19,25 +19,17 @@ from dataclasses import (
 )
 from pathlib import Path
 from typing import (
-    TYPE_CHECKING,
     TextIO,
 )
 
-from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.board import SessionBoard
-from agent_comms_hooks.watch import SessionEndpoint
+from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
+from agent_comms_hooks.watch import SessionEndpoint, SessionFailure
 
 from ..process_claim import ProcessSingleton
 from ..registry_store import RegistryStore
 from ..store_files import AtomicFile
 
-if TYPE_CHECKING:
-    from .monitor import SessionRequest
-    from .shared import Serve
-
-
-class SessionFailure(Exception):
-    """A session command failed; it does not declare the serving process dead."""
+import agent_comms.cli_bridges
 
 
 class SessionRefusedError(ValueError, SessionFailure):
@@ -195,15 +187,15 @@ class WatchState(ABC):
     def rearm(self, launch: Callable[[], None]) -> None:
         """Whether this state needs the enrolled session's existing launcher."""
 
-    def connect(self, serve: Callable[[], Serve],
-                request: Callable[[Serve], SessionRequest]) -> None:
+    def connect(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
+                request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         """An unenrolled session does not construct a serve or request authority."""
 
-    def connect_held(self, serve: Callable[[], Serve],
-                     request: Callable[[Serve], SessionRequest]) -> None:
+    def connect_held(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
+                     request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         """A claim removed while awaiting its launch lock remains unclaimed."""
 
-    def end(self, request: Callable[[], SessionRequest]) -> None:
+    def end(self, request: Callable[[], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         """Only a live holder can receive a shutdown request."""
 
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
@@ -267,25 +259,25 @@ class RecordedWatch(WatchState):
         return (self.record,)
 
     def commands(self) -> bool:
-        """Whether the registry names this binding's thread a commander, read now: command
-        moves between threads, so no session keeps its own copy of the answer."""
         snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
-        bound = snapshot.require(self.record.bus)
-        return any(thread.incarnation == bound.incarnation
-                   for thread in snapshot.commander_project.commanders(snapshot))
+        return snapshot.commander_project.by_role(
+            snapshot.require(self.record.bus).incarnation, commander=True, commanded=False)
 
     def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
                    commander: Callable[[WatchRecord], T]) -> T:
-        """A bound session supplies its own record to the selected role's operation."""
-        return commander(self.record) if self.commands() else fleet(self.record)
+        """Use the registry's role selector; the saved launcher record supplies no role."""
+        snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
+        operation = snapshot.commander_project.by_role(
+            snapshot.require(self.record.bus).incarnation, commander=commander, commanded=fleet)
+        return operation(self.record)
 
-    def connect(self, serve: Callable[[], Serve],
-                request: Callable[[Serve], SessionRequest]) -> None:
+    def connect(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
+                request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         with self.claim.launching():
             self.claim.state().connect_held(serve, request)
 
-    def connect_held(self, serve: Callable[[], Serve],
-                     request: Callable[[Serve], SessionRequest]) -> None:
+    def connect_held(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
+                     request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         operation = serve()
         operation.owner.require_alive()
         verification = request(operation)
@@ -294,7 +286,7 @@ class RecordedWatch(WatchState):
         except (FileNotFoundError, ConnectionRefusedError, SessionRefusedError):
             self.reconnect(operation, verification)
 
-    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
+    def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
         serve.launch_record(self.claim, self.record, request)
 
 
@@ -304,15 +296,19 @@ class LiveWatch(RecordedWatch):
         return
 
     def board(self) -> tuple[str, ...]:
-        """The bridge derives the current board; a failed read is a hook failure."""
-        return SessionBoard.asked(self.claim.socket_path).lines
+        """Preserve main's install-gap answer; other board failures remain loud."""
+        try:
+            return SessionBoard.asked(self.claim.socket_path).lines
+        except AbsentSessionSocket:
+            return ("BOARD: not read this call: an install is swapping the session bridge, "
+                    "so no bridge listens yet; the board returns when the new one does",)
 
-    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
+    def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
         raise RuntimeError(
             'An older watch still owns this session, or an install is replacing it. '
             'No second bridge launched. Stop that Monitor once, then connect.')
 
-    def end(self, request: Callable[[], SessionRequest]) -> None:
+    def end(self, request: Callable[[], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
         request().exchange(self.claim.socket_path)
 
     def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
@@ -337,11 +333,3 @@ class LiveWatch(RecordedWatch):
 class LapsedWatch(RecordedWatch):
     def rearm(self, launch: Callable[[], None]) -> None:
         launch()
-
-
-class CommanderSession(ClaudeTranscriptHook):
-    """A hook that acts only in the session the registry currently names commander."""
-
-    @property
-    def commands(self) -> bool:
-        return WatchClaim(self.session_id).state().commands()

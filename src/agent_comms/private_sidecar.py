@@ -32,7 +32,7 @@ from agent_comms.locked_store import DurableFile, SQLiteFile
 from .field_codec import FieldCodec
 
 if TYPE_CHECKING:
-    from .agent_backend import StreamingInputPolicy
+    from .turn_inbox import StreamingInputPolicy
 
 from .private_path import ObservedPath, PrivateFileRole, TrustedAncestorRole
 from .store_files import ExclusiveLock, StoreOwner
@@ -377,9 +377,10 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
         yield
 
     @staticmethod
-    def settle(path: Path) -> None:
-        # The snapshot protocol has no WAL or checkpoint operation.
-        pass
+    @contextmanager
+    def pinned(path: Path) -> Iterator[None]:
+        # Published inodes are immutable and the snapshot protocol has no WAL to checkpoint.
+        yield
 
     @classmethod
     def copy_file(cls, source: str | Path, target: str | Path) -> Path:

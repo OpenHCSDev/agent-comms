@@ -28,7 +28,7 @@ pytest_plugins = ("test_holder_standing_rules",)
 
 @pytest.mark.asyncio
 async def test_unconfirmed_monitor_reports_commander_deaf_once(
-    held_bus, installed_runtime, tmp_path, monkeypatch,
+    held_bus, tmp_path, monkeypatch,
 ):
     # A relative HOME keeps the real AF_UNIX endpoint below its path-length limit.
     monkeypatch.chdir(tmp_path)

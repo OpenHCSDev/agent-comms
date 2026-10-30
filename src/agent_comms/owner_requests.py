@@ -46,7 +46,7 @@ class RequestSelection(RequestValue, declared_name=None):
         return tuple(
             request
             for name in target.direct_names
-            for request in self.select(store, registry.require(name).incarnation)
+            for request in self.select(store, registry.require(name).acting_identity)
         )
 
     def for_order(self, store: TodoStore, commander: ThreadIncarnation) -> OwnerRequestId:
@@ -80,7 +80,7 @@ class OwnerRequestId(SingleFieldValue, RequestLink, RequestSelection):
         target: NamedTarget,
         registry: Registration,
     ) -> tuple[OwnerRequest, ...]:
-        return self.select(store, registry.require(target.require_dm_peer()).incarnation)
+        return self.select(store, registry.require(target.require_dm_peer()).acting_identity)
 
     def select(
         self,

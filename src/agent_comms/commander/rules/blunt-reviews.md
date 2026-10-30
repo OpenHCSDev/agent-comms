@@ -19,6 +19,11 @@ type: feedback
 > "who approved this"
 > four reviewers, each one a nit
 > mfw politeness merged more slop than any bad agent
+> run it back
+> reviewer: "back: string dispatch at todos.py:437, IMPL-1, pass the class. trick: grep the kind strings in src"
+> unit deletes the string, passes the class. one commit
+> next unit greps for the pattern to copy. nothing there
+> mfw the rude review was the only one that took less time than a nit
 
 **Why:** politeness is how incompetence gets tolerated and tone drifts soft; a polite order reads as a suggestion, and the exchange is where the wrong decision gets caught.
 

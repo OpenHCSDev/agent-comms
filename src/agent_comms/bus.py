@@ -31,12 +31,14 @@ from agent_comms.messages import (
     Addressed,
     MessageInput,
     BusRow,
+    BusCapability,
     ClaimOperations,
     HeldResources,
     BusRecord,
     Claimed,
     ClaimMessage,
     Message,
+    StoredWireHistory,
     MessageKind,
     PublicRecord,
 )
@@ -49,7 +51,7 @@ from agent_comms.envelope_claim_transitions import (
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
@@ -110,7 +112,7 @@ class AddressedRow(Addressed, BusRow, declared_name=None):
             f'AND target IN ({", ".join("?" * len(targets))}))',
             (*senders, *targets))
         headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
-        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+        return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
 
 @dataclass(frozen=True)
@@ -212,18 +214,26 @@ class BusReader(RouteCounts, ABC):
                 raise UnclaimedError(seq)
             return rows[0].claim_transition
 
-    def lookup(self, seq: int) -> BusRecord:
+    def records(self, sequences: Iterable[int]) -> tuple[BusRecord, ...]:
+        """These records in order from one joined read, never one query per table per row."""
         with self.observing() as db:
-            headers = BusRow.select(db, seq=seq)
-            if not headers:
-                raise RelationViolationError(f"Unknown bus sequence: {seq}")
-            return headers[0].kind.read_from(db, headers[0].seq)
+            return BusCapability.at_sequences(db, tuple(sequences))
 
-    def delivery(self, seq: int) -> Delivered:
+    def lookup(self, seq: int) -> BusRecord:
+        return self.records((seq,))[0]
+
+    def deliveries_at(self, sequences: Iterable[int]) -> tuple[Delivered, ...]:
         """A public history row cannot stand in for a frozen delivery."""
-        for delivery in self.lookup(seq).deliveries():
+        return tuple(self.frozen_delivery(record) for record in self.records(sequences))
+
+    @staticmethod
+    def frozen_delivery(record: BusRecord) -> Delivered:
+        for delivery in record.deliveries():
             return delivery
         raise RelationViolationError("Bus sequence has no frozen delivery")
+
+    def delivery(self, seq: int) -> Delivered:
+        return self.deliveries_at((seq,))[0]
 
     def message_reference(self, message_id: MessageId) -> MessageReference:
         """Resolve one content identity; absent or ambiguous identities are refused."""
@@ -240,31 +250,38 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             headers = (BusRow.require(db, seq=seq) for seq in
                        KeyedPublication.publication_sequences(db, publication_key))
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
+            return BusCapability.at_sequences(db, tuple(row.seq for row in BusRow.select(
                 db, where="{seq} < ?", parameters=(before,),
-                order_by=("seq",), descending=True, limit=limit))
+                order_by=("seq",), descending=True, limit=limit)))
+
+    @contextmanager
+    def stored_message_history(
+        self, predicate: str = "1", parameters: tuple[object, ...] = (),
+        *, through: int,
+    ) -> Iterator[StoredWireHistory]:
+        """The public history selected on one read snapshot; each format reads its own rows."""
+        with self.observing() as db:
+            query = Message.stored_wire_query(db, MessageIdentitySource)
+            query = (f'SELECT seq, timestamp, wire FROM ({query}) '
+                     f'WHERE seq <= ? AND ({predicate})')
+            yield StoredWireHistory(db, query, (through, *parameters))
 
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""
-        with self.reading() as source:
-            after, through = 0, source.revision()
-            while after < through:
-                records = source.since(after, 100)
-                for record in records:
-                    for message in record.messages():
-                        yield Message.from_message(message)
-                after = records[-1].seq
+        with self.observing() as db:
+            yield from BusCapability.public_messages(
+                db, (row.seq for row in BusRow.stream(db, order_by=("seq",))))
 
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
         with self.observing() as db:
-            return tuple(row.kind.read_from(db, row.seq) for row in BusRow.select(
+            return BusCapability.at_sequences(db, tuple(row.seq for row in BusRow.select(
                 db, where="{seq} > ?", parameters=(after,),
-                order_by=("seq",), limit=limit))
+                order_by=("seq",), limit=limit)))
 
     def inbox(self, target: str, after: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
@@ -272,7 +289,7 @@ class BusReader(RouteCounts, ABC):
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 'WHERE target=? AND seq>? ORDER BY seq LIMIT ?', (target, after, limit))
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
     def scoped_page(
         self, predicate: str, parameters: tuple[object, ...], *, lower: int = 0,
@@ -294,7 +311,7 @@ class BusReader(RouteCounts, ABC):
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
             )
             headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
     def latest_conversations(
         self, predicate: str, parameters: tuple[object, ...], through: int,
@@ -320,7 +337,7 @@ class BusReader(RouteCounts, ABC):
     ) -> tuple[Message, ...]:
         references = tuple(references)
         with self.reading() as source:
-            records = tuple(source.lookup(reference.seq) for reference in references)
+            records = source.records(reference.seq for reference in references)
             messages = tuple(message for record in records for message in record.messages())
         if tuple(message.reference for message in messages) != references:
             raise RelationViolationError("Message reference does not match its bus record")
@@ -374,9 +391,7 @@ class BusReader(RouteCounts, ABC):
                     sequences=sequences, limit=limit,
                 )) as selected:
                     positions.update(selected)
-            return tuple(source.delivery(seq) for seq in islice(
-                sorted(positions, reverse=descending), limit,
-            ))
+            return source.deliveries_at(islice(sorted(positions, reverse=descending), limit))
 
     def sent(
         self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None,
@@ -386,22 +401,22 @@ class BusReader(RouteCounts, ABC):
             *SentSource.query(lookup),
             after=after, before=before, descending=descending, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in positions)
+            return source.deliveries_at(positions)
 
     def received(
         self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
             *ReceivedSource.query(lookup, sender_lookups), after=after, before=before,
             descending=descending, sequences=sequences, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in positions)
+            return source.deliveries_at(positions)
 
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         """Read the bounded append-time policy index before loading deliveries."""
@@ -409,7 +424,7 @@ class BusReader(RouteCounts, ABC):
             *DirectReplySource.query(lookup, sender_lookups), after=after,
             descending=descending, sequences=sequences, limit=limit,
         )) as positions:
-            return tuple(source.delivery(seq) for seq in positions)
+            return source.deliveries_at(positions)
 
     def unanswered_references(
         self, sequences: tuple[int, ...], responders: frozenset[str],
@@ -437,7 +452,7 @@ class BusReader(RouteCounts, ABC):
             sequences = {row.seq for original in references
                          for row in AnsweredSource.select(db, original=original.seq)}
             headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
-            return tuple(header.kind.read_from(db, header.seq) for header in headers)
+            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
 
     def changed_names(self, after: int) -> frozenset[str]:
         with self.observing() as db:
@@ -483,17 +498,12 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class StoredBusReader(BusReader):
+class StoredBusReader(BusReader, SQLiteReader):
     """File-backed readers use SQLite snapshots; held snapshots need no connection."""
-
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The file named by this reader's owning declaration."""
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        with SQLiteFile.opened_reader(self.path) as db:
+        with self.reader_snapshot() as db:
             yield db
 
 
@@ -502,12 +512,13 @@ class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, B
 
     filename = "bus.sqlite3"
 
-    def unreceived(self, lookup: ThreadLookup,
+    def unreceived(self, lookups: tuple[ThreadLookup, ...],
                    references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
-        """The references outside this participant's frozen delivery audiences."""
+        """The references outside every one of these participants' frozen delivery audiences."""
         with self.observing() as db:
-            return tuple(reference for reference in references if not ReceivedSource.exists(
-                db, where="{seq} = ?", parameters=(reference.seq,), lookup=lookup))
+            return tuple(reference for reference in references if not any(
+                ReceivedSource.exists(db, where="{seq} = ?", parameters=(reference.seq,),
+                                      lookup=lookup) for lookup in lookups))
 
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""

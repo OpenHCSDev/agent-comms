@@ -75,6 +75,7 @@ from .locked_store import (
     RootFile,
     RuntimeFile,
     SQLiteFile,
+    SQLiteReader,
     SQLiteStorage,
     StoreCommittedError,
     WrittenFile,
@@ -142,6 +143,11 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         return value
 
     @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The stored value as JSON text, without a domain-object round trip."""
+        return f"json_quote({expression})"
+
+    @classmethod
     def for_type(cls, annotation: object) -> type[SqlStorage]:
         annotation, _ = _base_type(annotation)
         if get_origin(annotation) is Literal:
@@ -180,6 +186,12 @@ class RealStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         return annotation is float
 
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The codec owns exact float spelling; SQLite's formatters differ."""
+        db.create_function(cls.declared_name, 1, FieldCodec.compact, deterministic=True)
+        return f'"{cls.declared_name}"({expression})'
+
 
 class BooleanStorage(SqlStorage):
     sql_type = "INTEGER"
@@ -195,6 +207,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> int | None:
         return None if value is None else int(value)
+
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"CASE {expression} WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END"
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -265,6 +281,10 @@ class JsonStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> str | None:
         return None if value is None else FieldCodec.compact(value, allow_nan=False)
+
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"COALESCE({expression}, 'null')"
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -491,6 +511,20 @@ class _Field(SqlValue):
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
+
+    def wire_record(self, db: sqlite3.Connection, plan: FieldPlan, alias: str) -> str:
+        expression = self.reference(alias)
+        projected = plan.project_encoded(self.storage.json_text(db, expression), self.json_record)
+        if not plan.constructor_required and plan.omitted(plan.default()):
+            default = SQLiteLiteral.of(self.encode(plan.default()))
+            return f"CASE WHEN {expression} IS {default} THEN '{{}}' ELSE {projected} END"
+        return projected
+
+    @staticmethod
+    def json_record(values: Mapping[str, str]) -> str:
+        pieces = [sql_literal(json.dumps(key) + ':') + ' || ' + expression
+                  for key, expression in values.items()]
+        return "'{' || " + " || ',' || ".join(pieces) + " || '}'" if pieces else "'{}'"
 
     @property
     def lifecycle_family(self) -> type[LifecycleState]:
@@ -1057,6 +1091,53 @@ class WriterOwnedFile(SchemaChange):
         schema.reconcile_schema(db, self)
 
 
+class SchemaRevision(ABC):
+    """One schema state of one database, which decides whether a verified schema is remembered."""
+
+    @classmethod
+    def read(cls, db: sqlite3.Connection) -> SchemaRevision:
+        # The main database is always database_list's first row; an in-memory one has no path.
+        path = db.execute("PRAGMA database_list").fetchone()[2]
+        if not path:
+            return UnfiledSchema()
+        info = os.stat(path)
+        return FiledSchema(info.st_dev, info.st_ino, db.execute("PRAGMA schema_version").fetchone()[0])
+
+    @abstractmethod
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool: ...
+
+    @abstractmethod
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FiledSchema(SchemaRevision):
+    """A file's schema state: SQLite raises schema_version on every schema change, and a
+    replaced file is another inode, so an equal file and version stays verified."""
+
+    device: int
+    inode: int
+    version: int
+
+    verified_schemas: ClassVar[set[tuple[type[TableSchema], tuple[type[TypedTable], ...], FiledSchema]]] = set()
+
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool:
+        return (schema, sharing, self) in self.verified_schemas
+
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None:
+        self.verified_schemas.add((schema, sharing, self))
+
+
+class UnfiledSchema(SchemaRevision):
+    """An in-memory database has no file identity to remember, so every read compares again."""
+
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool:
+        return False
+
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None:
+        """Nothing outlives an in-memory database's connection."""
+
+
 class TableSchema(ABC):
     """The tables of one SQLite file, and the one reader of the SQL SQLite stored for them.
 
@@ -1126,10 +1207,18 @@ class TableSchema(ABC):
         cls, db: sqlite3.Connection, subject: str,
         sharing: tuple[type[TypedTable], ...] = (),
     ) -> None:
-        """Refuse a stored schema that differs, naming every object whose stored SQL differs."""
+        """Refuse a stored schema that differs, naming every object whose stored SQL differs.
+
+        A file and schema version already found equal stay equal, so readers compare the stored
+        SQL once per schema change instead of on every read (0.44 ms a coordinator read, 4% of
+        the resident worker's pool samples, 2026-10-30)."""
+        revision = SchemaRevision.read(db)
+        if revision.verified(cls, sharing):
+            return
         if cls.schema_differs(db, sharing):
             raise cls.schema_error(
                 f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
+        revision.remember(cls, sharing)
 
     @classmethod
     def changed_families(
@@ -2396,10 +2485,25 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
+    def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
+        """Project one declared field's stored value into its public wire record."""
+        item, = cls._fields_named((plan.name,))
+        return item.wire_record(db, plan, cls.declared_name)
+
+    @classmethod
     def qualified(cls, *names: str) -> str:
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)
         return ", ".join(f"{table}.{_identifier(item.wire_name)}" for item in cls._fields_named(names))
+
+    @classmethod
+    def join_to(cls, other: type[TypedTable]) -> str:
+        """Join a capability to the other table's declared primary key."""
+        keys = tuple(item.name for item in other._fields if item.column.primary_key)
+        if not keys:
+            raise TypeError(f"{other.__name__} declares no join key")
+        condition = " AND ".join(f"{cls.qualified(name)} = {other.qualified(name)}" for name in keys)
+        return f'JOIN {_identifier(cls.declared_name)} ON {condition}'
 
     @classmethod
     def decode_at(cls, row: tuple[object, ...], offset: int) -> Self:
@@ -2909,15 +3013,10 @@ class RuntimeWriter(RuntimeFile, StoreWriter):
     maintenance included."""
 
 
-class WalStore(StoreWriter, StoreLockFile):
+class WalStore(SQLiteReader, StoreWriter, StoreLockFile):
     """One WAL file owns connection setup, attachment and retirement."""
 
     synchronous: ClassVar[str] = "FULL"
-
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The physical file, supplied by a root declaration or file constructor."""
 
     def _create_file(self) -> None:
         """Create only a new inode; never close a descriptor for a live SQLite inode."""
@@ -3064,7 +3163,7 @@ class TypedStore(WalStore, TableSchema):
     def snapshot(self) -> Iterator[sqlite3.Connection]:
         """Read a committed store, or its declared empty schema before its first write."""
         with self.committed_or_empty(
-            type(self), lambda: self.opened_reader(self.path)
+            type(self), self.reader_snapshot
         ) as connection:
             self.require_schema(connection)
             yield connection

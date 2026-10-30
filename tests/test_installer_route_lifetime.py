@@ -22,6 +22,7 @@ from agent_comms.active_route import (
     ActiveRouteFile,
 )
 from agent_comms.bus import Bus
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import Comms, wire
 from agent_comms.installer.backup import StoreBackup
@@ -274,7 +275,7 @@ def test_route_publication_neither_waits_for_nor_ends_an_old_toad_holding_the_di
     directory = tmp_path / "state"
     directory.mkdir(mode=0o700)
     with SpawnedProcess.launch((sys.executable, "-c", ROUTE_HOLDER, str(directory), "toad"),
-                               output=subprocess.PIPE) as holder:
+                               stdio=DetachedChildStdio(stdout=subprocess.PIPE)) as holder:
         assert holder.process.stdout.readline() == b"held\n"
         ActiveRouteFile(directory / "active-route.json").update(
             lambda: None, lambda original, held: None)

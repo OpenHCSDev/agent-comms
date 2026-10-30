@@ -91,7 +91,14 @@ pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "t
 
 
 def thread(name: str, root: Path, created: float) -> Thread:
-    thread_registration = Registration(Path(root) / "registry.json")
+    """A registered thread: work is assigned only to a holder the registry knows."""
+    registration = Registration(Path(root) / "registry.json")
+    registration.register(Thread(name, frozenset(), Checkout(root), created_at=created))
+    return registration.require(name)
+
+
+def other_birth(name: str, root: Path, created: float) -> Thread:
+    """The same name born at another time: a distinct identity the registry never holds."""
     return Thread(name, frozenset(), Checkout(root), created_at=created)
 
 
@@ -112,7 +119,7 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
 
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1.0)
-    old_lead = thread('lead', tmp_path, 2.0)
+    old_lead = other_birth('lead', tmp_path, 2.0)
     checked = replace(order(source_repository), serves=RetainedStorePhase)
     declarations = (
         (lead, checked),
@@ -125,7 +132,8 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
         request = store.add_request(creator.incarnation, 'Check phase declarations').id
         todo = store.create(
             f'P{index}', RepositoryName.from_wire('example/source'), f'Problem {index}',
-            creator=creator, assigner=creator.incarnation, request=request, owner=creator,
+            creator=creator, assigner=creator.incarnation, request=request,
+            owner=thread(f'unit{index}', tmp_path, 10.0 + index),
             generation=GoalId.mint(), review_at=RecordedEventTime(1000), order=checked,
         )
         for _ in range(folds):
@@ -189,7 +197,7 @@ def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, sou
                 order=order(source_repository),
         )
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
-    newer = thread("lead", tmp_path, 2.0)
+    newer = other_birth("lead", tmp_path, 2.0)
     assert store.get(original.id).request == request
     with pytest.raises(NotOrderCommander):
         store.apply("P1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
@@ -503,7 +511,7 @@ def test_order_pr_adopts_a_registered_companion_once(pr_commander, proof_build_c
     body.write_text("A companion PR is never created by this order.")
     with pytest.raises(SystemExit, match="adopt a companion PR with --existing"):
         order_pr(ctx, toad_checkout, original.id, "--title", "Companion", "--body-file", str(body))
-    with pytest.raises(TodoError, match="OpenHCSDev/textual is not a repository"):
+    with pytest.raises(TodoError, match="openhcsdev/textual is not a repository of this commander project"):
         order_pr(ctx, textual_checkout, original.id, "--existing", "1")
     assert TodoStore(ctx.root).get(original.id) == original
 
@@ -705,7 +713,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
         original = c.goals.todos.apply(original.id, OrderMessage(
             original.revision, lead.incarnation, sent.message_id, at=RecordedEventTime(time.time())))
         claim = OrderClaim.for_order(
-            original, worker.incarnation, 1, merged, "The repair is ready for review",
+            original, worker.incarnation, PullRequestLink(original.repo, 1), merged, "The repair is ready for review",
             sent.reference, store=c.goals.todos,
         )
         claim = replace(claim, message=replace(

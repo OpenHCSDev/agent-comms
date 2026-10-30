@@ -9,7 +9,7 @@ from .agent_events import (
 
 from .errors import StaleAttemptError
 import logging
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
@@ -29,16 +29,16 @@ from .goal_actions import (
     SentBackOrderGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import Generation, GoalAttemptStore
+from .goal_attempts import Generation, GoalAttemptFile, GoalAttemptStore
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
     GoalInputReview,
+    GoalWait,
     GoalWaitRecovery,
     GoalWaitReview,
     GoalWaits,
-    RecordedGoalWait,
     StandbyReview,
 )
 from .native_input_owner import GoalLaunchOwner
@@ -82,7 +82,9 @@ class Goals(GoalWaitRecovery):
         self.bus = bus
         self.agents = agents
         self.waits = GoalWaits(root)
-        self.goal_store: GoalAttemptStore | None = None
+        self.dispositions = InputDispositions(root)
+        self.goal_store: GoalAttemptFile = GoalAttemptFile(GoalAttemptStore.path_in(
+            GoalAttemptStore.directory_in(root)))
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a commander's child goal from its parent's active work."""
@@ -94,16 +96,16 @@ class Goals(GoalWaitRecovery):
     def todos(self) -> TodoStore:
         return TodoStore(self.root)
 
-    def change_problem(self, problem, operation, commander):
-        actor = self.registry.require(commander).incarnation
+    def change_problem(self, problem, operation, actor: ThreadIncarnation):
+        """The caller's resolved identity carries its authority; a name lookup would drop it."""
         current = self.todos.get(problem)
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
-    def judge_calls(self, verdicts: Sequence[JudgedCall], commander: str) -> tuple[Todo, ...]:
+    def judge_calls(self, verdicts: Sequence[JudgedCall],
+                    actor: ThreadIncarnation) -> tuple[Todo, ...]:
         """Check every verdict on its order's state as the earlier ones leave it, list every
         refusal together, and write only when none is refused."""
-        actor = self.registry.require(commander).incarnation
         staged, ready = TodoBatch(), TodoBatch()
         for call in verdicts:
             call.operation.staged(staged, call)
@@ -157,11 +159,9 @@ class Goals(GoalWaitRecovery):
         return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
-        if self.goal_store is None:
-            private = GoalAttemptStore.directory_in(self.root)
-            private.mkdir(mode=0o700, exist_ok=True)
-            self.goal_store = GoalAttemptStore.initialize(private)
-        return self.goal_store
+        store = self.goal_store.open()
+        self.goal_store = store
+        return store
 
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
@@ -186,7 +186,7 @@ class Goals(GoalWaitRecovery):
     def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         entry = self.registry.entry(name).entry
-        rows = InputDispositions(self.root).unresolved((entry,)).unknown(entry.names)
+        rows = self.dispositions.unresolved((entry,)).unknown(entry.names)
         return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
@@ -198,14 +198,14 @@ class Goals(GoalWaitRecovery):
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         entry = self.registry.entry(name).entry
-        return InputDispositions(self.root).unresolved((entry,)).delivery_overview(
+        return self.dispositions.unresolved((entry,)).delivery_overview(
             entry.names, include_history=include_history, scope=scope)
 
     def dismiss_historical_inputs(
         self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        return InputDispositions(self.root).dismiss_historical(
+        return self.dispositions.dismiss_historical(
             (self.registry.entry(name).entry,), scope=scope)
 
     def goal_input_review(
@@ -231,7 +231,7 @@ class Goals(GoalWaitRecovery):
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         owners = captured.owners
-        dispositions = InputDispositions(self.root)
+        dispositions = self.dispositions
         unknown = {row.key: row for row in
                    dispositions.unresolved((snapshot.entry(thread.name),)).unknown(owners)}
         eligible = set()
@@ -308,11 +308,7 @@ class Goals(GoalWaitRecovery):
         return self._goal_snapshot(name).execution
 
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
-        """Announce a durable change through S1's event vocabulary.
-
-        Existing registry/history and wait persistence are the cross-process
-        authority. Each observer supplies its last successfully published view.
-        """
+        """Compare a rebuilt view after its publication owner observed a source change."""
         current = self.goal_snapshot(name)
         return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 
@@ -323,19 +319,25 @@ class Goals(GoalWaitRecovery):
     def _goal_snapshot(self, name: str) -> GoalSnapshot:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
-        return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.read())
+        # One owner's wait is one keyed row; decoding every wait to pick it cost 70% of each
+        # goal_changed, once per hosted session on every goal store change (2026-10-30).
+        return self.snapshot_for(snapshot.threads[canonical], snapshot, self.waits.resolve)
 
     def snapshot_for(self, owner: Thread, snapshot: RegistrySnapshot,
-                     waits: dict[str, RecordedGoalWait]) -> GoalSnapshot:
+                     wait: Callable[[GoalDeclaration], GoalWait]) -> GoalSnapshot:
         """All goal readers build the same source from the original records."""
         for goal in owner.goal:
             store = self.open_goal_store()
-            generation = store.require_generation(goal.id)
-            source = GoalExecutionSource(
-                goal, GoalWaits.for_goal(goal, waits), generation,
-                generation.lifecycle.evidence(store, generation), owner, snapshot, self.agents,
-            )
-            return GoalSnapshot(goal, source.execution())
+            # Generation and its failure evidence come from one cut. Permit
+            # attestation keeps GoalAttemptStore's independent fresh readback.
+            with store.reader_snapshot() as connection:
+                generation = Generation.require_in(connection, goal.id)
+                source = GoalExecutionSource(
+                    goal, wait(goal), generation,
+                    generation.lifecycle.evidence(connection, generation),
+                    owner, snapshot, self.agents,
+                )
+                return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
     def direct(self, name: str, message: Message) -> None:

@@ -65,21 +65,25 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     unclaimed.state().connect(
         unexpected_serve, lambda operation: VerifySession(owner=operation.owner))
     owner_log = tmp_path / 'owner.log'
+    dealt_output = tmp_path / 'session-deal.json'
     # This ordinary shell remains alive but is not a child subreaper. The hook
     # really exits, so its serve cannot retain the shell owner's ancestry.
     shell = (
-        'export CLAUDE_PID=$$; "$1" < "$2" & hook=$!; '
+        'export CLAUDE_PID=$$; "$1" < "$2" > "$3" & hook=$!; '
         'wait "$hook" || exit "$?"; printf "%s\\n" "$hook"; read -r finish || :'
     )
     with owner_log.open('wb') as errors, subprocess.Popen(
             ('/bin/sh', '-c', shell, 'session-owner',
-             str(source_programs.script(hook_session.SessionHook.main)), str(packet)),
+             str(source_programs.script(hook_session.SessionHook.main)), str(packet), str(dealt_output)),
             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors) as owner:
         try:
             assert select.select((owner.stdout,), (), (), 40)[0], owner_log.read_text()
             line = owner.stdout.readline()
             assert line, owner_log.read_text()
             hook_pid = int(line)
+            context = json.loads(dealt_output.read_text())["hookSpecificOutput"]["additionalContext"]
+            assert "Read each of these" in context
+            assert transcript.with_suffix(".deal.json").exists()
             expected = ProcessIdentity.capture(owner.pid)
             observed = InspectSession().information(claim.socket_path)
             assert observed.owner == expected

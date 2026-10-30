@@ -16,6 +16,7 @@ from acp.schema import (
     ToolCallStart,
     ToolKind,
     UsageUpdate,
+    SessionInfoUpdate,
 )
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
@@ -25,6 +26,7 @@ from metaclass_registry.mro_dispatch import (
 from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
+    GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
     NativeOutputCommittedUpdate,
     NativeRoundCommittedUpdate,
@@ -93,7 +95,7 @@ class AcpToolAction(MroDispatch):
 @dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
     agent: TurnEffects
-    session_id: str
+    session_id: AcpSessionId
     client: SessionUpdateSink
 
     @handles(TranscriptUpdate)
@@ -144,7 +146,13 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:
-        await self.agent.sessions.publish_metadata(self.session_id)
+        await self.client.publish_update(
+            session_id=self.session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                field_meta=encode_updates(GoalChangedUpdate.from_snapshot(event.snapshot)),
+            ),
+        )
 
     @handles(events.TextEvent)
     async def text(self, event: events.TextEvent) -> None:
@@ -225,7 +233,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(ContextUsage)
     async def on_context_usage(self, usage: ContextUsage) -> None:
-        await self.agent.turns.observe_context(AcpSessionId(self.session_id), usage)
+        await self.agent.turns.observe_context(self.session_id, usage)
         await self.client.publish_update(
             session_id=self.session_id,
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),

@@ -23,8 +23,9 @@ from .acp_extension import (
     QueueScope,
     encode_updates,
 )
-from .activity import FailedWakeDiagnostic
-from .agent_backend import AgentBackend, ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
+from .activity import FailedWakeDiagnostic, StoppedDrainDiagnostic
+from .agent_backend import AgentBackend
+from .turn_inbox import ClearQueue, InputContent, SendNow, TurnInbox, TurnInboxItem
 from .bus import Bus
 from .child_process import join_retirement
 from .cohort_schema import AcceptanceFrontier
@@ -52,7 +53,8 @@ from .input_attempt import (
 from .input_disposition import InputDispositions, InputDocument
 from .input_effects import InputEffects
 from .lifecycle_capability import Executing
-from .maintenance_barrier import MaintenanceBarrier, MaintenanceIngress
+from .maintenance_barrier import MaintenanceIngress
+from .locked_store import GoalWakeFile
 from .native_input_owner import RegistryOwner
 from .proven_source_coverage import SourcePrefix
 from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
@@ -105,14 +107,14 @@ class PrivateObservation(PrivateObservationState):
         return bool(bus.received(
             lookup, after=self.source_prefix.through_seq, limit=1, descending=False))
 
-    async def drain(self, inputs, session_id: str, root_id: RootId) -> int:
+    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return await inputs.effects._drain_private_nk(session_id, root_id)
 
 
 class ExecutionWaitingObservation(PrivateObservation):
     """A previous execution blocks new input until its stored state changes."""
 
-    async def drain(self, inputs, session_id: str, root_id: RootId) -> int:
+    async def drain(self, inputs, session_id: AcpSessionId, root_id: RootId) -> int:
         return 0
 
 
@@ -125,14 +127,14 @@ class InputObservation(ABC):
     runtime: RuntimeServer
     auto_wake: bool
     closing: bool
-    drained: dict[str, DrainedSession]
+    drained: dict[AcpSessionId, DrainedSession]
     root_observer: BackgroundTask
     observed_registry: asyncio.Task[RegistryDocument]
 
     @abstractmethod
-    def state(self, session_id: str) -> DrainedSession: ...
+    def state(self, session_id: AcpSessionId) -> DrainedSession: ...
 
-    def turn_live(self, session_id: str) -> bool:
+    def turn_live(self, session_id: AcpSessionId) -> bool:
         state = self.state(session_id)
         return state.turn_open() or state.turn_task.busy
 
@@ -140,11 +142,11 @@ class InputObservation(ABC):
         if state.observer.owns(task):
             state.observation_watcher = None
 
-    def wake_observer(self, session_id: str) -> None:
+    def wake_observer(self, session_id: AcpSessionId) -> None:
         self.ensure_live_drain(session_id)
         self.state(session_id).wake_observer()
 
-    def register_wake(self, session_id: str, task: asyncio.Task[WakeOutcome]) -> None:
+    def register_wake(self, session_id: AcpSessionId, task: asyncio.Task[WakeOutcome]) -> None:
         state = self.state(session_id)
         state.wake_task = task
 
@@ -161,7 +163,7 @@ class InputObservation(ABC):
 
         task.add_done_callback(finished)
 
-    def ensure_live_drain(self, session_id: str) -> None:
+    def ensure_live_drain(self, session_id: AcpSessionId) -> None:
         """Share root observation, retaining an independent consumer for each session."""
         if self.closing:
             return
@@ -174,14 +176,15 @@ class InputObservation(ABC):
         task = self.runtime.background(self.observe(session_id))
         state.observer = RunningBackgroundTask(task)
         task.add_done_callback(partial(self._retire_observer, state))
+        state.wake_observer()
         self.root_observer.wake()
 
-    async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
+    async def _own_entry(self, session_id: AcpSessionId) -> RegistryEntryRevision:
         return await Coordination.run_worker(partial(
             self.comms.registry.entry, self.sessions.require(session_id),
         ))
 
-    def _quiescent(self, session_id: str) -> bool:
+    def _quiescent(self, session_id: AcpSessionId) -> bool:
         """No process-local work or retry is waiting on the next tick."""
         state = self.state(session_id)
         turn_live = self.turn_live(session_id)
@@ -207,12 +210,16 @@ class InputObservation(ABC):
     async def observe_root(self) -> None:
         """One kernel registration and captured registry read feed the root's drains."""
         bus = self.comms.bus.bus
-        sources = (
+        inbox_sources = (
             *(FileSource(path) for path in (
                 *bus.source_paths(self.comms.root), *CoordinationStore.source_paths(self.comms.root),
             )),
             FileLifetimeSource(bus.path),
             FileLifetimeSource(CoordinationStore.path_in(self.comms.root)),
+        )
+        sources = (
+            *inbox_sources,
+            *(FileSource(path) for path in GoalWakeFile.watched_paths_in(self.comms.root)),
         )
         try:
             async with aclosing(bus.watch_sources(*sources)) as observations:
@@ -227,15 +234,25 @@ class InputObservation(ABC):
                         self._read_observed_registry, names,
                     )))
                     try:
-                        await read
+                        document = await read
                     except UNAVAILABLE_DRAIN_ERRORS:
                         # Each consumer records failure against its own original owner.
-                        pass
+                        for state in targets.values():
+                            state.observation_ready.set()
+                    else:
+                        self.effects.turns.goals.observe_root(
+                            document, (owner.identifier for state in targets.values()
+                                       for owner in state.executors()), watcher.observed_paths,
+                        )
                     self.observed_registry = read
+                    inbox_changed = any(source.path in watcher.observed_paths for source in inbox_sources)
                     for state in targets.values():
                         if state.observing():
+                            # Pending producers have their own completion wake;
+                            # only an explicit local request owes another tick.
+                            if inbox_changed or state.repeat_observation:
+                                state.observation_ready.set()
                             state.observation_watcher = watcher
-                            state.observation_ready.set()
         finally:
             self.root_observer = BackgroundTask()
             # A failed native registration cannot leave consumers waiting forever.
@@ -243,9 +260,31 @@ class InputObservation(ABC):
             for state in tuple(self.drained.values()):
                 state.observer.cancel()
 
-    async def observe(self, session_id: str) -> None:
-        initial = await self._own_entry(session_id)
+    async def observe(self, session_id: AcpSessionId) -> None:
+        """Keep this session's input loop alive; observe_root reaches only a live one.
+
+        A contended read restarts recovery at the next real change. Any other death
+        is recorded as a stopped drain, so the board sees a deaf owner, not an idle one.
+        """
         state = self.state(session_id)
+        try:
+            while True:
+                try:
+                    await self._observe_inbox(session_id, state)
+                except DEFERRED_DRAIN_ERRORS:
+                    await state.observation_ready.wait()
+                    state.observation_ready.clear()
+        except Exception as error:
+            thread = self.sessions.require(session_id)
+            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+            await record_drain_failure(
+                self.comms, thread, snapshot.owner_identity(thread),
+                StoppedDrainDiagnostic, error,
+            )
+            raise
+
+    async def _observe_inbox(self, session_id: AcpSessionId, state: DrainedSession) -> None:
+        initial = await self._own_entry(session_id)
         entry = await self.begin_observation(state, initial.entry)
         bus = self.comms.bus.bus
         lookup = entry.thread.incarnation.require_recorded().lookup
@@ -273,21 +312,22 @@ class InputObservation(ABC):
                 await self._observe_entry(session_id, entry)
 
     async def _observe_entry(
-        self, session_id: str, entry: RegistryEntry,
+        self, session_id: AcpSessionId, entry: RegistryEntry,
     ) -> None:
         thread = self.sessions.require(session_id)
         try:
             async with drain_failures(self.comms, thread, entry.owner_identity):
-                await self.sessions.config.apply_stored_settings(session_id)
+                attachment = self.state(session_id).owned().identifier
+                await self.sessions.config.apply_stored_settings(attachment)
                 drained = await self.drain_inbox(session_id)
-                if self.effects.turns.goals.in_standby(session_id):
+                if self.effects.turns.goals.in_standby(attachment):
                     await Coordination.run_worker(partial(
                         self.comms.goals.recover_closed_goal_wait, session_id,
                     ))
                 await ProjectResumeCheck(
                     session_id=session_id, inputs=self, turns=self.effects.turns,
                 ).schedule()
-                await self.effects.turns.goals.schedule_goal(session_id)
+                await self.effects.turns.goals.schedule_goal(attachment)
                 current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
                 if (current.turn_record.items_with(Executing, current) or self.turn_live(session_id)
                         or self._quiescent(session_id)):
@@ -302,7 +342,7 @@ class InputObservation(ABC):
             pass
 
     def _private_observation_revision(
-        self, session_id: str, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
+        self, session_id: AcpSessionId, root_id: RootId, source_prefix: SourcePrefix, entry: RegistryEntry,
         store: Coordination,
     ) -> PrivateObservation:
         """Original owner/work observations, never delivery or replay authority.
@@ -333,12 +373,12 @@ class InputObservation(ABC):
             and not self.owns_execution(session_id, owner.thread)
         ):
             observation = ExecutionWaitingObservation
-        maintenance = MaintenanceBarrier(self.comms.registry.store.path)._current_unlocked()
+        maintenance = self.comms.owners.maintenance._current_unlocked()
         return observation(source_prefix, entry, (
             root_id,
             self.auto_wake,
             self.sessions.runtime_enabled,
-            self.sessions.published.get(AcpSessionId(session_id)),
+            self.sessions.published.get(session_id),
             self.state(session_id).turn_open(),
             self.state(session_id).turn_task.busy,
             participant,
@@ -350,7 +390,7 @@ class InputObservation(ABC):
         ))
 
     async def _observe_private_revision(
-        self, session_id: str, root_id: RootId
+        self, session_id: AcpSessionId, root_id: RootId
     ) -> PrivateObservation:
         # Pending acquisition is not an inbox failure or a completed read.
         source_prefix = await Coordination.run_worker(partial(
@@ -537,6 +577,7 @@ class RunningTurnTask(RunningBackgroundTask, TurnTask):
 class DrainedSession:
     """One drained session's state, from its first use until the session ends."""
 
+    identifier: AcpSessionId = field(kw_only=True)
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     turn_task: TurnTask = field(default_factory=TurnTask)
@@ -566,6 +607,7 @@ class DrainedSession:
         """This host holds no session for the fenced owner: nothing is left to join, so
         completing it releases the row's binding to this host."""
         await sessions.complete_unheld(request.owner, request.claim)
+        sessions.effects.inputs.end_session(self.identifier)
         return OwnerRetiredReply(request.owner)
 
     def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
@@ -685,7 +727,6 @@ class DrainedSession:
 class OwnerSession(DrainedSession):
     """Local execution retains its original configuration, never copies its fields."""
 
-    identifier: AcpSessionId = field(kw_only=True)
     configuration: ConfigOptions = field(kw_only=True)
     owner: OwnerIdentity = field(kw_only=True)
     stop: OwnerStop = field(kw_only=True)
@@ -730,7 +771,7 @@ class InputDrain(InputObservation):
             self.comms.registry.entry, entry.thread.name,
         ))).entry
 
-    def owns_execution(self, session_id: str, owner: Thread) -> bool:
+    def owns_execution(self, session_id: AcpSessionId, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
         return (
             owner.turn_record.read().phase.busy
@@ -751,18 +792,18 @@ class InputDrain(InputObservation):
         self.runtime = runtime
         self.effects = effects
         self.configuration = configuration
-        self.drained: dict[str, DrainedSession] = {}
+        self.drained: dict[AcpSessionId, DrainedSession] = {}
         self.root_observer: BackgroundTask = BackgroundTask()
         self.queue_lock = asyncio.Lock()
         self.dispositions = InputDispositions(comms.root)
         self.auto_wake = auto_wake
         self.closing = False
 
-    def state(self, session_id: str) -> DrainedSession:
+    def state(self, session_id: AcpSessionId) -> DrainedSession:
         """This session's state, created on its first use."""
         state = self.drained.get(session_id)
         if state is None:
-            state = self.drained[session_id] = DrainedSession()
+            state = self.drained[session_id] = DrainedSession(identifier=session_id)
         return state
 
     def acquire_owner(
@@ -784,7 +825,7 @@ class InputDrain(InputObservation):
             raise RelationViolationError("Another allocation already owns this session")
         return owned
 
-    def end_session(self, session_id: str) -> None:
+    def end_session(self, session_id: AcpSessionId) -> None:
         """Ending a session drops its state, its live producers with it."""
         state = self.drained.pop(session_id, None)
         if state is not None:
@@ -795,7 +836,7 @@ class InputDrain(InputObservation):
         for session_id in tuple(self.drained):
             self.end_session(session_id)
 
-    async def clear_queued_inputs(self, session_id: str) -> None:
+    async def clear_queued_inputs(self, session_id: AcpSessionId) -> None:
         """Drop prompts queued against the backend for this session.
 
         Pi's own queue is cleared, then the local deferred-display list is
@@ -821,7 +862,7 @@ class InputDrain(InputObservation):
             state.restored = {}
         await self.emit_queue_state(session_id)
 
-    async def queue_binding(self, session_id: str) -> QueueScope:
+    async def queue_binding(self, session_id: AcpSessionId) -> QueueScope:
         try:
             owner, claim_scope = await Coordination.run_worker(partial(
                 self.comms.registry.live_owner_with_claim,
@@ -836,12 +877,12 @@ class InputDrain(InputObservation):
             owner=owner.require_process(),
         )
 
-    def next_revision(self, session_id: str) -> int:
+    def next_revision(self, session_id: AcpSessionId) -> int:
         state = self.state(session_id)
         state.queue_revision += 1
         return state.queue_revision
 
-    async def queue_state(self, session_id: str) -> QueueChangedUpdate:
+    async def queue_state(self, session_id: AcpSessionId) -> QueueChangedUpdate:
         """The producer owns the complete exact-ID queue projection."""
         scope = await self.queue_binding(session_id)
         state = self.state(session_id)
@@ -850,7 +891,7 @@ class InputDrain(InputObservation):
         ))
 
     async def emit_queue_state(
-        self, session_id: str, *, client: SessionUpdateSink | None = None,
+        self, session_id: AcpSessionId, *, client: SessionUpdateSink | None = None,
     ) -> None:
         await (client or self.runtime).publish_update(
             session_id=session_id,
@@ -858,7 +899,7 @@ class InputDrain(InputObservation):
         )
 
     async def emit_input_delivery_changed(
-        self, session_id: str, *,
+        self, session_id: AcpSessionId, *,
         client: SessionUpdateSink | None = None,
     ) -> None:
         await (client or self.runtime).publish_update(
@@ -866,7 +907,7 @@ class InputDrain(InputObservation):
             update=InputDeliveryChangedUpdate().acp_chunk(),
         )
 
-    def input_keys(self, session_id: str) -> frozenset[InputKey]:
+    def input_keys(self, session_id: AcpSessionId) -> frozenset[InputKey]:
         """Live captured source membership, never rebuilt from durable notices."""
         state = self.state(session_id)
         following = frozenset(
@@ -875,7 +916,7 @@ class InputDrain(InputObservation):
         )
         return following.union(state.turn.keys)
 
-    async def delivery_scope(self, session_id: str) -> InputDeliveryScope:
+    async def delivery_scope(self, session_id: AcpSessionId) -> InputDeliveryScope:
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
@@ -889,12 +930,12 @@ class InputDrain(InputObservation):
         )
         return OwnerQueueInputDeliveryScope(frozenset(keys))
 
-    async def drain_inbox(self, session_id: str) -> int:
+    async def drain_inbox(self, session_id: AcpSessionId) -> int:
         """Push undelivered messages to the client; returns count pushed."""
         async with self.state(session_id).lock:
             return await self.drain_owned_inbox(session_id)
 
-    async def _drain_private_if_changed(self, session_id: str, root_id: RootId) -> int:
+    async def _drain_private_if_changed(self, session_id: AcpSessionId, root_id: RootId) -> int:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
         state = self.state(session_id)
@@ -917,7 +958,7 @@ class InputDrain(InputObservation):
         await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
         return 0
 
-    async def drain_owned_inbox(self, session_id: str) -> int:
+    async def drain_owned_inbox(self, session_id: AcpSessionId) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
         await self.state(session_id).turn.resume(self.comms.owners.maintenance)
@@ -932,7 +973,7 @@ class InputDrain(InputObservation):
 
     async def accept_followup(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         *,
         text: str,
         display_text: str,
@@ -966,19 +1007,19 @@ class InputDrain(InputObservation):
             field_meta=encode_updates(InputDeliveryChangedUpdate()),
         )
 
-    def require_inbox(self, session_id: str, inbox: TurnInbox) -> None:
+    def require_inbox(self, session_id: AcpSessionId, inbox: TurnInbox) -> None:
         if not self.state(session_id).turn.matches(inbox):
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
-        self, session_id: str, owner: Thread,
+        self, session_id: AcpSessionId, owner: Thread,
     ) -> TurnInbox:
         """Open the live turn inbox and capture its configured settings."""
         inbox = self.state(session_id).open_inbox()
         self.sessions.config.turn_started(session_id, owner)
         return inbox
 
-    async def send_now(self, session_id: str) -> None:
+    async def send_now(self, session_id: AcpSessionId) -> None:
         async with self.queue_lock:
             state = self.state(session_id)
             if state.queued:
@@ -998,7 +1039,7 @@ class InputDrain(InputObservation):
             task.cancel()
         await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
 
-    async def input_refused(self, session_id: str, input_id: InputId) -> None:
+    async def input_refused(self, session_id: AcpSessionId, input_id: InputId) -> None:
         state = self.state(session_id)
         source = state.following.pop(input_id, None)
         if source is not None:
@@ -1009,7 +1050,7 @@ class InputDrain(InputObservation):
             await self.emit_queue_state(session_id)
 
     async def input_cleared(
-        self, session_id: str, input_id: InputId, native_id: InputId, text: str,
+        self, session_id: AcpSessionId, input_id: InputId, native_id: InputId, text: str,
     ) -> None:
         source = self.state(session_id).following.get(input_id)
         if source is not None:

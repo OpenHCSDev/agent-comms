@@ -14,11 +14,11 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import DocumentBytes, LockedStore, RegistryFile
+from .locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -140,6 +140,25 @@ class RegistryCut(RegistrySelection):
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryEntriesCut(RegistryCut):
+    """A complete cut whose decisions read only these threads' entries.
+
+    Other threads' writes (every live owner's heartbeat) leave such a decision
+    intact, so they never stale it; any change to one of these entries does.
+    """
+
+    names: frozenset[str]
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
+        with self.store.guarded_read():
+            for name in self.names:
+                if self.store.entry_unlocked(name) != self.snapshot.entry(name):
+                    raise StaleFence(f"registry entry {name!r} changed after this decision read it")
+            yield
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryPairCut[Peer](RegistryCut):
     peer: Peer
 
@@ -174,8 +193,8 @@ class RegistryCache:
     # Observers wake on the same registry change from several threads; one
     # decodes the new revision and the others take its result.
     decoding: threading.Lock = field(default_factory=threading.Lock)
-    # A successful guard check, keyed by the revisions of the three files it
-    # reads. Unchanged files give the same answer; failures are never kept.
+    # A successful guard check, keyed by the revisions of the files its answer
+    # was decided from. Unchanged files give the same answer; failures are never kept.
     guard: tuple[tuple, RegistryPrivacy] | None = None
     counts: RegistryReadCounts = field(default_factory=RegistryReadCounts)
     measurement: threading.Lock = field(default_factory=threading.Lock)
@@ -219,12 +238,12 @@ class RegistryEdit:
             ).prepare_participant(self.store)
         return restored
 
-    def fence_idle_owners(
+    def fence_restart_owners(
         self, selected: Sequence[tuple[Thread, int]]
     ) -> tuple[tuple[Thread, int], ...]:
-        """Commit all original idle owner fences together, or change none."""
+        """Commit all original restart fences together, or change none."""
         fenced = tuple(
-            (thread, self.document.fence_idle_owner(
+            (thread, self.document.fence_restart_owner(
                 thread, expected_claimed_generation=generation
             ))
             for thread, generation in selected
@@ -382,6 +401,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
 
+    def entries_cut(self, names: frozenset[str]) -> RegistryEntriesCut:
+        cut = self.snapshot_with_authority()
+        return RegistryEntriesCut(self, cut.revision, cut.snapshot, cut.privacy, names)
+
     def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.
 
@@ -446,6 +469,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
+
+    def entry_unlocked(self, name: str) -> RegistryEntry:
+        """This thread's current entry; the caller holds the registry guard."""
+        return self._decode_revision(self._capture_unlocked()).document.entry(name)
 
     def current_entry(self, name: str) -> AbstractContextManager[RegistryEntryRevision]:
         """Retain one current participant without materializing unrelated declarations."""
@@ -525,17 +552,27 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # The root is keyed by which directory it is, never by its mtime: every entry created or
         # removed under it, such as a coordinator transaction's journal, moves the mtime, and the
         # entries this guard reads are keyed by their own revisions below.
-        key = (
-            _link_revision(self.path.parent).file_identity(),
-            _link_revision(CoordinationStore.path_in(self.path.parent)),
+        # Observed before the check, so a change during it moves the key and forces a recheck.
+        # Each answer keys on the files it was decided from: the coordinator commits on every
+        # coordination write, and a private root never reads it, so keying a private answer
+        # on it re-hashed the whole registry on every coordination write.
+        root = _link_revision(self.path.parent).file_identity()
+        observed = (
             _link_revision(self.guard_path),
+            _link_revision(CoordinationStore.path_in(self.path.parent)),
             _link_revision(self.path),
         )
-        if (checked := self.cache.guard) is not None and checked[0] == key:
-            return checked[1]
+        if (checked := self.cache.guard) is not None:
+            key, guard = checked
+            if key == (root, *guard.guard_evidence(*observed)):
+                return guard
         guard = self._check_guard_unlocked()
-        self.cache.guard = key, guard
+        self.cache.guard = (root, *guard.guard_evidence(*observed)), guard
         return guard
+
+    @PublishedProperty
+    def coordinator_reader(self) -> ReadableStore:
+        return ReadableStore(CoordinationStore.path_in(self.path.parent))
 
     def _check_guard_unlocked(self) -> RegistryPrivacy:
         if self.guard_path.exists() or self.guard_path.is_symlink():
@@ -544,7 +581,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         if coordinator.exists() or coordinator.is_symlink():
             from .private_runtime_schema import PrivateCoordinatorTable
 
-            with CoordinationStore.opened_reader(coordinator) as db:
+            with self.coordinator_reader.reader_snapshot() as db:
                 if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
         return PublicRegistry()

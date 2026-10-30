@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 import typing
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from decimal import Decimal
@@ -62,8 +62,14 @@ from .pi_vocabulary import (
 )
 from .recorded_time import EventMilliseconds, EventTime, UnrecordedEventTime
 from .send_result import CorrectionResult, CorrectionUnreported
+from .thread_identity import ThreadIncarnation
 from .thread_model import ThreadModel, UndeclaredModel
 from .tool_declaration import ToolDeclaration
+from .tool_result import DeclaredReply
+from .turn_context import (
+    ContextTurn, MeasuredNativeSegment, PreviewProvenance, Provenance,
+    SegmentManifest, TurnContext,
+)
 from .tool_results import NoSentMessage, NoToolDiff, ToolDiff
 from .transcript_events import (
     AssistantTranscript,
@@ -1164,6 +1170,13 @@ class PiContextUsage(PiPayload):
         return self.tokens
 
 
+class SnapshotAttestation(ABC):
+    """The identity-conflict contract a native snapshot can ask its attestation."""
+
+    @abstractmethod
+    def conflicts(self, data: NativeSessionSnapshot) -> bool: ...
+
+
 @dataclass(frozen=True)
 class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
 
@@ -1178,18 +1191,77 @@ class PiResponseData(ExternalNull, PiPayload, DeclaredFamily, affix="Data"):
         """Only Pi's session-state reply answers a state query."""
         raise ValueError(f"{type(self).__name__} is not Pi's session state")
 
+    def require_compaction(self) -> CompactionData:
+        """Only Pi's compact reply supplies a compaction result."""
+        raise ValueError(f"{type(self).__name__} is not Pi's compaction result")
+
+    def require_context(self) -> NativeContextData:
+        """Only Pi's context inspection reply supplies native context sources."""
+        raise ValueError(f"{type(self).__name__} is not Pi's native context")
+
     def native_updates(self, session: NativeSession) -> Iterable[AgentEvent]:
         return ()
 
     def cleared_inputs(self, requested: tuple[InputId, ...]) -> tuple[InputId, ...]:
         return ()
 
-    def conflicts_attestation(self, attestation) -> bool:
+    def conflicts_attestation(self, attestation: SnapshotAttestation) -> bool:
         return False
 
     @classmethod
     def wire_member(cls, value):
         return cls if cls is not PiResponseData else cls.member_named(value.get("kind"))
+
+
+@dataclass(frozen=True)
+class NativeContextData(StrictFields, PiResponseData, DeclaredReply):
+    counter: str
+    identity: NativeSessionIdentity
+    segments: tuple[MeasuredNativeSegment, ...]
+
+    def require_context(self) -> NativeContextData:
+        return self
+
+    def observation(self) -> PreviewProvenance:
+        """Return the SDK's original observation, without deriving its digest."""
+        originals = {observation for segment in self.segments
+                     for source in segment.provenance
+                     for observation in source.preview_observations()}
+        if len(originals) != 1:
+            raise ValueError("Native context has no unambiguous current preview observation")
+        (original,) = originals
+        self.identity.require_same_session(original.identity)
+        return original
+
+    def public_source(
+        self, observation: PreviewProvenance, segment: int, source: Provenance,
+    ) -> Provenance:
+        if observation != self.observation():
+            raise ValueError("Current native preview changed since the selected observation")
+        if not 0 <= segment < len(self.segments):
+            raise ValueError("Source has no selected context segment")
+        return self.segments[segment].require_source(source)
+
+    def recorded_public_text(self, expected: SegmentManifest) -> str:
+        self.identity.require_same_session(expected.sources.native_identity())
+        originals: dict[str, list[SegmentManifest]] = {}
+        for original in expected.original_values():
+            originals.setdefault(original.sha256, []).append(original)
+        values: dict[str, list[MeasuredNativeSegment]] = {}
+        for segment in self.segments:
+            if not any(segment.matches_recorded(original)
+                       for original in originals.get(segment.sha256, ())):
+                raise ValueError("Recorded SDK source is outside the selected original value")
+            values.setdefault(segment.sha256, []).append(segment)
+        return expected.recorded_public_text(values)
+
+    def for_turn(self, owner: ThreadIncarnation, turn: ContextTurn) -> TurnContext:
+        return TurnContext(owner, turn, self.segments)
+
+    def require_session_file(self, session_file: str) -> NativeContextData:
+        if self.identity.session_file != session_file:
+            raise ValueError("Context inspection belongs to a different selected native session")
+        return self
 
 
 @dataclass(frozen=True)
@@ -1251,7 +1323,7 @@ class NativeSessionSnapshot(PiPayload):
         known, observed = self._known_identity(), other._known_identity()
         return any(known[key] != observed[key] for key in known.keys() & observed.keys())
 
-    def conflicts_attestation(self, attestation) -> bool:
+    def conflicts_attestation(self, attestation: SnapshotAttestation) -> bool:
         return attestation.conflicts(self)
 
 
@@ -1337,6 +1409,9 @@ class ThinkingLevelsData(PiResponseData):
 
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
+    def require_compaction(self) -> CompactionData:
+        return self
+
     summary: str | None = None
     usage: Annotated[PiField[PiUsage], WireNullDefault()] = UnreportedUsage()
     first_kept_entry_id: Annotated[
@@ -1561,13 +1636,13 @@ class McpServerState(DeclaredFamily, affix="McpServerState"):
 
 class ReadyMcpServerState(McpServerState):
     @classmethod
-    def validate(cls, calls, counts):
+    def validate(cls, calls: type[McpCallPolicy], counts: tuple[int, ...]) -> None:
         calls.require_available()
 
 
 class ErrorMcpServerState(McpServerState):
     @classmethod
-    def validate(cls, calls, counts):
+    def validate(cls, calls: type[McpCallPolicy], counts: tuple[int, ...]) -> None:
         calls.require_unavailable()
         if any(counts):
             raise ValueError("Inactive MCP server counts must be zero")

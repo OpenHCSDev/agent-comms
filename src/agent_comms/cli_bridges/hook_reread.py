@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from collections.abc import Mapping
 from typing import ClassVar
 
-from .hook_skill import DeckStart
+from agent_comms_hooks import ClaudeSubagentHook
+from .hook_read_gate import GatedCall
+
+from agent_comms_hooks.skill import DeckStart
 from ..comms import Comms
-from ..instruction_deck import DeckReader
+from agent_comms_hooks.skill import DeckReader
 from ..registry_document import RegistrySnapshot
 
 
@@ -21,7 +25,7 @@ class SliceReminder(DeckStart):
               snapshot: RegistrySnapshot) -> tuple[str, ...]:
         deck = self.deck(reader)
         if not deck.exists():
-            return self.dealt(reader, comms, snapshot)  # the session was bound, or changed role, after it started
+            return self.widened(reader, comms, snapshot)
         if not number or number % self.every:
             return ()
         slices = json.loads(deck.read_text(encoding="utf-8"))
@@ -48,3 +52,17 @@ class BoardReminder(DeafReminder):
     def taken(self, reader: DeckReader, number: int, comms: Comms,
               snapshot: RegistrySnapshot) -> tuple[str, ...]:
         return super().taken(reader, number, comms, snapshot) + reader.board(self.session_id)
+
+
+@dataclass(frozen=True)
+class ReminderCall(BoardReminder, GatedCall):
+    """One completed event supplies both its read result and its inline reminder."""
+
+    @classmethod
+    def of(cls, record: Mapping[str, object], **context: object) -> ReminderCall:
+        return (SubagentReminderCall if cls.raised_by_subagent(record) else cls).decode(record, **context)
+
+
+@dataclass(frozen=True)
+class SubagentReminderCall(ClaudeSubagentHook, ReminderCall):
+    """A completed subagent call updates only its own deal and counter."""

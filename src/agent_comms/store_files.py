@@ -11,6 +11,7 @@ import stat
 import tempfile
 import threading
 import time
+import weakref
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterable, Iterator
 from contextlib import (
@@ -447,6 +448,54 @@ class DependentStateTier(StoreLockTier):
     __slots__ = ()
 
 
+class LentCursor(sqlite3.Cursor):
+    """A cursor its connection lent out and retires before that connection closes."""
+
+    def retire(self) -> None:
+        self.close()
+        self.__class__ = RetiredCursor
+
+
+class RetiredCursor(LentCursor):
+    """Released by its connection's close; a stream finishing later has nothing to release."""
+
+    def close(self) -> None:
+        pass
+
+
+class LendingConnection(sqlite3.Connection):
+    """The connection owns every cursor it lends, so closing it releases them first.
+
+    A typed stream (TypedRow.iterate) holds its cursor until the stream is closed; a
+    caller that drops a half-read stream leaves that to the collector, after the store's
+    scope already closed this connection. Retiring the cursors here makes the scope the
+    one owner of query lifetime instead of every caller wrapping its stream in closing().
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._lent: weakref.WeakSet[LentCursor] = weakref.WeakSet()
+
+    def cursor(self, factory: type[LentCursor] = LentCursor) -> LentCursor:
+        lent = super().cursor(factory)
+        self._lent.add(lent)
+        return lent
+
+    def execute(self, sql: str, parameters=(), /) -> LentCursor:
+        return self.cursor().execute(sql, parameters)
+
+    def executemany(self, sql: str, parameters, /) -> LentCursor:
+        return self.cursor().executemany(sql, parameters)
+
+    def executescript(self, script: str, /) -> LentCursor:
+        return self.cursor().executescript(script)
+
+    def close(self) -> None:
+        for lent in tuple(self._lent):
+            lent.retire()
+        super().close()
+
+
 class StoreContention(ABC):
     """Typed SQLite busy behavior shared by snapshots and writers."""
 
@@ -454,8 +503,14 @@ class StoreContention(ABC):
     @abstractmethod
     def timeout(self) -> float: ...
 
-    def reader(self, uri: str) -> sqlite3.Connection:
-        return sqlite3.connect(uri, uri=True, isolation_level=None, timeout=self.timeout)
+    def configure(self, connection: sqlite3.Connection) -> None:
+        """Apply this acquisition's wait budget to a retained SQLite handle."""
+        connection.execute(f"PRAGMA busy_timeout={round(self.timeout * 1000)}")
+
+    def reader(self, uri: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
+        return sqlite3.connect(
+            uri, uri=True, isolation_level=None, timeout=self.timeout,
+            check_same_thread=check_same_thread, factory=LendingConnection)
 
     def writer(
         self, path: str | os.PathLike[str], *,
@@ -464,7 +519,7 @@ class StoreContention(ABC):
     ) -> sqlite3.Connection:
         return sqlite3.connect(
             path, timeout=self.timeout, isolation_level=isolation_level,
-            uri=uri, check_same_thread=check_same_thread,
+            uri=uri, check_same_thread=check_same_thread, factory=LendingConnection,
         )
 
 
@@ -479,9 +534,9 @@ class StoreBusy(StoreContention):
 
     timeout: ClassVar[float] = 0.0
 
-    def reader(self, uri: str) -> sqlite3.Connection:
+    def reader(self, uri: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
         with CoordinationReadUnavailable.checking():
-            return super().reader(uri)
+            return super().reader(uri, check_same_thread=check_same_thread)
 
 
 DEFAULT_STORE_CONTENTION = StoreWait()

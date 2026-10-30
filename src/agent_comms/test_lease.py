@@ -13,12 +13,8 @@ from typing import ClassVar, TextIO
 
 from .child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
-from .process_claim import ClaimHeldError, ProcessSingleton
+from .process_claim import ProcessSingleton
 from .store_files import SourceTier
-
-
-class TestLeaseBusy(RuntimeError):
-    """Another controller is already spending this host's test budget."""
 
 
 class LeaseStart(ABC):
@@ -34,8 +30,11 @@ class LeaseStart(ABC):
 
 @dataclass(frozen=True)
 class NewTestRun(LeaseStart):
+    """A new controller queues in the kernel until the current one lets go: a refusal made
+    every caller poll by relaunching pytest, which spent the CPU the lease exists to protect."""
+
     def claim(self, owner: ProcessSingleton) -> AbstractContextManager[TextIO]:
-        return owner.claimed()
+        return owner.waited()
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,6 @@ class InheritedTestRun(LeaseStart):
 
 
 class TestLease(ProcessSingleton, SourceTier, declared_name=None):
-    refusal: ClassVar[str] = "integration run already holds the test lease"
     runner_program: ClassVar[str] = ""
     default_start: ClassVar[NewTestRun] = NewTestRun()
 
@@ -92,10 +90,7 @@ class TestLease(ProcessSingleton, SourceTier, declared_name=None):
     def held(self, start: LeaseStart = default_start) -> Iterator[LeaseStart]:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with ExitStack() as lifetime:
-            try:
-                held = lifetime.enter_context(start.claim(self))
-            except ClaimHeldError as error:
-                raise TestLeaseBusy(self.refusal) from error
+            held = lifetime.enter_context(start.claim(self))
             yield InheritedTestRun(held.fileno())
 
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import subprocess
 import sys
 import tempfile
@@ -63,13 +62,6 @@ from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
-
-
-def stopped(signum: int, frame: object) -> None:
-    """A stop runs the install's abort once; another signal cannot cut it short."""
-    for each in (signal.SIGTERM, signal.SIGINT):
-        signal.signal(each, signal.SIG_IGN)
-    raise SystemExit(f"install: stopped by {signal.Signals(signum).name}")
 
 
 @dataclass
@@ -164,7 +156,7 @@ class InstallRun:
         parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         scratch = Path(tempfile.mkdtemp(dir=parent, prefix="install-"))
         with TargetCheckoutPreparePhase().running(commands.clock):
-            TargetTree(checkout, scratch, target).add()
+            TargetTree(scratch, target, repo=checkout).add()
         return cls(command, root, scratch, target,
                    [timing.launched() for timing in commands.clock.phases])
 
@@ -180,7 +172,7 @@ class InstallRun:
     def spawn(self, *, wait: bool) -> None:
         """The install runs in its own unit and reads its request from a file beside the bus,
         so stopping the caller's unit, the connector's included, cannot cut it short."""
-        tree = TargetTree(self.command.checkout, self.scratch, self.target)
+        tree = TargetTree(self.scratch, self.target, repo=self.command.checkout)
         self.unit.request.write_text(json.dumps(FieldCodec.encode(self)))
         print(f"install: {self.unit.unit} runs {self.target[:12]}; "
               f"diagnostics {self.unit.errors}", file=sys.stderr, flush=True)

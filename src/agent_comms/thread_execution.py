@@ -110,6 +110,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
                      for candidate in thread.work_state.candidates(executor))
 
     @classmethod
+    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread receives channel messages independently of its parent."""
+        return (thread,)
+
+    @classmethod
     def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
         """The thread when its commander's heartbeat reads it as a unit."""
         return (thread,)
@@ -252,8 +257,15 @@ class CommanderForkExecution(SubagentExecution):
         return (thread,)
 
     @classmethod
+    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A fork answers on its commander's records, so a channel never reaches it directly."""
+        return ()
+
+    @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return parent.commanded_child(child)
+        """A fork acts for its commander, so it carries every tag the commander carries,
+        #commanders included: it is seen where its commander is."""
+        return replace(child, tags=parent.tags)
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

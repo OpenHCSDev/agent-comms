@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import asyncio
 import time
+from collections.abc import Iterable
+from functools import cached_property
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms_hooks import ToolRefusedError
 from aiohttp import ClientError
@@ -19,19 +23,26 @@ from agent_comms.cli_bridges.codex_protocol import RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
-from agent_comms.field_codec import DisclosureIdentity, OrderId, projected
+from agent_comms.disclosure_text import (
+    AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
+)
+from agent_comms.field_codec import (
+    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
+)
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
 from agent_comms.plan_phases import Plan, PlanPhase
 from agent_comms.order_story import OrderStory
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.service_passes import BoardUnavailable, ServicePassStore, ServiceReading
+from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePassStore, ServiceReading
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.turn_digests import LastTurns, OrderEditCountRead
-from agent_comms.ui_model.unit_state import UnitClock, UnitState
-from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.turn_digests import LastTurns
+from agent_comms.ui_model.unit_state import ExpandedHudGroup, HudGroup, UnitClock, UnitState, UrgentGroup
+from agent_comms.task_attachments.commander_pings import (
+    AlarmGroup, AlarmSection, CommanderDelivery, CommanderUpdate, Ping,
+)
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
@@ -39,7 +50,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class CommanderOrder:
+class CommanderOrder(DisclosedRecord):
     """Small order card; identifiers/text come from Todo, review rounds from TodoStore."""
 
     problem: Annotated[str, DisclosureIdentity()]
@@ -52,19 +63,31 @@ class CommanderOrder:
     unjudged_edits: int
 
 
-class HudRow(ABC):
-    """One frame row below the load line. Each row says whether it needs the commander's hand,
-    and the frame puts every row that does above every row that does not."""
+class PlanPhasesGroup(HudGroup):
+    tone = AccentTone
+
+
+class FinishedPlansGroup(ExpandedHudGroup, HudGroup):
+    pass
+
+
+class HudUnavailableGroup(HudGroup):
+    tone = ErrorTone
+
+
+class HudRecord(DisclosedRecord, ABC):
+    """Native rows expose their declared group, not another hand-joined renderer."""
+
+    @property
+    @abstractmethod
+    def hud_group(self) -> type[HudGroup]: ...
 
     def needs_hand(self) -> bool:
-        return False
-
-    @abstractmethod
-    def line(self) -> str: ...
+        return self.hud_group.needs_hand()
 
 
 @dataclass(frozen=True)
-class CommanderUnit(HudRow):
+class CommanderUnit(HudRecord):
     """One unit's state card: its orders, live strikes and GitHub's open ready/draft requests.
 
     ``state`` and ``clock`` come from the UnitState the heartbeat derived for the unit, so a
@@ -73,47 +96,36 @@ class CommanderUnit(HudRow):
 
     unit: Annotated[ThreadIncarnation, DisclosureIdentity()]
     state: type[UnitState]
-    clock: UnitClock
-    orders: tuple[CommanderOrder, ...]
-    strikes: int
-    ready_prs: tuple[PullRequest, ...]
-    draft_prs: tuple[PullRequest, ...]
+    clock: Annotated[UnitClock, HudExclude()] = field(compare=False)
+    orders: Annotated[tuple[CommanderOrder, ...], HudExclude()]
+    strikes: Annotated[int, HudExclude()]
+    ready_prs: Annotated[tuple[PullRequest, ...], HudExclude()]
+    draft_prs: Annotated[tuple[PullRequest, ...], HudExclude()]
 
-    def line(self) -> str:
-        orders = "; ".join(
-            f"{order.problem}: {order.state}; {order.progress.line}" for order in self.orders
-        )
-        return (
-            f"{self.unit.name}: {self.state.question} orders={orders} "
-            f"review timers={sum(len(order.review_timers_up) for order in self.orders)} "
-            f"strikes={self.strikes} edits={sum(order.unjudged_edits for order in self.orders)} "
-            f"ready={','.join(str(pr.number) for pr in self.ready_prs)} "
-            f"draft={','.join(str(pr.number) for pr in self.draft_prs)}"
-        )
+    @property
+    def hud_group(self) -> type[HudGroup]:
+        return self.state.hud_group
 
-    def brief_parts(self) -> tuple[str, ...]:
-        """The scan line's coherent pieces: the unit, each held order, its pull requests and
-        next action. The view owns wrapping, including sections wider than its viewport."""
-        orders = tuple(
-            f"{order.problem} {order.state} · {order.progress.line}" for order in self.orders
-        ) or ("no held orders",)
-        pulls = ", ".join(f"#{pr.number}@{pr.head[:9]}" for pr in (*self.ready_prs, *self.draft_prs))
-        return (self.unit.name, *orders, pulls or "no PR", f"→ {self.state.action}")
+    @projected(view=HudExclude)
+    def work(self) -> str:
+        return "\n".join(f"{order.problem} {order.state}" for order in self.orders)
 
-    def brief(self) -> str:
-        """A dense scan line; expansion reads the original order and activity owners."""
-        return " | ".join(self.brief_parts())
+    @projected(view=HudExclude)
+    def change(self) -> str:
+        return "\n".join(order.progress.line for order in self.orders)
 
-    def needs_hand(self) -> bool:
-        """Its UnitState asks for the commander, or a review timer on one of its orders is up."""
-        return (self.state.attention() and self.state.commander_disposes) or any(
-            order.review_timers_up for order in self.orders
-        )
+    @projected(view=HudExclude)
+    def next(self) -> str:
+        return self.state.action
+
+    @property
+    def order_ids(self) -> tuple[OrderId, ...]:
+        return tuple(dict.fromkeys(card.order for card in self.orders))
 
     def detail(self, comms: Comms, commander: ThreadIncarnation,
                orders: tuple[OrderId, ...]) -> CommanderUnitDetail:
         """Expand this published selection from its original record owners."""
-        if tuple(dict.fromkeys(card.order for card in self.orders)) != orders:
+        if self.order_ids != orders:
             raise ToolRefusedError("The selected unit's orders changed; read its current card")
         store = comms.goals.todos
         held = store.held_by(commander, self.unit)
@@ -136,7 +148,31 @@ class CommanderUnit(HudRow):
 
 
 @dataclass(frozen=True)
-class CommanderOrderDetail:
+class HudSection:
+    """One group heading, with native tables partitioned by their actual declarations."""
+
+    group: type[HudGroup]
+    tables: tuple[ViewTable[HudRecord], ...]
+
+    @cached_property
+    def records(self) -> tuple[HudRecord, ...]:
+        return tuple(record for table in self.tables for record in table.records)
+
+    def heading(self) -> str:
+        return self.group.count_heading(len(self.records))
+
+    @classmethod
+    def partition(cls, records: Iterable[HudRecord]) -> tuple[HudSection, ...]:
+        grouped: dict[type[HudGroup], dict[type[HudRecord], list[HudRecord]]] = {}
+        for record in records:
+            grouped.setdefault(record.hud_group, {}).setdefault(type(record), []).append(record)
+        return tuple(cls(group, tuple(ViewTable(declaration, HudExclude, tuple(rows))
+                                      for declaration, rows in grouped[group].items()))
+                     for group in HudGroup.members_with(HudGroup) if group in grouped)
+
+
+@dataclass(frozen=True)
+class CommanderOrderDetail(DisclosedRecord):
     """The selected card beside its original instructions, story and captured Git points."""
 
     card: Annotated[CommanderOrder, DisclosureIdentity()]
@@ -146,7 +182,7 @@ class CommanderOrderDetail:
 
 
 @dataclass(frozen=True)
-class CommanderUnitDetail:
+class CommanderUnitDetail(DisclosedRecord):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: Annotated[CommanderUnit, DisclosureIdentity()]
@@ -155,10 +191,10 @@ class CommanderUnitDetail:
 
 
 @dataclass(frozen=True)
-class CommanderPhase(HudRow):
+class CommanderPhase(HudRecord):
     """PlanPhase supplies every answer; no HUD status taxonomy is maintained beside it."""
 
-    phase: type[PlanPhase]
+    phase: Annotated[type[PlanPhase], DisclosureIdentity()]
     done: bool
     ready: bool
     holders: tuple[ThreadIncarnation, ...]
@@ -172,48 +208,22 @@ class CommanderPhase(HudRow):
         """Ready with nobody holding it, or done while an order still holds it open."""
         return (self.ready and not self.holders) or (self.done and bool(self.holders))
 
-    def line(self) -> str:
-        return (
-            f"{self.phase.plan.declared_name}/{self.phase.declared_name} "
-            f"done={self.done} ready={self.ready} "
-            f"holders={','.join(unit.name for unit in self.holders)}"
-        )
+    @property
+    def hud_group(self) -> type[HudGroup]:
+        return UrgentGroup if self.needs_hand() else PlanPhasesGroup
 
 
 @dataclass(frozen=True)
-class BoardRow(HudRow):
-    """A committed board line, without another interpretation or ordering."""
+class FinishedPhases(HudRecord):
+    """One declaration-derived finished count per plan, through the same table projection."""
 
-    entry: BoardEntry
+    plan: Annotated[type[Plan], DisclosureIdentity()]
+    phases: Annotated[tuple[type[PlanPhase], ...], HudExclude()]
+    hud_group: ClassVar[type[HudGroup]] = FinishedPlansGroup
 
-    def needs_hand(self) -> bool:
-        return True
-
-    def line(self) -> str:
-        return self.entry.aged(time.time())
-
-
-@dataclass(frozen=True)
-class QuietUnits(HudRow):
-    """Units with no commander action share one roll call."""
-
-    units: tuple[CommanderUnit, ...]
-
-    def line(self) -> str:
-        return f"{len(self.units)} units need no hand: " + ", ".join(
-            unit.unit.name for unit in self.units
-        )
-
-
-@dataclass(frozen=True)
-class FinishedPhases(HudRow):
-    """One plan's finished phases as one count: a graveyard needs no roll call."""
-
-    plan: type[Plan]
-    phases: tuple[type[PlanPhase], ...]
-
-    def line(self) -> str:
-        return f"{self.plan.declared_name}: {len(self.phases)} phases done"
+    @projected(view=HudExclude)
+    def done(self) -> int:
+        return len(self.phases)
 
 
 class UnreadableUsage(RateLimitReading):
@@ -227,7 +237,7 @@ class UnreadableUsage(RateLimitReading):
 
 
 @dataclass(frozen=True)
-class CodexUsage(HudRow):
+class CodexUsage:
     reading: RateLimitReading
 
     @classmethod
@@ -245,13 +255,24 @@ class CodexUsage(HudRow):
 
 
 @dataclass(frozen=True)
-class CommanderForks(HudRow):
-    """The commander's forks Core registered and still hears."""
+class CommanderStatus(DisclosedRecord):
+    load: float
+    review_up: int
+    unjudged: int
+    forks: int
+    usage: str
+    heartbeat: Annotated[str, PublicationExclude()]
 
-    forks: tuple[ThreadIncarnation, ...]
 
-    def line(self) -> str:
-        return f"forks: {', '.join(fork.name for fork in self.forks) or 'none registered'}"
+@dataclass(frozen=True)
+class HudDisplayFacts:
+    commander: ThreadIncarnation
+    status: ViewFacts
+    groups: tuple[ViewSectionFacts, ...]
+    alarms: tuple[ViewSectionFacts, ...]
+    alarm_membership: tuple[AlarmSection, ...]
+    not_applied: tuple[str, ...]
+    failures: tuple[tuple[str, FailingPass], ...]
 
 
 @dataclass(frozen=True)
@@ -265,9 +286,12 @@ class CommanderLoad(ServiceReading):
             return 'Retained board rows and load:'
         return 'STALE retained board rows and load:'
 
-    @projected(view='wire')
+    def health_lines(self) -> tuple[str, ...]:
+        return (*self.service_status, self.retained_status())
+
+    @projected(view=WireExclude)
     def header(self) -> tuple[str, ...]:
-        return (*self.service_status, self.retained_status(), str(self.load))
+        return (*self.health_lines(), str(self.load))
 
 
 @dataclass(frozen=True)
@@ -285,7 +309,8 @@ class CommanderHud(CommanderLoad):
     phases: tuple[CommanderPhase, ...]
     forks: tuple[ThreadIncarnation, ...]
     usage: CodexUsage
-    board: tuple[BoardEntry, ...] = ()
+    packets: tuple[CommanderUpdate, ...] = ()
+    open_pings: tuple[Ping, ...] = field(kw_only=True)
 
     @classmethod
     def read(cls, comms: Comms, commander: str) -> CommanderHud:
@@ -293,22 +318,18 @@ class CommanderHud(CommanderLoad):
 
     @classmethod
     def of(cls, comms: Comms, commander: str, frame: HeartbeatFrame,
-           states: tuple[UnitState, ...]) -> CommanderHud:
+           states: tuple[UnitState, ...], *, delivery: CommanderDelivery,
+           usage: CodexUsage) -> CommanderHud:
         """Cards follow ``states``, already in the UnitState family's declared order."""
-        snapshot, now = comms.registry.snapshot(), time.time()
-        owner = snapshot.require(commander).incarnation
-        store = comms.goals.todos
+        snapshot = comms.registry.snapshot()
+        owner = snapshot.require(commander).incarnation.require_recorded()
         pulls, reading = frame.pulls, frame.plan
-        history = reading.todos
+        todo_history = reading.todos
         held = frame.todos
         progress = pulls.progress(held, comms.registry)
-        timers = store.timers_up_in(held, now, progress)
+        timers = frame.review_timers
         installed = InstalledBuild.read()
-        edits = dict.fromkeys((todo.id for todo in held), 0) | {
-            read.todo.id: read.read()
-            for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, progress, frame.workplaces)
-        }
+        edits = frame.edit_counts(comms)
         units = []
         for state in states:
             unit, orders = state.unit, state.source.todos
@@ -325,7 +346,7 @@ class CommanderHud(CommanderLoad):
                     tuple(at for due, at in timers if due.id == todo.id),
                     todo.strike_count, edits[todo.id],
                 ) for todo in orders),
-                sum(todo.strikes_against(unit) for todo in history),
+                sum(todo.strikes_against(unit) for todo in todo_history),
                 tuple(ready for request in requests.values() for ready in request.as_ready()),
                 tuple(draft for request in requests.values() for draft in request.as_draft()),
             ))
@@ -335,52 +356,92 @@ class CommanderHud(CommanderLoad):
         ) for phase in PlanPhase.members_with(PlanPhase))
         forks = tuple(fork.incarnation for fork in CommanderService.forks(snapshot, commander)
                       if snapshot.status(fork.name).receiving)
-        board = tuple(entry for packet in CommanderUpdate.latest(comms, owner)
-                      for entry in packet.board(comms))
+        passes = ServicePassStore.at(comms.root).read()
         return cls(commander=owner, units=tuple(units), phases=phases,
                    load=OverloadDegradation.from_orders(held, len(timers), sum(edits.values())),
-                   forks=forks, usage=CodexUsage.read(), board=board)
+                   forks=forks, usage=usage, packets=(delivery.packet,),
+                   open_pings=delivery.open_pings, services=passes,
+                   heartbeat=passes.heartbeat_completed_at(owner))
 
-    def rows(self) -> tuple[HudRow, ...]:
-        """Committed board order, actionable cards, live phases, then folded quiet units."""
-        live_phases = tuple(phase for phase in self.phases if not phase.finished)
-        live = (*self.units, *live_phases)
-        quiet = tuple(unit for unit in self.units if not unit.needs_hand())
+    def for_delivery(self, delivery: CommanderDelivery) -> CommanderHud:
+        """Keep the prepared shared board; packet history and completion belong to its recipient."""
+        owner = delivery.packet.commander.require_recorded()
+        return replace(self, commander=owner, packets=(delivery.packet,),
+                       open_pings=delivery.open_pings).with_services(self.services, owner)
+
+    @property
+    def board(self) -> tuple[BoardEntry, ...]:
+        """The one action-filtered set captured from Ping.on_board for this publication."""
+        return tuple(ping.board_entry() for ping in self.open_pings)
+
+    @cached_property
+    def alarms(self) -> tuple[AlarmSection, ...]:
+        return AlarmGroup.sections(self.packets, self.open_pings)
+
+    @cached_property
+    def groups(self) -> tuple[HudSection, ...]:
         finished = tuple(phase.phase for phase in self.phases if phase.finished)
-        return (
-            *(BoardRow(line) for line in self.board),
-            *(row for row in live if row.needs_hand()),
-            *(phase for phase in live_phases if not phase.needs_hand()),
-            *((QuietUnits(quiet),) if quiet else ()),
-            self.usage,
-            CommanderForks(self.forks),
-            *(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
-              for phases in (tuple(phase for phase in finished if phase.plan is plan),)
-              if phases),
+        folded = tuple(FinishedPhases(plan, phases) for plan in Plan.members_with(Plan)
+                       for phases in (tuple(phase for phase in finished if phase.plan is plan),)
+                       if phases)
+        return HudSection.partition((*self.units, *(phase for phase in self.phases if not phase.finished),
+                                     *folded))
+
+    def status_table(self, now: float) -> ViewTable[CommanderStatus]:
+        return ViewTable(CommanderStatus, HudExclude, (CommanderStatus(
+            self.load.total, self.load.timers_up, self.load.unjudged,
+            len(self.forks), self.usage.line(), self.heartbeat.age(now),
+        ),))
+
+    def status_strip(self, now: float) -> str:
+        return "\n".join((*self.health_lines(), *self.status_table(now).labelled_lines()))
+
+    @cached_property
+    def display_facts(self) -> HudDisplayFacts:
+        """Compare declared displayed cells, not excluded tool clocks or paint-time ages."""
+        alarms = self.alarms
+        return HudDisplayFacts(
+            self.commander, self.status_table(0).facts,
+            tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables))
+                  for section in self.groups),
+            tuple(ViewSectionFacts(section.heading(), tuple(table.facts for table in section.tables(0)))
+                  for section in alarms),
+            alarms,  # Original ping equality retains hidden overflow membership, not paint-time age/text.
+            tuple(line for packet in self.packets for line in packet.not_applied),
+            tuple(sorted(self.services.failing.items())),
         )
 
-    def brief(self) -> tuple[str, ...]:
-        """Routine heartbeat telemetry; the full board retains completed plans."""
-        plans = "; ".join(
-            f"{plan.declared_name} {sum(phase.finished for phase in phases)}/{len(phases)}"
-            for plan in Plan.members_with(Plan)
-            for phases in (tuple(phase for phase in self.phases if phase.phase.plan is plan),)
-            if any(not phase.finished for phase in phases)
-        )
-        visible = tuple(unit for unit in self.units if unit.orders or unit.needs_hand())
-        quiet = tuple(unit for unit in self.units if unit not in visible)
-        return (
-            f"{self.load} | {len(visible)} active units | {len(self.forks)} forks",
-            self.usage.line(),
-            *(unit.brief() for unit in visible),
-            *((QuietUnits(quiet).line(),) if quiet else ()),
-            *((f"Plans · {plans}",) if plans else ()),
-        )
+    @staticmethod
+    def alarm_text(sections: tuple[AlarmSection, ...], now: float, *,
+                   colour: bool = False) -> tuple[str, ...]:
+        return tuple(line for section in sections for line in (
+            section.group.paint(section.heading(), colour),
+            *(line for table in section.tables(now) for line in table.labelled_lines()),
+        ))
 
-    @projected(view="wire")
+    @staticmethod
+    def alarm_detail(sections: tuple[AlarmSection, ...], now: float) -> tuple[str, ...]:
+        """Every original line; the section title already owns its compact heading."""
+        return tuple(ping.render(now) for section in sections for ping in section.pings)
+
+    def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
+        """The heartbeat has no viewport; native readers own their concrete geometry."""
+        result = list(self.status_strip(now).splitlines())
+        result.extend(("", *self.alarm_text(
+            tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
+                       *(line for packet in self.packets for line in packet.not_applied)))
+        for section in self.groups:
+            group = section.group
+            result.extend(("", group.paint(section.heading(), colour)))
+            result.extend(group.paint(line, colour) for line in group.table_lines(
+                table.lines() for table in section.tables))
+        result.extend(("", *self.alarm_text(
+            tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
+        return tuple(result)
+
+    @projected(view=WireExclude)
     def frame(self) -> tuple[str, ...]:
-        """The load line, then one line per row in the order rows() declares."""
-        return (*self.header, *(row.line() for row in self.rows()))
+        return self.hud_text(time.time())
 
     def load_reading(self) -> CommanderLoad:
         return CommanderLoad(self.load, services=self.services, heartbeat=self.heartbeat)
@@ -393,14 +454,18 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
     """The newest CommanderHud of each beating commander, for views that only show it.
 
     One writer, the heartbeat, replaces every commander's file each beat from the same
-    CommanderHud the heartbeat reads, and keeps no history. It never reads a frame back,
-    so a shape left by an older build cannot stop a beat; the next beat overwrites it.
+    CommanderHud the heartbeat reads, and keeps no history. It is a current view, never
+    proof that a packet was successfully published.
     """
 
     path: Path
     reading: ServiceReading = field(default_factory=ServiceReading, compare=False, kw_only=True)
 
     record_type = CommanderHud
+
+    @classmethod
+    def at(cls, root: Path, commander: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
 
     def empty(self) -> CommanderHud:
         raise BoardUnavailable(self.reading, f'Tristan frame missing: {self.path}')
@@ -421,7 +486,7 @@ class CommanderFrame(CommanderFrameFile, JsonDocument[CommanderHud]):
         """Write one frame per commander; a commander no longer beating loses its frame."""
         written = set()
         for hud in huds:
-            frame = cls(cls.path_in(root, lookup=str(hud.commander.require_recorded().lookup)))
+            frame = cls.at(root, hud.commander)
             frame.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
             frame._publish_unlocked(hud)
             written.add(frame.path)

@@ -18,7 +18,7 @@ from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarge
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
-from .locked_store import WireWakeFile
+from .locked_store import GoalWakeFile
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .turn_lease import TurnCompletion, TurnLease
@@ -544,7 +544,7 @@ class GoalWaitTargetRow(GoalWaitsRows, TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, DurableStore, WireWakeFile):
+class GoalWaits(ThreadOwnedState, DurableStore, GoalWakeFile):
     root: Path
     filename: ClassVar[str] = "goal_waits.sqlite3"
     tables = GoalWaitsRows

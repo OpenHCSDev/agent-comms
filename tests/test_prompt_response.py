@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.agent_backend import FollowUpInputPolicy, InputContent, InputRequest
+from agent_comms.turn_inbox import FollowUpInputPolicy, InputContent, InputRequest
 from agent_comms.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection

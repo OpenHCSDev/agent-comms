@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar
 
+from .native_build_inputs import DetachedChildStdio
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .field_codec import FieldCodec, WireName
 from .head_review import HeadReview, PullRequestHead
@@ -283,8 +284,7 @@ class IntegrationRun:
                 command,
                 cwd=self.checkout.path,
                 env=environment,
-                output=output,
-                stderr=subprocess.STDOUT,
+                stdio=DetachedChildStdio(stdout=output),
                 pass_fds=start.descriptors(),
                 runtime=runtime,
             ) as child:

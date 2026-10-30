@@ -23,7 +23,7 @@ class CommanderService:
     def requested_by(cls, thread: Thread, goals: Goals) -> tuple[OwnerRequest, ...]:
         """The oldest open request makes a live holder owed service, even before its first beat."""
         return tuple(request for live in cls.live((thread,))
-                     for request in goals.todos.open_requests(live.incarnation, limit=1, descending=False))
+                     for request in goals.todos.open_requests(live.acting_identity, limit=1, descending=False))
 
     @classmethod
     def forks(cls, snapshot: RegistrySnapshot, commander: str) -> tuple[Thread, ...]:
@@ -48,14 +48,25 @@ class CommanderService:
         return tuple(dict.fromkeys((lead, *cls.live(snapshot.commander_project.commanders(snapshot)))))
 
     @classmethod
+    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
+        """Every commander a pass sends a packet to: each board's recipients, once."""
+        snapshot = registry.snapshot()
+        return tuple(dict.fromkeys(
+            recipient for lead in cls.boards(registry, goals)
+            for recipient in cls.recipients(snapshot, lead)))
+
+    @classmethod
     def boards(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The registered lead when live and owed service: the one board the heartbeat reads.
+        """The registered lead's board, the one the heartbeat reads, while any live commander is
+        owed service: a lead's closed session must not blind the commanders still running.
 
         Command moves with the registry, never with an old request: a thread that stood down
         keeps its parked orders and requests, and gets no heartbeat or vibe check for them."""
         snapshot = registry.snapshot()
-        return tuple(
-            thread
-            for thread in snapshot.commander_project.leads(snapshot)
-            if cls.requested_by(thread, goals)
-        )
+        project = snapshot.commander_project
+        commanders = project.commanders(snapshot)
+        if not cls.live(commanders) or not any(
+                goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
+                for thread in commanders):
+            return ()
+        return project.leads(snapshot)

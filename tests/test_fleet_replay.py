@@ -22,7 +22,7 @@ import pytest
 from agent_comms.commander.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_commander
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
@@ -33,11 +33,12 @@ from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo
+from agent_comms.repo import Checkout, Repo, UnpushedHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
+    UnparsedBranch,
     BranchGrowth,
     ConflictingBranches,
     DeliveredHeadReview,
@@ -64,7 +65,7 @@ from agent_comms.todos import (
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import Unreadable
-from agent_comms.work_branches import SourceGrowth, UnpushedHead, WorkBranchError
+from agent_comms.work_branches import SourceGrowth, WorkBranchError
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
 from github_fixture import GitHubFixture
@@ -192,7 +193,7 @@ class Fleet:
         claimed = OrderClaim.for_order(
             todo,
             unit,
-            number,
+            PullRequestLink(self.repository, number),
             head,
             "Delivered the repair",
             original.reference,
@@ -241,7 +242,7 @@ class BranchBehindMainSeed(IncidentSeed):
             todo.held().owner_identity,
             fleet.repository,
             "behind",
-            BranchBehindMain.limit + 1,
+            1,
         )
 
 
@@ -285,6 +286,18 @@ class BranchGrowthSeed(IncidentSeed):
             todo.id, todo.held().owner_identity, fleet.repository,
             "growing", SourceGrowth((("src/agent_comms/grown.py", SourceGrowth.limit + 1),)),
         )
+
+
+class UnparsedBranchSeed(IncidentSeed):
+    rule = UnparsedBranch
+
+    @classmethod
+    def seed(cls, fleet: Fleet) -> StandingRule:
+        worktree = fleet.worktree("unparsed", base=fleet.main)
+        fleet.commit(worktree, "src/agent_comms/unparsed.py", "<<<<<<< HEAD\n")
+        fleet.push(worktree)
+        todo = fleet.unit("unparsed", worktree)
+        return UnparsedBranch(todo.id, todo.held().owner_identity, fleet.repository, "unparsed", ())
 
 
 class UnpushedBranchSeed(IncidentSeed):
@@ -431,9 +444,8 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
     github_cli.configure(source.github, *(repo.github for repo in project.repos))
     old_main = source.main_commit
     built = Fleet(comms, source, tmp_path / "worktrees", old_main, request, github_cli)
-    # Main moves past the oldest branch's base by exactly one commit more than the limit.
-    for count in range(BranchBehindMain.limit + 1):
-        built.commit(source.checkout, "main.py", f"count = {count}\n")
+    # One commit on main already puts the oldest branch behind.
+    built.commit(source.checkout, "main.py", "count = 0\n")
     built.git(source.checkout, "push", "-q", "origin", "main")
     expected = tuple(
         IncidentSeed.seeds[member].seed(built)
@@ -706,7 +718,7 @@ def test_a_merged_order_running_its_proof_is_not_spinning(fleet):
     # This fixture's repository is no installed package: the HUD line says so, never raises.
     observed = built.observe()
     assert not any(type(rule) is SpinningUnit for rule in observed.rules)
-    hud = CommanderHud.of(built.comms, Fleet.commander, observed.frame, observed.states)
+    hud = current_hud(built.comms, Fleet.commander, observed.frame, observed.states)
     assert any(order.state == "Merged, no runtime install, waiting on the run"
                for unit in hud.units for order in unit.orders)
 

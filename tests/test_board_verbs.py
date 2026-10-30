@@ -10,19 +10,23 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.commander import judge, order
+from agent_comms.channel_targets import CommandersTag
+from agent_comms.errors import TodoError
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
-from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
-    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
+    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, TodoStore, UnderReviewHeadVerdict, VerdictReason,
 )
 
 from test_held_problem_orders import merge_two_commit_fix
@@ -47,7 +51,7 @@ def board_review(head_bus):
         original = comms.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = comms.goals.todos.apply(todo.id, OrderMessage(
             todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
-        delivery = OrderClaim.for_order(todo, worker, request.pr, request.head,
+        delivery = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, request.pr), request.head,
                                         "Review the broken duplicated decision repair",
                                         original.reference, store=comms.goals.todos)
         ClaimOrder(todo.revision, worker, todo.held().generation, delivery).record(comms.goals, todo.id)
@@ -71,6 +75,7 @@ def author_arguments(command, todo):
         "ok": ["--why", REASON.text, "--serves", QUOTE],
         "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
         "reviewing": [],
+        "superseded": ["--why", REASON.text, "--by", todo.id],
     }
     return arguments[1:] + authored[verb]
 
@@ -106,11 +111,12 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
-    assert (UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)) == claim_it
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
-    frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
+    frame = replace(frame, review_timers=TodoStore.timers_up_in(
+        (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
     assert bool(timers) == (not claim_it)
     for timer in timers:
@@ -166,15 +172,16 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
-        assert (UnderReviewHeadVerdict in verdicts) == (rule.todo.id == second.id)
+        assert UnderReviewHeadVerdict in verdicts
     frame = capture_frame(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
-    frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
+    frame = replace(frame, review_timers=TodoStore.timers_up_in(
+        (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
     timer, = timers
     assert timer.todo == timed
     assert timer.problem == first.id
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(timer, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(timer, comms, request)
 
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
@@ -203,7 +210,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert released.order.holds_head(request)
     assert comms.goals.todos.resolve_order(released.creator_identity, previous.owner, released.id) == released
     rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(rule, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
     ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(
@@ -262,3 +269,27 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
     NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
+
+
+def test_every_commander_of_the_project_may_review_its_heads(board_review):
+    """Review authority is the project's commanders, not its registered lead alone: a #commanders
+    peer judges the same heads, and a commanded unit still may not."""
+    comms, request, _, _ = board_review
+    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+                                  comms.registry.require("lead").worktree,
+                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
+                                  execution=ExternalThreadExecution))
+    NoHeadOrder().require_reviewer(comms.goals, request, comms.registry.require("peer").incarnation)
+    with pytest.raises(TodoError, match="Only a commander of this project"):
+        NoHeadOrder().require_reviewer(comms.goals, request,
+                                       comms.registry.require("worker").incarnation)
+
+
+def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
+    from agent_comms.head_review import PullRequestHead
+    from agent_comms.repository_name import RepositoryName
+    from agent_comms.standing_rules import OrderlessUnreviewedHead
+
+    head = "a" * 40
+    line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()
+    assert line.count("judge ") == 1 and all(part in line for part in ("--pr 7", f"--head {head}", "--repo o/r"))

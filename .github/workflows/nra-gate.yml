@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
-      statuses: read
+      statuses: write
       pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
@@ -168,6 +168,8 @@ jobs:
     steps:
       # A pull request is pushed before its verdict exists; the queue's group
       # is where the commander's verdict on the head must already be success.
+      # Main requires agent-comms/review directly, and a verdict names a pull request's
+      # head, so the group's own commit carries the status its verified head holds.
       - name: The commander's verdict on the queued head is success
         if: github.event_name == 'merge_group'
         shell: bash
@@ -178,6 +180,8 @@ jobs:
             --jq '[.statuses[] | select(.context == "agent-comms/review")][0].state // "none"')
           echo "PR #${BASH_REMATCH[1]} head $head: agent-comms/review=$verdict"
           [[ $verdict == success ]]
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" -f state=success \
+            -f context=agent-comms/review -f "description=Verdict on head $head"
 
   nra-gate:
     name: debt-${{ matrix.kind }}

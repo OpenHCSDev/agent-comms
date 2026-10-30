@@ -1,4 +1,5 @@
 """SessionEnd uses the existing resident owner without importing Core."""
+
 from .watch import SessionHookProgram
 
 

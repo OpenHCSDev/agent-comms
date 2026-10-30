@@ -34,7 +34,7 @@ from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.coordination_errors import Refused
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
@@ -95,7 +95,8 @@ class TestHandlers:
         self, tmp_path, native_runtime_package
     ):
         agent = self._agent(tmp_path)
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        session = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        session_id = FieldCodec.decode(AcpSessionId, session.session_id)
         agent._comms.agents.observe_runtime_info(
             "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
@@ -103,14 +104,14 @@ class TestHandlers:
             "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
-        assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
+        assert facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
             "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
-            facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
+            facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[0].context_usage
             == UnmeasuredContext()
         )
 
@@ -125,6 +126,40 @@ class TestHandlers:
             await agent.set_config_option(
                 session_id="proj", config_id="model", value="openrouter/missing"
             )
+
+    async def test_service_tier_menu_selection_and_readback(
+        self, tmp_path, native_runtime_package,
+    ):
+        from agent_comms.pi_vocabulary import ServiceTier
+
+        agent = self._agent(tmp_path)
+        try:
+            response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+            tier = next(option for option in response.config_options
+                        if option.category == "service_tier")
+            assert tier.current_value == ServiceTier.STANDARD.value
+            assert {choice.value for choice in tier.options} == {
+                member.value for member in ServiceTier
+            }
+            original = agent._comms.registry.require(response.session_id)
+            for selected in (ServiceTier.PRIORITY, ServiceTier.STANDARD):
+                changed = await agent.set_config_option(
+                    session_id=response.session_id, config_id=tier.id,
+                    value=selected.value,
+                )
+                readback = next(option for option in changed.config_options
+                                if option.id == tier.id)
+                current = agent._comms.registry.require(response.session_id)
+                assert readback.current_value == selected.value
+                assert current.service_tier is selected
+                assert current.model == original.model
+                assert current.thinking_level == original.thinking_level
+                assert current.turn_record == original.turn_record
+                assert json.loads(current.catalog_path(agent._comms.root).read_text())[
+                    "service_tier"
+                ] == selected.value
+        finally:
+            await agent.shutdown()
 
     async def test_compaction_details_preserve_markdown(self, tmp_path):
         summary = "## Decisions\n\n" + "- Keep this decision.\n" * 80 + "\n## Next\nContinue."

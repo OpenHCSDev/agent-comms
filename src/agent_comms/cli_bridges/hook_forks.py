@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms_hooks import ClaudeTranscriptHook, SubagentId, ToolRefusedError
+from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, SubagentId, ToolRefusedError
 
 from .session_watch import WatchClaim
 from .shared import Binding
@@ -34,17 +34,15 @@ class SubagentSeats(ClaudeTranscriptHook):
 
 
 @dataclass(frozen=True)
-class SeatedSubagent(SubagentSeats):
+class SeatedSubagent(ClaudeSubagentHook, SubagentSeats):
     """The declared role chooses the existing seat or commander-fork activity identity."""
-
-    agent_id: SubagentId
 
     @property
     def seat(self) -> Path:
         return self.seats / self.agent_id
 
     def enter(self, comms: Comms, binding: Binding, phase: TurnPhase) -> None:
-        selected = comms.registry.snapshot().commander_project.session_output(
+        selected = comms.registry.snapshot().commander_project.by_role(
             binding.recipient(comms), commander=lambda: self.agent_id.fork, commanded=self.seat.read_text)
         comms.agents.enter_phase(selected(), phase)
 
@@ -57,14 +55,14 @@ class SubagentHook(SeatedSubagent):
 
     def register(self, comms: Comms, binding: Binding) -> None:
         actor = binding.recipient(comms)
-        selected = comms.registry.snapshot().commander_project.session_output(
+        selected = comms.registry.snapshot().commander_project.by_role(
             actor, commander=self.join, commanded=self.claim)
         selected(comms, actor)
         self.enter(comms, binding, ModelWaitPhase())
 
     def join(self, comms: Comms, actor: ThreadIncarnation) -> None:
         fork = self.agent_id.fork
-        CommanderForkCaller(fork).commanding(comms, actor.name)
+        CommanderForkCaller(fork).join(comms, actor.name)
         self.warn(f"Core registered you as commander fork {fork}: pass `--fork {fork}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
@@ -86,7 +84,7 @@ class SubagentStopHook(SubagentHook):
     stop_hook_active: bool
 
     def retire(self, comms: Comms, binding: Binding) -> None:
-        selected = comms.registry.snapshot().commander_project.session_output(
+        selected = comms.registry.snapshot().commander_project.by_role(
             binding.recipient(comms), commander=self.retire_fork, commanded=self.leave)
         selected(comms)
 
@@ -117,7 +115,7 @@ class SessionSubagents(SubagentSeats):
                      for path in sorted(directory.glob("agent-*.jsonl")))
 
     def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
-        selected = comms.registry.snapshot().commander_project.session_output(
+        selected = comms.registry.snapshot().commander_project.by_role(
             binding.recipient(comms), commander=self.end_forks, commanded=self.vacate_seats)
         return selected(comms)
 

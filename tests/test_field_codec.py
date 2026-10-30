@@ -1,3 +1,5 @@
+
+from agent_comms.field_codec import ReportExclude, StatusExclude, WireExclude
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -119,7 +121,7 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None
     record = Record("kept")
     assert [key for _, key in FieldCodec.record_fields(Record)] == ["value"]
     assert FieldCodec.encode(record) == {"value": "kept"}
-    assert FieldCodec.project(record, "status") == {"value": "kept"}
+    assert FieldCodec.project(record, StatusExclude) == {"value": "kept"}
     assert FieldCodec.decode(Record, {"value": "kept"}).value == "kept"
     properties = FieldCodec.value_schema(Record)["properties"]
     assert isinstance(properties, dict)
@@ -133,7 +135,7 @@ def test_record_encoding_uses_the_declared_fields_and_projections() -> None:
     class Key:
         value: str
 
-        @projected(view="wire")
+        @projected(view=WireExclude)
         def uppercase(self) -> str:
             return self.value.upper()
 
@@ -141,7 +143,7 @@ def test_record_encoding_uses_the_declared_fields_and_projections() -> None:
     class ReadKey(Key):
         local: str
 
-        @projected(view="wire")
+        @projected(view=WireExclude)
         def local_uppercase(self) -> str:
             return self.local.upper()
 
@@ -234,7 +236,7 @@ def test_wire_absence_is_none_without_running_the_constructor_factory() -> None:
         ):
             assert decoded.id is None
             assert FieldCodec.encode(decoded) == {}
-            assert FieldCodec.project(decoded, "status") == {}
+            assert FieldCodec.project(decoded, StatusExclude) == {}
         assert plan.read(raw) is None
     assert created == ["created"]
     with pytest.raises(MalformedRecord):
@@ -306,12 +308,12 @@ def test_json_value_alias_uses_the_opaque_json_owner_everywhere() -> None:
     for annotation in annotations:
         assert FieldCodec.encode(payload, annotation) == payload
         assert FieldCodec.decode(annotation, payload) == payload
-        assert FieldCodec.project(payload, "report", annotation) == payload
+        assert FieldCodec.project(payload, ReportExclude, annotation) == payload
         assert FieldCodec.value_schema(annotation) == {}
         for invalid in ({1: "non-text key"}, {"nested": float("nan")}, {"nested": object()}):
             for operation in (
                 lambda: FieldCodec.encode(invalid, annotation),
-                lambda: FieldCodec.project(invalid, "report", annotation),
+                lambda: FieldCodec.project(invalid, ReportExclude, annotation),
             ):
                 with pytest.raises(TypeError):
                     operation()
@@ -352,7 +354,7 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter() -> None:
     encoded = {"value": "retained", "nested": ["nested"]}
     assert FieldCodec.encode(value) == encoded
     assert FieldCodec.decode(OwnedWireRecord, encoded) == value
-    assert FieldCodec.project(value, "status") == encoded
+    assert FieldCodec.project(value, StatusExclude) == encoded
     assert FieldCodec.value_schema(OwnedWireText) == {"type": "string"}
     assert FieldCodec.decode(OwnedWireRecord, {**encoded, "value": None}).value is None
     with pytest.raises(ValueError):
@@ -458,7 +460,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary() -> No
         "count": "0x1f",
     }
     assert FieldCodec.decode(Scalars, encoded) == value
-    assert FieldCodec.project(value, "status") == encoded
+    assert FieldCodec.project(value, StatusExclude) == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
         "anyOf": [
             {"type": "string", "description": "agent_comms.field_codec.PathText text"},
@@ -892,7 +894,7 @@ def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value: 
     container, wire = type(value), {"number": 7, "text": "seven"}
     assert FieldCodec.encode(value) == wire
     assert FieldCodec.decode(container, wire) == value
-    assert FieldCodec.project(value, "report") == wire
+    assert FieldCodec.project(value, ReportExclude) == wire
     required = FieldCodec.record_schema(container)["required"]
     assert isinstance(required, list)
     assert set(required) == wire.keys()
@@ -1168,5 +1170,31 @@ class CountWire(WireValue):
 def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wire_form() -> None:
     member = SecretMember("kept", "secret")
     assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
-    assert FieldCodec.project(member, "snapshot") == {"name": "kept"}
-    assert FieldCodec.project(CountWire(3), "snapshot") == "count=3"
+    assert FieldCodec.project(member, SnapshotExclude) == {"name": "kept"}
+    assert FieldCodec.project(CountWire(3), SnapshotExclude) == "count=3"
+
+
+def test_an_annotation_lambda_sees_the_module_that_declared_it():
+    """get_type_hints evaluated class annotations with the class dict as globals, so a lambda in
+    one could not see its own module: WireRevision.goal_execution raised NameError on
+    GoalWakeFile and every Toad observer died (2026-10-30)."""
+    import sys
+    import types
+    module = types.ModuleType("annotation_lambda_module")
+    sys.modules[module.__name__] = module
+    exec(
+        "from __future__ import annotations\n"
+        "from typing import Annotated\n"
+        "import os\n"
+        "class Declared:\n"
+        "    sep: Annotated[int, (lambda: os.sep)]\n",
+        module.__dict__,
+    )
+    hint = FieldCodec._types(module.Declared)["sep"]
+    assert hint.__metadata__[0]() == __import__("os").sep
+
+
+def test_a_declaration_evaluates_its_annotations_once():
+    """Pi payloads call _types on every decode. Uncached, a real journal entry cost 2.21 ms
+    instead of 0.16 ms and the resident worker burned 112% CPU (2026-10-30)."""
+    assert FieldCodec._types(SecretMember) is FieldCodec._types(SecretMember)

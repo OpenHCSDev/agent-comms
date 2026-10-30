@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
+from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
-from agent_comms.work_branches import CommitBase, UnpushedHead, WorkBranches
+from agent_comms.work_branches import CommitBase, WorkBranches
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -43,7 +44,7 @@ class UnpushedBranch(HeldBranchRule):
     def line(self) -> str:
         return (f"{self.holder.name} has {self.unpublished.commits} unpushed commits on"
                 f" {self.problem} ({self.unpublished.head[:9]} in {self.worktree}, upstream"
-                f" {self.unpublished.upstream or 'not configured'}). waiting for the disk to die?"
+                f" {self.unpublished.upstream or 'not configured'}). these commits exist only locally"
                 " -> push them")
 
 
@@ -62,7 +63,7 @@ class EmptyPullRequest(HeldBranchRule):
         for held in branches:
             reader = held.repository.branches
             todo = held.todo
-            for pull in held.source.pulls.open_for(todo):
+            for pull in held.source.frame.pulls.open_for(todo):
                 for compared in pull.empty_changes(reader):
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,
                                      PullRequestLink(todo.repo, pull.number),

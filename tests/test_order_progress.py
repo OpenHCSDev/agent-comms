@@ -16,7 +16,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_commander
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
@@ -150,7 +150,7 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
     assert todo.reissued_review(5000.0) == RecordedEventTime(5000.0 + window)
 
 
-def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
+def test_deleted_branch_marks_one_card_unreadable(held_bus):
     """Delete after unit reads, before HUD rendering, then complete another heartbeat."""
     comms = held_bus
     checkout = comms.goals.todos.get('P1').order.checked().check.directory
@@ -178,8 +178,8 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
                 broken.source.require_read()
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
-            expected = CommanderHud.of(comms, lead.name, frame.frame, frame.states)
             asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
+            expected = current_hud(comms, lead.name, frame.frame, frame.states)
             assert CommanderFrame.read_all(comms.root) == (expected,)
         print(broken.line())
 
@@ -198,3 +198,20 @@ def test_push_times_come_from_origin_reflogs_only(tmp_path):
     git(worktree, 'commit', '-q', '--allow-empty', '-m', 'never pushed')
     side = git(worktree, 'rev-parse', 'HEAD~1')
     assert sorted(sha for sha, _ in PresentCheckout(worktree).origin_pushes) == sorted([pushed, side])
+
+
+def test_every_order_greps_one_history_walk_per_selection(tmp_path):
+    """Each held order re-walked every origin ref with its own `git log -1 --grep`: about 500
+    walks of one history per heartbeat (36 s of a 220 s pass, 2026-10-30). One walk per
+    selection answers every order with the newest match Git's --grep would give."""
+    worktree = unit_checkout(tmp_path / 'worker--P1')
+    for message in ('P1 first', 'fix P12 slot', 'body only\n\nrefs p3 here', 'P1: second', 'XP1 is not P1x'):
+        git(worktree, 'commit', '-q', '--allow-empty', '-m', message)
+    checkout = PresentCheckout(worktree)
+    refs = ('HEAD',)
+    for pattern in (*(rf'(^|[^A-Za-z0-9_]){problem}([^A-Za-z0-9_]|$)' for problem in ('P1', 'P12', 'P3', 'P4')),
+                    'second', ''):
+        expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',
+                       f'--grep={pattern}', '--format=%H', *refs, '--not')
+        assert [point.sha for point in checkout.commits(pattern, refs)] == expected.split()
+    assert len(checkout.branches.history._walks) == 1

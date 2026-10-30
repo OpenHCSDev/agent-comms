@@ -8,6 +8,8 @@ nothing is refused until the commander answers that message (the OwedAnswer gate
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -25,6 +27,7 @@ from agent_comms.goal_actions import (
     OwnerInvocable,
 )
 from agent_comms.messages import Message
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
@@ -43,7 +46,6 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
-from agent_comms.turn_digests import OrderEditCountRead
 
 
 class Escalation:
@@ -83,9 +85,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
-            sum(read.read() for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry),
-                frame.workplaces)),
+            sum(frame.edit_counts(comms).values()),
         )
 
     @classmethod
@@ -93,11 +93,11 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         """One load projection shared by the heartbeat's HUD and standing rules."""
         return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def overloaded(self) -> bool:
         return self.total >= self.ceiling
 
@@ -173,8 +173,8 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"vibe check {self.cited} is {age} min old. still ignoring it? -> answer it"
+        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
+                " still ignoring it? -> answer it")
 
 
 class Indictment:
@@ -224,7 +224,8 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def enforce(self, comms: Comms, commander: str) -> None:
         units = sorted(owner.name for owner in self.units)
         for unit in units:
-            comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
+            if not any(goal.state.protected for goal in comms.registry.require(unit).goal):
+                comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
         ChokeholdNotice.burst_once(comms, commander, self.burst(units), self.ignored())
 
     def ignored(self) -> str:

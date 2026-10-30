@@ -1,6 +1,6 @@
 ---
 name: ship-and-install
-description: "merged fixes are installed the same hour; installs stop every unit at once instead of waiting on turns; the merge queue is the only gate; our own packages track latest; every wait or gate must name the failure it alone prevents, and slowness is a defect fixed now"
+description: "merged fixes are installed the same hour; installs stop every unit at once instead of waiting on turns; the merge queue is the only gate except a hotfix; our own packages track latest; every wait or gate must name the failure it alone prevents, and slowness is a defect fixed now"
 drift: "Every wait, gate or one-at-a-time step names the failure it alone prevents, or it goes."
 audience: fleet
 type: feedback
@@ -56,13 +56,19 @@ type: feedback
 > every "waiting on review" I posted froze his app
 > I spent the whole wait reproducing the bug by hand, as status updates
 > mfw I wrote an 80x speedup and shipped a 0x speedup and 5x more #comms traffic
+> run it back
+> 13 lines, controls pass, PR, verdict on the head
+> merge, install within the hour, 2 minutes
+> Toad stops freezing before anyone types "is the fix in yet"
+> zero status updates, because nothing was waiting
+> mfw the 80x speedup shipped at 80x
 
 **Why:** a merged fix that is not installed does nothing for the owner, and every wait, gate or serial step costs throughput; one that names no failure nothing else catches buys nothing.
 
 - Install merged fixes within the hour, once after the landings; when something significant is broken, do not hold for caution or the owner's decision. Tristan, 2026-10-13: "when something significant is broken, we don't need to be cautious about breaking things, it's already broken that's more important".
 - INSTALL DUE appears the pass main leaves the installed build, naming every uninstalled merge and the open requests about to land. Due means an install can be used, not that one runs: batch the landing requests, then run `order install`, the one launch of Core's installer. Tristan, 2026-10-25: "due means it can use an install, not install right now, you can batch other pending PRs in the same install".
 - Installs never wait on agent turns: stop every unit at once, install (about 2 minutes), start the same set. Tristan, 2026-10-20 00:59: "there's no such thing as a blocking unit you just stop it why the fuck were you about to wait minutes on it?"
-- The merge queue's hosted NRA gate is the only gate. Local test execution follows tests-and-commands.md, never a per-PR run. The full CI matrix runs only before a PyPI release.
+- The merge queue's hosted NRA gate is the only gate, except an obvious recoverable bug, which hotfix.md ships with `--admin`. Local test execution follows tests-and-commands.md, never a per-PR run. The full CI matrix runs only before a PyPI release.
 - Batch every PR with an OK verdict on its exact head into one `batch/integ-N` branch built from fresh main; run CI once per batch. Resolve conflicts inside the batch, never send them back. Sent-back PRs and heads without a verdict never enter; a batch never stacks on an unmerged batch. When a member fails the batch's checks, close that batch and rebuild without it the same tick so the rest land. Turn off members' own auto-merge and cancel their own runs while batched. **Why:** on 2026-10-26, batches 11–15 all carried rejected PRs and nothing merged for 45 minutes. Tristan, 2026-10-25: "put it in an integration branch and run it once instead of being morons"; "we need more integration branch".
 - The commander owns the merge queue's ruleset and required checks: it changes them itself and reports the change.
 - Pin only PyPI releases; our own sibling packages track latest `main`. Tristan, 2026-10-18: "why would we not always use latest?"

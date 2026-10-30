@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ActivityExclude
+
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
@@ -15,7 +17,7 @@ from .bus import Bus
 from .context_store import ContextStore
 from .declared_family import DeclaredFamily
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec, WireTransient, projected
+from .field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
 from .historical_native_inputs import HistoricalNativeAnswers
 from .message_reference import MessageReference
@@ -55,7 +57,7 @@ class ActivityTurnView(TurnView):
     def project(cls, answer: ThreadTurns) -> JsonValue:
         selected = answer.turns[:cls.turn_limit]
         page = replace(answer, turns=selected, older=answer.older.older(selected))
-        return FieldCodec.project(page, "activity")
+        return FieldCodec.project(page, ActivityExclude)
 
 
 class OriginalTurnView(TurnView):
@@ -83,7 +85,7 @@ class UnavailableOrderEdits(ToolResult):
     owner: ThreadIncarnation
     cause: Annotated[WorkBranchError | OSError, WireTransient()]
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def error(self) -> str:
         return str(self.cause)
 
@@ -93,7 +95,7 @@ class UnjudgedEdits(ServiceReading):
     edits: tuple[EditCall, ...]
     unavailable: tuple[UnavailableOrderEdits, ...] = ()
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def complete(self) -> bool:
         return not self.unavailable
 
@@ -106,6 +108,10 @@ class TurnBound(DeclaredFamily):
 
     def page_count(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(turns)
+
+    def displayed(self, turns: tuple[TurnDigest, ...]) -> tuple[TurnDigest, ...]:
+        """The returned turns a reader sees as text, so their selected messages are decoded."""
+        return turns
 
     def older(self, turns: tuple[TurnDigest, ...]) -> TurnBound:
         """A recorded identity continues even across undated or equal-time turns."""
@@ -187,6 +193,21 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
+class RecentTurnsSince(TurnsSince):
+    """Keep the recent turn window as well as every turn since an order's review cut."""
+
+    recent: LastTurns = field(kw_only=True)
+
+    def take(self, turns: Iterable[TurnDigest]) -> tuple[TurnDigest, ...]:
+        remaining = iter(turns)
+        return (*self.recent.take(remaining), *super().take(remaining))
+
+    def displayed(self, turns: tuple[TurnDigest, ...]) -> tuple[TurnDigest, ...]:
+        """Only the recent window is read as text; turns behind it answer for their calls."""
+        return self.recent.take(turns)
+
+
+@dataclass(frozen=True)
 class ThreadRead[Result](ConversationPreparation):
     """The original native/external source selection, shared by typed readers."""
 
@@ -208,8 +229,8 @@ class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
         return super().read()
 
     def native(self) -> frozenset[MessageReference]:
-        return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
-            self.references)
+        return self.privacy.native_answered(
+            HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy), self.references)
 
     def external(self) -> frozenset[MessageReference]:
         return ExternalTranscript(self.root, self.thread.incarnation).answered_inputs(self.references)
@@ -243,7 +264,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
     def from_native(self, source: TranscriptSource, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
         """A woken input reads as the messages its wake selected, from their bus records."""
         recorded = source.recorded_contexts(
-            ContextStore(self.root), tuple(turn.turn_id for turn in turns))
+            ContextStore(self.root), tuple(turn.turn_id for turn in self.bound.displayed(turns)))
         selected = {turn_id: manifest.wire_sources() for turn_id, manifest in recorded.items()}
         references = tuple(dict.fromkeys(ref for refs in selected.values() for ref in refs))
         deliveries = (Bus(Bus.path_in(self.root)).deliveries_for_references(references)
@@ -274,9 +295,12 @@ class OrderEditRead[Result](OrderRead[Result]):
     workplaces: EditWorkplaces
     progress: OrderProgress = NoCommitProgress()
 
-    def read(self) -> Result:
+    def when_readable(self, operation: Callable[[], Result]) -> Result:
         self.progress.require_read()
-        return super().read()
+        return operation()
+
+    def read(self) -> Result:
+        return self.when_readable(super().read)
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
@@ -316,6 +340,16 @@ class OrderEditRead[Result](OrderRead[Result]):
                      if edit.id not in judged
                      and self.workplaces.problems_for(edit.path) == frozenset((self.todo.id,)))
 
+    @abstractmethod
+    def project_edits(self, edits: tuple[EditCall, ...]) -> Result: ...
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> Result:
+        return self.when_readable(lambda: self.project_edits(self.edits_from_turns(turns)))
+
+    def from_external(self, source: StoreRead) -> Result:
+        return self.when_readable(lambda: self.project_edits(
+            self.owned(source.unjudged(self.todo, self.bound.at))))
+
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         since = self.bound.at
         edits = {edit.id: edit for turn in reversed(turns)
@@ -329,21 +363,18 @@ class OrderEditRead[Result](OrderRead[Result]):
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
-    def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
-        return self.edits_from_turns(turns)
-
-    def from_external(self, source: StoreRead) -> tuple[EditCall, ...]:
-        return self.owned(source.unjudged(self.todo, self.bound.at))
+    def project_edits(self, edits: tuple[EditCall, ...]) -> tuple[EditCall, ...]:
+        return edits
 
 
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
-    def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
-        return len(self.edits_from_turns(turns))
+    def when_readable(self, operation: Callable[[], int]) -> int:
+        return self.progress.unjudged(operation)
 
-    def from_external(self, source: StoreRead) -> int:
-        return len(self.owned(source.unjudged(self.todo, self.bound.at)))
+    def project_edits(self, edits: tuple[EditCall, ...]) -> int:
+        return len(edits)
 
 
 @dataclass(frozen=True)

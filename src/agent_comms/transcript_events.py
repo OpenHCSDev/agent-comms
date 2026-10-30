@@ -215,11 +215,11 @@ class TextTranscript(TranscriptEvent):
     def activity_items(self) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
-    @projected(view="activity", name="text")
+    @projected(view=ActivityExclude, name="text")
     def activity_text(self) -> str:
         return self.text[:TurnDigest.activity_excerpt_characters]
 
-    @projected(view="activity", name="text_characters")
+    @projected(view=ActivityExclude, name="text_characters")
     def activity_text_characters(self) -> int:
         return len(self.text)
 
@@ -296,7 +296,7 @@ class IncomingTranscript(TextTranscript):
     def __post_init__(self) -> None:
         self.message.require_envelope()
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def position(self) -> int:
         return self.message.seq
 
@@ -304,11 +304,11 @@ class IncomingTranscript(TextTranscript):
     def text(self):
         return self.message.body
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def timestamp(self):
         return self.message.timestamp
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def source(self):
         return self.message.reference
 
@@ -605,7 +605,7 @@ class TurnDigest:
     activity_text_limit: ClassVar[int] = 4
     activity_call_limit: ClassVar[int] = 6
 
-    @projected(view="activity", name="events")
+    @projected(view=ActivityExclude, name="events")
     def activity_events(self) -> tuple[TranscriptEvent, ...]:
         """Keep the request and the newest conversation text; omit raw tool results."""
         items = tuple(item for event in self.events for item in event.activity_items())
@@ -613,7 +613,7 @@ class TurnDigest:
             return items
         return items[:1] + items[-(self.activity_text_limit - 1):]
 
-    @projected(view="activity", name="calls_started")
+    @projected(view=ActivityExclude, name="calls_started")
     def activity_calls(self) -> tuple[OrderCall, ...]:
         """Use the existing call owner for digests and final recorded outcomes."""
         calls: dict[ToolCallId, OrderCall] = {}
@@ -622,7 +622,7 @@ class TurnDigest:
         return tuple(replace(call, digest=call.digest[:self.activity_excerpt_characters])
                      for call in tuple(calls.values())[-self.activity_call_limit:])
 
-    @projected(view="activity", name="original_event_count")
+    @projected(view=ActivityExclude, name="original_event_count")
     def activity_event_count(self) -> int:
         return len(self.events)
 

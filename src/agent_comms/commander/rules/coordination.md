@@ -28,6 +28,12 @@ type: hard-rule
 > seven hours
 > the answer was one word
 > mfw the bottleneck was the only agent with nothing to type
+> run it back
+> fork-boundaries asks one question
+> commander types the one word
+> 4 seconds
+> 34 checks get an owner each in one order; the swallowed print goes to a fork with full context
+> mfw the throughput fix was answering the question
 
 **Why:** problems scattered across orders lose their owner (2026-10-19: 33 of the 34 checks the Core commander switch depended on sat ownerless for nearly two hours), and a unit left to diagnose picks the cheapest reading (2026-10-21: triage orders P362, P377, P378 and P379 let units decide "src bug or stale test" and then design the src fix).
 

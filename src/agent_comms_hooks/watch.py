@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import socket
 import sys
 from abc import (
@@ -28,7 +29,11 @@ from . import (
 from .board import SessionWire
 
 
-class HookBridgeUnavailable(RuntimeError):
+class SessionFailure(Exception):
+    """A session command failed; it does not declare the serving process dead."""
+
+
+class HookBridgeUnavailable(RuntimeError, SessionFailure):
     """A bound session cannot answer its hook; it did not become unbound."""
 
 
@@ -62,6 +67,15 @@ class SessionEndpoint:
 
     thread: str
     home: Path = field(default_factory=Path.home)
+
+    @staticmethod
+    def environment_session() -> str:
+        """Claude exports the identity shared by its hooks, its bare Monitor command and
+        every Bash call its subagents make."""
+        session = os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if not session:
+            raise ValueError("Claude did not export CLAUDE_CODE_SESSION_ID")
+        return session
 
     @classmethod
     def directory(cls, home: Path) -> Path:
@@ -97,10 +111,17 @@ class SessionEndpoint:
         """
         if self.record_path.exists():
             return BoundSession(self)
-        return UnboundSession()
+        return UnboundSession(self)
 
 
+@dataclass(frozen=True)
 class HookSession(ABC):
+    endpoint: SessionEndpoint
+
+    def require_bound(self) -> None:
+        raise HookBridgeUnavailable(
+            f"Session {self.endpoint.thread} is bound to no bus thread; bind it to the bus first")
+
     def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
         """An unbound session supplies no enrolled record to the resident watch."""
         return unbound()
@@ -118,7 +139,8 @@ class UnboundSession(HookSession):
 
 @dataclass(frozen=True)
 class BoundSession(HookSession):
-    endpoint: SessionEndpoint
+    def require_bound(self) -> None:
+        """Enrollment is already established by this state; socket liveness is separate."""
 
     def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
         return bound()
@@ -136,7 +158,7 @@ class BoundSession(HookSession):
             if not raw:
                 raise HookBridgeUnavailable("The bound session bridge closed without answering the hook")
             answer = HookAnswer.replied(json.loads(raw))
-        except (OSError, ValueError, KeyError) as error:
+        except OSError as error:
             raise HookBridgeUnavailable(
                 f"Bound session {self.endpoint.thread} cannot answer its hook: {error}. "
                 "Start its existing agent-comms-claude-bridge; no unbound fallback was used."
@@ -153,6 +175,15 @@ class SessionHookProgram(ClaudeHookProgram, ABC):
             record = json.load(sys.stdin)
             hook = ClaudeHook.decode(record)
             SessionEndpoint(hook.session_id).session().invoke(cls, record)
-        except Exception as error:
-            # This process boundary reports the failure; it never substitutes an unbound answer.
+        except SessionFailure as error:
             cls.failed(error)
+
+
+class SkillText(SessionHookProgram):
+    """Startup deals through the resident after launch, not through a parallel hook."""
+
+    events = ("SessionStart",)
+
+    @classmethod
+    def installation_members(cls) -> tuple[type[ClaudeHookProgram], ...]:
+        return ()

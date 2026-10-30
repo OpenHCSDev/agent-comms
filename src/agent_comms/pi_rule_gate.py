@@ -9,6 +9,7 @@ tool denial: Pi shows its text to the model as the tool's error.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,7 +22,9 @@ from agent_comms_hooks.skill import (
     FleetRulesReader,
 )
 
-from .rule_deal import DealtRuleGate, Redeals
+from .bus_publication import Delivered
+from .field_codec import ThreadLookup
+from .rule_deal import DealTrigger, DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
@@ -65,14 +68,15 @@ class PiRedeal(PiRuleGate, Redeals):
         gate = PiRuleGate.of(comms, thread)
         return cls(gate.scratch, gate.worktree, comms, thread)
 
-    def renew(self) -> None:
+    def renew(self, trigger: DealTrigger) -> None:
         """A start or compaction deals the papers, then the rules."""
-        self.deal_from(CommanderReader, FleetReader)
+        self.deal_from(CommanderReader, FleetReader, trigger)
 
-    def reread(self) -> None:
-        self.deal_from(CommanderRulesReader, FleetRulesReader)
+    def reread(self, trigger: DealTrigger) -> None:
+        self.deal_from(CommanderRulesReader, FleetRulesReader, trigger)
 
-    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader]) -> None:
+    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader],
+                  trigger: DealTrigger) -> None:
         """The registry's commander project picks the deck reader whose sources it deals."""
         snapshot = self.comms.registry.snapshot()
         snapshot.commander_project.deal_rules(
@@ -81,22 +85,32 @@ class PiRedeal(PiRuleGate, Redeals):
             commander=commander,
             commanded=commanded,
             prompts=self.owner_words(snapshot),
+            trigger=trigger,
         )
 
     def owner_words(self, snapshot: RegistrySnapshot) -> tuple[str, ...]:
-        """What the registry's human last sent this thread, oldest first: the same person
-        whose prompts the Claude deal reads from its transcript."""
+        """What the registry's human last typed to this thread, oldest first: the same person
+        whose prompts the Claude deal reads from its transcript. Core's notices (the heartbeat,
+        escalations, restart reminders) publish under his thread too; his thread's role asks
+        each message's task whether it carries his words, so a notice is never dealt as them."""
         lookup = self.thread.incarnation.require_recorded().lookup
-        return tuple(
-            reversed(
-                tuple(
-                    delivery.message.body
-                    for user in snapshot.user_thread().existing()
-                    for delivery in self.comms.bus.bus.received(
-                        lookup,
-                        sender_lookups=(user.incarnation.require_recorded().lookup,),
-                        limit=self.owner_prompts,
-                    )
-                )
-            )
-        )
+        return tuple(reversed(tuple(
+            delivery.message.body
+            for user in snapshot.user_thread().existing()
+            for delivery in self.typed_by(user, lookup)
+        )[:self.owner_prompts]))
+
+    def typed_by(self, user: Thread, lookup: ThreadLookup) -> Iterator[Delivered]:
+        """The human's own messages to this thread, newest first, read a page at a time
+        until the deal has its prompts or his history ends."""
+        sender = (user.incarnation.require_recorded().lookup,)
+        before: int | None = None
+        found = 0
+        while found < self.owner_prompts and (page := self.comms.bus.bus.received(
+            lookup, sender_lookups=sender, before=before, limit=self.owner_prompts * 8,
+        )):
+            for delivery in page:
+                if user.role.user_task_facts(delivery.message):
+                    found += 1
+                    yield delivery
+            before = page[-1].seq

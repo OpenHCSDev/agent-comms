@@ -8,6 +8,7 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -47,9 +48,9 @@ from .field_codec import (
     WireOmitDefault,
     projected,
 )
-from .goal_attempts import GoalAttemptStore
 from .goal_presentation import GoalExecution
 from .goal_waits import GoalWaits
+from .locked_store import GoalWakeFile
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
@@ -693,7 +694,7 @@ class ThreadRecord(CliResult):
              pending: Mapping[str, InboxCount]) -> tuple[ThreadRecord, ...]:
         """Only active threads are observed; the rest show the absent activity."""
         threads = tuple(threads)
-        waits = goals.waits.read()
+        waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
         observed = agents.all_activity(snapshot.active_threads(threads), snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name),
@@ -703,17 +704,17 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+        return FieldCodec.project(self, PresenceExclude)
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def is_fork(self) -> bool:
         return self.thread.is_fork
 
-    @projected(view="presence", name="activity")
+    @projected(view=PresenceExclude, name="activity")
     def activity_state(self) -> ActivityState:
         return self.activity.state
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def activity_detail(self) -> str:
         shown = self.activity.presentation(self.thread.display_title)
         return " · ".join(part for part in (self.activity.detail, *shown.status.details) if part)
@@ -736,7 +737,7 @@ class ThreadView(ThreadRecord):
         if not threads:
             return ()
         runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
-        waits = goals.waits.read()
+        waits = partial(GoalWaits.for_goal, rows=goals.waits.read())
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
             thread, snapshot.status(thread.name), activities[thread.name],
@@ -757,19 +758,19 @@ class ThreadView(ThreadRecord):
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def resumable(self) -> bool:
         return self.thread.runtime.resumable
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def last_activity(self) -> float:
         return self.activity.timestamp
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def context_used(self) -> PiCount:
         return self.runtime.context_used
 
-    @projected(view="presence")
+    @projected(view=PresenceExclude)
     def context_size(self) -> PiCount:
         return self.runtime.context_size
 
@@ -869,17 +870,8 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
-# typing evaluates class annotations with the class namespace as globals, so a
-# lambda written inside one cannot see this module; named functions can.
 def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
-
-
-def goal_execution_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return (
-        *GoalWaits.source_paths(views.root),
-        *GoalAttemptStore.source_paths(GoalAttemptStore.directory_in(views.root)),
-    )
 
 
 def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
@@ -968,7 +960,7 @@ class WireRevision(ReadState):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(goal_execution_paths, *StatusSourced.views()),
+        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views()),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],

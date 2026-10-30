@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO
 
-from agent_comms_hooks import ClaudeTranscriptHook
+from abc import abstractmethod
 
 from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
 from .declared_family import DeclaredFamily
@@ -58,15 +58,8 @@ class RecordedGateCall:
         self.record.write(RefusedGate.marker())
         return self.notices.refused()
 
-    def read(self, read_record: Path, source: Path) -> tuple[type[CompactionNotice], ...]:
-        line = f"{source.resolve()}\n".encode("utf-8")
-        with read_record.open("ab", buffering=0) as record:
-            record.write(line)
-            first = record.tell() == len(line)
-        return self.notices.first_read() if first else ()
 
-
-class DealtCalls(ClaudeTranscriptHook, StoreGuard):
+class DealtCalls(StoreGuard):
     """One byte per completed/refused call, retaining the existing .calls representation.
 
     The leading byte also records that a refusal occurred. Its remaining bytes are
@@ -75,8 +68,13 @@ class DealtCalls(ClaudeTranscriptHook, StoreGuard):
     """
 
     @property
+    @abstractmethod
+    def stem(self) -> Path:
+        """The backend's identity selects the session's state location."""
+
+    @property
     def calls(self) -> Path:
-        return Path(self.transcript_path).with_suffix(".calls")
+        return self.stem.with_suffix(".calls")
 
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
