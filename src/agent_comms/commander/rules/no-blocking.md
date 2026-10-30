@@ -28,6 +28,13 @@ type: hard-rule
 > everyone politely waits for everyone else to go first
 > 2 a.m., Tristan finds all of it by hand
 > mfw the fleet achieved perfect safety by doing nothing, and doing nothing was the outage
+> run it back
+> order tool refuses every free unit: same launch directory
+> unit posts "order tool refuses free units on launch dir; trying a fresh worktree each". does it
+> Neovim crash: "owner got stopped by the install, taking it". fixed before the install finished
+> hint fix: "it's None.value, patching the owner". done
+> 2 a.m., Tristan finds nothing, because there's nothing left to find
+> mfw the safe move was one sentence and a tool call
 
 **Why:** on 2026-10-29 every blocked item Tristan found in one evening (the Neovim crash, P947's timing result, P952's frozen hints, P904's 12-hour-dead Toad half, every free unit refused by the order tool) was a unit or commander that noticed a problem and stopped quietly. Stopping felt obedient. It deadlocked the fleet while each piece of it was "being careful". Tristan, 2026-10-29: "No fucking blocking for any reason"; "We might benefit from a new rule, and we should call it no blocking, just talking. So if there's a problem, you can't block. You need to say it to whoever in a channel, whatever, describe it, and then say I'm going to try this, and everybody else is going to be made aware, and if anybody has a problem with it, they can send the message back. So this makes sure that it's still safe, because everybody is aware, and it prevents dead lock."
 

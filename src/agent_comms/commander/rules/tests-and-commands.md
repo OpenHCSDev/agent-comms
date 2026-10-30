@@ -28,6 +28,12 @@ type: feedback
 > report: "latency is 2 ms"
 > fastest command in the fleet. it does not exist.
 > mfw the slowest thing on the machine was the test of how slow things are
+> run it back
+> suite in the background, timeout -s INT 300, finalizers run
+> wait on the PID, not pgrep -f. one waiter, zero forks per second
+> latency loop checks rc first: 127, quote "$c", rerun, a real number
+> Tristan's message answered in seconds while the suite runs
+> mfw the fast path was `&` and `$?`
 
 **Why:** a foreground run freezes the commander, so bus messages and the owner's questions wait behind it; and tests matter only as behaviour protection, so preserving sloppy ones blocks structural change. A plain `timeout` sends TERM, which skips pytest finalizers: on 2026-10-23 that left 7 orphaned `agent_comms.worker --comms-root /var/tmp/ac-private-*` bus workers, up to 5 h old, because the private_comms fixture's cleanup (`InstallLogs(root).stop_running()` in its `finally`, tests/conftest.py:383) never ran; INT runs it.
 
