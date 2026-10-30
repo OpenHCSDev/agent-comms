@@ -398,6 +398,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
         plans = [[row[3] for row in connection.execute(f"EXPLAIN QUERY PLAN {statement}")]
                  for statement in claim_statements]
 
+    limited = NotificationAssignment.capture_detached(root, limited)
     assert len(batches) > 1
     assert all(len(batch.bindings) <= bound for batch in batches)
     assert sum(len(batch.bindings) for batch in batches) == key_fields * len(distinct)
