@@ -2626,17 +2626,15 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
         their encoding declarations. Every owner uses the same statement filter.
         """
         columns = {column.name for column in cls._columns}
-        production = {
-            owner: set(columns) for owner in cls.__mro__
-            if issubclass(owner, ProjectionOutputs)
-        }
+        owners = cls.producer_owners()
+        production = {owner: set(columns) for owner in owners if owner in cls.__mro__}
         for lineage in cls.producer_lineage():
             names = {
                 name for owner in lineage if owner.produces_whole() for name in vars(owner)
             }
             for owner in lineage:
                 production.setdefault(owner, set()).update(names)
-        for owner in cls.producer_owners():
+        for owner in owners:
             production.setdefault(owner, set(vars(owner)))
         members: list[tuple[type, tuple[str, ...]]] = []
         for owner, names in production.items():
