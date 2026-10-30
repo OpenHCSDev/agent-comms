@@ -29,6 +29,33 @@ class SessionWire:
     """The session socket's records: one JSON line each, its family member named by the key."""
 
     family_discriminator: ClassVar[str] = "type"
+    request: ClassVar[str]
+    # Past this the bridge is held behind an install's maintenance turn; a tool call never waits it out.
+    timeout: ClassVar[float] = 2
+
+    @classmethod
+    def exchanged(cls, endpoint: Path, **fields: str) -> dict:
+        """Ask the bridge for this member and return its one reply line, undecoded."""
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+                peer.settimeout(cls.timeout)
+                peer.connect(str(endpoint))
+                asked = {cls.family_discriminator: cls.request, **fields}
+                peer.sendall(json.dumps(asked).encode() + b"\n")
+                with peer.makefile("rb") as stream:
+                    return json.loads(stream.readline())
+        except (FileNotFoundError, ConnectionRefusedError) as error:
+            raise AbsentSessionSocket(f"No session bridge is listening: {error}") from error
+        except (OSError, json.JSONDecodeError) as error:
+            raise UnexpectedBoardReply(f"The session bridge did not answer: {error}") from error
+
+    @classmethod
+    def replied(cls, **reply: Sequence[str]) -> SessionWire:
+        """Decode the declared member first; a refusal is not a constructor error."""
+        member = reply.pop(cls.family_discriminator)
+        if member != cls.request:
+            raise UnexpectedBoardReply(f"{member}: {reply!r}")
+        return cls.decoded(**reply)
 
 
 @dataclass(frozen=True)
@@ -81,8 +108,6 @@ class SessionBoard(SessionWire):
     """The board lines the bridge derived from Core at the moment of asking."""
 
     request: ClassVar[str] = "board"
-    # Past this the bridge is held behind an install's maintenance turn; a tool call never waits it out.
-    timeout: ClassVar[float] = 2
 
     lines: tuple[str, ...]
 
@@ -96,27 +121,26 @@ class SessionBoard(SessionWire):
 
     @classmethod
     def asked(cls, endpoint: Path) -> SessionBoard:
-        try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
-                peer.settimeout(cls.timeout)
-                peer.connect(str(endpoint))
-                peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
-                with peer.makefile("rb") as stream:
-                    return cls.replied(**json.loads(stream.readline()))
-        except (FileNotFoundError, ConnectionRefusedError) as error:
-            raise AbsentSessionSocket(f"No session bridge is listening: {error}") from error
-        except (OSError, json.JSONDecodeError) as error:
-            raise UnexpectedBoardReply(f"The session bridge did not answer: {error}") from error
-
-    @classmethod
-    def replied(cls, **reply: Sequence[str]) -> SessionBoard:
-        """Decode the declared member first; a refusal is not a constructor error."""
-        member = reply.pop(cls.family_discriminator)
-        if member != cls.request:
-            raise UnexpectedBoardReply(f"{member}: {reply!r}")
-        return cls.decoded(**reply)
+        return cls.replied(**cls.exchanged(endpoint))
 
     @classmethod
     def decoded(cls, lines: Sequence[str]) -> SessionBoard:
         """Decode this member's field only after its discriminator matched."""
         return cls(tuple(lines))
+
+
+@dataclass(frozen=True)
+class SessionOwnerSaid(SessionWire):
+    """What the person last typed in this session, read by the bridge at the moment of asking."""
+
+    request: ClassVar[str] = "owner_said"
+
+    words: tuple[str, ...]
+
+    @classmethod
+    def asked(cls, endpoint: Path, transcript: Path) -> SessionOwnerSaid:
+        return cls.replied(**cls.exchanged(endpoint, transcript=str(transcript)))
+
+    @classmethod
+    def decoded(cls, words: Sequence[str]) -> SessionOwnerSaid:
+        return cls(tuple(words))

@@ -25,7 +25,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, Path
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
-from agent_comms_hooks.board import SessionBoard, SessionWire
+from agent_comms_hooks.board import SessionBoard, SessionOwnerSaid, SessionWire
 from agent_comms_hooks.watch import (
     HeldClaim, SessionConnectionClosed, SessionRefusedError,
     SessionRequestTimeout, WatchClaim, WatchRecord,
@@ -273,6 +273,11 @@ class BoardReply(SessionBoard, SessionReply, declared_name=SessionBoard.request)
 
 
 @dataclass(frozen=True)
+class OwnerSaidReply(SessionOwnerSaid, SessionReply, declared_name=SessionOwnerSaid.request):
+    """The hook decodes this with the standard library, through the fields it declares."""
+
+
+@dataclass(frozen=True)
 class PeerGone(SessionReply, declared_name='gone'):
 
     async def publish(self, peer: MonitorPeer) -> None:
@@ -370,6 +375,16 @@ class ReadBoard(SessionRequest[BoardReply], declared_name=SessionBoard.request):
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         return BoardReply(await service.bridge.board())
+
+
+@dataclass(frozen=True)
+class ReadOwnerSaid(SessionRequest[OwnerSaidReply], declared_name=SessionOwnerSaid.request):
+    """The rule gate's refusal asking what the person typed last."""
+
+    transcript: Annotated[Path, PathText]
+
+    async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
+        return OwnerSaidReply(await asyncio.to_thread(service.bridge.owner_said, self.transcript))
 
 
 @dataclass(frozen=True)

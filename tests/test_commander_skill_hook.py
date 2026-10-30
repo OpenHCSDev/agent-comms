@@ -20,7 +20,7 @@ import pytest
 from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
-from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
+from agent_comms.cli_bridges.monitor import BoardReply, OwnerSaidReply, ReadBoard, ReadOwnerSaid, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.channel_targets import CommandersTag
@@ -60,7 +60,7 @@ from agent_comms.rule_deal import AuditDue, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
                                      Prime, UnboundPrimeError)
-from agent_comms_hooks.watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import DeafWatch, LiveWatch, UnclaimedWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -782,30 +782,48 @@ def test_the_template_shows_no_answer_to_copy_and_asks_only_for_the_three_fields
     assert set(template["rules"][0]) == {"rule", "quote", "does", "why"}
 
 
-def test_a_refusal_quotes_what_he_said_last_not_what_the_deal_showed(
-        tmp_path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_a_refusal_quotes_what_the_bridge_says_he_said_last(tmp_path, capsys, monkeypatch):
+    """Refusals kept quoting the prompt frozen at the deal while he typed new orders."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     start.prepare(CommanderReader(), ("the old order",), StartedDeal())
-    gated(transcript, "Bash", {}).judge()
-    assert "the old order" in capsys.readouterr().out  # nothing newer to read yet
-    transcript.write_text(json.dumps({
-        "type": "user", "origin": {"kind": "human"}, "promptId": "10bbaae7-9ccb-4091-b936-c3a8bca91f48",
-        "uuid": "1ea60c93-2969-4191-8218-6f62f2245f44", "timestamp": "2026-10-30T21:30:08.609Z",
-        "message": {"role": "user", "content": "the new order"}}) + "\n")
+    gated(transcript, "Bash", {}).judge()  # no bridge: the deal's copy stands
+    assert "the old order" in capsys.readouterr().out
+    monkeypatch.setattr(UnclaimedWatch, "owner_said", lambda self, path: ("the new order",))
     gated(transcript, "Bash", {}).judge()
     reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Tristan told you, verbatim:\nthe new order\nYou did not." in reason
     assert "the old order" not in reason
-    with transcript.open("a") as stream:  # typed while the turn runs
-        stream.write(json.dumps({"type": "attachment", "attachment": {
-            "type": "queued_command", "origin": {"kind": "human"},
-            "prompt": [{"type": "text", "text": "the queued order"}]}}) + "\n")
-        stream.write(json.dumps({"type": "user", "origin": {"kind": "task-notification"},
-                                 "message": {"content": "not him"}}) + "\n")
-    gated(transcript, "Bash", {}).judge()
-    assert "verbatim:\\nthe queued order\\n" in capsys.readouterr().out
+
+
+def test_the_bridge_answers_his_last_prompt_over_the_session_socket(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    claim = WatchClaim("spoken")
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    transcript = tmp_path / "session.jsonl"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        with ThreadPoolExecutor(1) as pool:
+            said = pool.submit(LiveWatch(claim, record).owner_said, transcript)
+            peer, _ = server.accept()
+            with peer, peer.makefile("rwb") as stream:
+                asked = FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline()))
+                assert asked == ReadOwnerSaid(transcript)
+                reply = OwnerSaidReply(("the new order",))
+                stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
+            assert said.result(timeout=5) == ("the new order",)
+
+
+def test_a_refusal_lands_when_the_bridge_is_swapping(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    assert LiveWatch(WatchClaim("swapping"), record).owner_said(tmp_path / "s.jsonl") == ()
 
 
 def test_the_bus_and_the_watch_stay_open_during_a_deal(capsys, dealt_session):

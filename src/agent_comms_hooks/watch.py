@@ -22,7 +22,12 @@ from agent_comms.process_claim import ProcessSingleton
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
+from agent_comms_hooks.board import (
+    AbsentSessionSocket,
+    SessionBoard,
+    SessionOwnerSaid,
+    UnexpectedBoardReply,
+)
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -260,6 +265,10 @@ class WatchState(ABC):
         """Only a running bridge can derive a board."""
         return ()
 
+    def owner_said(self, transcript: Path) -> tuple[str, ...]:
+        """Only a running bridge can read his words for a hook."""
+        return ()
+
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         """No bridge holds the claim: the reader says delivery is down, once per outage."""
         announce()
@@ -344,6 +353,13 @@ class LiveWatch(RecordedWatch):
         except AbsentSessionSocket:
             return ("BOARD: not read this call: an install is swapping the session bridge, "
                     "so no bridge listens yet; the board returns when the new one does",)
+
+    def owner_said(self, transcript: Path) -> tuple[str, ...]:
+        """A refusal still lands when the bridge is swapping or busy; it quotes the deal's copy."""
+        try:
+            return SessionOwnerSaid.asked(self.claim.socket_path, transcript).words
+        except UnexpectedBoardReply:
+            return ()
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(

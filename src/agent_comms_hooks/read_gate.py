@@ -23,6 +23,7 @@ from agent_comms.rule_deal import AuditDue, DealtRuleGate, ReadSpan
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
 from agent_comms_hooks.seats import SeatedSubagent
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
@@ -44,22 +45,6 @@ class WriteInput(HookRecord):
     """The Write tool's input: the gate only needs where it writes."""
 
     file_path: Path
-
-
-def typed_prompt(raw: bytes) -> str:
-    """What the person typed in one transcript line: a user record or a prompt queued into a
-    running turn, each marked with a human origin. Any other line carries none."""
-    record = json.loads(raw)
-    queued = record.get("attachment") or {}
-    origin, content = (
-        (queued.get("origin"), queued.get("prompt")) if queued.get("type") == "queued_command"
-        else (record.get("origin"), (record.get("message") or {}).get("content"))
-        if record.get("type") == "user" else (None, None))
-    if not origin or origin.get("kind") != "human":
-        return ""
-    if isinstance(content, str):
-        return content
-    return "\n".join(block["text"] for block in content or () if block.get("type") == "text")
 
 
 class ToolMeaning(DeclaredFamily):
@@ -165,15 +150,11 @@ class GatedCall(ClaudeToolHook, DealtRuleGate):
         ToolMeaning.of(self.tool_name).completed(self)
 
     def owner_said(self, due: AuditDue) -> tuple[str, ...]:
-        """His last prompt in the transcript's tail as this call runs, not as the deal showed it.
-        Core's transcript decoder costs a hook 3 s of imports, so this reads the two records that
-        carry his typing with the standard library; past the window the deal's copy stands."""
-        if not Path(self.transcript_path).exists():
-            return super().owner_said(due)
-        for raw in reversed(self.tail()):
-            if words := typed_prompt(raw):
-                return (words,)
-        return super().owner_said(due)
+        """His last prompt as this call runs, not as the deal showed it. The bridge holds the
+        transcript's decoder, which would cost this hook 3 s of imports; a session with no
+        bridge has the deal's copy."""
+        return (WatchClaim(self.session_id).state().owner_said(Path(self.transcript_path))
+                or super().owner_said(due))
 
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
