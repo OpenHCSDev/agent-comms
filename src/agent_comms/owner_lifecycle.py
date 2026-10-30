@@ -531,28 +531,23 @@ class OwnerLifecycle:
             ))
         return tuple(requests)
 
-    def _stop_selection(self, name: str) -> tuple[Thread, int] | None:
-        """Settle an owner that needs no signal, or capture the one that does."""
+    def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
+        """Fence the complete selection in one edit, before any retirement joins."""
         with self.registry.store.editing() as edit:
             snapshot = edit.original.snapshot
-            thread = edit.document.require(name)
-            thread.role.require_executable(
-                RelationViolationError("Only agent threads can be stopped.")
-            )
-            if thread.process_identity.allows_owner_start():
-                if not snapshot.status(thread.name).stopped:
-                    edit.document.unregister(thread.name)
-                    edit.commit()
-                return None
-            return thread, snapshot.claim_generation(thread.name)
-
-    def fence_stop(self, *names: str) -> tuple[tuple[Thread, int], ...]:
-        owners = tuple(owner for name in dict.fromkeys(names)
-                       if (owner := self._stop_selection(name)) is not None)
-        # Fence ingress first. Only the host's completed cleanup writes a release.
-        with self.registry.store.editing() as edit:
+            owners: list[tuple[Thread, int]] = []
+            for name in dict.fromkeys(names):
+                thread = edit.document.require(name)
+                thread.role.require_executable(
+                    RelationViolationError("Only agent threads can be stopped.")
+                )
+                if thread.process_identity.allows_owner_start():
+                    if not snapshot.status(thread.name).stopped:
+                        edit.document.unregister(thread.name)
+                else:
+                    owners.append((thread, snapshot.claim_generation(thread.name)))
             for thread, generation in owners:
-                edit.original.snapshot.require_stopping_owner(thread, generation)
+                snapshot.require_stopping_owner(thread, generation)
                 edit.document.unregister(thread.name)
             edit.commit()
             fenced = edit.original.snapshot
