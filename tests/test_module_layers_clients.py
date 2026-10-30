@@ -13,7 +13,7 @@ import pytest
 import tomli_w
 
 from module_layers import MaterializedClients, OutgoingWire, Package, StackClient
-from debt_ratchet import ClientTypeErrors
+from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.todos import DraftListedPullRequest
 from github_fixture import GitHubFixture
@@ -102,8 +102,9 @@ def test_actual_client_membership_stays_absent_on_its_own_cut(
         clients = resource.at(pair.core.checkout, core.baseline.commit, tested, side)
         assert len(clients) == int(present)
         assert all(client.checkout == side.checkout(pair.output, pair.client.github) for client in clients)
-    assert len(ClientTypeErrors.parts(pair.core.checkout, core.baseline.commit, tested,
-                                     {"src/agent_comms/api.py"}, "src/", resource)) == 1
+    assert len(ClientTypeErrors.parts(AgentCommsProject(pair.core.checkout, clients=resource),
+                                     core.baseline.commit, tested,
+                                     {"src/agent_comms/api.py"}, "src/")) == 1
 
 
 def test_materialized_client_files_come_from_each_actual_cut(
