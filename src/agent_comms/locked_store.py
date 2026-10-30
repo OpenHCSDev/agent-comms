@@ -970,20 +970,24 @@ class SQLiteReader(SQLiteStorage):
         self.require_path()
         revision = FileRevision.capture(self.path)
         revision.require(FileNotFoundError(self.path))
-        held = self.readers.connection.acquire(self, revision, contention)
-        self.readers.connection = held
-        db = held.db
         with CoordinationReadUnavailable.checking():
             try:
-                contention.configure(db)
-                self.begin_snapshot(db)
-                yield db
+                held = self.readers.connection.acquire(self, revision, contention)
+                self.readers.connection = held
+                db = held.db
+                try:
+                    contention.configure(db)
+                    self.begin_snapshot(db)
+                    yield db
+                finally:
+                    if db.in_transaction:
+                        db.execute("ROLLBACK")
             except sqlite3.OperationalError as error:
-                error.add_note(f"SQLite observation store: {self.path}")
+                error.add_note(
+                    f"SQLite observation store: {self.path}; "
+                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+                )
                 raise
-            finally:
-                if db.in_transaction:
-                    db.execute("ROLLBACK")
 
 
 class SQLiteFile(SQLiteStorage):
