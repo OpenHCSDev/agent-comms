@@ -32,9 +32,11 @@ def example_hud() -> CommanderHud:
         (order,), 0, (), (),
     )
     commander = RecordedThreadIncarnation("lead", 1.0)
-    old = replace(RulePing.capture(ServicePassFailing(watch="source", since=900, error="read refused")),
+    old = replace(RulePing.capture(ServicePassFailing(watch="source", since=900, error="read refused",
+                                                      failed_at=900)),
                   since=RecordedEventTime(900))
-    new = replace(RulePing.capture(ServicePassFailing(watch="review", since=1000, error="head needs review")),
+    new = replace(RulePing.capture(ServicePassFailing(watch="review", since=1000, error="head needs review",
+                                                      failed_at=1000)),
                   since=RecordedEventTime(1000))
     return CommanderHud(
         commander=commander, units=(
