@@ -542,15 +542,22 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
 
 
 @dataclass(frozen=True)
-class BranchBehindMain(HeldBranchRule):
-    """A held branch needs a new base after too much main work passed it."""
+class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
+    """A held branch needs a new base after too much main work passed it. Syncing is the
+    holder's reflex, so Core tells the holder itself instead of waiting on a commander relay."""
 
     problem: str
     holder: ThreadIncarnation
     repository: RepositoryName
     branch: str
     behind: int = field(compare=False)
-    limit: ClassVar[int] = 30
+    limit: ClassVar[int] = 10
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        comms.messaging.send(commander, self.holder.name, (
+            f"{self.branch} is {self.behind} commits behind main. Merge origin/main into it now,"
+            " resolve every conflict yourself, push, and keep working; a stale tree turns your"
+            " next push into everyone's conflict."))
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
