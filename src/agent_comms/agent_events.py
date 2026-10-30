@@ -317,7 +317,7 @@ class Done(AgentEvent, FailedGoalTurn):
 
     def settle_current(self, account) -> None:
         if self.ok:
-            VerifiedGoalSettlement.settle_current(account)
+            VerifiedGoalSettlement.settle_current(account.comms, account.owner, account.turn)
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if self.ok:
