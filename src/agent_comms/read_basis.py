@@ -388,9 +388,9 @@ class ReadCursor:
     @staticmethod
     def sql(parameter: str) -> str:
         return f"""read_cursors AS MATERIALIZED (
-        SELECT json_extract(value,'$[0]') AS actor,
-               json_extract(value,'$[1]') AS target,
-               json_extract(value,'$[2]') AS sender,
+        SELECT CAST(json_extract(value,'$[0]') AS TEXT) AS actor,
+               CAST(json_extract(value,'$[1]') AS TEXT) AS target,
+               CAST(json_extract(value,'$[2]') AS TEXT) AS sender,
                json_extract(value,'$[3]') AS high_water,
                json_extract(value,'$[4]') AS exceptions
         FROM json_each({parameter}))"""
