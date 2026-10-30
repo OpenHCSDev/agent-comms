@@ -27,7 +27,7 @@ dependencies = [
     "aiohttp>=3.14",
     "agent-client-protocol>=0.8",
     "metaclass-registry @ git+https://github.com/OpenHCSDev/metaclass-registry@main",
-    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@feat/absorb-refactor-audit",
+    "nominal-refactor-advisor @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor@main",
     "packaging>=24",
     "pydantic>=2.13",
 ]
