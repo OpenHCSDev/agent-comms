@@ -878,6 +878,10 @@ def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
     return (relationships.RelationshipStore.path_in(views.root),)
 
 
+def goal_wake_paths(views: HistoryViews) -> tuple[Path, ...]:
+    return GoalWakeFile.watched_paths_in(views.root)
+
+
 def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
     return CoordinationStore.source_paths(views.root)
 
@@ -960,7 +964,7 @@ class WireRevision(ReadState):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views()),
+        *revision_source(goal_wake_paths, *StatusSourced.views()),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
