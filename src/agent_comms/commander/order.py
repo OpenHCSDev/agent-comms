@@ -369,8 +369,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().leads(snapshot)
-        return thread.name
+        return snapshot.commander_project.require().lead(snapshot).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -1277,14 +1276,6 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
-
-
-@dataclass(frozen=True, kw_only=True)
-class JoinVerb(OrderVerb):
-    help = "register a commander fork before its first record"
-
-    def run(self, ctx: Commander) -> None:
-        print(f'{ctx.actor_name} registered')
 
 
 @dataclass(frozen=True, kw_only=True)

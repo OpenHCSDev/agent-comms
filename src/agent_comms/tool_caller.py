@@ -232,6 +232,12 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     def commanding(self, comms: Comms, commander: str) -> None:
         comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
 
+    def join(self, comms: Comms) -> None:
+        """The SubagentStart hook declares the fork under the registered lead, in its own
+        process, before the fork's first call."""
+        snapshot = comms.registry.snapshot()
+        self.commanding(comms, snapshot.commander_project.require().lead(snapshot).name)
+
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
         parent, = fork.parent.names()
