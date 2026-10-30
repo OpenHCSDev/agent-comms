@@ -664,6 +664,13 @@ class PullRequestLink:
 
 
 @dataclass(frozen=True)
+class MergedLink:
+    """A pull request an order links and the merge commit the order recorded for it."""
+    link: PullRequestLink
+    sha: str
+
+
+@dataclass(frozen=True)
 class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
@@ -1983,7 +1990,7 @@ class GrowthReason(PlainText):
 
 
 class OrderCorrectionReason(PlainText):
-    """Why the recorded check or run was wrong, in enough words to stand on the record."""
+    """Why the recorded part of an order was wrong, in enough words to stand on the record."""
 
     refusal = (
         "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
@@ -2800,8 +2807,15 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     """An active order keeps corrections and accepts its checked delivery by identity."""
 
-    def corrected(self, correction: CorrectOrderTodo) -> Self:
+    def corrected(self, correction: CorrectOrderTodo) -> OpenProblemOrder:
         return correction.corrected(self)
+
+    def merged_link(self, link: PullRequestLink) -> MergedLink:
+        """The merge this order recorded through ``link``; an unmerged order recorded none."""
+        raise TodoError(f"Order {self.id} records no merge to take back.")
+
+    def unmerged(self, link: PullRequestLink) -> OpenProblemOrder:
+        raise TodoError(f"Order {self.id} records no merge to take back.")
 
     def require_delivery(self, order_id: OrderId) -> None:
         if self.id != order_id:
@@ -2844,6 +2858,16 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def require_linkable(self) -> None:
         raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
                          "Ask the commander for a send-back before opening or linking another PR.")
+
+    def merged_link(self, link: PullRequestLink) -> MergedLink:
+        if link not in self.pull_requests:
+            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
+        return MergedLink(link, self.sha)
+
+    def unmerged(self, link: PullRequestLink) -> PendingProblemOrder:
+        """Pending again under its own id, check, run, edits and times, without ``link``."""
+        return self.copy_as(PendingProblemOrder, pull_requests=tuple(
+            kept for kept in self.pull_requests if kept != link))
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -4974,7 +4998,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
-    def corrected[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
         if self.previous != self.part(order):
             raise TodoError("The corrected part changed since it was read; read it again.")
         return replace(self.replaced(order), corrections=(*order.corrections, self))
@@ -4984,8 +5008,8 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         """The order's current value of the part this correction replaces."""
 
     @abstractmethod
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
-        """The order with this correction's part replaced."""
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """The order with this correction's part replaced; its state may change with it."""
 
 
 @dataclass(frozen=True)
@@ -5004,7 +5028,7 @@ class CorrectCheckTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderCheck:
         return order.check
 
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         self.check.require_writable()
         return replace(order, check=self.check)
 
@@ -5018,8 +5042,23 @@ class CorrectRunTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderRun:
         return order.run
 
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         return replace(order, run=self.run)
+
+
+@dataclass(frozen=True)
+class CorrectMergedLinkTodo(CorrectOrderTodo):
+    """The commander takes back a merge recorded through a pull request that never held this
+    order's work, such as a merged prerequisite. The order is pending again under its own id,
+    check, run, edits and times; only that link leaves it. Any other linked pull request stays,
+    so a merge of real work on it is read again from the forge, never dropped."""
+    previous: MergedLink
+
+    def part(self, order: OpenProblemOrder) -> MergedLink:
+        return order.merged_link(self.previous.link)
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        return order.unmerged(self.previous.link)
 
 
 @dataclass(frozen=True)
