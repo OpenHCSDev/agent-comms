@@ -606,11 +606,13 @@ class SubmoduleTransfer:
         return cls(store, relative, original)
 
     def apply(self, destination: Path) -> None:
-        Repo.git(destination, '--git-dir', str(self.store), 'config', '--local',
+        Repo.git(destination, '--git-dir', str(self.store),
+                 '--work-tree', str(destination / self.relative), 'config', '--local',
                  'core.worktree', str(destination / self.relative))
 
     def restore(self, source: Path) -> None:
-        Repo.git(source, '--git-dir', str(self.store), 'config', '--local',
+        Repo.git(source, '--git-dir', str(self.store),
+                 '--work-tree', str(source / self.relative), 'config', '--local',
                  'core.worktree', self.original_worktree)
 
 

@@ -467,8 +467,10 @@ def test_transfer_restores_original_tree_and_modules_after_actual_git_failure(re
     (source.path / 'pinned' / 'catalog.md').write_text('keep module after failure\n')
     before = git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')
     config = (repository / '.git' / 'config').read_bytes()
-    with pytest.raises(GitCommandError):
+    with pytest.raises(GitCommandError, match='not-a-git-command'):
         with source.relocating(destination):
+            assert not source.path.exists()
+            assert git(destination / 'pinned', 'rev-parse', '--show-toplevel').strip() == str(destination / 'pinned')
             Repo.git(destination, 'not-a-git-command')
     assert source.path.exists() and not destination.exists()
     assert (git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')) == before
