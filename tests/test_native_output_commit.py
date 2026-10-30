@@ -19,6 +19,7 @@ from agent_comms.field_codec import (
 from agent_comms.native_output import AssistantOutput, ToolOutput
 from agent_comms.pi_events import NativeOutputCommitted, PiEvent
 from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.transcripts import Through
 from agent_comms.threads import Thread
 from conftest import installed_comms
 
@@ -56,7 +57,7 @@ def test_output_proof_covers_only_original_prefix_and_survives_later_appends(com
     fresh = comms.transcripts.capture_page_read('worker').identity
     assert proof.page_bound.offset == marker.session_entry_end < fresh.page_bound.offset
     assert proof.contains_native_prefix(fresh)
-    assert not proof.contains_native_prefix(replace(fresh, through=fresh.page_bound.at_offset(marker.session_entry_end - 1)))
+    assert not proof.contains_native_prefix(replace(fresh, limit=Through(fresh.page_bound.at_offset(marker.session_entry_end - 1))))
     assert not proof.contains_native_prefix(replace(fresh, root='/different/source'))
     assert not proof.contains_native_prefix(replace(fresh, thread=replace(fresh.thread,
         created_at=fresh.thread.created_at.to_wire() + 1)))

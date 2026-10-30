@@ -211,11 +211,6 @@ class WatchState(ABC):
         a binding can point at it."""
         return False
 
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
-                   commander: Callable[[WatchRecord], T]) -> T:
-        """An unbound session has no role on any bus: a subagent, or a session never enrolled."""
-        return unbound()
-
     def board(self) -> tuple[str, ...]:
         """Only a running bridge can derive a board."""
         return ()
@@ -261,15 +256,7 @@ class RecordedWatch(WatchState):
     def commands(self) -> bool:
         snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
         return snapshot.commander_project.by_role(
-            snapshot.require(self.record.bus).incarnation, commander=True, commanded=False)
-
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
-                   commander: Callable[[WatchRecord], T]) -> T:
-        """Use the registry's role selector; the saved launcher record supplies no role."""
-        snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
-        operation = snapshot.commander_project.by_role(
-            snapshot.require(self.record.bus).incarnation, commander=commander, commanded=fleet)
-        return operation(self.record)
+            snapshot.require(self.record.bus), commander=True, commanded=False)
 
     def connect(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
                 request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:

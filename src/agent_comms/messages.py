@@ -34,7 +34,7 @@ from agent_comms.typed_table import (
 )
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
-from .channel_targets import CommandTarget
+from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
@@ -59,6 +59,7 @@ from .field_codec import (
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .page_traversal import LiveCursor, PageCursor
+from .recorded_time import Timestamped
 from .task_sources import Decision, NoTaskAttachment, TaskAttachment
 from .thread_identity import AgentThreadRole, ThreadRole
 from .ui_model.message_category import InboundCategory, MessageCategory, OtherCategory
@@ -900,7 +901,7 @@ class PublicSender(NullMember):
 
 
 @dataclass(frozen=True, slots=True)
-class MessageInput(Addressed, BusCapability):
+class MessageInput(Timestamped, Addressed, BusCapability):
     """The facts an input is keyed and written from: who, where, what text, which role.
 
     Attachments, reports and answers belong to Message; this is never a whole message
@@ -1106,6 +1107,11 @@ class Message(MessageInput, TurnOrigin):
         kind = cast(builtins.type[MessageKind], plan.value.decode(plan.raw(data)))
         # The field decoder has already required a record; do not validate/copy it again.
         return kind.decode_message({"ts": 0.0, **cast(Mapping[str, object], data)})
+
+    def awaits_answer_from(self, recipient: ThreadTarget) -> bool:
+        """The original message owns whether this named recipient owes its sender an answer."""
+        return (self.sender == recipient.name or self.target == recipient.name
+                or bool(self.response_eligibility((recipient.name,)).required_responders))
 
     def response_eligibility(
         self, audience: Sequence[str], *, aliases: Mapping[str, str] = NO_ALIASES

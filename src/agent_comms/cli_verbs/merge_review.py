@@ -23,8 +23,8 @@ class ReviewedMerge:
     """The CLI and resident hook share exact-head authorization, not a subprocess protocol."""
 
     def require_actor(self, snapshot: RegistrySnapshot, actor: RecordedThreadIncarnation) -> None:
-        if not any(actor == commander.incarnation
-                   for commander in snapshot.commander_project.commanders(snapshot)):
+        if not snapshot.commander_project.by_role(
+                snapshot.born(actor.lookup), commander=True, commanded=False):
             raise ToolRefusedError(
                 "Only a bound commander session may use a reviewed merge bypass.")
 
@@ -36,7 +36,8 @@ class ReviewedMerge:
         for bypass in bypasses:
             target = bypass.target()
             request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-            StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(request)
+            StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(
+                request, snapshot.commander_project.require().repos)
             heads.append(request)
         return MergeReviewResult(tuple(heads))
 

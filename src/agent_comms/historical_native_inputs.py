@@ -35,7 +35,7 @@ from .native_input_record import (
     NativeInputReference,
     TriageNativeExecution,
 )
-from .native_pi import NativeContextProof
+from .native_input_proof import NativeContextProof
 from .native_prompt_binding import expected_prompt_bindings, expected_prompt_matches_journal
 from .native_runtime_input import NativeRuntimeInput
 from .selected_triage import SelectedTriage
@@ -200,8 +200,8 @@ def read_historical_native_inputs(
                 # Journal alone cannot promote an unrecorded or uncertain input.
                 # The immutable SQL row is already present from the live event;
                 # this check only corroborates its message-bearing context facts.
-                corroborated = recorded.corroborates_input(
-                    row.input_id, evidence=source_reads.for_source(session_file),
+                corroborated = source_reads.for_source(session_file).corroborates_context(
+                    recorded, input_id=row.input_id,
                     files=NativeSessionFiles.for_identity(original_session, root=store.session.path.parent,
                                              owner=row.owner_identity),
                 )

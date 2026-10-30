@@ -1,4 +1,5 @@
 import os
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,11 @@ def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity
         )
 
 
-def manifest(core="core", toad="toad", wheel="old-wheel"):
+TOAD_COMMIT = "a" * 40
+TEXTUAL_COMMIT = "b" * 40
+
+
+def manifest(core="core", toad=TOAD_COMMIT, wheel="old-wheel"):
     return RuntimeResolution.model_validate(
         {
             "core_commit": core,
@@ -35,7 +40,7 @@ def manifest(core="core", toad="toad", wheel="old-wheel"):
                     "version": "3",
                     "source": {
                         "url": "https://example/textual",
-                        "vcs_info": {"commit_id": "textual"},
+                        "vcs_info": {"commit_id": TEXTUAL_COMMIT},
                     },
                 },
                 "rich": {"version": "4", "source": None},
@@ -62,12 +67,12 @@ def lock():
                 {
                     "name": "batrachian-toad",
                     "version": "2",
-                    "source": {"git": "https://example/toad#toad"},
+                    "source": {"git": f"https://example/toad#{TOAD_COMMIT}"},
                 },
                 {
                     "name": "textual",
                     "version": "3",
-                    "source": {"git": "https://example/textual#textual"},
+                    "source": {"git": f"https://example/textual#{TEXTUAL_COMMIT}"},
                 },
                 {"name": "rich", "version": "4", "source": {"registry": "https://pypi.org/simple"}},
                 # The universal lock contains entries not selected by this synced environment.
@@ -88,7 +93,7 @@ def test_recorded_sources_match_selected_lock_not_wheel_locations():
     assert built.pins() == pins
     assert manifest(wheel="another-wheel").pins() == pins
     assert manifest(core="changed").pins() != pins
-    assert manifest(toad="changed").pins() != pins
+    assert manifest(toad="d" * 40).pins() != pins
     assert lock().pins({**selected, "unselected": "5"}, "core") != built.pins()
 
 
@@ -110,7 +115,8 @@ def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_bran
     tracked = lock.tracked()
     assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
     assert "objectstate" not in tracked
-    toad = next(entry for entry in lock.package if entry.name == "batrachian-toad")
-    toad.source.git = toad.source.git.replace("branch=main", "branch=work/unit-toad--P694")
+    document = tomllib.loads(path.read_text())
+    toad = next(entry for entry in document["package"] if entry["name"] == "batrachian-toad")
+    toad["source"]["git"] = toad["source"]["git"].replace("branch=main", "branch=work/unit-toad--P694")
     with pytest.raises(ValueError, match="batrachian-toad"):
-        lock.tracked()
+        ResolvedLock.model_validate(document).tracked()

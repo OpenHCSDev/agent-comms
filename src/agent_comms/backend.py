@@ -29,17 +29,18 @@ from collections.abc import (
     Sequence,
 )
 from contextlib import AsyncExitStack, aclosing, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
-from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.pi_payloads import RequestId
 from metaclass_registry.mro_dispatch import (
     MroDispatch,
     handles,
 )
+
+from agent_comms.participant_identity import ParticipantIdentity
+from agent_comms.pi_payloads import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -49,19 +50,24 @@ from .acp_failure import UnrecordedFailureSource
 from .agent_backend import NO_INPUT_START_LISTENER, InputStartListener
 from .turn_inbox import TurnInbox, TurnInboxItem
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
 from .field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
+from .native_entries import NativeEvidenceScope
 from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextProof, NativeInputCommit
 from .native_package import VerifiedNativePackage
-from .native_pi import NativePiRpcLaunch
-from .native_session_reopen import SessionRetention
+from .native_pi import NativePiRpcLaunch, read_tracked_input_commitment
+from .native_session_files import NativeSessionFiles
+from .native_session_reopen import PiSessionId, SessionRetention
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .native_tool_call import NativeToolMode
 from .native_tool_transport import ToolTransport, UnboundToolTransport
 from .pi_rpc import PiRpcChannel
+from .private_sidecar import native_request_digest
 from .prompt_state import PromptState, QueuedOperation, UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
 from .send_outcome import NO_SEND_BOUNDARY, SendBoundary
@@ -122,6 +128,7 @@ async def stream_agent_events(
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     send_boundary: SendBoundary = NO_SEND_BOUNDARY,
     *,
+    cursor_delivery: CursorDelivery,
     input_start: InputStartListener,
     persistent_session: PersistentPiSession,
     package: VerifiedNativePackage,
@@ -159,13 +166,17 @@ async def stream_agent_events(
             yield events.Error(text=str(error), reason_code=failures.NativeLaunchInvalid.declared_name)
             yield events.Done(ok=False, failure=failures.NativeLaunchInvalid(str(error)), text=str(error))
             return
-        async with launch.session.files(root).accept_input():
-            async with aclosing(
+        async with (
+            launch.session.files(root).accept_input(),
+            aclosing(
                 TurnSession(
                     launch,
-                    partial(commands.Prompt,
+                    partial(
+                        commands.Prompt,
                         id=RequestId(PiRequestKey.fresh()),
-                        input_id=InputId.mint(), message=task, images=tuple(images),
+                        input_id=InputId.mint(),
+                        message=task,
+                        images=tuple(images),
                         context_contributions=context_contributions,
                     ),
                     tool_mode=tool_mode,
@@ -175,14 +186,16 @@ async def stream_agent_events(
                     rpc_abort_grace=rpc_abort_grace,
                     send_boundary=send_boundary,
                     input_start=input_start,
+                    cursor_delivery=cursor_delivery,
                     native_session=persistent_session,
                     ui_request=ui_request,
                     request_observer=request_observer,
                     startup=NativeStartup.for_launch(launch),
                 ).run()
-            ) as stream:
-                async for event in stream:
-                    yield event
+            ) as stream,
+        ):
+            async for event in stream:
+                yield event
 
 
 class FinishSignal(ABC):
@@ -438,7 +451,7 @@ class NativeSession(MroDispatch, ABC):
         self.startup.native_process = native.proc.identity
         return native
 
-    async def run(self) -> AsyncGenerator[events.AgentEvent, None]:
+    async def run(self) -> AsyncGenerator[events.AgentEvent]:
         self.loop = asyncio.get_running_loop()
         self.owner = asyncio.current_task()
         async with AsyncExitStack() as resources:
@@ -597,6 +610,98 @@ class NativeSession(MroDispatch, ABC):
         yield from self.output.done(self, self.error_text)
 
 
+T = TypeVar("T")
+
+
+class NativeCommitObservation(ABC, Generic[T]):
+    """Observed native input records, without permission to start or replay input."""
+
+    @abstractmethod
+    def require(self) -> T: ...
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        raise NativePiUnavailable("Native Pi repeated the input commitment")
+
+
+class PendingNativeCommit(NativeCommitObservation[T]):
+    def require(self) -> T:
+        raise NativePiUnavailable("Native Pi did not commit a tracked model context")
+
+    def capture(self, event: T) -> NativeCommitObservation[T]:
+        return ObservedNativeCommit(event)
+
+
+@dataclass(frozen=True)
+class ObservedNativeCommit(NativeCommitObservation[T]):
+    event: T
+
+    def require(self) -> T:
+        return self.event
+
+
+@dataclass
+class TrackedInputContext:
+    """One actually sent command owns its emitted join, bounded by this run's scope."""
+
+    command: commands.Prompt
+    input_commit: NativeCommitObservation[pi.InputCommitted] = field(
+        default_factory=PendingNativeCommit
+    )
+    context_commit: NativeCommitObservation[pi.ContextCommitted] = field(
+        default_factory=PendingNativeCommit
+    )
+
+    async def committed_input(self, turn: TurnSession, event: pi.InputCommitted) -> None:
+        self.input_commit = self.input_commit.capture(event)
+        async with turn.cursor_delivery.reading() as source_reads:
+            await Coordination.run_worker(
+                lambda: source_reads.for_source(
+                    turn.launch.session.files(turn.launch.root).session
+                ).observe(event)
+            )
+        await self.command.input_committed(turn, event)
+
+    def proof(
+        self,
+        files: NativeSessionFiles,
+        session_id: PiSessionId,
+        source_reads: NativeEvidenceScope,
+    ) -> NativeContextProof:
+        evidence = source_reads.for_source(files.session)
+        proof = evidence.verify_context(
+            files,
+            self.input_commit.require(),
+            self.context_commit.require().record_for(self.command.input_id, session_id),
+        )
+        committed = read_tracked_input_commitment(
+            proof.session_file,
+            self.command.input_id,
+            evidence=evidence,
+        )
+        if not committed.matches(
+            native_request_digest(
+                self.command.message,
+                streaming_behavior=self.command.streaming_behavior,
+                images=self.command.images,
+            )
+        ):
+            raise NativePiUnavailable("Native context differs from its actual scoped input request")
+        return proof
+
+    async def committed_context(self, turn: TurnSession, event: pi.ContextCommitted) -> None:
+        self.context_commit = ObservedNativeCommit(event)
+        async with turn.cursor_delivery.reading() as source_reads:
+            proof = await Coordination.run_worker(
+                partial(
+                    self.proof,
+                    turn.launch.session.files(turn.launch.root),
+                    turn.native.attestation.require_identity().session_id,
+                    source_reads,
+                )
+            )
+            await self.command.context_committed(turn, proof, source_reads)
+
+
 class TurnSession(NativeSession):
     """A native input adds its declared tools and constructs its connected command."""
 
@@ -607,22 +712,69 @@ class TurnSession(NativeSession):
         self.record_retry(event.outcome.result(event.attempt, self.output.redact))
         return updates
 
-    def __init__(self, launch, make_command: Callable[..., commands.Prompt], *,
-                 tool_mode: NativeToolMode, **options):
+    def __init__(
+        self,
+        launch,
+        make_command: Callable[..., commands.Prompt],
+        *,
+        tool_mode: NativeToolMode,
+        cursor_delivery: CursorDelivery,
+        **options,
+    ):
         super().__init__(launch, **options)
         self.tool_mode = tool_mode
         self.make_command = make_command
+        self.cursor_delivery = cursor_delivery
+        self.contexts: dict[InputId, TrackedInputContext] = {}
 
     async def open_transport(self, resources: AsyncExitStack) -> UnboundToolTransport:
+        resources.callback(self.contexts.clear)
         unbound = await self.tool_mode.open_transport(self, resources)
         self.command = self.make_command(owner_tools=unbound.listener.connection)
         del self.make_command
+        self.contexts[self.command.input_id] = TrackedInputContext(self.command)
         self.output.sensitive = bool(self.command.images)
         return unbound
 
-    async def context_proof(self):
+    def following_started(self, command: commands.FollowingPrompt) -> None:
+        if command.input_id in self.contexts:
+            raise NativePiUnavailable(
+                "A tracked following input reused an in-scope native identity"
+            )
+        self.contexts[command.input_id] = TrackedInputContext(command)
+
+    async def original_committed(self, event: NativeInputCommit) -> None:
+        """An ordinary original already started through its matched MessageStart."""
+
+    async def original_context_committed(
+        self,
+        context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
+        await self.input_start.original_context_committed(self.command.message, context)
+
+    @handles(pi.InputCommitted)
+    async def committed_input(self, event: pi.InputCommitted) -> None:
+        if context := self.contexts.get(event.input_id):
+            await context.committed_input(self, event)
+
+    @handles(pi.ContextCommitted)
+    async def committed_context(self, event: pi.ContextCommitted) -> None:
+        if context := self.contexts.get(event.input_id):
+            await context.committed_context(self, event)
+
+    async def context_proof(self) -> NativeContextProof:
         if not self.started_input or not self.accepts_output:
             raise SelectedToolDenied("Native tool has no started input")
+        async with self.cursor_delivery.reading() as source_reads:
+            return await Coordination.run_worker(
+                partial(
+                    self.contexts[self.command.input_id].proof,
+                    self.launch.session.files(self.launch.root),
+                    self.native.attestation.require_identity().session_id,
+                    source_reads,
+                )
+            )
 
     @handles(pi.ToolExecutionStart)
     async def tool_started(self, event):

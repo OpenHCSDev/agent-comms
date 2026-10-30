@@ -4,7 +4,7 @@ import json
 import sys
 from pathlib import Path
 
-from agent_comms.native_pi import NativeContextJournal
+from agent_comms.native_input_proof import NativeContextJournal
 
 
 def main() -> None:

@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from agent_comms.cli_bridges.claude_transcript import RunningClaude
+from agent_comms.cli_bridges.monitor import InspectSession
 from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.cli_bridges.hook_requests import PrimeRequest
@@ -53,10 +53,11 @@ def main() -> None:
     session = SessionEndpoint.environment_session()
     endpoint = SessionEndpoint(session)
     endpoint.session().require_bound()
+    information = InspectSession().information(endpoint.socket_path)
     request = PrimeRequest(prime=arguments.variant, payload={
         "session_id": session,
         "hook_event_name": "Prime",
-        "transcript_path": str(RunningClaude(session).source),
+        "transcript_path": str(information.transcript),
     })
     request.exchange(endpoint.socket_path).print(PrimeRequest)
 

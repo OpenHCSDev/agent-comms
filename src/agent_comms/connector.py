@@ -61,6 +61,7 @@ from .errors import (
     UnregisteredThreadError,
 )
 from .coordination_errors import CoordinationError, Refused
+from .work_branches import WorkBranchError
 from .field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     RecordMember, boundary_decoder, projected,
@@ -466,7 +467,10 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         try:
             reply = await connector.call(tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
-        except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
+        except (
+            ToolRefusedError, RelationViolationError, CoordinationError, WorkBranchError,
+            MalformedRecord, Refused, ConnectionError, TimeoutError,
+        ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
 

@@ -207,8 +207,10 @@ class StopHook(ClaudeTranscriptHook):
         """A stop this hook already sent back is let through, so it never loops."""
         if self.stop_hook_active:
             return
-        selected = self.comms.registry.snapshot().commander_project.by_role(
-            self.binding.recipient(self.comms), commander=self.judge_reply, commanded=lambda: None)
+        snapshot = self.comms.registry.snapshot()
+        selected = snapshot.commander_project.by_role(
+            snapshot.born(self.binding.owner.require_recorded().lookup),
+            commander=self.judge_reply, commanded=lambda: None)
         selected()
 
     def judge_reply(self) -> None:

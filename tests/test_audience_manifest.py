@@ -4,12 +4,8 @@ from dataclasses import FrozenInstanceError, replace
 
 import pytest
 
-from agent_comms.audience_manifest import (
-    MAX_RECIPIENTS,
-    MAX_WIRE_ENVELOPE_BYTES,
-    FrozenRecipient,
-    freeze_audience,
-)
+from agent_comms.audience_manifest import MAX_RECIPIENTS, MAX_WIRE_ENVELOPE_BYTES, freeze_audience
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import AlertKind, InfoKind, Message
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole

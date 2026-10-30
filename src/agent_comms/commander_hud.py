@@ -182,7 +182,7 @@ class CommanderOrderDetail(DisclosedRecord):
 
 
 @dataclass(frozen=True)
-class CommanderUnitDetail(DisclosedRecord):
+class CommanderUnitDetail(ToolResult, DisclosedRecord):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: Annotated[CommanderUnit, DisclosureIdentity()]
@@ -416,7 +416,7 @@ class CommanderHud(CommanderLoad):
                    colour: bool = False) -> tuple[str, ...]:
         return tuple(line for section in sections for line in (
             section.group.paint(section.heading(), colour),
-            *(line for table in section.tables(now) for line in table.labelled_lines()),
+            *section.text_lines(now),
         ))
 
     @staticmethod
@@ -434,7 +434,7 @@ class CommanderHud(CommanderLoad):
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.lines() for table in section.tables))
+                table.plain_lines() for table in section.tables))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)

@@ -358,7 +358,7 @@ class DeckStart(DealtDeck):
         """The supplied resident binding selects a reader at one registry cut."""
         snapshot = comms.registry.snapshot()
         reader = snapshot.commander_project.by_role(
-            snapshot.born(binding.owner.require_recorded().lookup).incarnation,
+            snapshot.born(binding.owner.require_recorded().lookup),
             commander=CommanderReader(), commanded=FleetReader())
         return self.taken(reader, number, comms, snapshot)
 
@@ -370,7 +370,7 @@ class DeckStart(DealtDeck):
         """The owner-selected variant, dealt through the same admitted resident context."""
         snapshot = comms.registry.snapshot()
         reader = snapshot.commander_project.by_role(
-            snapshot.born(binding.owner.require_recorded().lookup).incarnation,
+            snapshot.born(binding.owner.require_recorded().lookup),
             commander=prime.commander(), commanded=prime.fleet())
         return self.dealt(reader, prime.trigger(), comms, snapshot)
 

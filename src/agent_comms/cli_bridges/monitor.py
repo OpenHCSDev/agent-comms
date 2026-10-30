@@ -15,7 +15,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, cast, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.harness_delivery_states import Outcome
@@ -26,6 +26,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from agent_comms_hooks.board import SessionBoard, SessionWire
+from agent_comms_hooks.watch import SessionFailure
 
 from .session_watch import (
     HeldClaim,
@@ -310,7 +311,7 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
 
     @classmethod
     def reply_type(cls) -> type[Reply]:
-        return cast(type[Reply], cls.declared_argument(SessionRequest))
+        return cls.declared_argument(SessionRequest)
 
     @classmethod
     def declared_argument(cls, family: type) -> type:
@@ -478,7 +479,10 @@ class MonitorService:
                 except (MalformedRecord, TimeoutError) as error:
                     reply = SessionRefused(error=str(error))
                 else:
-                    reply = await request.handle(self, peer)
+                    try:
+                        reply = await request.handle(self, peer)
+                    except SessionFailure as error:
+                        reply = SessionRefused(error=str(error))
                 await reply.publish(peer)
             finally:
                 await peer.close()

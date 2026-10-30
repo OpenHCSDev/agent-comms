@@ -29,7 +29,7 @@ from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
-from .tool_result import DeclaredReply
+from .tool_result import ToolResult
 from .typed_table import (
     Column,
     DurableTables,
@@ -169,7 +169,7 @@ class RegistryWriterObserver(JournalObserver):
 
 
 @dataclass(frozen=True)
-class RecordedGoalHistory(DeclaredReply):
+class RecordedGoalHistory(ToolResult):
     """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
 
     history: tuple[RecordedGoalRevision, ...]

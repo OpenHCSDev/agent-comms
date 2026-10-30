@@ -6,7 +6,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from agent_comms_hooks.watch import HookAnswer
+from agent_comms_hooks.watch import HookAnswer, SessionHookProgram, SkillText
 from pydantic import JsonValue
 
 from agent_comms_hooks import Bash, ClaudeHook, ClaudeHookProgram, ClaudeToolHook, HookOutput, ToolRefusedError
@@ -17,7 +17,6 @@ from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms_hooks.read_gate import ReadGateProgram
 from agent_comms_hooks.reread import ReminderProgram
 from agent_comms_hooks.session import SessionEnded
-from agent_comms_hooks.watch import SkillText
 
 from ..comms import Comms
 from .hook_deferral import StopHook
@@ -49,7 +48,7 @@ class HookReply(HookAnswer, SessionReply, declared_name=HookAnswer.request):
 
 
 @dataclass(frozen=True)
-class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgram, declared_name=None):
+class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], SessionHookProgram, declared_name=None):
     """The generic event declaration owns decoding; the request class owns its effect."""
 
     payload: dict[str, JsonValue]

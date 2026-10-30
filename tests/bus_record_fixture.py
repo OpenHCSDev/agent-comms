@@ -6,7 +6,8 @@ import os
 from multiprocessing.context import ForkServerContext
 from pathlib import Path
 
-from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+from agent_comms.audience_manifest import freeze_audience
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import PrivateRecord
 from agent_comms.bus_publication import Delivered, KeyedPublication
 from agent_comms.child_process import ProcessIdentity

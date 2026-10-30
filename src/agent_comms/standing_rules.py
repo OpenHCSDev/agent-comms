@@ -203,6 +203,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         FieldCodec.compile_comparison(cls)
     commander_disposes: ClassVar[bool] = True
     urgent: ClassVar[bool] = False
+    owner_flagged: ClassVar[bool] = False
 
     @classmethod
     def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
@@ -1239,6 +1240,8 @@ class LocatedHuntDue(HuntDue):
 @dataclass(frozen=True)
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
+
+    owner_flagged: ClassVar[bool] = True
 
     request: OwnerRequestId
     directive: RequestDirective

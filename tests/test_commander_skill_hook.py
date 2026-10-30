@@ -38,7 +38,7 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.slop import Slop
 from agent_comms.commander.spinning import SpinningUnit
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, ReviewTimerUp
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
@@ -46,7 +46,9 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
-from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard, UnexpectedBoardReply
+from agent_comms_hooks.board import (
+    AbsentSessionSocket, BoardEntry, BoardSummary, SessionBoard, UnexpectedBoardReply,
+)
 from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
@@ -303,6 +305,32 @@ def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_b
         assert not after
 
 
+def unchanged_summary(pings, now):
+    return BoardSummary(tuple(ping.board_entry() for ping in pings), now).line()
+
+
+def test_the_summary_leads_with_tristans_lines_and_never_parks_on_one_row():
+    """2026-10-30: min(since) printed metaclass-registry#11 on every tool call for 1180 min."""
+    stale = BoardEntry("stale", "UNORDERED metaclass-registry#11", 0.0, 0.0)
+    other = BoardEntry("other", "JUDGE #3751", 600.0, 600.0)
+    his = (BoardEntry("a", "ACT owner directive a", 1200.0, 1200.0, True),
+           BoardEntry("b", "ADVANCE request b", 1800.0, 1800.0, True))
+    board = (stale, other, *his)
+    at = 6000.0
+    minutes = tuple(BoardSummary(board, at + 60 * step).shown for step in range(4))
+    assert set(minutes) == set(his)
+    assert "4 unchanged, 2 from Tristan: " in BoardSummary(board, at).line()
+    assert {BoardSummary((stale, other), at + 60 * step).shown for step in range(2)} == {stale, other}
+
+
+def test_rules_carrying_his_words_flag_their_board_lines():
+    since = RecordedEventTime(1.0)
+    worker = UnitSubject(RecordedThreadIncarnation("worker", 1.0))
+    flagged = RulePing(DirectiveUnacted, TextDigest.of("d"), text="ACT", subjects=(worker,), since=since)
+    plain = RulePing(ReviewTimerUp, TextDigest.of("t"), text="Review", subjects=(worker,), since=since)
+    assert flagged.board_entry().owner_flagged and not plain.board_entry().owner_flagged
+
+
 def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
     """Real packets, bridge delivery journal and session socket; no hook-side state."""
     comms = notification_bus
@@ -332,23 +360,23 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             "BOARD: Review worker P2 (seen for 1 min)",
         )
         assert tool_call(hook, server, comms, db, began + 91) == (
-            "BOARD: 2 unchanged (oldest: Read worker P1, seen 1 min)",
+            unchanged_summary((first, second), began + 91),
         )
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
         CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, began + 92, hud)
         assert tool_call(hook, server, comms, db, began + 92) == (
             "BOARD: Read worker P1 (seen for 0 min)",
-            "BOARD: 1 unchanged (oldest: Review worker P2, seen 1 min)",
+            unchanged_summary((second,), began + 92),
         )
         # A fresh packet does not reset delivery, and the answer window rings only once.
         CommanderDecisions(lead, (changed, second), (), ()).send(comms, began + 93, hud)
         alarm = began + AwaitingCommander.seconds
         assert tool_call(hook, server, comms, db, alarm + 1) == (
             "BOARD: Review worker P2 (seen for 5 min)",
-            "BOARD: 1 unchanged (oldest: Read worker P1, seen 3 min)",
+            unchanged_summary((changed,), alarm + 1),
         )
         assert tool_call(hook, server, comms, db, alarm + 2) == (
-            "BOARD: 2 unchanged (oldest: Review worker P2, seen 5 min)",
+            unchanged_summary((changed, second), alarm + 2),
         )
         assert DeliveredBoardContent.count(db) == 2
         CommanderDecisions(lead, (), (), ()).send(comms, alarm + 3, hud)

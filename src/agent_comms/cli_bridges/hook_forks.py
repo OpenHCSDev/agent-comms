@@ -42,8 +42,10 @@ class SeatedSubagent(ClaudeSubagentHook, SubagentSeats):
         return self.seats / self.agent_id
 
     def enter(self, comms: Comms, binding: Binding, phase: TurnPhase) -> None:
-        selected = comms.registry.snapshot().commander_project.by_role(
-            binding.recipient(comms), commander=lambda: self.agent_id.fork, commanded=self.seat.read_text)
+        snapshot = comms.registry.snapshot()
+        selected = snapshot.commander_project.by_role(
+            snapshot.born(binding.owner.require_recorded().lookup),
+            commander=lambda: self.agent_id.fork, commanded=self.seat.read_text)
         comms.agents.enter_phase(selected(), phase)
 
 
@@ -54,10 +56,11 @@ class SubagentHook(SeatedSubagent):
     agent_type: str
 
     def register(self, comms: Comms, binding: Binding) -> None:
-        actor = binding.recipient(comms)
-        selected = comms.registry.snapshot().commander_project.by_role(
+        snapshot = comms.registry.snapshot()
+        actor = snapshot.born(binding.owner.require_recorded().lookup)
+        selected = snapshot.commander_project.by_role(
             actor, commander=self.join, commanded=self.claim)
-        selected(comms, actor)
+        selected(comms, actor.incarnation)
         self.enter(comms, binding, ModelWaitPhase())
 
     def join(self, comms: Comms, actor: ThreadIncarnation) -> None:
@@ -84,8 +87,10 @@ class SubagentStopHook(SubagentHook):
     stop_hook_active: bool
 
     def retire(self, comms: Comms, binding: Binding) -> None:
-        selected = comms.registry.snapshot().commander_project.by_role(
-            binding.recipient(comms), commander=self.retire_fork, commanded=self.leave)
+        snapshot = comms.registry.snapshot()
+        selected = snapshot.commander_project.by_role(
+            snapshot.born(binding.owner.require_recorded().lookup),
+            commander=self.retire_fork, commanded=self.leave)
         selected(comms)
 
     def leave(self, comms: Comms) -> None:
@@ -115,8 +120,10 @@ class SessionSubagents(SubagentSeats):
                      for path in sorted(directory.glob("agent-*.jsonl")))
 
     def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
-        selected = comms.registry.snapshot().commander_project.by_role(
-            binding.recipient(comms), commander=self.end_forks, commanded=self.vacate_seats)
+        snapshot = comms.registry.snapshot()
+        selected = snapshot.commander_project.by_role(
+            snapshot.born(binding.owner.require_recorded().lookup),
+            commander=self.end_forks, commanded=self.vacate_seats)
         return selected(comms)
 
     def vacate_seats(self, comms: Comms) -> tuple[str, ...]:
