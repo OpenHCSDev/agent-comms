@@ -1480,7 +1480,7 @@ class PresentCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = tuple(f"refs/heads/{branch}"
                       for branch, paths in self.branches.worktrees().items()
-                      if any(storage.owns_present_checkout(owner, checkout)
+                      if any(storage.owns_present_checkout(owner, checkout, self.reads)
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
@@ -1653,7 +1653,7 @@ class ProgressSource(PullRequestSource):
     def of(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> Self:
         owner = registry.require(todo.held().owner)
         storage = registry.storage_rule
-        owned = storage.checkout_paths(owner)
+        owned = storage.checkout_paths(owner, pulls)
         candidates = (todo.order.checked().check.directory, *owned)
         path = next(iter(Checkout.git_roots(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
@@ -4963,11 +4963,9 @@ class DroppedVerdict(GitSettledVerdict):
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
             self.refuse(str(target))
-        refs = Repo.git(checkout, "for-each-ref", "--format=%(objectname)",
-                        "refs/heads", "refs/remotes").splitlines()
-        heads = [entry.removeprefix("HEAD ")
-                 for entry in Repo.git(checkout, "worktree", "list", "--porcelain").splitlines()
-                 if entry.startswith("HEAD ")]
+        history = RepositoryReads().history_for(Checkout(checkout))
+        refs = tuple(reference.commit for reference in history.refs.values())
+        heads = tuple(sha for head in history.heads.values() for sha in head.required())
         patterns = [arg for line in lines for arg in ("-e", line)]
         found = Repo.grep(checkout, "-l", "-F", "--all-match", *patterns,
                                 *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")

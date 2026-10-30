@@ -169,7 +169,7 @@ class UnitObservation:
             for pull in self.frame.pulls.open_for(todo):
                 pull.require_comparison(reader)
         if self.todos:
-            for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
+            for path in self.comms.registry.storage_rule.checkout_paths(self.thread, self.frame.pulls):
                 self.frame.pulls.checkout(path).require_read()
         for source in self.sources:
             source.checkout.require_read()

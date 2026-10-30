@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, RepositoryReads
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName
@@ -45,11 +45,11 @@ def test_goal_checkout_uses_origin_default_and_retires(
     assert repository.git(path, "rev-parse", "HEAD").strip() == repository.git(
         repository.checkout, "rev-parse", "origin/master",
     ).strip()
-    assert path in rule.checkout_paths(comms.registry.require(worker.name))
+    assert path in rule.checkout_paths(comms.registry.require(worker.name), RepositoryReads())
     assert path in rule.checkouts_of(comms.registry.require(worker.name))
     prepared = core_process(*command, "add", str(repository.checkout))
     assert prepared.returncode == 0, prepared.stdout + prepared.stderr
     retired = core_process(*command, "remove", str(repository.checkout))
     assert retired.returncode == 0, retired.stdout + retired.stderr
     assert not path.exists()
-    assert path not in rule.checkout_paths(comms.registry.require(worker.name))
+    assert path not in rule.checkout_paths(comms.registry.require(worker.name), RepositoryReads())
