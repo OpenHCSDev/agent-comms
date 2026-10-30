@@ -1,8 +1,8 @@
-"""agent-comms as the refactor-audit's measured project: its facts, each derived from the
+"""agent-comms as NominalRefactorAdvisor's measured project: its facts, each derived from the
 declaration that owns it here, and the one measure only it has, the type check of its stack
 clients.
 
-The debt ratchet's entry (debt_ratchet.py) measures an AgentCommsProject of its checkout; the
+The NRA gate's entry (nra_gate.py) measures an AgentCommsProject of its checkout; NRA's
 audit package itself never imports agent-comms."""
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from subprocess import CompletedProcess
 
 import stored_formats
 from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClient
+from nominal_refactor_advisor import audit
 
 import agent_comms
 from agent_comms import (
@@ -47,27 +48,12 @@ from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.phase_evidence import MainTree, PlanReading
-from agent_comms.pinned_audit import SKILL, audit
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent
 READER = Path(inspect.getfile(stored_formats)).relative_to(REPOSITORY)
-AUDIT = SKILL.relative_to(REPOSITORY)
-
-
-class PinnedAudit(audit.repository.Repository):
-    """This checkout's clone of the audit submodule, which every agent-comms revision pins by
-    commit. git archive leaves a submodule out of a revision's tree, so a revision run from an
-    archive would import this checkout's audit instead of the one it pinned."""
-
-    def place(self, pin: str, into: Path) -> None:
-        """The audit at the pin, fetched into this clone first when the clone lacks it."""
-        if not self.has(pin):
-            self._run("fetch", "--quiet", "origin", pin)
-        into.mkdir(parents=True, exist_ok=True)
-        self.extract(pin, into)
 
 
 class StoredFormatReader(ABC):
@@ -82,16 +68,15 @@ class StoredFormatReader(ABC):
 class RevisionReader(StoredFormatReader):
     """agent-comms measuring itself: each revision runs its own reader, because a head's
     reader may import modules only that head declares (#3576 moved field_codec under
-    nominal), beside the audit that revision pinned, which its modules import through
-    pinned_audit. A revision without a reader fails loud."""
+    nominal). The audit it imports is the installed NominalRefactorAdvisor's. A revision
+    without a reader fails loud."""
 
     def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
         project.extract(ref, tree, str(READER))
-        PinnedAudit(REPOSITORY / AUDIT).place(project.identity(ref, str(AUDIT)), tree / AUDIT)
 
 
 class CheckoutReader(StoredFormatReader):
-    """A client repository such as Toad ships no reader; the ratchet checkout's own reads its
+    """A client repository such as Toad ships no reader; the gate checkout's own reads its
     modules, importing agent_comms from that checkout."""
 
     def place(self, project: AgentCommsProject, ref: str, tree: Path) -> None:
@@ -134,7 +119,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     directory on the path would resolve the revision's bare imports into this one's tree."""
 
     def cache_directory(self) -> Path:
-        return Path.home() / ".cache/agent-comms/debt-ratchet"
+        return Path.home() / ".cache/agent-comms/nra-gate"
 
     def source_roots(self) -> tuple[Path, ...]:
         return (Path(inspect.getfile(stored_formats)).parent, SOURCES)
@@ -176,11 +161,11 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             package = package.parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed)]
-        with tempfile.TemporaryDirectory(prefix="ratchet-formats-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="gate-formats-") as scratch:
             tree = Path(scratch)
             self.extract(ref, tree, str(package))
             self.reader.place(self, ref, tree)
-            sources = audit.ratchet.Compared.source_paths(root, tree)
+            sources = audit.gate.Compared.source_paths(root, tree)
             for stamp in tree.rglob("package_stamp.py"):
                 WheelStamp.of_source(tree / package, self.revision(ref),
                                      source_paths=sources).write(stamp)
@@ -188,7 +173,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             result = SpawnedProcess.run(
                 (sys.executable, "-c", self.probe, str(tree / READER),
                  os.pathsep.join(paths), *modules), cwd=scratch,
-                env=audit.ratchet.Compared.environment(root, tree), timeout=300,
+                env=audit.gate.Compared.environment(root, tree), timeout=300,
             )
         if result.returncode:
             raise ValueError(f"stored formats could not be read at {ref}: {result.stderr.decode()}")
@@ -242,7 +227,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
 
 
 @dataclass(frozen=True)
-class ClientFileCount(audit.ratchet.FileCount):
+class ClientFileCount(audit.gate.FileCount):
     """Type errors in one stack client file, which the client's own code cannot add: both sides
     check the same client commit."""
 
@@ -260,7 +245,7 @@ class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
 
     @staticmethod
     def cut(repo: AgentCommsProject, base: str, head: str,
-            side: type[audit.ratchet.Side]) -> tuple[StackClient, ...]:
+            side: type[audit.gate.Side]) -> tuple[StackClient, ...]:
         """The clients of the materialized cut that this compared side measures, selected by
         the side each cut declares, so equal base and head revisions still keep two cuts."""
         return tuple(repo.clients.at(repo.path, base, head, CutSide.materializing(side)))
@@ -273,13 +258,13 @@ class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
     @classmethod
     def findings(
         cls, repo: audit.project.Project, ref: str, client: StackClient,
-        side: type[audit.ratchet.Side],
-    ) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
+        side: type[audit.gate.Side],
+    ) -> tuple[type[audit.gate.Side], tuple[audit.checkers.CheckerSite, ...]]:
         """Mypy resolves the client's other imports from the installed environment, which no
         content key names, so each comparison checks afresh under mypy's own cache."""
         selected = cls.selected(client)
         cache = repo.beside("mypy-clients") / client.name / side.family_name
-        with tempfile.TemporaryDirectory(prefix="ratchet-client-") as scratch:
+        with tempfile.TemporaryDirectory(prefix="gate-client-") as scratch:
             repo.extract(ref, Path(scratch), "src")
             # The client checks under its own configuration, from its checkout.
             result = SpawnedProcess.run(
@@ -303,16 +288,16 @@ class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
                 or any(path.startswith(f"src/{PACKAGE}/") for path in changed)):
             return ()
         return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
-                     for side in audit.ratchet.Side.sides()
+                     for side in audit.gate.Side.sides()
                      for client in cls.cut(repo, base, head, side)
                      if cls.selected(client))
 
     @classmethod
     def measured(
-        cls, found: dict[type[audit.ratchet.Side], Counter[str]], changed: set[str]
+        cls, found: dict[type[audit.gate.Side], Counter[str]], changed: set[str]
     ) -> list[str]:
         """The client files with an error on either side; changed paths are the package's."""
-        return sorted(found[audit.ratchet.BaseSide].keys() | found[audit.ratchet.HeadSide].keys())
+        return sorted(found[audit.gate.BaseSide].keys() | found[audit.gate.HeadSide].keys())
 
     @classmethod
     def at(cls, path: str) -> ClientFileCount:

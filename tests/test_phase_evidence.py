@@ -30,7 +30,7 @@ from agent_comms.phase_evidence import (
     RulesetGates,
     UnreadableEvidenceError,
 )
-from agent_comms.pinned_audit import GodFunction
+from nominal_refactor_advisor.audit.findings import GodFunction
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName

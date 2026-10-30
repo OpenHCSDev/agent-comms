@@ -25,10 +25,10 @@ from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import MergeHeadReview
-from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
-import agent_comms
-from agent_comms import skills
-from agent_comms.pinned_audit import SKILL, audit
+from nominal_refactor_advisor import audit
+from nominal_refactor_advisor.ast_tools import ParsedModule
+from nominal_refactor_advisor.audit.findings import GodFunction
+from nominal_refactor_advisor.audit.source_measures import ForeignAbsenceProbe
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import GitCommandError, Repo
 
@@ -103,16 +103,9 @@ class MainTree:
             )
         )
 
-    def pinned(self, path: str) -> MainTree:
-        """The tree of the submodule this commit pins at ``path``: another repository's tree,
-        read at exactly the commit its gitlink names, from that repository's own objects."""
-        commit = Repo.git(self.repo.checkout, "rev-parse", f"{self.commit}:{path}").strip()
-        return MainTree(Repo.of(self.repo.checkout / path), commit)
-
     def module(self, path: str) -> ParsedModule:
-        blob, = Repo.blobs(self.repo.checkout, f"{self.commit}:{path}")
-        source = blob.decode()
-        return ParsedModule(path, source, ast.parse(source, filename=path), path)
+        module, = self.modules((path,))
+        return module
 
     def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
@@ -133,8 +126,9 @@ class MainTree:
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
         for (blob, name), content in zip(fresh, contents, strict=True):
             source = content.decode()
-            self.parsed[name] = blob, ParsedModule(name, source,
-                                                   ast.parse(source, filename=name), name)
+            self.parsed[name] = blob, ParsedModule(
+                path=Path(name), module_name=name,
+                module=ast.parse(source, filename=name), source=source)
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
@@ -423,23 +417,17 @@ class PatternPresent(PatternEvidence):
 
 @dataclass(frozen=True)
 class AuditPatternPresent(PatternPresent):
-    """A pattern in the audit package of the refactor-audit main pins, at the commit it pins:
-    code this repository runs from that repository. Where the submodule sits and where its
-    package sits inside it are pinned_audit's, read from the loaded skill."""
+    """A pattern in the audit package of the installed NominalRefactorAdvisor: code this
+    repository runs from that repository, which main's lock pins by commit."""
 
     def read(self, main: MainTree) -> bool:
-        # The skills package's place under the source root, read from the loaded package.
-        installed = Path(skills.__path__[0]).relative_to(Path(agent_comms.__path__[0]).parent)
-        submodule = Path(main.repo.source, installed, SKILL.name)
-        package = Path(audit.__path__[0]).relative_to(SKILL)
-        if not main.has(submodule.as_posix()):
-            # A commit that pins no audit holds none of its patterns.
-            return self.satisfied(0)
-        pinned = main.pinned(submodule.as_posix())
-        return self.satisfied(pinned.count(self.pattern, (package.as_posix(),)))
+        package = Path(audit.__path__[0])
+        found = re.compile(self.pattern, re.MULTILINE)
+        return self.satisfied(sum(len(found.findall(module.read_text(encoding="utf-8")))
+                                  for module in package.rglob("*.py")))
 
     def describe(self) -> str:
-        return f"{self.pattern!r} in the audit package of the refactor-audit main pins"
+        return f"{self.pattern!r} in the installed NominalRefactorAdvisor audit package"
 
 
 @dataclass(frozen=True)
@@ -462,7 +450,7 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
     def read(self, main: MainTree) -> bool:
         scan = type(self)()
         for module in main.modules(("src",)):
-            scan.visit(module.tree)
+            scan.visit(module.module)
         return not scan.found
 
     def describe(self) -> str:
@@ -690,7 +678,7 @@ class NoExactCopies(MainEvidence):
         shapes = [
             ErasedBody.of(function)
             for module in main.present_modules(self.paths)
-            for function in NamedFunctions.of(self.names, module.tree)
+            for function in NamedFunctions.of(self.names, module.module)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -709,7 +697,7 @@ class NoGodFunction(MainEvidence):
         return not any(
             found
             for module in main.present_modules((self.path,))
-            for function in NamedFunctions.of((self.name,), module.tree)
+            for function in NamedFunctions.of((self.name,), module.module)
             for found in GodFunction.from_node(function, module)
         )
 
@@ -729,7 +717,7 @@ class NoAbsenceProbes(MainEvidence):
         return not any(
             ForeignAbsenceProbe.occurrences(node)
             for module in main.present_modules(self.paths)
-            for node in ast.walk(module.tree)
+            for node in ast.walk(module.module)
         )
 
     def describe(self) -> str:
@@ -759,7 +747,7 @@ class ClassFlagsAbsent(MainEvidence):
             statements = (
                 (path, statement.lineno)
                 for path in {path for path, _ in matched}
-                for declared in Classes.of((main.module(path).tree,))
+                for declared in Classes.of((main.module(path).module,))
                 for statement in declared.body
             )
         return not any(statement in matched for statement in statements)
@@ -938,8 +926,8 @@ class OwnClassChecksAbsent(MainEvidence):
     def checks(main: MainTree) -> ClassChecks:
         checks = ClassChecks()
         for module in main.modules(("src",)):
-            checks.path = module.path
-            checks.visit(module.tree)
+            checks.path = module.file_path
+            checks.visit(module.module)
         return checks
 
     def describe(self) -> str:
@@ -960,13 +948,13 @@ class ParentsShared(MainEvidence):
             *(
                 declared.name
                 for declared in Classes.of(
-                    module.tree for module in main.present_modules(self.paths)
+                    module.module for module in main.present_modules(self.paths)
                 )
             ),
         }
         members = Counter(
             base
-            for member in Classes.of(module.tree for module in main.modules(("src",)))
+            for member in Classes.of(module.module for module in main.modules(("src",)))
             for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
@@ -1135,10 +1123,10 @@ class DeclaredScopes:
         self.modules: dict[QualifiedName, ModuleBindings] = {}
         self.module_of: dict[str, QualifiedName] = {}
         for module in main.modules(paths):
-            name, package = self.dotted(module.path, paths)
-            bindings = self.modules[name] = ModuleBindings(self, module.path, name, package)
-            bindings.visit(module.tree)
-            self.module_of[module.path] = name
+            name, package = self.dotted(module.file_path, paths)
+            bindings = self.modules[name] = ModuleBindings(self, module.file_path, name, package)
+            bindings.visit(module.module)
+            self.module_of[module.file_path] = name
 
     @staticmethod
     def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:

@@ -30,7 +30,7 @@ from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
-from agent_comms.pinned_audit import audit
+from nominal_refactor_advisor import audit
 from module_layers import MaterializedClients, Package
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
@@ -389,7 +389,7 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
         assert entry.returncode == 0, entry.stdout + entry.stderr
     # Both namespace files are selected under --explicit-package-bases: a duplicate
     # performance/tools.performance identity aborts the real checker, not a zero count.
-    result = audit.ratchet.compare(project, source.baseline.commit, head, "src", 1,
+    result = audit.gate.compare(project, source.baseline.commit, head, "src", 1,
                                    (ClientTypeErrors,))
     assert not result.failed
     assert all(value == 0 for value in result.delta.values())

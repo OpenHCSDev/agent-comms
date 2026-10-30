@@ -2072,7 +2072,7 @@ class FairText(DirectiveWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID, "
+    refusal = ("{1} faults inheritance itself. Cite an NRA pattern ID, "
                "name the restated fact and the declaration that derives it.")
 
 
@@ -2650,7 +2650,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         if any((check.directory / reference.file).resolve().is_relative_to(
                    check.directory / 'tools/') for reference in references) and not all(
                 said in body for said in ('--root tools', '--root src')):
-            problems.append('the order changes tools/: say "ratchet with --root tools and with '
+            problems.append('the order changes tools/: say "NRA gate with --root tools and with '
                             '--root src, each as its own command"')
         return problems
 

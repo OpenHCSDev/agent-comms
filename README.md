@@ -81,23 +81,18 @@ Git. Source distributions retain that stamp, and Git archives use their export
 stamp. Rebuild after changing the checked-out commit to refresh the build identity.
 
 ```bash
-git clone --recurse-submodules https://github.com/OpenHCSDev/agent-comms.git
+git clone https://github.com/OpenHCSDev/agent-comms.git
 cd agent-comms
-pip install -e src/agent_comms/skills/refactor-audit -e ".[dev]"
+pip install -e ".[dev]"
 python -m pytest
 black src tests
 ruff check src tests
 mypy src
 ```
 
-The refactor-audit skill is pinned as a Git submodule under
-`src/agent_comms/skills/`. For an existing checkout, run
-`git submodule update --init --recursive` before installing or building.
-`agent-comms install` discovers every skill in that directory and links it into
-each detected harness; refactor-audit needs no separate install path or copy.
-Skill edits belong in [OpenHCSDev/refactor-audit](https://github.com/OpenHCSDev/refactor-audit),
-then the submodule pin is advanced here. The development install above also
-uses that same checkout for the shared audit measures.
+Slop measurement, the base/head gate and the pattern catalog come from the
+`nominal-refactor-advisor` dependency (`nominal_refactor_advisor.audit`); edits belong in
+[OpenHCSDev/NominalRefactorAdvisor](https://github.com/OpenHCSDev/NominalRefactorAdvisor).
 
 Tests that launch native Pi must run inside the checkout's built runtime, not
 against an editable source package. With uv on PATH and Node/npm available, run:

@@ -51,7 +51,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
-from agent_comms.pinned_audit import audit
+from nominal_refactor_advisor import audit
 
 from agent_comms.declared_family import DeclaredFamily
 

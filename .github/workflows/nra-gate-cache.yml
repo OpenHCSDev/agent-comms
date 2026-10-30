@@ -1,7 +1,7 @@
-name: Debt ratchet cache
+name: NRA gate cache
 
 # A pull request restores only caches saved on its own ref or on main, and the merge queue runs
-# never run on main, so every ratchet measured main cold. Measuring each main commit against its
+# never run on main, so every gate run measured main cold. Measuring each main commit against its
 # parent saves main's readings and mypy analysis for every pull request based on it.
 on:
   push:
@@ -23,7 +23,7 @@ env:
   GIT_CONFIG_VALUE_0: "false"
 
 concurrency:
-  group: debt-ratchet-cache
+  group: nra-gate-cache
   cancel-in-progress: true
 
 jobs:
@@ -38,7 +38,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: recursive
           fetch-depth: 0
 
       - uses: actions/setup-python@v5
@@ -63,13 +62,14 @@ jobs:
       - uses: actions/cache/restore@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ github.sha }}
-          restore-keys: debt-ratchet-${{ matrix.kind }}-
+          key: nra-gate-${{ matrix.kind }}-${{ github.sha }}
+          restore-keys: nra-gate-${{ matrix.kind }}-
 
       # The verdict belongs to the merge queue; this run only fills the cache.
       - name: Measure main against its parent
         run: |
-          PYTHONPATH=src:tools python tools/debt_ratchet.py \
+          PYTHONPATH=src:tools python tools/nra_gate.py \
+            --ci-inputs "$RUNNER_TEMP/paired-sources" \
             --root ${{ matrix.kind }} --base HEAD^1 --head HEAD || true
 
       - name: The same sources are still current before saving cache
@@ -80,4 +80,4 @@ jobs:
       - uses: actions/cache/save@v4
         with:
           path: ~/.cache/agent-comms
-          key: debt-ratchet-${{ matrix.kind }}-${{ github.sha }}
+          key: nra-gate-${{ matrix.kind }}-${{ github.sha }}

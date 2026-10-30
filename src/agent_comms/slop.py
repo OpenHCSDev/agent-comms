@@ -1,4 +1,4 @@
-"""Slop citations: the refactor-audit pattern a restated fact matches, where it is
+"""Slop citations: the NRA pattern a restated fact matches, where it is
 restated, the mechanism that derives it and the declaration that owns it."""
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from typing import ClassVar
 from metaclass_registry.mro_dispatch import handles
 from pydantic import JsonValue
 
-from agent_comms import skills
 from agent_comms.change_report import Declaration, FileLine
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
@@ -170,8 +169,8 @@ class Slop:
 
     @staticmethod
     def catalog() -> Path:
-        """The pinned refactor-audit pattern catalog that slop citations name."""
-        return Path(str(files(skills) / "refactor-audit" / "references" / "patterns"))
+        """The installed NominalRefactorAdvisor's pattern catalog that slop citations name."""
+        return Path(str(files("nominal_refactor_advisor.audit") / "patterns"))
 
     @classmethod
     @cache
@@ -186,7 +185,7 @@ class Slop:
         problems = []
         if self.pattern not in self.patterns():
             problems.append(
-                f"Unknown refactor-audit pattern ID {self.pattern!r}; "
+                f"Unknown NRA pattern ID {self.pattern!r}; "
                 "fix: use an ID from the packaged pattern catalog."
             )
         if len(self.fact.split()) < 4:

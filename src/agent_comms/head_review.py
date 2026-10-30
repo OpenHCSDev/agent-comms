@@ -18,7 +18,7 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import StackSources
-from .pinned_audit import audit
+from nominal_refactor_advisor import audit
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -508,14 +508,14 @@ class Side(DeclaredFamily, affix="Side"):
     """One compared source cut; selection and materialized path belong to this member. The
     revision it holds is the audit side it materializes, which owns the base/head choice."""
 
-    measures: ClassVar[type[audit.ratchet.Side]]
+    measures: ClassVar[type[audit.gate.Side]]
 
     @classmethod
     def sides(cls) -> tuple[type[Side], ...]:
         return cls.members_with(cls)
 
     @classmethod
-    def materializing(cls, measured: type[audit.ratchet.Side]) -> type[Side]:
+    def materializing(cls, measured: type[audit.gate.Side]) -> type[Side]:
         """The one cut holding the revision an audit side measures."""
         cut, = (side for side in cls.sides() if side.measures is measured)
         return cut
@@ -540,7 +540,7 @@ class Side(DeclaredFamily, affix="Side"):
 
 
 class BaseSide(Side):
-    measures = audit.ratchet.BaseSide
+    measures = audit.gate.BaseSide
 
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
@@ -549,7 +549,7 @@ class BaseSide(Side):
 
 
 class HeadSide(Side):
-    measures = audit.ratchet.HeadSide
+    measures = audit.gate.HeadSide
 
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
