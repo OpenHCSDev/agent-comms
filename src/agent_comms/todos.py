@@ -4351,7 +4351,7 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
                          actor: ThreadIncarnation) -> None:
         project = goals.registry.snapshot().commander_project.require()
         if (actor.commanding_identity != project.commander or
-                request.repo not in {repo.github for repo in project.repos}):
+                request.repo not in project.repository_names()):
             raise TodoError("Only this repository's commander or the director may review its heads.")
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
@@ -5060,10 +5060,15 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: GoalId
 
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        """A companion link is checked against the registered project under the write."""
+        project = RegistryStore.at(store.root).snapshot().commander_project
+        if self.link.repo not in project.linkable(current.repo):
+            raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this commander "
+                            f"project; {current.id} links only registered repositories.")
+
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
-        if self.link.repo != current.repo:
-            raise TodoError("A recorded pull request must belong to the todo's repository.")
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
