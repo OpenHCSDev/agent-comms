@@ -17,7 +17,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
@@ -6031,13 +6031,10 @@ class OwnerRequestStore(DurableStore):
     def open_requests(
         self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
-        with self.snapshot() as db:
-            requests = (
-                request for request in OwnerRequest.stream(
-                    db, state=OpenRequestState(),
-                    order_by=("created_at", "id"), descending=descending,
-                ) if commander.commands(request.commander)
-            )
+        with self.snapshot() as db, closing(OwnerRequest.stream(
+            db, state=OpenRequestState(), order_by=("created_at", "id"), descending=descending,
+        )) as stored:
+            requests = (request for request in stored if commander.commands(request.commander))
             return tuple(islice(requests, None if limit < 0 else limit))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
