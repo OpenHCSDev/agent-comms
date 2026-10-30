@@ -807,6 +807,10 @@ class RepositoryReads:
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
 
+    def repository(self, path: Path) -> Repo:
+        """The common directory's identity, acquired once within this pass."""
+        return self.history_for(Checkout(path)).repository
+
     def history_for(self, checkout: Checkout) -> CheckoutHistory:
         checkout = checkout.resolved()
         if checkout.path not in self._worktree_histories:
@@ -852,6 +856,11 @@ class CheckoutHistory:
         self._remote_selections: dict[str, int] = {}
         self._bases: dict[int, tuple[str, ...]] = {}
         self._walks: dict[CommitSelection, tuple[GitCommit, ...]] = {}
+
+    @cached_property
+    def repository(self) -> Repo:
+        """Origin and source identity shared by every alias of this repository."""
+        return Repo.of(self.checkout.path)
 
     @cached_property
     def refs(self) -> dict[str, GitReference]:

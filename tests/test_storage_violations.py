@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, RepositoryReads
 import json
 import shutil
 import subprocess
@@ -151,8 +151,8 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
     assert len(reads[0].extra_checkouts) == extra_count
     assert reads[0].missing_home is not has_home
     assert not (base / "worker").exists()
-    assert comms.registry.storage_rule.owns_present_checkout(worker, home) is has_home
-    assert not comms.registry.storage_rule.owns_present_checkout(worker, base / "worker")
+    assert comms.registry.storage_rule.owns_present_checkout(worker, home, RepositoryReads()) is has_home
+    assert not comms.registry.storage_rule.owns_present_checkout(worker, base / "worker", RepositoryReads())
     if has_home:
         declared_ref = subprocess.check_output(
             ["git", "-C", str(home), "symbolic-ref", "HEAD"], text=True, timeout=15
