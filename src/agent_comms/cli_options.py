@@ -7,10 +7,10 @@ import json
 from collections.abc import Sequence
 from typing import ClassVar, Self
 
-from .field_codec import FieldCodec
+from .field_codec import DisclosedRecord, FieldCodec
 
 
-class JsonFlagRecord:
+class JsonFlagRecord(DisclosedRecord):
     """A record supplies its JSON-value flag; FieldCodec owns its representation."""
 
     __slots__ = ()

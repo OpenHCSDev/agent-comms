@@ -8,6 +8,8 @@ nothing is refused until the commander answers that message (the OwedAnswer gate
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -151,11 +153,11 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         """One load projection shared by the heartbeat's HUD and standing rules."""
         return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def overloaded(self) -> bool:
         return self.total >= self.ceiling
 

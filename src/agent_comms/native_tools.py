@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ArgumentsExclude
+
 import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
@@ -106,7 +108,7 @@ class ArgumentTool:
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
         # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.project(self, "arguments")
+        encoded = FieldCodec.project(self, ArgumentsExclude)
         del encoded[self.family_discriminator]
         return encoded
 

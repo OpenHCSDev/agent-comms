@@ -3,6 +3,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ReportExclude
+
 import argparse
 import ast
 import atexit
@@ -2801,23 +2803,23 @@ class Comparison:
         """The report's JSON keys: the one place a count's record becomes text."""
         return {identity.text: value for identity, value in counts.items()}
 
-    @projected(view="report", name="base")
+    @projected(view=ReportExclude, name="base")
     def base_report(self) -> dict[str, int]:
         return self.keyed(self.base)
 
-    @projected(view="report", name="head")
+    @projected(view=ReportExclude, name="head")
     def head_report(self) -> dict[str, int]:
         return self.keyed(self.head)
 
-    @projected(view="report", name="introduced")
+    @projected(view=ReportExclude, name="introduced")
     def introduced_report(self) -> dict[str, list[int]]:
         return self.keyed(self.introduced)
 
-    @projected(view="report", name="found")
+    @projected(view=ReportExclude, name="found")
     def found_report(self) -> dict[str, list[Site]]:
         return self.keyed(self.found)
 
-    @projected(view="report", name="delta")
+    @projected(view=ReportExclude, name="delta")
     def delta_report(self) -> dict[str, int]:
         return self.keyed(self.delta)
 
@@ -2900,7 +2902,7 @@ def main() -> int:
     args = parser.parse_args()
     result = compare(Path.cwd(), args.base, args.head, args.root, args.workers)
     # Flushed first: stdout is block-buffered into a pipe, and the growth lines must end the log.
-    print(json.dumps(FieldCodec.project(result, "report"), indent=2), flush=True)
+    print(json.dumps(FieldCodec.project(result, ReportExclude), indent=2), flush=True)
     # The failing step's last lines become check annotations (.github/run-step.sh merges
     # stderr), so what grew goes to stderr last; stdout stays the one JSON report.
     for key, grown in sorted(result.delta.items(), key=lambda item: item[0].text):

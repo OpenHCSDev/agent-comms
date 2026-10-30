@@ -19,6 +19,7 @@ from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.disclosure_text import AccentTone, SuccessTone, ViewHeading, WarningTone
 from agent_comms.field_codec import (
+    DisclosedRecord,
     MalformedRecord,
     ToolCallId,
 )
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
     from agent_comms.heartbeat_frame import HeartbeatFrame
 
 
-class UnitClock(DeclaredFamily, affix="Clock"):
+class UnitClock(DisclosedRecord, DeclaredFamily, affix="Clock"):
     """When a holder last acted and last committed on its pending orders."""
 
     @abstractmethod

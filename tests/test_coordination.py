@@ -1,5 +1,7 @@
 """Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
+from agent_comms.field_codec import SnapshotExclude
+
 import os
 import sqlite3
 import subprocess
@@ -325,7 +327,7 @@ def test_snapshot_projection_retry_and_inert_secrets():
         attempt_record=failed_attempt,
     )
     assert deferred.can_retry
-    projection = FieldCodec.project(deferred, "snapshot")
+    projection = FieldCodec.project(deferred, SnapshotExclude)
     assert projection["execution"]["current_attempt_ordinal"] == 1
     assert projection["attempt"]["owner_generation"] == 1
     assert "owner_token_digest" not in str(projection)
@@ -369,8 +371,8 @@ def test_snapshot_projection_retry_and_inert_secrets():
 def test_wire_claim_obligation_and_publication_contract():
     record = execution(origin=WireOrigin)
     valid = snapshot(execution_record=record, response=obligation())
-    assert FieldCodec.project(valid, "snapshot")["claims"][0]["claim_id"] == "claim-1"
-    primitive = FieldCodec.project(valid, "snapshot")
+    assert FieldCodec.project(valid, SnapshotExclude)["claims"][0]["claim_id"] == "claim-1"
+    primitive = FieldCodec.project(valid, SnapshotExclude)
     assert primitive["execution_claims"][0]["ordinal"] == 0
     assert "claim_ids" not in primitive["execution"]
     assert [item["claim_id"] for item in primitive["claims"]] == [
@@ -967,7 +969,7 @@ def test_missing_replay_cannot_later_reauthorize_failed(db):
             pointer_revision=2,
             is_current=False,
         )
-        assert FieldCodec.project(absent, "snapshot")["replay"] is None
+        assert FieldCodec.project(absent, SnapshotExclude)["replay"] is None
         assert not absent.can_retry
         with pytest.raises(IntegrityViolationError):
             replace(

@@ -1,10 +1,14 @@
 """Root-owned controls for the shared heartbeat and native HUD presentation."""
 
+from agent_comms.field_codec import HudExclude
+
 from dataclasses import replace
 
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_hud import CommanderHud, CommanderOrder, CommanderUnit, CodexUsage, HudRecord, UnreadableUsage
-from agent_comms.disclosure_text import ViewTable
+from agent_comms.disclosure_text import (
+    DisclosureText, EntityKey, FieldKey, IdentifiedRecordText, MappingText, SequenceText, ViewTable,
+)
 from agent_comms.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing
@@ -47,13 +51,13 @@ def example_hud() -> CommanderHud:
 
 def test_commander_hud_projection_has_one_progress_answer() -> None:
     unit = example_hud().units[0]
-    assert tuple(FieldCodec.projections(CommanderUnit, "hud")) == ("work", "change", "next")
-    columns = FieldCodec.view_columns(CommanderUnit, "hud")
+    assert tuple(FieldCodec.projections(CommanderUnit, HudExclude)) == ("work", "change", "next")
+    columns = FieldCodec.view_columns(CommanderUnit, HudExclude)
     assert tuple(column.name for column in columns) == ("unit", "state", "work", "change", "next")
     assert tuple(plan.name for plan in FieldCodec.field_plans(type(unit.unit))
                  if DisclosureIdentity.read(plan.annotation, False)) == ("name",)
     second = replace(unit.orders[0], problem="P931", order=OrderId("abcdef123456"))
-    table = ViewTable(CommanderUnit, "hud", (replace(unit, orders=(*unit.orders, second)),))
+    table = ViewTable(CommanderUnit, HudExclude, (replace(unit, orders=(*unit.orders, second)),))
     assert "\n" in table.texts[0][2]
 
 
@@ -100,6 +104,35 @@ def test_display_facts_ignore_only_hidden_clocks_and_paint_time() -> None:
     assert hud.display_facts != replace(hud, usage=CodexUsage(
         UnreadableUsage(reason="a different visible usage observation"))).display_facts
     assert hud.display_facts != replace(hud, units=(replace(unit, state=Stuck), *hud.units[1:])).display_facts
+
+
+def test_disclosure_reuses_original_children_and_declared_identity() -> None:
+    unit = example_hud().units[0]
+    text = DisclosureText.of(unit)
+    assert isinstance(text, IdentifiedRecordText)
+    assert text.summary == unit.unit.name
+    assert text.children is text.children
+    original_unit = next(child for child in text.children if child.key == FieldKey(CommanderUnit, "unit"))
+    assert original_unit.value is text.identity_values[0]
+    assert text.sequence_key is text.sequence_key
+    assert text.sequence_key == EntityKey(CommanderUnit, (EntityKey(type(unit.unit), (unit.unit.name,)),))
+    # Identity-only text still discloses every original field, including hidden HUD columns.
+    assert tuple(child.key for child in text.children) == tuple(
+        FieldKey(CommanderUnit, plan.name) for plan in FieldCodec.field_plans(CommanderUnit) if plan.records)
+    assert next(child for child in text.children if child.key == FieldKey(CommanderUnit, "strikes")).value.value == unit.strikes
+
+    mapping = DisclosureText.of({"units": (unit,)})
+    assert isinstance(mapping, MappingText)
+    assert mapping.children is mapping.children
+    sequence = mapping.children[0].value
+    assert isinstance(sequence, SequenceText)
+    assert sequence.children is sequence.children
+    assert sequence.children[0].key == text.sequence_key
+    assert sequence.children[0].value.value is unit
+    assert sequence.summary == "1 item"
+    table = ViewTable(CommanderUnit, HudExclude, (unit,))
+    assert table.entities is table.entities
+    assert table.entities[text.sequence_key] is unit
 
 
 def test_every_native_record_producer_declares_entity_identity() -> None:

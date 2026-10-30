@@ -9,7 +9,7 @@ from math import isfinite
 from typing import ClassVar, Never
 
 from .declared_family import DeclaredFamily
-from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+from .field_codec import AcceptsNull, DisclosedRecord, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
 
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""
@@ -68,7 +68,7 @@ class GeneratedTimestamp(NullableEventSeconds):
         raise TypeError("A generated timestamp is read from its event, never written")
 
 
-class EventTime(DeclaredFamily, affix="EventTime"):
+class EventTime(DisclosedRecord, DeclaredFamily, affix="EventTime"):
     @classmethod
     def capture(cls, timestamp: float) -> EventTime:
         """Capture a recorded Unix-seconds fact, never the read time."""

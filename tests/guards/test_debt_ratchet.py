@@ -1,5 +1,7 @@
 """Exercise the command against real Git commits, without mocking Git or ASTs."""
 
+from agent_comms.field_codec import ReportExclude
+
 import ast
 import asyncio
 import json
@@ -214,7 +216,7 @@ class Repository:
         The command line itself is proven by the tests that launch it.
         """
         result = compare(self.path, base, head, self.root, 2, measured)
-        return int(result.failed), json.loads(json.dumps(FieldCodec.project(result, "report")))
+        return int(result.failed), json.loads(json.dumps(FieldCodec.project(result, ReportExclude)))
 
 
 def test_compare_timeout_retires_pool_probe_and_defiant_grandchild(tmp_path: Path) -> None:

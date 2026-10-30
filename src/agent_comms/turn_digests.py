@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ActivityExclude
+
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -54,7 +56,7 @@ class ActivityTurnView(TurnView):
     def project(cls, answer: ThreadTurns) -> JsonValue:
         selected = answer.turns[:cls.turn_limit]
         page = replace(answer, turns=selected, older=answer.older.older(selected))
-        return FieldCodec.project(page, "activity")
+        return FieldCodec.project(page, ActivityExclude)
 
 
 class OriginalTurnView(TurnView):

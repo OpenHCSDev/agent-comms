@@ -12,7 +12,7 @@ import os
 import re
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Hashable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
@@ -234,7 +234,11 @@ class ViewName(ValueDirective[str], DeclaredFamily, affix="Name"):
 
 
 class ViewExclusion(FlagDirective, DeclaredFamily, affix="Exclude"):
-    """Whether a field is absent from one encoded view."""
+    """The nominal encoded view owns exclusion and optional field naming."""
+
+    @classmethod
+    def key_in(cls, annotation: object, default: str) -> str:
+        return default
 
 
 class WireName(ViewName):
@@ -324,10 +328,24 @@ class ActivityExclude(ViewExclusion):
 
 
 class SnapshotExclude(ViewExclusion):
-    pass
+    @classmethod
+    def key_in(cls, annotation: object, default: str) -> str:
+        return SnapshotName.read(annotation, default)
 
 
 class HudExclude(ViewExclusion):
+    pass
+
+
+class StatusExclude(ViewExclusion):
+    pass
+
+
+class ReportExclude(ViewExclusion):
+    pass
+
+
+class ArgumentsExclude(ViewExclusion):
     pass
 
 
@@ -547,13 +565,8 @@ class ViewColumn(ABC):
     @abstractmethod
     def current(self, record: object) -> object: ...
 
-    @cached_property
-    def view_exclusions(self) -> tuple[ViewExclusion, ...]:
-        return ViewExclusion.on(self.annotation)
-
-    def excluded_in(self, view: str) -> bool:
-        return any(directive.value for directive in self.view_exclusions
-                   if type(directive).declared_name == view)
+    def excluded_in(self, view: type[ViewExclusion]) -> bool:
+        return view.read(self.annotation, False)
 
     def minimum_width(self, values: Iterable[str]) -> int:
         """Keep headers and individual words intact while the viewport can afford them."""
@@ -640,15 +653,8 @@ class FieldPlan(ViewColumn):
     def omit_default(self) -> bool:
         return WireOmitDefault.read(self.annotation, False)
 
-    @cached_property
-    def view_names(self) -> tuple[ViewName, ...]:
-        return ViewName.on(self.annotation)
-
-    def key_in(self, view: str) -> str:
-        for directive in self.view_names:
-            if type(directive).declared_name == view:
-                return directive.value
-        return self.key
+    def key_in(self, view: type[ViewExclusion]) -> str:
+        return view.key_in(self.annotation, self.key)
 
     @cached_property
     def value(self) -> ValueDecoder[object]:
@@ -1309,7 +1315,7 @@ class FieldRepresentation[T](MroDispatch, ABC, JsonSchemaOwner):
         return cls
 
     @classmethod
-    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         return RepresentedProjection.of(value, view, annotation)
 
     @classmethod
@@ -1371,7 +1377,7 @@ class StructuralRepresentation(FieldRepresentation):
         return FieldCodec.representation(type(value))[1]
 
     @classmethod
-    def project_view(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def project_view(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         return FieldCodec._project_structure(value, view, annotation)
 
     @classmethod
@@ -1680,17 +1686,17 @@ class RepresentedProjection(MroDispatch):
     """A represented value's view: its wire encoding, unless its declared record is its wire form."""
 
     @classmethod
-    def of(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def of(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         return cls.handler_for(type(value))(value, view, annotation)
 
     @handles(RecordMember)
     @staticmethod
-    def record(value: RecordMember, view: str, annotation: object) -> JsonValue:
+    def record(value: RecordMember, view: type[ViewExclusion], annotation: object) -> JsonValue:
         return FieldCodec._project_record(value, view)
 
     @handles(object)
     @staticmethod
-    def encoded(value: object, view: str, annotation: object) -> JsonValue:
+    def encoded(value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         return FieldCodec.encode(value, annotation)
 
 
@@ -2258,8 +2264,35 @@ class GitCommitText(HexDigits):
         return 7
 
 
-class ValueDescription[Product](ABC):
-    """A nominal presentation implements the canonical boundary's recovered Python shapes."""
+class DisclosedRecord:
+    """Records declare their disclosure capability in their own inheritance."""
+
+    __slots__ = ()
+
+    @classmethod
+    @cache
+    def disclosure_identity(cls) -> tuple[FieldPlan, ...]:
+        return tuple(plan for plan in FieldCodec.field_plans(cls)
+                     if DisclosureIdentity.read(plan.annotation, False))
+
+    def disclose[T](self, presentation: type[ValueDescription[T]]) -> T:
+        identity = type(self).disclosure_identity()
+        return (presentation.identified_record(self, identity) if identity
+                else presentation.record(self))
+
+
+class ValueDescription[Product](MroDispatch, ABC):
+    """Presentation dispatch is independent of FieldCodec's external decoder dispatch."""
+
+    @classmethod
+    def describe(cls, value: object) -> Product:
+        handler: Callable[[object], Product] = cls.handler_for(type(value))
+        return handler(value)
+
+    @handles(DisclosedRecord)
+    @classmethod
+    def disclosed(cls, value: DisclosedRecord) -> Product:
+        return value.disclose(cls)
 
     @classmethod
     @abstractmethod
@@ -2287,7 +2320,7 @@ class ValueDescription[Product](ABC):
 
     @classmethod
     @abstractmethod
-    def sequence(cls, value: Sequence[object]) -> Product: ...
+    def sequence(cls, value: Collection[object]) -> Product: ...
 
 
 class Projected(ViewColumn, property):
@@ -2300,7 +2333,7 @@ class Projected(ViewColumn, property):
     def name(self) -> str:
         return self.__name__
 
-    def __init__(self, getter, *, view: str, name: str | None = None):
+    def __init__(self, getter, *, view: type[ViewExclusion], name: str | None = None):
         super().__init__(getter)
         self.view = view
         self.wire_name = name or getter.__name__
@@ -2324,7 +2357,7 @@ class Projected(ViewColumn, property):
             yield from Projected._declared.get(base, {}).items()
 
 
-def projected(*, view: str, name: str | None = None):
+def projected(*, view: type[ViewExclusion], name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
 
 
@@ -2345,23 +2378,8 @@ class FieldCodec(MroDispatch, Sealed):
 
     @classmethod
     def describe[T](cls, value: object, presentation: type[ValueDescription[T]]) -> T:
-        """Decode foreign Python shape once, retaining the capability's concrete product type."""
-        if isinstance(value, type):
-            if issubclass(value, DeclaredFamily):
-                return presentation.family_value(value)
-            return presentation.class_value(value)
-        if isinstance(value, (str, bytes)):
-            return presentation.scalar(value)
-        if isinstance(value, Mapping):
-            return presentation.mapping(value)
-        if isinstance(value, Sequence):
-            return presentation.sequence(value)
-        if is_dataclass(value):
-            identity = tuple(plan for plan in cls.field_plans(type(value))
-                             if DisclosureIdentity.read(plan.annotation, False))
-            return (presentation.identified_record(value, identity) if identity
-                    else presentation.record(value))
-        return presentation.scalar(value)
+        """The presentation owns its nominal input handlers, not the decoder's table."""
+        return presentation.describe(value)
 
     @classmethod
     def decode_external[T](
@@ -2655,7 +2673,7 @@ class FieldCodec(MroDispatch, Sealed):
         return representation.schema_for(annotation)
 
     @classmethod
-    def project(cls, value: object, view: str, annotation: object = None) -> JsonValue:
+    def project(cls, value: object, view: type[ViewExclusion], annotation: object = None) -> JsonValue:
         """Encode a redacted view using field exclusions and owned properties.
 
         A family record carries its tag at every depth, as in its wire form.
@@ -2666,7 +2684,7 @@ class FieldCodec(MroDispatch, Sealed):
         return cls._value_representation(value, annotation).project_view(value, view, annotation)
 
     @classmethod
-    def _project_structure(cls, value: object, view: str, annotation: object) -> JsonValue:
+    def _project_structure(cls, value: object, view: type[ViewExclusion], annotation: object) -> JsonValue:
         if is_dataclass(value) and not isinstance(value, type):
             return cls._project_record(value, view)
         if isinstance(value, (tuple, list)):
@@ -2675,7 +2693,7 @@ class FieldCodec(MroDispatch, Sealed):
         return cls.encode(value)
 
     @classmethod
-    def _project_record(cls, value: object, view: str) -> JsonValue:
+    def _project_record(cls, value: object, view: type[ViewExclusion]) -> JsonValue:
         """A record's view: its tag, its view's fields and the properties the view owns."""
         result = cls._tag(value)
         result.update(cls._record_plan(type(value)).encoded(
@@ -2748,7 +2766,7 @@ class FieldCodec(MroDispatch, Sealed):
                 key=lambda row: (WireOrder.read(row[1].annotation, row[0]), row[0]),
             )
         )
-        computed = {member.wire_name for member in cls.projections(record, "wire").values()}
+        computed = {member.wire_name for member in cls.projections(record, WireExclude).values()}
         wire_fields, required_keys = [], []
         for entry in entries:
             keys = entry.contribute(wire_fields)
@@ -2776,7 +2794,7 @@ class FieldCodec(MroDispatch, Sealed):
         return selected.pop()
 
     @classmethod
-    def view_columns(cls, declaration: type, view: str) -> tuple[ViewColumn, ...]:
+    def view_columns(cls, declaration: type, view: type[ViewExclusion]) -> tuple[ViewColumn, ...]:
         """One column source for native tables and plain-text views."""
         return (
             *(plan for plan in cls.field_plans(declaration)
@@ -2786,7 +2804,7 @@ class FieldCodec(MroDispatch, Sealed):
 
     @staticmethod
     @cache
-    def projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
+    def projections(declaration: type, view: type[ViewExclusion]) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
         return types.MappingProxyType({
@@ -3559,11 +3577,11 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         if not isinstance(value, self.target):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = self.plan.encoded(
-            value, "wire", lambda entry, current: entry.value.encode(current)
+            value, WireExclude, lambda entry, current: entry.value.encode(current)
         )
         result.update(
             (member.wire_name, FieldCodec.encode(getattr(value, name)))
-            for name, member in FieldCodec.projections(self.target, "wire").items()
+            for name, member in FieldCodec.projections(self.target, WireExclude).items()
         )
         return result
 

@@ -2,15 +2,51 @@
 
 from __future__ import annotations
 
-from collections.abc import Collection, Mapping, Sequence
+from abc import abstractmethod
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from functools import cached_property
 from itertools import zip_longest
 from textwrap import wrap
+from types import MappingProxyType
 from typing import ClassVar, Hashable
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, FieldPlan, ValueDescription, ViewColumn
+from metaclass_registry.mro_dispatch import handles
+
+from agent_comms.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.field_codec import FieldCodec, FieldPlan, PublicationExclude, ValueDescription, ViewColumn, ViewExclusion
+
+
+class DisclosureKey:
+    """Semantic disclosure identity, independent of native widget allocation."""
+
+
+@dataclass(frozen=True)
+class RecordKey(DisclosureKey):
+    owner: type
+
+
+class RootKey(RecordKey):
+    """The whole record, not one of its fields."""
+
+
+@dataclass(frozen=True)
+class FieldKey(RecordKey):
+    name: str
+
+
+@dataclass(frozen=True)
+class EntityKey(RecordKey):
+    parts: tuple[object, ...]
+
+
+class AnonymousKey(DisclosureKey):
+    """An undeclared identity cannot inherit another item's selection."""
+
+
+@dataclass(frozen=True)
+class MappingKey(DisclosureKey):
+    key: Hashable
 
 
 @dataclass(frozen=True)
@@ -21,9 +57,22 @@ class DisclosureText(ValueDescription["DisclosureText"]):
     def of(cls, value: object) -> DisclosureText:
         return FieldCodec.describe(value, DisclosureText)
 
+    @cached_property
     def summary(self) -> str:
         return str(self.value)
 
+    @cached_property
+    def sequence_key(self) -> DisclosureKey:
+        return AnonymousKey()
+
+    @property
+    def identity_part(self) -> object:
+        return self.value
+
+    def column_value(self, column: ViewColumn) -> DisclosureText:
+        return DisclosureText.of(column.current(self.value))
+
+    @handles(object, str, bytes)
     @classmethod
     def scalar(cls, value: object) -> DisclosureText:
         return DisclosureText(value)
@@ -36,21 +85,40 @@ class DisclosureText(ValueDescription["DisclosureText"]):
     def identified_record(cls, value: object, identity: tuple[FieldPlan, ...]) -> DisclosureText:
         return IdentifiedRecordText(value, identity)
 
+    @handles(type)
     @classmethod
     def class_value(cls, value: type) -> DisclosureText:
         return ClassText(value)
 
+    @handles(FamilyMeta)
     @classmethod
     def family_value(cls, value: type[DeclaredFamily]) -> DisclosureText:
         return FamilyText(value)
 
+    @handles(dict, MappingProxyType)
     @classmethod
     def mapping(cls, value: Mapping[Hashable, object]) -> DisclosureText:
         return MappingText(value)
 
+    @handles(list, tuple, frozenset)
     @classmethod
-    def sequence(cls, value: Sequence[object]) -> DisclosureText:
+    def sequence(cls, value: Collection[object]) -> DisclosureText:
         return SequenceText(value)
+
+
+@dataclass(frozen=True)
+class DisclosureEntry:
+    key: DisclosureKey
+    label: str
+    value: DisclosureText
+
+
+class StructuredText(DisclosureText):
+    """An expanded branch borrows children prepared once by its source owner."""
+
+    @property
+    @abstractmethod
+    def children(self) -> tuple[DisclosureEntry, ...]: ...
 
 
 @dataclass(frozen=True)
@@ -73,7 +141,7 @@ class ViewTable[R]:
     """One declaration owns semantic cells and both wide and stacked presentation."""
 
     record: type[R]
-    view: str
+    view: type[ViewExclusion]
     records: tuple[R, ...]
     show_header: ClassVar[bool] = True
     row_separator: ClassVar[tuple[str, ...]] = ()
@@ -87,20 +155,31 @@ class ViewTable[R]:
         return self.declared_columns
 
     @cached_property
+    def row_values(self) -> tuple[DisclosureText, ...]:
+        return tuple(DisclosureText.of(record) for record in self.records)
+
+    @cached_property
+    def entities(self) -> Mapping[DisclosureKey, R]:
+        entities = {text.sequence_key: record for text, record in zip(self.row_values, self.records)}
+        if len(entities) != len(self.records):
+            raise ValueError("A declared table requires unique record identities")
+        return MappingProxyType(entities)
+
+    @cached_property
     def cells(self) -> tuple[tuple[DisclosureText, ...], ...]:
-        return tuple(tuple(DisclosureText.of(column.current(record)) for column in self.declared_columns)
-                     for record in self.records)
+        return tuple(tuple(text.column_value(column) for column in self.declared_columns)
+                     for text in self.row_values)
 
     @cached_property
     def texts(self) -> tuple[tuple[str, ...], ...]:
-        return tuple(tuple(cell.summary() for cell in row) for row in self.cells)
+        return tuple(tuple(cell.summary for cell in row) for row in self.cells)
 
     @cached_property
     def facts(self) -> ViewFacts:
         retained = tuple(index for index, column in enumerate(self.declared_columns)
-                         if not column.excluded_in("publication"))
+                         if not column.excluded_in(PublicationExclude))
         return ViewFacts(self.record, tuple(self.declared_columns[index].label for index in retained),
-                         tuple(tuple(row[index].summary() for index in retained) for row in self.cells))
+                         tuple(tuple(row[index].summary for index in retained) for row in self.cells))
 
     @cached_property
     def minimums(self) -> tuple[int, ...]:
@@ -157,7 +236,7 @@ class StackedViewTable[R](ViewTable[R]):
 
     @cached_property
     def texts(self) -> tuple[tuple[str, ...], ...]:
-        return tuple(("\n".join(f"{column.label}: {cell.summary()}"
+        return tuple(("\n".join(f"{column.label}: {cell.summary}"
                                  for column, cell in zip(self.declared_columns, row)),)
                      for row in self.cells)
 
@@ -217,31 +296,57 @@ class ViewHeading(DeclaredFamily, declared_name=None):
         return cls.tone.paint(text, colour)
 
 
-class RecordText(DisclosureText):
+class RecordText(StructuredText):
+    @cached_property
     def fields(self) -> tuple[FieldPlan, ...]:
-        """All disclosed fields; identity-only summaries never remove detail children."""
+        """Identity-only summaries never remove original detail children."""
         return tuple(plan for plan in FieldCodec.field_plans(type(self.value)) if plan.records)
 
-    def summary_fields(self) -> tuple[FieldPlan, ...]:
-        return self.fields()
+    @cached_property
+    def _field_values(self) -> dict[str, DisclosureText]:
+        return {}
 
+    def column_value(self, column: ViewColumn) -> DisclosureText:
+        if column.name not in self._field_values:
+            self._field_values[column.name] = super().column_value(column)
+        return self._field_values[column.name]
+
+    @cached_property
+    def children(self) -> tuple[DisclosureEntry, ...]:
+        return tuple(DisclosureEntry(FieldKey(type(self.value), plan.name), plan.label,
+                                     self.column_value(plan)) for plan in self.fields)
+
+    @cached_property
     def summary(self) -> str:
-        return " · ".join(DisclosureText.of(plan.current(self.value)).summary()
-                          for plan in self.summary_fields())
+        return " · ".join(child.value.summary for child in self.children)
 
 
 @dataclass(frozen=True)
 class IdentifiedRecordText(RecordText):
     identity: tuple[FieldPlan, ...]
 
-    def summary_fields(self) -> tuple[FieldPlan, ...]:
-        return self.identity
+    @cached_property
+    def identity_values(self) -> tuple[DisclosureText, ...]:
+        return tuple(self.column_value(plan) for plan in self.identity)
+
+    @cached_property
+    def sequence_key(self) -> EntityKey:
+        return EntityKey(type(self.value), tuple(part.identity_part for part in self.identity_values))
+
+    @property
+    def identity_part(self) -> EntityKey:
+        return self.sequence_key
+
+    @cached_property
+    def summary(self) -> str:
+        return " · ".join(part.summary for part in self.identity_values)
 
 
 @dataclass(frozen=True)
 class ClassText(DisclosureText):
     value: type
 
+    @cached_property
     def summary(self) -> str:
         return self.value.__name__
 
@@ -250,14 +355,16 @@ class ClassText(DisclosureText):
 class FamilyText(ClassText):
     value: type[DeclaredFamily]
 
+    @cached_property
     def summary(self) -> str:
         return self.value.declared_name
 
 
-class CollectionText(DisclosureText):
+class CollectionText(StructuredText):
     value: Collection[object]
     noun: ClassVar[str] = "item"
 
+    @cached_property
     def summary(self) -> str:
         count = len(self.value)
         return f"{count} {self.noun}{'s' if count != 1 else ''}"
@@ -265,10 +372,23 @@ class CollectionText(DisclosureText):
 
 @dataclass(frozen=True)
 class SequenceText(CollectionText):
-    value: Sequence[object]
+    value: Collection[object]
+
+    @cached_property
+    def children(self) -> tuple[DisclosureEntry, ...]:
+        entries = []
+        for index, value in enumerate(self.value):
+            text = DisclosureText.of(value)
+            entries.append(DisclosureEntry(text.sequence_key, str(index + 1), text))
+        return tuple(entries)
 
 
 @dataclass(frozen=True)
 class MappingText(CollectionText):
     value: Mapping[Hashable, object]
     noun = "field"
+
+    @cached_property
+    def children(self) -> tuple[DisclosureEntry, ...]:
+        return tuple(DisclosureEntry(MappingKey(key), str(key), DisclosureText.of(value))
+                     for key, value in self.value.items())

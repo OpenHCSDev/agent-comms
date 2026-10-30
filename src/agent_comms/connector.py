@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 
 import asyncio
 import base64
@@ -274,7 +276,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def code(self) -> int:
         return Refused.METHOD_NOT_FOUND
 

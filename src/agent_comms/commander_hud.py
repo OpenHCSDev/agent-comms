@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import asyncio
 import time
 from collections.abc import Iterable
@@ -26,7 +28,7 @@ from agent_comms.disclosure_text import (
 )
 from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
-    DisclosureIdentity, HudExclude, OrderId, PublicationExclude, WireTransient, projected,
+    DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, WireTransient, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.locked_store import JsonDocument
@@ -49,7 +51,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class CommanderOrder:
+class CommanderOrder(DisclosedRecord):
     """Small order card; identifiers/text come from Todo, review rounds from TodoStore."""
 
     problem: Annotated[str, DisclosureIdentity()]
@@ -74,7 +76,7 @@ class HudUnavailableGroup(HudGroup):
     tone = ErrorTone
 
 
-class HudRecord(ABC):
+class HudRecord(DisclosedRecord, ABC):
     """Native rows expose their declared group, not another hand-joined renderer."""
 
     @property
@@ -105,15 +107,15 @@ class CommanderUnit(HudRecord):
     def hud_group(self) -> type[HudGroup]:
         return self.state.hud_group
 
-    @projected(view="hud")
+    @projected(view=HudExclude)
     def work(self) -> str:
         return "\n".join(f"{order.problem} {order.state}" for order in self.orders)
 
-    @projected(view="hud")
+    @projected(view=HudExclude)
     def change(self) -> str:
         return "\n".join(order.progress.line for order in self.orders)
 
-    @projected(view="hud")
+    @projected(view=HudExclude)
     def next(self) -> str:
         return self.state.action
 
@@ -165,13 +167,13 @@ class HudSection:
         grouped: dict[type[HudGroup], dict[type[HudRecord], list[HudRecord]]] = {}
         for record in records:
             grouped.setdefault(record.hud_group, {}).setdefault(type(record), []).append(record)
-        return tuple(cls(group, tuple(ViewTable(declaration, "hud", tuple(rows))
+        return tuple(cls(group, tuple(ViewTable(declaration, HudExclude, tuple(rows))
                                       for declaration, rows in grouped[group].items()))
                      for group in HudGroup.members_with(HudGroup) if group in grouped)
 
 
 @dataclass(frozen=True)
-class CommanderOrderDetail:
+class CommanderOrderDetail(DisclosedRecord):
     """The selected card beside its original instructions, story and captured Git points."""
 
     card: Annotated[CommanderOrder, DisclosureIdentity()]
@@ -181,7 +183,7 @@ class CommanderOrderDetail:
 
 
 @dataclass(frozen=True)
-class CommanderUnitDetail:
+class CommanderUnitDetail(DisclosedRecord):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: Annotated[CommanderUnit, DisclosureIdentity()]
@@ -220,7 +222,7 @@ class FinishedPhases(HudRecord):
     phases: Annotated[tuple[type[PlanPhase], ...], HudExclude()]
     hud_group: ClassVar[type[HudGroup]] = FinishedPlansGroup
 
-    @projected(view="hud")
+    @projected(view=HudExclude)
     def done(self) -> int:
         return len(self.phases)
 
@@ -254,7 +256,7 @@ class CodexUsage:
 
 
 @dataclass(frozen=True)
-class CommanderStatus:
+class CommanderStatus(DisclosedRecord):
     load: float
     review_up: int
     unjudged: int
@@ -368,7 +370,7 @@ class CommanderHud(ToolResult):
                                      *folded))
 
     def status_table(self, now: float) -> ViewTable[CommanderStatus]:
-        return ViewTable(CommanderStatus, "hud", (CommanderStatus(
+        return ViewTable(CommanderStatus, HudExclude, (CommanderStatus(
             self.load.total, self.load.timers_up, self.load.unjudged,
             len(self.forks), self.usage.line(), self.heartbeat.age(now),
         ),))
@@ -415,7 +417,7 @@ class CommanderHud(ToolResult):
                        *(line for packet in self.packets for line in packet.not_applied)))
         return tuple(result)
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def frame(self) -> tuple[str, ...]:
         return self.hud_text(time.time())
 
