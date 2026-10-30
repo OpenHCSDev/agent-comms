@@ -50,6 +50,7 @@ from agent_comms.todos import (
     FailedCheckStrike,
     OrderClaim,
     PendingProblemOrder,
+    PullRequestLink,
     ReleaseTodo,
     SendBackVerdict,
     StrikeReason,
@@ -73,6 +74,29 @@ def test_delivery_report_refuses_a_flat_status_memo():
     assert DeliveryReport(blunt).text == blunt
 
 
+def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_commander):
+    """An order in one repo can be delivered by a pull request in another (Core order, Textual PR)."""
+    from agent_comms.repository_name import RepositoryName
+
+    ctx = held_commander
+    comms = ctx.comms
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
+    request = FieldCodec.decode(CommsOrderDeliverTool, {
+        "tool": "comms_order_deliver", "problem": "P1",
+        "pull_request": {"repo": "openhcsdev/textual", "number": 213}, "head": sha,
+        "report": "Killed the broken Core#213 lie at order_tools.py:398; the claim names Textual#213 now.",
+    })
+    ThreadCaller("worker").invoke(request, comms)
+    claim = comms.goals.todos.get("P1").order.claim
+    assert claim.pull_request == PullRequestLink(RepositoryName.from_wire("openhcsdev/textual"), 213)
+    assert claim.pull_request.repo != original.repo
+
+
 def test_claim_verdict_family_on_retained_copy(held_commander):
     ctx = held_commander
     comms = ctx.comms
@@ -85,7 +109,7 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     report = ctx.root / "report.txt"
     report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
     request = CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=DeliveryReport(report.read_text()),
+        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(report.read_text()),
     )
     with pytest.raises(TodoConflict):
         ThreadCaller(ctx.commander).invoke(request, comms)
@@ -150,7 +174,7 @@ def unsent_claim(ctx):
     ))
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     request = CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=DeliveryReport(
+        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(
             "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
     )
     before = comms.bus.bus.revision()
@@ -241,7 +265,7 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     ))
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     request = CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=DeliveryReport(
+        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(
             "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
     )
     ThreadCaller("worker").invoke(request, comms)
@@ -285,7 +309,7 @@ def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
     ))
     head = cited_source.git(cited_source.checkout, "rev-parse", "fix/4").strip()
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
-        problem="P1", pull_request=4, head=head,
+        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 4), head=head,
         report=DeliveryReport("The wrong count is dead and merged; check the merged tree."),
     ), comms)
     claimed = comms.goals.todos.get("P1")
@@ -383,7 +407,7 @@ def claimed_by_worker(ctx) -> Todo:
     report = ctx.root / "report.txt"
     report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
-        problem="P1", pull_request=1, head=sha, report=DeliveryReport(report.read_text()),
+        problem="P1", pull_request=PullRequestLink(ctx.comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(report.read_text()),
     ), ctx.comms)
     claimed = ctx.comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)
@@ -449,7 +473,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
             ctx.commander, holder.name, todo.order.instructions(todo),
         ).message
         claim = OrderClaim.for_order(
-            todo, holder.incarnation, 1, head, "The source repair is published for review.",
+            todo, holder.incarnation, PullRequestLink(todo.repo, 1), head, "The source repair is published for review.",
             sent.reference, store=store,
         )
         claim = replace(claim, message=replace(claim.message, timestamp=time.time() - 3600))
