@@ -1070,7 +1070,8 @@ class SchemaRevision:
 
     @classmethod
     def read(cls, db: sqlite3.Connection) -> SchemaRevision | object:
-        path = next(row[2] for row in db.execute("PRAGMA database_list") if row[1] == "main")
+        # The main database is always database_list's first row.
+        path = db.execute("PRAGMA database_list").fetchone()[2]
         if not path:
             return object()
         info = os.stat(path)
