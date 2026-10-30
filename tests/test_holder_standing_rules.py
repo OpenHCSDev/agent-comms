@@ -844,6 +844,9 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     passes.heartbeat_passed((commander.incarnation,), observed)
     completed = passes.read().commander_completed[commander.incarnation]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
+    # The longest normal pass is quiet, not silent.
+    monkeypatch.setattr(time, "time", lambda: completed + CommanderHeartbeat.pass_duration)
+    assert HeartbeatSilent.violations(held_bus, "lead") == ()
     before = held_bus.bus.bus.revision()
     later = completed + HeartbeatSilent.seconds + 1
     monkeypatch.setattr(time, "time", lambda: later)
