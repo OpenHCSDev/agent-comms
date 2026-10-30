@@ -71,8 +71,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
             failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
             now = time.time()
             snapshot = comms.registry.snapshot()
-            for thread in (recipient for commander in self.commanders(comms.registry, comms.goals)
-                           for recipient in self.recipients(snapshot, commander)):
+            for thread in (recipient for lead in self.boards(comms.registry, comms.goals)
+                           for recipient in self.recipients(snapshot, lead)):
                 for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
@@ -81,7 +81,7 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
 
     def prepare(self, comms: Comms) -> Mapping[Thread, CommanderInputs]:
         return {thread: CommanderInputs.prepare(comms, thread.name, ProgressRead(), self)
-                for thread in self.commanders(comms.registry, comms.goals)}
+                for thread in self.boards(comms.registry, comms.goals)}
 
     def observe(self, comms: Comms, prepared: Mapping[Thread, CommanderInputs]) -> tuple[CommanderObservation, ...]:
         return tuple(
@@ -100,7 +100,10 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merges(comms))
-                previous = CommanderUpdate.latest(comms, item.thread.incarnation)
+                recipients = self.recipients(comms.registry.snapshot(), item.thread)
+                held = {recipient: CommanderUpdate.latest(comms, recipient.incarnation)
+                        for recipient in recipients}
+                previous = held[item.thread]
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
@@ -110,17 +113,15 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
                 )
                 # Board disposition reads CommanderHistory after enforcement.
                 hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states)
-                snapshot = comms.registry.snapshot()
-                history = CommanderHistory.read(comms, self.actors(snapshot))
+                history = CommanderHistory.read(comms, self.actors(comms.registry.snapshot()))
                 states = tuple(state for state in item.states if state not in rejected)
                 rules = tuple(rule for rule in item.rules if rule not in rejected)
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
-                for recipient in self.recipients(snapshot, item.thread):
-                    held = CommanderUpdate.latest(comms, recipient.incarnation)
+                for recipient, latest in held.items():
                     for update in CommanderUpdate.derive(
-                        recipient.incarnation, states, rules, held, now=now,
+                        recipient.incarnation, states, rules, latest, now=now,
                         undisposed=tuple(
-                            ping for packet in held
+                            ping for packet in latest
                             for ping in packet.undisposed(history, now - AwaitingCommander.seconds)),
                         not_applied=not_applied,
                     ):

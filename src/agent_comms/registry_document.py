@@ -15,6 +15,8 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
+from .channel_targets import CommandersTag
+from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -547,8 +549,16 @@ class HistoricalRootPurpose(RootPurpose):
 class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """Every commander of this bus, the registered lead first: #commanders declares the rest.
+        A member that works inside its parent's turn is covered by that parent, never counted."""
+        return tuple(dict.fromkeys((*self.leads(snapshot), *(
+            owner for member in ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
+            for owner in member.execution.turn_owners(member)))))
+
     @abstractmethod
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered commander that owns the project's board, repositories and orders."""
 
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
@@ -579,7 +589,7 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 
 class NoCommanderProject(CommanderProject):
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
@@ -602,7 +612,7 @@ class RegisteredCommanderProject(CommanderProject):
     commander: ThreadIncarnation
     repos: tuple[Repo, ...]
 
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
         if not selected:
             raise RelationViolationError("The registered commander thread no longer exists.")

@@ -38,6 +38,7 @@ from agent_comms.ui_model.unit_state import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
+from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget
@@ -669,13 +670,13 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     """The registry names the commander; an old open request does not make one."""
     comms = notification_bus
     lead = comms.registry.require("lead")
-    assert lead.name in {thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+    assert lead.name in {thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
     assert CommanderHeartbeat.requested_by(lead, comms.goals)
     comms.registry.set_commander_project(RegisteredCommanderProject(
         comms.registry.require("worker").incarnation, ()))
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
-        thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+        thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
 
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
@@ -701,3 +702,21 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
         comms.registry.require("lead").incarnation, worker}
+
+
+def test_every_tagged_commander_commands_its_bound_session(notification_bus, tmp_path):
+    """The hook's role answer reads the same derivation: a tagged peer commands like the
+    registered lead; an untagged worker and a fork carrying its parent's tag do not."""
+    comms = notification_bus
+    for name in ("lead", "worker"):
+        thread = comms.registry.require(name)
+        comms.registry.register(replace(thread, tags=thread.tags | {CommandersTag.declared_name}))
+    comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
+
+    def commands(name):
+        return RecordedWatch(WatchClaim(name, home=tmp_path),
+                             WatchRecord(name, str(comms.root), (), tmp_path)).commands()
+
+    assert commands("lead") and commands("worker")
+    assert not commands("outsider")
+    assert not commands("worker-fork")
