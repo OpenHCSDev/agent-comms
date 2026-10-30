@@ -10,7 +10,7 @@ from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 
 from ..wire_models import WireModel
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession
+from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, SubagentProgress
 from .history import (
     ClaudeHistory, HarnessAddress, JsonLines, JsonLinesFile, NamedSession,
     OfflineHistory, OnlineHistory,
@@ -61,6 +61,13 @@ class ClaudeTranscript(ClaudeJsonLines, JsonLinesFile, ClaudeHistory, OfflineHis
         title = (ThreadText.external(SubagentMeta.model_validate_json(meta.read_bytes()).description)
                  if meta.is_file() else NoThreadText())
         yield SessionFacts(source_id=self.source.stem, title=title)
+
+    def progress(self) -> SubagentProgress:
+        """Where the newest record that decides it says this agent stands, read newest first
+        without the older prefix; a transcript with no such record is malformed and fails."""
+        with self.source.open('rb') as stream:
+            return next(progress for offset, raw in self.reverse_lines(stream, stream.seek(0, 2))
+                        for progress in self.decode_line(raw, offset).subagent_progress())
 
     @staticmethod
     def subagents(session: Path) -> tuple[Path, ...]:

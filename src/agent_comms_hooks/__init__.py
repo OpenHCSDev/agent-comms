@@ -56,6 +56,11 @@ class SubagentId(str):
     def fork(self) -> str:
         return f"claude-{self}"
 
+    @classmethod
+    def of_transcript(cls, transcript: Path) -> SubagentId:
+        """Claude Code names a subagent's transcript `agent-<id>.jsonl`."""
+        return cls(transcript.stem.removeprefix("agent-"))
+
 
 @dataclass(frozen=True)
 class ClaudeHook(HookRecord):
