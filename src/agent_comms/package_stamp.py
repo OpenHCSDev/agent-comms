@@ -1,6 +1,5 @@
 """Source checkouts use their own repository; builds replace this module."""
 
-from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -10,16 +9,10 @@ from .repo import Repo
 
 @dataclass(frozen=True)
 class CheckoutStamp(CoreStamp):
-    value: str
+    """A checkout's commit is whatever its repository holds when asked."""
 
     def commit(self) -> str:
         return Repo.git(self.value, "rev-parse", "HEAD").strip()
 
-    def producer_digests(
-        self,
-        declared: Mapping[str, Callable[[], str]],
-    ) -> dict[str, str]:
-        return {name: digest() for name, digest in declared.items()}
 
-
-STAMP = CheckoutStamp(str(Path(__file__).resolve().parents[2]))
+STAMP: CoreStamp = CheckoutStamp(str(Path(__file__).resolve().parents[2]))

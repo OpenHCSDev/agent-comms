@@ -8,6 +8,8 @@ nothing is refused until the commander answers that message (the OwedAnswer gate
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -16,8 +18,6 @@ from typing import ClassVar, Self
 
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.questions import SenderMessages, UnansweredBurst
-from agent_comms.commander.standing import AnswersTo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
@@ -27,9 +27,9 @@ from agent_comms.goal_actions import (
     OwnerInvocable,
 )
 from agent_comms.messages import Message
-from agent_comms.read_basis import RepliesDisplayScope
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.service_sender import ServiceSender
+from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
     BlocksRelease,
     Degradation,
@@ -49,75 +49,21 @@ from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.turn_digests import OrderEditCountRead
 
 
-class EscalationSender(ServiceSender):
-    """Escalations arrive as a burst of short messages a beat apart, so each lands as its own
-    input: one wall of text is skimmed, a burst is not."""
-
-    sender: ClassVar[str]
-    gap: ClassVar[float] = 2.0
-
-    @classmethod
-    def burst(cls, comms: Comms, commander: str, lines: Sequence[str]) -> None:
-        cls.register(comms.registry)
-        first, *rest = lines
-        comms.messaging.send(cls.sender, commander, first)
-        for line in rest:
-            time.sleep(cls.gap)
-            comms.messaging.send(cls.sender, commander, line)
-
-    @classmethod
-    def burst_once(cls, comms: Comms, commander: str, lines: Sequence[str], identity: str) -> None:
-        """A burst is sent once per identity line: the bus, not a process's memory, says it
-        went out, so a restarted heartbeat that sees the rule as new again does not resend it."""
-        if not cls.sent(comms, commander, identity):
-            cls.burst(comms, commander, lines)
-
-    @classmethod
-    def sent(cls, comms: Comms, commander: str, line: str) -> bool:
-        snapshot = comms.registry.snapshot()
-        messages = SenderMessages(
-            RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
-            time.time() - cls.horizon,
-            time.time(),
-        ).read_opened(comms.bus.bus)
-        return any(message.body == line for message in messages)
-
-    @classmethod
-    def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
-                   before: float) -> tuple[Message, ...]:
-        """This sender's messages to the commander, sent by ``before`` and after the newest
-        answer to any of them: one answer covers the burst it lands after."""
-        return UnansweredBurst(
-            RepliesDisplayScope(snapshot.names_for(commander), snapshot.names_for(cls.sender)),
-            time.time() - cls.horizon,
-            before,
-        ).read_opened(source)
-
-    horizon: ClassVar[int] = 6 * 60 * 60
-
-
-class VibeCheckSender(EscalationSender):
-    sender = "vibe-check"
-
-
-class ChokeholdSender(EscalationSender):
-    sender = "chokehold"
-
-
 class Escalation:
     """An answer owed to an escalation itself. Ignoring one is the chokehold's signal."""
 
     message: Message
+    notice: ClassVar[type[EscalationNotice]]
 
     def clearing_action(self) -> str:
-        return (f"Answer the {self.message.sender} burst by its protocol, naming it with "
+        return (f"Answer the {self.notice.title} burst by its protocol, naming it with "
                 f"--answers {self.message.message_id}.")
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """An escalation arrives as a burst: an answer naming any line of it covers every line
-        its sender sent before the answer, which UnansweredBurst reads once the answer is sent.
+        of that burst sent before the answer, which unanswered reads once the answer is sent.
         The gate runs just before the answer is sent, so it reads the answer the same way."""
-        return any(message.sender == self.message.sender for message in named)
+        return any(message.task == self.message.task for message in named)
 
 
 @dataclass(frozen=True)
@@ -141,7 +87,8 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
             sum(read.read() for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry))),
+                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry),
+                frame.workplaces)),
         )
 
     @classmethod
@@ -149,11 +96,11 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         """One load projection shared by the heartbeat's HUD and standing rules."""
         return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def overloaded(self) -> bool:
         return self.total >= self.ceiling
 
@@ -191,7 +138,7 @@ class VibeCheck(UndatedStandingRule):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         indictment = self.indictment()
-        VibeCheckSender.burst_once(comms, commander, indictment, indictment[0])
+        VibeCheckNotice.burst_once(comms, commander, indictment, indictment[0])
 
     def indictment(self) -> tuple[str, ...]:
         return (
@@ -207,12 +154,14 @@ class VibeCheck(UndatedStandingRule):
 
     def line(self) -> str:
         return (f"vibe check: {self.sign.signal.declared_name}. you seeing this?"
-                f" -> answer the {VibeCheckSender.sender} messages now")
+                f" -> answer the {VibeCheckNotice.title} messages now")
 
 
 @dataclass(frozen=True)
 class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """A vibe check is owed an answer like a directive: the gate refuses until it gets one."""
+
+    notice = VibeCheckNotice
 
     seconds: ClassVar[int] = 5 * 60
 
@@ -221,14 +170,14 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     VibeCheckSender.unanswered(source, snapshot, commander, time.time()))
+                     VibeCheckNotice.unanswered(source, snapshot, commander, time.time()))
 
     def due(self, now: float) -> bool:
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"vibe check {self.cited} is {age} min old. still ignoring it? -> answer it"
+        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
+                " still ignoring it? -> answer it")
 
 
 class Indictment:
@@ -272,14 +221,14 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def scan_checks(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
-            ignored = VibeCheckSender.unanswered(source, snapshot, commander, time.time() - cls.after)
+            ignored = VibeCheckNotice.unanswered(source, snapshot, commander, time.time() - cls.after)
         return tuple(cls(message, tuple(scan.holders)) for message in ignored[:1])
 
     def enforce(self, comms: Comms, commander: str) -> None:
         units = sorted(owner.name for owner in self.units)
         for unit in units:
             comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
-        ChokeholdSender.burst_once(comms, commander, self.burst(units), self.ignored())
+        ChokeholdNotice.burst_once(comms, commander, self.burst(units), self.ignored())
 
     def ignored(self) -> str:
         return f"Ignored: vibe check {self.check.seq}:{self.check.message_id}."
@@ -307,7 +256,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
     def line(self) -> str:
         return (
             f"vibe check {self.check.seq}:{self.check.message_id} ignored, so the units are"
-            f" paused. happy now? -> answer the {ChokeholdSender.sender} burst by its protocol"
+            f" paused. happy now? -> answer the {ChokeholdNotice.title} burst by its protocol"
         )
 
 
@@ -315,12 +264,14 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 class ChokeholdUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
     """Every chokehold message gates the commander from the moment it lands."""
 
+    notice = ChokeholdNotice
+
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         return tuple(cls(message) for message in
-                     ChokeholdSender.unanswered(source, snapshot, commander, time.time()))
+                     ChokeholdNotice.unanswered(source, snapshot, commander, time.time()))
 
     def line(self) -> str:
         return f"chokehold {self.cited} is still unanswered. why? -> answer it by the protocol"
@@ -355,14 +306,10 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     def newest(comms: Comms, commander: str) -> tuple[Message, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
-            if ChokeholdSender.unanswered(source, snapshot, commander, time.time()):
+            if ChokeholdNotice.unanswered(source, snapshot, commander, time.time()):
                 return ()
-            return AnswersTo(
-                RepliesDisplayScope(
-                    snapshot.names_for(commander), snapshot.names_for(ChokeholdSender.sender)
-                ),
-                time.time() - ChokeholdSender.horizon,
-            ).read_opened(source)
+            return ChokeholdNotice.newest_answer(
+                source, snapshot, commander, ChokeholdNotice.lines(source, snapshot, commander, time.time()))
 
     @staticmethod
     def blocking_signs(comms: Comms, commander: str, frame: HeartbeatFrame) -> tuple[Sign, ...]:
@@ -394,7 +341,7 @@ class ChokeholdReleased(ChokeholdAnswer):
         for unit in self.held(comms):
             comms.goals.update_goal(
                 unit, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
-        ChokeholdSender.burst(
+        ChokeholdNotice.burst(
             comms,
             commander,
             ("You quoted it. Units resumed.", "Now do the structural change you named, this turn."),
@@ -415,7 +362,7 @@ class ChokeholdHeld(ChokeholdAnswer):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
-        ChokeholdSender.burst_once(
+        ChokeholdNotice.burst_once(
             comms,
             commander,
             (
@@ -442,7 +389,7 @@ class ChokeholdRefused(ChokeholdAnswer):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
-        ChokeholdSender.burst_once(
+        ChokeholdNotice.burst_once(
             comms,
             commander,
             (

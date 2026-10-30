@@ -68,14 +68,13 @@ class WorkDispatch:
             model=defaults.model,
             thinking_level=defaults.thinking_level,
         )
-        self.action.require_reviewed(comms.goals)
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         repository = Repo.of(self.action.order.check.directory)
         Repo.git(repository.checkout, "fetch", "origin", "main")
         start = CheckoutStart.of(repository.checkout, f"auto/{name}", "origin/main")
         CreateCheckoutStorageEffect(checkout, repository, start).check(
-            StorageProjection(storage, candidate)
+            StorageProjection(storage, candidate, comms)
         )
         Checkout.add(repository.checkout, checkout, start)
         location = candidate.runtime.new_location(comms.root, checkout)
@@ -89,7 +88,7 @@ class WorkDispatch:
         # A failed publication leaves a stopped unit and its checkout, not an
         # untracked running task. A failed/uncertain start never releases its order.
         self.publish(comms, child)
-        comms.owners.start(child.name)
+        comms.owners.start_many((child.name,))
         return comms.registry.require(child.name)
 
 

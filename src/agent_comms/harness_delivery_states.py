@@ -11,13 +11,14 @@ from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
+from .message_reference import MessageReference
 from .declared_family import DeclaredFamily
 from .field_codec import TranscriptRecordId
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .assignment_store import AssignmentStore
-    from .cli_bridges.shared import LineMonitorBridge, MonitorPart
+    from .cli_bridges.shared import LineMonitorBridge, MonitorPart, MonitorReadFile
     from .coordination_tables.harness_deliveries import HarnessDelivery
     from .notification_progress import DeliveryProgress
 
@@ -43,6 +44,10 @@ class Outcome(DeclaredFamily, affix="Outcome"):
         attempt proves no context entry and leaves it."""
         return progress
 
+    @classmethod
+    def finished_with(cls, export: MonitorReadFile) -> None:
+        """An unconsumed body keeps its export for a later Read."""
+
 
 class FilteredOutcome(Outcome):
     @classmethod
@@ -66,6 +71,10 @@ class DeliveredOutcome(FilteredOutcome):
     def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
         return progress.harness_consumed()
 
+    @classmethod
+    def finished_with(cls, export: MonitorReadFile) -> None:
+        export.retire()
+
 
 class EmittedOutcome(UnconfirmedOutcome):
     pass
@@ -76,7 +85,7 @@ class MonitorEvidence(DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         return ()
 
     def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
@@ -95,7 +104,7 @@ class ReceivingMonitor(MonitorEvidence):
     total: int
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         if notification.total != self.total:
             return ()
         parts = await bridge.observe_part(delivery, notification, record)
@@ -107,7 +116,7 @@ class ReceivingMonitor(MonitorEvidence):
             await bridge.record_mismatch(delivery, 'Observed parts do not equal the original message')
             return ()
         await bridge.finish(delivery, partial(replace, outcome=DeliveredOutcome, monitor=record))
-        return (message.exact_reply_target,)
+        return message.opening_references(bridge.binding.bus)
 
 
 @dataclass(frozen=True)

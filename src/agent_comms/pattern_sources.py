@@ -333,6 +333,18 @@ class PaddedWithChecksFailure(PostmortemFailure):
     )
 
 
+class ReadThenRepeatedFailure(PostmortemFailure):
+    number = 31
+    title = "It read the rules after compaction and repeated their first story anyway"
+    evidence = (
+        "October 29: at 08:16 claude-code read every dealt rule, owner-authority's 118-PR "
+        "greentext first, then skipped the ordered audit. For seven hours it wrote about 20 "
+        "prose reviews while 23 PRs merged and Tristan's two standing priorities, Toad p99.9 "
+        "under load and bus latency, got no order. His last words before bed were \"make sure "
+        "the order and standing requests get cleared instead of accumulate\"; load went 36 to 41."
+    )
+
+
 @dataclass(frozen=True)
 class CommanderRule(PatternSource):
     lead: str

@@ -6,10 +6,11 @@ import math
 import shutil
 import time
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.declared_family import DeclaredFamily
@@ -20,12 +21,13 @@ from agent_comms.field_codec import (
     MalformedRecord,
 )
 from agent_comms.locked_store import DurableFile
+from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.problem_number import ProblemNumber
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_room import RoomAllocation
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.work_branches import WorkBranches
+from agent_comms.work_branches import WorkBranchError, WorkBranches
 
 from .shell_effects import StorageDenied, StorageEffect
 from .thread_storage import (
@@ -36,7 +38,10 @@ from .threads import Thread
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration
-    from agent_comms.todos import Todo, TodoStore
+    from agent_comms.comms import Comms
+    from agent_comms.registry_document import RegistrySnapshot
+    from agent_comms.todos import ProgressRead, Todo, TodoStore
+    from agent_comms.held_orders import LiveHold
 
     from .native_tool_call import CodingCall
 
@@ -77,7 +82,10 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
     def for_path(cls, rule: StorageRule, owner: Thread,
                  path: Path) -> Iterator[CheckoutAllocation]:
         allocated = rule.roots_of(owner).allocation_name
-        problem, _, suffix = path.name.removeprefix(f'{allocated}--').partition('--')
+        prefix = f'{allocated}--'
+        name = (path.name.removeprefix(prefix)
+                if path.parent == rule.checkout_base and path.name.startswith(prefix) else '')
+        problem, _, suffix = name.partition('--')
         for member in cls.members_with(cls):
             yield from member.read(owner, path, problem, suffix)
 
@@ -93,6 +101,29 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
                       repository: RepositoryName) -> bool:
         return self.owns_present(rule, owner, path)
 
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        """Read/launch allocations reserve no editable work; declared members supply it."""
+        return ()
+
+    @classmethod
+    def source_repositories(cls, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return ()
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        return frozenset()
+
+    def reserves_boundary(self) -> bool:
+        return False
+
+    def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
+                      store: TodoStore) -> frozenset[Path]:
+        return frozenset()
+
 
 @dataclass(frozen=True)
 class HomeCheckoutAllocation(CheckoutAllocation):
@@ -106,15 +137,50 @@ class HomeCheckoutAllocation(CheckoutAllocation):
         return path in owner.home_checkouts
 
 
-class ProblemCheckoutAllocation(CheckoutAllocation):
+class EditableCheckoutAllocation(CheckoutAllocation):
+    """Declared editable members acquire Git identity once at the source-write boundary."""
+
+    def reserves_boundary(self) -> bool:
+        return True
+
+    def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
+                      store: TodoStore) -> frozenset[Path]:
+        try:
+            repository = Repo.of(path).github
+            if not self.owns_declared(rule, owner, path, repository):
+                return frozenset()
+            return frozenset(root for root in self.editable_roots(rule, owner, store, repository)
+                             if root == path)
+        except (GitCommandError, TodoError) as error:
+            raise StorageDenied(f'Cannot authorize source write in {path}: {error}') from error
+
+
+class ProblemCheckoutAllocation(EditableCheckoutAllocation):
     """A checkout allocated to one problem; ``verb`` is the command that creates it."""
 
     verb: ClassVar[str]
+    problem: str
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        current = store.get(self.problem)
+        current.state.require_open(current)
+        assignment = current.held()
+        current.require_assignee(owner.incarnation, assignment.generation)
+        companions = current.order.source_repositories()
+        if repository not in self.source_repositories(current.repo, companions):
+            return frozenset()
+        return rule.edit_boundaries(owner, current.id, current.repo, companions, assignment.generation)
+
+    @classmethod
+    def source_repositories(cls, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return (primary,)
 
     @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
-        if path != owner.project_path and ProblemNumber.accepts(problem):
+        if ProblemNumber.accepts(problem):
             yield from cls.allocated(problem, suffix)
 
     @classmethod
@@ -131,6 +197,12 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
     def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
         if not suffix:
             yield cls(problem)
+
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return (rule.order_checkout(rule.roots_of(owner), problem),)
 
     def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
         return path == rule.order_checkout(rule.roots_of(owner), self.problem)
@@ -161,6 +233,18 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
     suffix: str
 
     @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return tuple(rule.repository_checkout(rule.roots_of(owner), problem, repository)
+                     for repository in companions)
+
+    @classmethod
+    def source_repositories(cls, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return companions
+
+    @classmethod
     def allocated(cls, problem: str, suffix: str) -> Iterator[CheckoutAllocation]:
         if suffix:
             yield cls(problem, suffix)
@@ -171,14 +255,43 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
 
 
 @dataclass(frozen=True)
-class GoalCheckoutAllocation(RepositoryAllocation):
+class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
     goal: GoalId
     suffix: str
 
     @classmethod
+    def source_repositories(cls, primary: RepositoryName,
+                            companions: tuple[RepositoryName, ...]) -> tuple[RepositoryName, ...]:
+        return tuple(dict.fromkeys((primary, *companions)))
+
+    def editable_roots(self, rule: StorageRule, owner: Thread, store: TodoStore,
+                       repository: RepositoryName) -> frozenset[Path]:
+        roots = frozenset(path.resolve() for goal in owner.goal.matching(self.goal)
+                          for path in self.for_goal(rule, owner, goal.id, repository))
+        for current in store.for_goal(owner.incarnation, self.goal):
+            companions = current.order.source_repositories()
+            if repository in (current.repo, *companions):
+                roots |= rule.edit_boundaries(owner, current.id, current.repo, companions, self.goal)
+        return roots
+
+    @classmethod
+    def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
+                 primary: RepositoryName, companions: tuple[RepositoryName, ...],
+                 generation: GoalId) -> tuple[Path, ...]:
+        return tuple(path for repository in cls.source_repositories(primary, companions)
+                     for path in cls.for_goal(rule, owner, generation, repository))
+
+    @classmethod
+    def for_goal(cls, rule: StorageRule, owner: Thread, generation: GoalId,
+                 repository: RepositoryName) -> tuple[Path, ...]:
+        return (rule.repository_checkout(rule.roots_of(owner), generation, repository),)
+
+    @classmethod
     def read(cls, owner: Thread, path: Path, problem: str,
              suffix: str) -> Iterator[CheckoutAllocation]:
-        if path == owner.project_path or not suffix:
+        # An allocated checkout can also be the current project. Its Goal identity,
+        # not the fact it is home, determines whether it grants editable work.
+        if not suffix:
             return
         try:
             goal = FieldCodec.decode(GoalId, problem)
@@ -242,13 +355,12 @@ class StorageRule(RoomAllocation, DurableFile):
         checkout = self.order_checkout(roots, problem)
         return checkout.with_name(f'{checkout.name}--{repository.name}')
 
-    def checkout_problem(self, roots: StorageRoots, path: Path, other: str) -> str:
-        """The problem whose checkout holds path, read back from order_checkout's own name;
-        other for a path in no problem checkout."""
-        allocated = self.order_checkout(roots, '')
-        names = path.relative_to(allocated.parent).parts[:1] if path.is_relative_to(allocated.parent) else ()
-        return next((name.removeprefix(allocated.name).split('--')[0] for name in names
-                     if name.startswith(allocated.name)), other)
+    def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
+                        companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
+        """Physical editable roots follow declared allocations, even before materialization."""
+        return frozenset(path.resolve()
+                         for member in CheckoutAllocation.members_with(CheckoutAllocation)
+                         for path in member.for_work(self, owner, problem, primary, companions, generation))
 
     def problem_checkouts(self, roots: StorageRoots, problem: str) -> tuple[Path, ...]:
         """Every checkout allocated to one problem: its check repository's, then each other's."""
@@ -292,6 +404,34 @@ class StorageRule(RoomAllocation, DurableFile):
         """Only a repository-suffixed allocation needs its existing Git origin read."""
         return any(allocation.owns_present(self, owner, path)
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
+
+    def require_completed_transfer(self, owner: Thread, source: Path, destination: Path,
+                                   threads: Iterable[Thread], repository: Repo) -> None:
+        """An absent old path may identify only this caller's current physical allocation."""
+        prefix = self.order_checkout(self.roots_of(owner), '').name
+        if source.parent != self.checkout_base or not source.name.startswith(prefix):
+            self.deny(f'Missing source {source} is outside {owner.name}\'s allocations')
+        self.require_transfer_source(owner, destination, threads, repository)
+
+    def require_transfer_source(self, owner: Thread, source: Path,
+                                threads: Iterable[Thread], repository: Repo) -> None:
+        """Relocation ownership is not permission to edit the old order."""
+        if source.is_symlink() or source != source.resolve() or source.parent != self.checkout_base:
+            self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
+        if source == repository.checkout.resolve():
+            self.deny(f'{source} is the registered repository checkout, not an isolated allocation')
+        if not (self.owns_present_checkout(owner, source) or owner.ran_in(Checkout(source))):
+            self.deny(f'{source} is not a current or historical checkout of {owner.name}')
+        owners = tuple(thread for thread in threads
+                       if thread.incarnation != owner.incarnation
+                       and self.owns_present_checkout(thread, source))
+        if owners:
+            self.deny(f'{source} has foreign or ambiguous checkout owners: '
+                      + ', '.join(thread.name for thread in owners))
+        if Repo.of(source).github != repository.github:
+            self.deny(f'{source} is not a checkout of {repository.github}')
+        if not (source / '.git').is_file():
+            self.deny(f'{source} is a shared main/home checkout, not a linked worktree')
 
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and work allocations; Git metadata supplies their branches."""
@@ -388,15 +528,6 @@ class StorageRule(RoomAllocation, DurableFile):
         if path.is_relative_to(self.scratch_base) and not path.is_relative_to(scratch):
             self.deny(f'foreign scratch destination {path}; registered scratch is {scratch}')
 
-    def require_path(self, thread: Thread, path: Path) -> None:
-        """A write in a present checkout follows that checkout's allocation."""
-        self.require_destination(thread, path)
-        base = self.checkout_base
-        if path.is_relative_to(base) and path != base:
-            checkout = base / path.relative_to(base).parts[0]
-            if not self.owns_present_checkout(thread, checkout):
-                self.deny(f'{checkout} is not a checkout of {thread.name}')
-
     def order_text(self, thread: Thread, pythons: Sequence[str]) -> str:
         """The rule uses the same declared paths as storage enforcement."""
         checkout = self.order_checkout(self.roots_of(thread), "P<n>")
@@ -475,10 +606,32 @@ class StorageProjection:
 
     rule: StorageRule
     thread: Thread
+    comms: Comms
+
+    @cached_property
+    def snapshot(self) -> RegistrySnapshot:
+        return self.comms.registry.snapshot()
 
     @cached_property
     def storage(self) -> UnitStorage:
         return UnitStorage.read(self.rule, self.thread)
+
+    def require_write(self, path: Path) -> None:
+        self.rule.require_destination(self.thread, path)
+        owners = self.snapshot.threads_for(self.thread.incarnation.require_recorded())
+        if not owners:
+            self.rule.deny('The source writer incarnation is no longer registered.')
+        owner, = owners
+        resolved = path.resolve()
+        sources = Checkout.git_roots(resolved, *resolved.parents)
+        store = self.comms.goals.todos
+        allowed = frozenset(boundary for root in sources
+                            for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
+                            for boundary in allocation.edit_boundary(self.rule, owner, root, store))
+        if (sources or path.is_relative_to(self.rule.checkout_base)
+                or resolved.is_relative_to(owner.project_path.resolve())) and not any(
+                resolved.is_relative_to(root) for root in allowed):
+            self.rule.deny(f'{path} is a read/launch source, not allocated editable work of {owner.name}.')
 
     def check_call(self, call: CodingCall) -> tuple[StorageEffect, ...]:
         """Check the call's declared effects against this same lazy owner snapshot."""
@@ -490,3 +643,191 @@ class StorageProjection:
         """Preflight every effect of one call against this one snapshot."""
         for effect in effects:
             effect.check(self)
+
+
+@dataclass(frozen=True)
+class EditWorkplaces:
+    """Allocation edit ownership plus retained edit-review evidence, captured for one operation.
+
+    Review-only check/PR sources preserve original calls; they never grant source writes.
+    Zero or multiple review candidates never select a held order. Records stay put.
+    """
+
+    rule: StorageRule
+    owners: Mapping[ThreadIncarnation, Thread]
+    allocated: Mapping[Path, frozenset[str]]
+    orders: Mapping[str, Todo] = field(default_factory=dict, kw_only=True)
+    review_sources: Mapping[Path, frozenset[str]] = field(default_factory=dict, kw_only=True)
+
+    @staticmethod
+    def owner_threads(snapshot: RegistrySnapshot) -> dict[ThreadIncarnation, Thread]:
+        return {thread.incarnation: thread for thread in snapshot.threads.values()}
+
+    @classmethod
+    def for_assignment(cls, root: Path, snapshot: RegistrySnapshot, held: tuple[Todo, ...],
+                       proposed: tuple[Todo, ...]) -> Self:
+        """Capture declared physical boundaries without forge reads or a Todo write lock."""
+        rule = StorageRule.load(root)
+        orders = {todo.id: todo for todo in (*held, *proposed)}
+        allocated: dict[Path, set[str]] = {}
+        for todo in orders.values():
+            companions = todo.order.source_repositories()
+            for assignment in todo.current_holder.current_assignments():
+                for owner in assignment.holder_in(snapshot):
+                    for path in rule.edit_boundaries(owner, todo.id, todo.repo, companions,
+                                                     assignment.generation):
+                        allocated.setdefault(path, set()).add(todo.id)
+        return cls(rule, cls.owner_threads(snapshot),
+                   {path: frozenset(problems) for path, problems in allocated.items()},
+                   orders=orders)
+
+    def roots_for(self, problem: str) -> frozenset[Path]:
+        return frozenset(path for path, problems in self.allocated.items() if problem in problems)
+
+    def require_owner(self, todo: Todo, snapshot: RegistrySnapshot) -> None:
+        assignment = todo.held()
+        before = frozenset((thread.incarnation, self.rule.roots_of(thread))
+                           for thread in self.owners.values()
+                           if thread.incarnation == assignment.owner_identity)
+        after = frozenset((thread.incarnation, self.rule.roots_of(thread))
+                          for thread in assignment.holder_in(snapshot))
+        if not before or before != after:
+            raise TodoConflict(todo)
+
+    def require_current(self, todo: Todo, snapshot: RegistrySnapshot) -> None:
+        if todo.id not in self.orders:
+            raise TodoConflict(todo)
+        todo.require_result(self.orders[todo.id])
+        if self.roots_for(todo.id):
+            self.require_owner(todo, snapshot)
+
+    @classmethod
+    def capture(cls, comms: Comms, snapshot: RegistrySnapshot, holds: Iterable[LiveHold],
+                pulls: ProgressRead
+                ) -> dict[ThreadIncarnation, EditWorkplaces]:
+        """Acquire source/forge facts once, then match edits without Git or network calls."""
+        holds = tuple(holds)
+        if not holds:
+            return {}
+        prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), ())
+        repositories = snapshot.commander_project.require().repos
+        registered = frozenset(repo.github for repo in repositories)
+        rule = prepared.rule
+        declared = {todo.id: todo.order.source_repositories() for todo in prepared.orders.values()}
+        trees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
+        for repo in repositories:
+            branches = trees.setdefault(repo.github, {})
+            for branch, worktrees in pulls.worktrees(repo).items():
+                branches[branch] = (*branches.get(branch, ()), *worktrees)
+        listed = {Path(path) for branches in trees.values()
+                  for worktrees in branches.values() for path in worktrees}
+        explicit = {order.check.directory for hold in holds
+                    for order in hold.todo.order.declarations}
+        links = tuple(dict.fromkeys(link for hold in holds
+                                    for order in hold.todo.order.declarations
+                                    for link in order.pull_requests))
+        requests = {link: row
+                    for repo in repositories
+                    for row in pulls.rows(repo.github, tuple(
+                        link.number for link in links if link.repo == repo.github))
+                    for link in links if link.repo == repo.github and link.number == row.number}
+        progress = pulls.progress(tuple(hold.todo for hold in holds), comms.registry)
+        source_orders: dict[Path, dict[str, Todo]] = {}
+        for hold in holds:
+            todo = hold.todo
+            paths = {order.check.directory for order in todo.order.declarations}
+            paths.update(prepared.roots_for(todo.id))
+            paths.update(Path(path) for order in todo.order.declarations
+                         for link in order.pull_requests if link in requests
+                         for path in trees[link.repo].get(requests[link].branch, ()))
+            for path in paths:
+                source_orders.setdefault(path, {})[todo.id] = todo
+        # Qualify only captured Git roots, never nearest parents of individual events.
+        # An alias cannot manufacture another problem allocation around the same source.
+        present = Checkout.git_roots(*listed, *source_orders)
+        actual: dict[Path, Repo] = {}
+        for path in present:
+            affected = source_orders.get(path, {})
+            readable: tuple[Path, ...] = (path,) if affected else ()
+            for todo in affected.values():
+                readable = progress[todo.id].readable_paths(readable)
+            for source in readable:
+                if source.is_absolute() and Checkout(source).resolved().path == source:
+                    try:
+                        repository = Repo.of(source)
+                        if repository.github in registered:
+                            # A declared source can be a separate clone. Qualify its own
+                            # worktree facts within the same per-source failure boundary.
+                            extra = (pulls.worktrees(repository)
+                                     if source in explicit - listed else {})
+                            actual[source] = repository
+                            branches = trees[repository.github]
+                            for branch, worktrees in extra.items():
+                                if str(source) in worktrees:
+                                    branches[branch] = (*branches.get(branch, ()), str(source))
+                    except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
+                        pulls.unread(affected.values(), error)
+        owners = prepared.owners
+        # The allocation cut is the only problem ownership map. Qualify its source
+        # identity once; absent Git never enables a generic check-root fallback.
+        allocated = {
+            path: frozenset(
+                problem for problem in problems if path in actual
+                for assignment in prepared.orders[problem].current_holder.current_assignments()
+                for owner in assignment.holder_in(snapshot)
+                for allocation in CheckoutAllocation.for_path(rule, owner, path)
+                if actual[path].github in allocation.source_repositories(
+                    prepared.orders[problem].repo, declared[problem])
+                and allocation.owns_declared(rule, owner, path, actual[path].github))
+            for path, problems in prepared.allocated.items()
+        }
+        workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}
+        for holder in dict.fromkeys(hold.holder.incarnation for hold in holds):
+            sources: dict[Path, set[str]] = {}
+            for hold in holds:
+                if hold.holder.incarnation != holder:
+                    continue
+                todo = hold.todo
+                linked = tuple(link for order in todo.order.declarations
+                               for link in order.pull_requests)
+                for order in todo.order.declarations:
+                    path = order.check.directory
+                    # Explicit pre-PR source is valid only for its primary actual repository,
+                    # and ceases being a generic workplace once that source has a PR link.
+                    if (path in actual and actual[path].github == todo.repo
+                            and not any(link.repo == todo.repo for link in linked)):
+                        sources.setdefault(path, set()).add(todo.id)
+                for link in linked:
+                    if link not in requests:
+                        continue  # Unregistered repositories cannot qualify a source boundary.
+                    for worktree_path in trees[link.repo].get(requests[link].branch, ()):
+                        root = Path(worktree_path)
+                        if root in actual and actual[root].github == link.repo:
+                            sources.setdefault(root, set()).add(todo.id)
+            workplaces[holder] = cls(rule, owners, allocated, review_sources={
+                path: frozenset(problems) for path, problems in sources.items()})
+        return workplaces
+
+    def problems_for(self, path: str) -> frozenset[str]:
+        original = Path(path)
+        if not original.is_absolute():
+            return frozenset()
+        # Resolve the edited path once, not its missing leaf with Git. Lexical membership
+        # rejects aliases into a checkout; resolved membership rejects symlink escapes.
+        resolved = original.resolve()
+        parts = (original.relative_to(self.rule.checkout_base).parts
+                 if original.is_relative_to(self.rule.checkout_base) else ())
+        boundary = self.rule.checkout_base.joinpath(*parts[:1])
+        reserved = boundary in self.allocated or any(allocation.reserves_boundary()
+                       for thread in self.owners.values()
+                       for prefix in (self.rule.order_checkout(self.rule.roots_of(thread), ''),)
+                       if boundary.parent == prefix.parent and boundary.name.startswith(prefix.name)
+                       for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
+        # Even a missing/released/unknown allocation reserves its lexical boundary. Only
+        # captured actual Git identity may supply an owner; absence never enables spill.
+        candidates = ({boundary: self.allocated.get(boundary, frozenset())}
+                      if reserved else self.review_sources)
+        return frozenset(problem for root, problems in candidates.items()
+                         if original.is_relative_to(root) and resolved.is_relative_to(root)
+                         for problem in problems)
+

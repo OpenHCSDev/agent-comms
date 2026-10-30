@@ -13,7 +13,7 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 
 **Five things, in this order, every tick:**
 1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
-2. **Work from the heartbeat.** Core's heartbeat is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
+2. **Work from Tristan.** Core's Tristan pass is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
 4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
 5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
@@ -29,13 +29,13 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 
 ## Start of session, and after every compaction
 
-- **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of the pinned refactor-audit catalog (`src/agent_comms/skills/refactor-audit/references/patterns/README.md`); read a rung file when an order or roast cites one of its pattern IDs. The session hook supplies them at every start and compaction from their declared sources. A summary or memory note is a paraphrase that drifts and never counts.
+- **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of NominalRefactorAdvisor's pattern catalog (`nominal_refactor_advisor/audit/patterns/README.md` in the installed package); read a rung file when an order or roast cites one of its pattern IDs. The session hook supplies them at every start and compaction from their declared sources. A summary or memory note is a paraphrase that drifts and never counts.
 - **Memory holds only Tristan's own words and the commander's dated failures; every rule lives here or in rules/.** Tristan, 2026-10-25: "your memory is there to humble you, the rules and tools hone you."
 - Arm `agent-comms-claude-bridge watch` under Monitor exactly, with no pipe or filter, and re-arm it on every expiry and after every install or restore. A buffering filter holds the probe line and deadlocks delivery silently (2026-10-23), and a watch dead since an outage left owner messages unread for 13 hours (2026-10-19). A broken bridge breaks only the push; the tick still pulls `comms_hud` itself.
 
 Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
 
-A silent heartbeat is a dead board, not a quiet one: ten minutes without one is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
+A silent Tristan is a dead board, not a quiet one: ten minutes without him is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
 
 ## Why a dictator
 

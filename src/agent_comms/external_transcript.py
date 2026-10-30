@@ -10,7 +10,7 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from contextlib import aclosing, closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -26,6 +26,7 @@ from .field_codec import (
     ToolCallId,
 )
 from .locked_store import RegistryFile
+from .message_reference import MessageReference
 from .native_runtime_input import NativeRuntimeInput
 from .native_tools import MutatingPathTool
 from .native_transcript import RecordsCut
@@ -58,9 +59,76 @@ if TYPE_CHECKING:
     from .turn_digests import TurnBound
 
 
+class ReplyWindow(DeclaredFamily, affix="Replies"):
+    """The turn owns its opening deliveries, before and after output starts."""
+
+    def delivered(self, connection: Connection, turn: ExternalTurn,
+                  references: tuple[MessageReference, ...]) -> None:
+        """Context cannot reopen a retired turn's input window."""
+
+    def answering(self) -> ReplyWindow:
+        return self
+
+    def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
+        return ()
+
+    def answered(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
+        return ()
+
+    def observed(self, events: tuple[TranscriptEvent, ...]) -> ReplyWindow:
+        window = self
+        for event in events:
+            window = event.reply_window(window, window.answering)
+        return window
+
+    def finished(self) -> ReplyWindow:
+        return self
+
+    def cancelled(self) -> ReplyWindow:
+        return self
+
+
+class ActiveReplies(ReplyWindow, declared_name=None):
+    """Only active windows receive context or transition on turn retirement."""
+
+    def references_in(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
+        return turn.opening_references(connection)
+
+    def finished(self) -> ReplyWindow:
+        return FinishedReplies()
+
+    def cancelled(self) -> ReplyWindow:
+        return StoppedReplies()
+
+
 @dataclass(frozen=True)
-class ExternalTurn(TypedRow):
-    turn_id: NativeTurnId
+class OpeningReplies(ActiveReplies):
+    def delivered(self, connection: Connection, turn: ExternalTurn,
+                  references: tuple[MessageReference, ...]) -> None:
+        for reference in references:
+            ExternalTurnInput(turn.thread, turn.turn_id, reference).insert_if_absent(connection)
+
+    def answering(self) -> ReplyWindow:
+        return AnsweringReplies()
+
+
+@dataclass(frozen=True)
+class AnsweringReplies(ActiveReplies):
+    """Later context cannot change which deliveries opened this answer."""
+
+
+@dataclass(frozen=True)
+class StoppedReplies(ReplyWindow):
+    """A retired window cannot be reopened by input or output."""
+
+
+class FinishedReplies(StoppedReplies):
+    def answered(self, connection: Connection, turn: ExternalTurn) -> tuple[MessageReference, ...]:
+        opening = turn.opening_references(connection)
+        return opening if any(event.answers_turn
+            for item in ExternalItemRow.select(connection, thread=turn.thread, turn_id=turn.turn_id,
+                                                order_by=("seq",), descending=True, limit=1)
+            for event in item.events_in(connection)) else ()
 
 
 class ExternalPage(DeclaredFamily):
@@ -184,6 +252,48 @@ class ExternalTranscriptRows(StoreRows):
 
 
 @dataclass(frozen=True)
+class ExternalTurn(ExternalTranscriptRows, TypedTable):
+    """One external turn's opening deliveries, retained after its completion."""
+
+    seq: Annotated[int, Column(primary_key=True, auto_increment=True)]
+    thread: ThreadLookup
+    turn_id: NativeTurnId
+    replies: ReplyWindow
+    unique = (("thread", "turn_id"),)
+    indexes = (Index(("thread", "seq")), Index(("thread", "replies")))
+
+    @classmethod
+    def opened(cls, connection: Connection, thread: ThreadLookup, turn_id: NativeTurnId) -> ExternalTurn:
+        for turn in cls.select(connection, thread=thread, turn_id=turn_id):
+            return turn
+        cls.insert_values(connection, thread=thread, turn_id=turn_id, replies=OpeningReplies())
+        return cls.require(connection, thread=thread, turn_id=turn_id)
+
+    def store(self, connection: Connection, replies: ReplyWindow) -> None:
+        if replies != self.replies:
+            self.update(connection, where="seq=?", parameters=(self.seq,), replies=replies)
+
+    def opening_references(self, connection: Connection) -> tuple[MessageReference, ...]:
+        return tuple(sorted((row.reference for row in ExternalTurnInput.select(
+            connection, thread=self.thread, turn_id=self.turn_id)), key=lambda reference: reference.seq))
+
+
+@dataclass(frozen=True)
+class ExternalTurnInput(ExternalTranscriptRows, TypedTable):
+    """An indexed opening edge, not a second copy in the turn's state payload."""
+
+    thread: Annotated[ThreadLookup, Column(primary_key=True)]
+    turn_id: Annotated[NativeTurnId, Column(primary_key=True)]
+    reference: Annotated[MessageReference, Column(primary_key=True)]
+    indexes = (Index(("thread", "reference")),)
+
+    @classmethod
+    def references(cls) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(columns=("thread", "turn_id"), target=ExternalTurn,
+                           target_columns=("thread", "turn_id")),)
+
+
+@dataclass(frozen=True)
 class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
     """A stable item position; older pages prepend without moving saved cursors."""
 
@@ -212,7 +322,7 @@ class ExternalItemRow(ExternalTranscriptRows, ExternalPageRow, TypedTable):
             f'WHERE previous.thread={table}.thread AND previous.turn_id={table}.turn_id '
             f'AND previous.seq<{table}.seq)'
         )
-        with closing(cls.stream(connection, row_type=ExternalTurn, thread=thread,
+        with closing(cls.stream(connection, row_type=ExternalPageRow, thread=thread,
                                 where=first_item, order_by=("seq",), descending=True)) as rows:
             for row in rows:
                 yield row.turn_id
@@ -286,7 +396,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
 
     @classmethod
     @contextmanager
-    def publication(cls, root: Path, input_id: InputId):
+    def publication(cls, root: Path, input_id: InputId) -> Iterator[DraftPublication]:
         from .transcripts import TranscriptRead
         with TranscriptRead.publication_source(root) as connection:
             original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None
@@ -294,7 +404,7 @@ class DraftRow(ExternalTranscriptRows, TypedTable, TranscriptDraft, declared_nam
             yield DraftPublication()
             return
         from .registration import Registration
-        thread = Registration(RegistryFile.path_in(root)).snapshot().by_lookup[original.owner_lookup]
+        thread = Registration(RegistryFile.path_in(root)).require_lookup(original.owner_lookup)
         original.owner_identity.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
@@ -467,10 +577,53 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             ).fetchone()[0]
         return GeneratedTimestamp.decode(timestamp)
 
+    def delivered(self, turn_id: NativeTurnId, references: tuple[MessageReference, ...]) -> None:
+        if not references:
+            return  # Protocol notices and already-confirmed history introduce no input.
+        with self.writing() as connection:
+            turn = ExternalTurn.opened(connection, self.lookup, turn_id)
+            turn.replies.delivered(connection, turn, references)
+
+    def opening_for(self, turn_id: NativeTurnId) -> tuple[MessageReference, ...]:
+        with self.snapshot() as connection:
+            turns = ExternalTurn.select(connection, thread=self.lookup, turn_id=turn_id)
+            return next((turn.replies.references_in(connection, turn) for turn in turns), ())
+
+    def answered_inputs(self, references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
+        """Probe only named originals and the final items of the turns they opened."""
+        with self.snapshot() as connection:
+            inputs = ExternalTurnInput.select_keys(connection, tuple(
+                dict(thread=self.lookup, reference=reference) for reference in references))
+            turns = tuple(dict.fromkeys(row.turn_id for row in inputs))
+            answered = frozenset(reference
+                for turn_id in turns
+                for turn in ExternalTurn.select(connection, thread=self.lookup, turn_id=turn_id)
+                for reference in turn.replies.answered(connection, turn))
+        return answered.intersection(references)
+
+    def finish_replies(self, turn_id: NativeTurnId) -> None:
+        with self.writing() as connection:
+            for turn in ExternalTurn.select(connection, thread=self.lookup, turn_id=turn_id):
+                turn.store(connection, turn.replies.finished())
+
+    def transition_replies(self, transition: Callable[[ReplyWindow], ReplyWindow]) -> None:
+        """Indexed active-state probes retire all open turns without decoding history."""
+        with self.writing() as connection:
+            for turn in ExternalTurn.select_keys(connection, tuple(
+                dict(thread=self.lookup, replies=member())
+                for member in ReplyWindow.members_with(ActiveReplies))):
+                turn.store(connection, transition(turn.replies))
+
+    def observe_output(self, connection: Connection, turn_id: NativeTurnId,
+                       events: tuple[TranscriptEvent, ...]) -> None:
+        turn = ExternalTurn.opened(connection, self.lookup, turn_id)
+        turn.store(connection, turn.replies.observed(events))
+
     def finish(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
+            self.observe_output(connection, turn_id, events)
             if events:
                 self._insert_once(connection, turn_id, item_id, events, self._cut(connection).offset + 1)
             DraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
@@ -526,6 +679,7 @@ class ExternalTranscript(TranscriptSource, DurableStore):
     def draft(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
+            self.observe_output(connection, turn_id, events)
             DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
 
     def end_turn(self) -> None:

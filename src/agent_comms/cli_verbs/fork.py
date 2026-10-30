@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from agent_comms.channel_targets import DeclaredTag
 from agent_comms.cli_verbs.new import NewThreadCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms
@@ -29,5 +30,5 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 
     @classmethod
     def thread_binding(cls, thread: Thread) -> Self:
-        return cls(name='', parent=thread.name, tags=GivenTags(thread.tags), project=thread.worktree,
+        return cls(name='', parent=thread.name, tags=GivenTags(DeclaredTag.for_child(thread.tags)), project=thread.worktree,
                    model=thread.model, thinking_level=thread.thinking_level)

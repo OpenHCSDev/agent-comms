@@ -38,12 +38,12 @@ class UnpushedBranch(HeldBranchRule):
         return tuple(cls(held.problem, held.todo.order.checked().id, held.holder,
                          held.worktree, unpublished)
                      for held in branches
-                     for unpublished in held.repository.branches.unpushed(held.difference))
+                     for unpublished in held.difference.unpublished)
 
     def line(self) -> str:
         return (f"{self.holder.name} has {self.unpublished.commits} unpushed commits on"
                 f" {self.problem} ({self.unpublished.head[:9]} in {self.worktree}, upstream"
-                f" {self.unpublished.upstream or 'not configured'}). waiting for the disk to die?"
+                f" {self.unpublished.upstream or 'not configured'}). these commits exist only locally"
                 " -> push them")
 
 
@@ -62,7 +62,7 @@ class EmptyPullRequest(HeldBranchRule):
         for held in branches:
             reader = held.repository.branches
             todo = held.todo
-            for pull in held.source.pulls.open_for(todo):
+            for pull in held.source.frame.pulls.open_for(todo):
                 for compared in pull.empty_changes(reader):
                     found.append(cls(held.problem, todo.order.checked().id, held.holder,
                                      PullRequestLink(todo.repo, pull.number),

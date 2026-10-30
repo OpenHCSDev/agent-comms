@@ -3,7 +3,7 @@
 import asyncio
 import os
 import time
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from dataclasses import replace
 
 import pytest
@@ -11,12 +11,14 @@ import pytest
 from agent_comms.channel_targets import CommsTag
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.task_attachments.commander_pings import CommanderNotice
+from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Addressed
+from agent_comms.repo import Checkout
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ConnectedThreadStatus
 from agent_comms_hooks.watch import WatchClaim
@@ -43,17 +45,18 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                       thread='deaf-session', start=Binding.bus_head(str(held_bus.root)))
     operation = Serve(owner=owner, transcript=tmp_path / "deaf-session.jsonl")
     heartbeat = CommanderHeartbeat()
+    owner_thread = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
 
-    def beat():
-        heartbeat.pass_body(held_bus, heartbeat.observe(held_bus))
+    async def beat():
+        await heartbeat.run(lambda: nullcontext(held_bus))
 
     def alarms():
         with held_bus.bus.bus.observing() as db:
             sequences = tuple(row.seq for row in Addressed.table.select(
-                db, sender=heartbeat.sender, target=CommsTag.channel(),
+                db, sender=owner_thread, target=CommsTag.channel(),
             ))
         return tuple(message for sequence in sequences
-                     if "COMMANDER DEAF" in (message := held_bus.bus.bus.lookup(sequence)).body)
+                     if (message := held_bus.bus.bus.lookup(sequence)).task == FleetNotice())
 
     with Binding.open(state) as db:
         binding.bind(db)
@@ -84,13 +87,13 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 paused = snapshot.seen_at("lead")
                 assert status.paused_since(paused) == (paused,)
                 assert type(snapshot.statuses["lead"]) is type(status)
-                beat()
+                await beat()
                 assert alarms() == ()
                 monkeypatch.setattr(time, "time", lambda: paused + 301)
-                beat()
-                beat()
+                await beat()
+                await beat()
                 alarm, = alarms()
-                assert alarm.body.startswith("lead: COMMANDER DEAF")
+                assert alarm.body.startswith("lead: ")
                 assert "agent-comms-claude-bridge watch" in alarm.body
 
                 await bridge.confirm_probe(probe)
@@ -98,10 +101,10 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 assert type(snapshot.status("lead")) is ConnectedThreadStatus
                 assert type(snapshot.statuses["lead"]) is ConnectedThreadStatus
                 assert snapshot.status("lead").paused_since(snapshot.seen_at("lead")) == ()
-                beat()
+                await beat()
                 assert alarms() == (alarm,)
                 update, = held_bus.bus.bus.latest_addressed(
-                    frozenset({heartbeat.sender}), frozenset({"lead"}),
+                    frozenset({owner_thread}), frozenset({"lead"}),
                 )
                 assert isinstance(update.task, CommanderNotice)
             finally:

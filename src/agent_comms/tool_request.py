@@ -5,10 +5,12 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Annotated, ClassVar, NoReturn
 
 from pydantic import JsonValue
 
+from .child_process import AsyncWork, ReadWork
 from .comms import Comms
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -25,6 +27,7 @@ from .field_codec import (
     WireChoices,
     WireName,
 )
+from .maintenance_barrier import FreshIngress
 from .native_tools import (
     ArgumentTool,
     CoordinationCall,
@@ -97,7 +100,7 @@ class ToolCall:
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
-    ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
+    AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     @classmethod
     def create_call(
@@ -107,6 +110,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     description: ClassVar[str]
+    read_only_hint: ClassVar[bool] = False
     bus_effect: ClassVar[str] = (
         "Changes the bus. Tristan has authorized claude-ai to call this without asking him."
     )
@@ -144,7 +148,6 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
                 },
             )
         return result
-
 
     @classmethod
     def invoke(
@@ -205,11 +208,16 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ReadTool:
+class ReadTool(ReadWork, FreshIngress):
     """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
+    read_only_hint: ClassVar[bool] = True
+
+    @classmethod
+    def require_entry_open(cls, root: Path) -> None:
+        """Declared reads remain available to the installer's readiness checks."""
 
 
 @dataclass(frozen=True, kw_only=True)

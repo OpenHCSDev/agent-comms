@@ -26,13 +26,30 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     """
 
     OBSERVATION_MAX_BYTES = 16 * 1024
+    DRAIN_CHUNK_BYTES = 64 * 1024
 
     def __init__(self, reader: asyncio.StreamReader, *, event_type: type[PiEvent] = PiEvent):
-        super().__init__(reader)
+        # Node writes to a stdout pipe synchronously on Linux: a pipe Core stops
+        # draining freezes Pi's whole event loop, model stream included. Records
+        # are read from an unpaused copy that one task keeps filling from the
+        # child's pipe, so draining never waits on how Core handles a record.
+        super().__init__(asyncio.StreamReader())
+        self.source = reader
+        self.draining = asyncio.get_running_loop().create_task(self._drain_source())
         self.pending = PendingRequests()
         self.event_type = event_type
         self._events = asyncio.Queue(maxsize=100)
         self._read_task: asyncio.Task | None = None
+
+    async def _drain_source(self) -> None:
+        try:
+            while chunk := await self.source.read(self.DRAIN_CHUNK_BYTES):
+                self.reader.feed_data(chunk)
+        except OSError as error:
+            # The pipe's own failure reaches the record reader, as it did before.
+            self.reader.set_exception(error)
+            return
+        self.reader.feed_eof()
 
     async def _read(self):
         try:

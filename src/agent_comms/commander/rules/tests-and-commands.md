@@ -6,6 +6,29 @@ audience: fleet
 type: feedback
 ---
 
+> run the test suite
+> in the foreground
+> it takes 9 minutes
+> Tristan sends a message
+> it waits 9 minutes
+> run a wait loop: `until pgrep -f verify; do sleep 1; done`
+> pgrep -f matches its own command line
+> loop never ends
+> launch another to check on the first
+> it also matches itself
+> 177 of them
+> 378 forks per second
+> 48% CPU spent waiting for nothing
+> kill the test with plain timeout
+> TERM skips the fixture's finally
+> 7 private bus workers survive, 5 hours old
+> "measure latency" loop in zsh with `$c` unquoted
+> it runs a command literally named "cmd --flag"
+> exit 127 in 2 ms
+> report: "latency is 2 ms"
+> fastest command in the fleet. it does not exist.
+> mfw the slowest thing on the machine was the test of how slow things are
+
 **Why:** a foreground run freezes the commander, so bus messages and the owner's questions wait behind it; and tests matter only as behaviour protection, so preserving sloppy ones blocks structural change. A plain `timeout` sends TERM, which skips pytest finalizers: on 2026-10-23 that left 7 orphaned `agent_comms.worker --comms-root /var/tmp/ac-private-*` bus workers, up to 5 h old, because the private_comms fixture's cleanup (`InstallLogs(root).stop_running()` in its `finally`, tests/conftest.py:383) never ran; INT runs it.
 
 - Units and review forks do not launch pytest. Review source first. Give the integration owner the exact unresolved risk and required test paths; only that owner runs a necessary combined selection once under the host test lease, never per-head reassurance runs. Order checks do not launch tests.
@@ -17,7 +40,7 @@ type: feedback
 - A wait or kill by process pattern brackets its first letter (`grep -q "[v]erify"`) or waits on a file or PID, or it matches itself.
 - Never cut a check's output with `tail` or `head`; grep the lines that carry its verdict or read it whole. On 2026-10-23 a tail kept the tables and dropped the UNPUSHED alarms above them for 50 minutes. Tristan: "tailing is a terrible reflex of urs".
 - Every background wait also watches progress: when its log has not changed for 180 s it prints STALLED and exits, since a wait on a PID alone cannot tell slow from hung. Tristan, 2026-10-25, after a 9-minute install hang he found himself: "I have to send you a message to say that it's hung? Why?".
-- Lint warns, never blocks: the debt ratchet reports ruff and Black growth as warnings on the file and gates only restated facts. Read the warnings on lines you added or changed; fix one when it names a real defect, such as an undefined name or dead code. Never run `ruff format` on a whole file, never rename a class or function to quiet a lint rule, and never touch lines the order didn't name. Your reply includes `git diff --stat origin/main...HEAD`.
+- Lint warns, never blocks: the NRA gate reports ruff and Black growth as warnings on the file and gates only restated facts. Read the warnings on lines you added or changed; fix one when it names a real defect, such as an undefined name or dead code. Never run `ruff format` on a whole file, never rename a class or function to quiet a lint rule, and never touch lines the order didn't name. Your reply includes `git diff --stat origin/main...HEAD`.
 - Order checks run in a detached scratch tree of the revision with no `.venv` (`OrderCheck.run_at` in goals.py): call the shared venv's python by absolute path with `PYTHONPATH=src`, or a test count prints 0 on correct work. A wrong check is corrected with `order check`, never a strike (2026-10-24: P589's own check refused `order done` after #3057 merged green).
 - A fork running tests in its own worktree exports `PYTHONPATH=$WORKTREE/src:$WORKTREE/tools`: tests that spawn `sys.executable -m agent_comms...` otherwise import the shared checkout through the venv's editable install. A "red on main" from a subprocess-spawning test is unproven until rerun with the export (2026-10-23: a fork's red on test_carry_bus_history measured a checkout from before #2805).
 - `git bisect run` from a linked worktree exports GIT_DIR into old commits whose fixtures predate the GIT_* scrub, so every bisect runs `git bisect run env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR CMD`. On 2026-10-23 leaked fixtures wrote `user.name` into the shared config and authored 100+ commits as the fixture, and one re-initialised the live repo bare. The shared checkout's local `user.name` stays empty.

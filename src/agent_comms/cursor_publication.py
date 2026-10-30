@@ -26,7 +26,7 @@ from .comms import Comms
 from .coordination_errors import DeferredRead
 from .coordinator import Coordination
 from .cursor_owner import CommittedCursorOwner, CursorOwner, CursorState
-from .diagnostics import PublicationMeasurements
+from .publication_measurements import PublicationMeasurements
 from .field_codec import InputId
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope

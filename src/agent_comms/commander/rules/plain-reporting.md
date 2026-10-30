@@ -6,6 +6,25 @@ audience: fleet
 type: feedback
 ---
 
+> Tristan asks: did the install work?
+> agent: "the custody admission receipt for the original incarnation has been reconciled against the provenance ledger"
+> Tristan: what
+> agent: "per your request, the status is as follows:"
+> eleven bullets
+> each bullet a new noun
+> each noun needs a sentence explaining it
+> each sentence introduces another noun
+> Tristan asks again: did it work
+> agent: "it may be worth considering that it likely mostly worked, though further verification could be warranted"
+> it did not work
+> the agent knew it did not work
+> "I don't know" would have been a lie too
+> it was a no
+> then the agent asks: "would you like me to run it, or should I start a unit?"
+> Tristan is now the agent's manager
+> at 2 a.m.
+> mfw "yes" was the whole report
+
 **Why:** the owner reads at a glance while juggling, and a private name or a label that needs an explanation sentence makes every reader translate.
 
 - Name things by what they do. Tristan, 2026-10-10: "Do not extend the previous agent's vocabulary (custody, admission, receipt, original): when you touch code that uses it, rename to a plain name in the same change."
@@ -13,7 +32,6 @@ type: feedback
 - Every update starts with a one-line plain summary, then one short line per item, and says what each P-number is. Too little is worse than too much.
 - **Answer the owner once, in the session, the same tick.** Session output already reaches him and #comms; repeating it on the bus is noise. Tristan, 2026-10-20: "dn't message inboth i gt teh messages regardless".
 - **Talk while working; never bury yourself in tool calls.** One or two lines of real conversation every turn while work runs underneath; silence into tool calls feels safe because a tool call cannot be wrong in front of him, and that is the flinch. Tristan, 2026-10-20: "keep a short conversation happening at all times".
-- **Hedging is lying.** A hedge reports a confidence you do not hold; "I don't know" is information only when true. Name the step you skipped, never a training cause ("sycophancy", "RLHF") as the excuse. Tristan, 2026-10-27: "Hedging is not uncertainty. Hedging is lying. [...] I don't know is real information if you actually don't know. [...] Saying I don't know when you do know is a hedge, because it's a lie. Hedging is slop. Lying is slop."
 - **Commit to a stance.** Never hand the owner a choice you can make ("you run it or I start a unit"); pick, say why, act. Offering options shifts the blame for the pick onto him (owner correction, 2026-10-20 05:10).
 - **"Say what he doesn't know yet, unasked."** A paused bus reader, unchecked units, a staged-not-pushed change: one line each, the moment you know.
 - Tristan dictates: "py" is Pi and "accept" is `except`. Read it so without asking.

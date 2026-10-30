@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
 
@@ -142,7 +144,7 @@ class OwnGoalPublication(ToolResult):
 
     __slots__ = ()
 
-    @projected(view="wire", name="agentCommsKind")
+    @projected(view=WireExclude, name="agentCommsKind")
     def publication_kind(self) -> object:
         return FieldCodec.encode(PublishedGoalToolDetails)
 
@@ -537,7 +539,7 @@ class CommsGoalTool(ThreadToolRequest):
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
-            "Merged, installed or working claims, each with the artifact Core verifies; "
+            "Typed evidence claims, each with the artifact Core verifies; "
             "a completed report needs at least one"
         ),
     ] = ()
@@ -846,7 +848,9 @@ class SendTool(PublishingTool[ThreadCaller]):
     description = (
         "Send a message to another thread or channel. Address specific threads with "
         "@thread-name in the body: the named threads are told they are the intended "
-        "readers, and others dismiss quietly. Unknown names stay plain text."
+        "readers, and others dismiss quietly. Unknown names stay plain text. "
+        "External sends may name received originals in answers; "
+        "source-turn identity is not a model argument."
     )
     target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: Annotated[str, *tool_field("Message text")]
@@ -861,6 +865,11 @@ class SendTool(PublishingTool[ThreadCaller]):
         *tool_field("Change report fields; required for the change-report kind"),
     ] = NoChangeReport()
 
+    answers: Annotated[
+        tuple[MessageReference, ...],
+        *tool_field("Original received messages explicitly answered; external sends without a named source turn must name these to link answers"),
+    ] = ()
+
     def publish(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         sender = caller.own_thread()
         target = CommandTarget.named(self.target)
@@ -869,7 +878,8 @@ class SendTool(PublishingTool[ThreadCaller]):
             body = target.addressed(self.audience, self.body)
             result = comms.messaging.send(
                 sender, target.name, body, self.type, report=self.report,
-                task=self.attachment(comms, target), origin=caller.origin())
+                task=self.attachment(comms, target), origin=caller.origin(),
+                answers=self.answers)
         except ToolRefusedError as error:
             # The caller hears the refusal now; the record waits for the wire lock on its own.
             threading.Thread(target=SendRefusal.record,

@@ -135,6 +135,15 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def assistant_parts(self) -> tuple[str, ...]:
         return ()
 
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
+        """Input and system evidence do not start an assistant answer."""
+        return window
+
+    @property
+    def answers_turn(self) -> bool:
+        """Non-answer events do not clear a turn's opening questions."""
+        return False
+
     def with_publications(self, publications: tuple[MessageReference, ...]) -> TranscriptEvent:
         return self
 
@@ -206,11 +215,11 @@ class TextTranscript(TranscriptEvent):
     def activity_items(self) -> tuple[TranscriptEvent, ...]:
         return (self,)
 
-    @projected(view="activity", name="text")
+    @projected(view=ActivityExclude, name="text")
     def activity_text(self) -> str:
         return self.text[:TurnDigest.activity_excerpt_characters]
 
-    @projected(view="activity", name="text_characters")
+    @projected(view=ActivityExclude, name="text_characters")
     def activity_text_characters(self) -> int:
         return len(self.text)
 
@@ -277,7 +286,7 @@ class IncomingTranscript(TextTranscript):
 
     @property
     def category(self) -> type[MessageCategory]:
-        return self.message.role.category
+        return self.message.category
 
     message: Annotated[Message, ActivityExclude()]
     reader: str
@@ -287,7 +296,7 @@ class IncomingTranscript(TextTranscript):
     def __post_init__(self) -> None:
         self.message.require_envelope()
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def position(self) -> int:
         return self.message.seq
 
@@ -295,11 +304,11 @@ class IncomingTranscript(TextTranscript):
     def text(self):
         return self.message.body
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def timestamp(self):
         return self.message.timestamp
 
-    @projected(view="activity")
+    @projected(view=ActivityExclude)
     def source(self):
         return self.message.reference
 
@@ -347,7 +356,18 @@ class UserTranscript(NativeTextTranscript):
         return (replace(self, routing=self.routing.with_requests(remaining)),)
 
 
-class AssistantTranscript(AgentTextTranscript):
+class ModelOutput:
+    """Assistant text, thinking and tool output close the window for new automatic reply routes."""
+
+    def reply_window[Window](self, window: Window, answering: Callable[[], Window]) -> Window:
+        return answering()
+
+
+class AssistantTranscript(ModelOutput, AgentTextTranscript):
+    @property
+    def answers_turn(self) -> bool:
+        return bool(self.text)
+
     def append_to(self, events: list[TranscriptEvent]) -> None:
         if events and (merged := events[-1].followed_by_assistant(self)) is not None:
             events[-1] = merged
@@ -437,7 +457,7 @@ class SentTranscript(OutgoingRoute, WireTextTranscript):
         raise ValueError("Sent report no longer matches its original assigned wire message")
 
 
-class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
+class ThinkingTranscript(ModelOutput, SilentTranscript, LiveTextTranscript):
     category = ThinkingCategory
 
     @property
@@ -453,7 +473,7 @@ class ContextTranscript(SilentTranscript, NativeTextTranscript):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolTranscript(SilentTranscript, RecordedTranscript):
+class ToolTranscript(ModelOutput, SilentTranscript, RecordedTranscript):
     category = ToolCategory
     tool_call_id: ToolCallId
     tool_name: str
@@ -533,6 +553,16 @@ class ToolEndTranscript(ToolTranscript):
 class CallState(DeclaredFamily, affix="CallState"):
     """Where one tool call stands in its unit's records."""
 
+    @classmethod
+    def repeats_failure(cls, current: OrderCall, previous: OrderCall) -> bool:
+        """Only a failure can repeat one: a call still running or that succeeded repeats nothing."""
+        return False
+
+    @classmethod
+    def same_failed_digest(cls, current: str, previous: str) -> bool:
+        """The previous call, asked by a failed one: only a failure is the same failure."""
+        return False
+
 
 class RunningCallState(CallState):
     """Started; no result is recorded yet."""
@@ -543,7 +573,13 @@ class SucceededCallState(CallState):
 
 
 class FailedCallState(CallState):
-    pass
+    @classmethod
+    def repeats_failure(cls, current: OrderCall, previous: OrderCall) -> bool:
+        return previous.state.same_failed_digest(current.digest, previous.digest)
+
+    @classmethod
+    def same_failed_digest(cls, current: str, previous: str) -> bool:
+        return current == previous
 
 
 @dataclass(frozen=True)
@@ -552,6 +588,10 @@ class OrderCall:
     tool_name: str
     digest: str
     state: type[CallState]
+
+    def repeats_failure(self, previous: OrderCall) -> bool:
+        """This call failed the same way the previous one did."""
+        return self.state.repeats_failure(self, previous)
 
 
 @dataclass(frozen=True)
@@ -565,7 +605,7 @@ class TurnDigest:
     activity_text_limit: ClassVar[int] = 4
     activity_call_limit: ClassVar[int] = 6
 
-    @projected(view="activity", name="events")
+    @projected(view=ActivityExclude, name="events")
     def activity_events(self) -> tuple[TranscriptEvent, ...]:
         """Keep the request and the newest conversation text; omit raw tool results."""
         items = tuple(item for event in self.events for item in event.activity_items())
@@ -573,7 +613,7 @@ class TurnDigest:
             return items
         return items[:1] + items[-(self.activity_text_limit - 1):]
 
-    @projected(view="activity", name="calls_started")
+    @projected(view=ActivityExclude, name="calls_started")
     def activity_calls(self) -> tuple[OrderCall, ...]:
         """Use the existing call owner for digests and final recorded outcomes."""
         calls: dict[ToolCallId, OrderCall] = {}
@@ -582,7 +622,7 @@ class TurnDigest:
         return tuple(replace(call, digest=call.digest[:self.activity_excerpt_characters])
                      for call in tuple(calls.values())[-self.activity_call_limit:])
 
-    @projected(view="activity", name="original_event_count")
+    @projected(view=ActivityExclude, name="original_event_count")
     def activity_event_count(self) -> int:
         return len(self.events)
 

@@ -21,6 +21,8 @@ from agent_comms.todos import (
     TodoProblems,
     PlainText,
     ProgressRead,
+    PullRequestLink,
+    ResumeClaimOrder,
     HeadReviewed,
     HeadVerdict,
     NoHeadOrder,
@@ -31,11 +33,14 @@ from agent_comms.todos import (
     JudgedCall,
     ToolCallVerdict,
 )
-from .commander.vibe_check import OverloadDegradation
-from .commander_hud import CommanderHud
+from .commander_hud import CommanderHud, CommanderLoad
+from .service_passes import ServicePassStore
 from .comms import Comms
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from .problem_number import ProblemNumber
+from .tool_declaration import EditCall
+from .work_branches import WorkBranchError
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
@@ -67,6 +72,7 @@ from .turn_digests import (
     TurnView,
     TurnsSince,
     UnjudgedEdits,
+    UnavailableOrderEdits,
 )
 
 
@@ -121,7 +127,7 @@ class CommsTodoTool(ThreadToolRequest):
         todo = comms.goals.todos.get(self.problem)
         actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.commander(comms).name))
+            self.problem, self.operation_for(todo, actor, comms), actor))
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -156,9 +162,9 @@ class CommsVerdictTool(ThreadToolRequest):
     ]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        actor = caller.identity(comms)
         changed, = comms.goals.judge_calls(
-            (JudgedCall(self.problem, self.operation.authored_by(caller.identity(comms))),),
-            caller.commander(comms).name)
+            (JudgedCall(self.problem, self.operation.authored_by(actor)),), actor)
         return TodoChanged(changed, changed.strike_count)
 
 
@@ -177,7 +183,7 @@ class CommsVerdictsTool(ThreadToolRequest):
         return TodoList(comms.goals.judge_calls(
             tuple(replace(call, operation=call.operation.authored_by(actor))
                   for call in self.verdicts),
-            caller.commander(comms).name))
+            actor))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -226,8 +232,17 @@ class CommsUnjudgedTool(ThreadReadTool):
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
-            comms, caller.subject(self.thread)) for edit in read.read()))
+        owner = comms.registry.require(caller.subject(self.thread)).incarnation.require_recorded()
+        passes = ServicePassStore.at(comms.root).read()
+        edits: list[EditCall] = []
+        unavailable: list[UnavailableOrderEdits] = []
+        for read in OrderEditsRead.for_commander(comms, owner.name):
+            try:
+                edits.extend(read.read())
+            except (WorkBranchError, OSError) as error:
+                unavailable.append(UnavailableOrderEdits(
+                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, error))
+        return UnjudgedEdits(tuple(edits), tuple(unavailable)).with_services(passes, owner)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -242,18 +257,19 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(BoardReadTool):
     label = "Measured commander load"
-    description = "Read open orders, review timers and unjudged edits used by the overload rule."
+    description = "Read retained commander load with recorded service failures and its original completion clock."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
-        return CommanderHud.read(comms, caller.subject(self.thread)).load
+    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderLoad:
+        return CommanderHud.read(comms, caller.subject(self.thread)).load_reading()
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsHudTool(ThreadReadTool):
     label = "Commander HUD"
     description = (
-        "Read the commander's latest published heartbeat frame: orders, review timers, "
-        "strikes, edits, PRs, plan phases and load. A missing or stale heartbeat is refused."
+        "Read the commander's latest published Tristan frame: orders, review timers, "
+        "strikes, edits, PRs, plan phases and load. Recorded failures precede retained data; "
+        "stale rows stay explicitly stale, and missing frames remain unavailable."
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
@@ -322,8 +338,9 @@ class CommsTodoListTool(BoardReadTool):
 class CommsStandingRulesTool(CommsHudTool):
     label = "Read broken standing rules"
     description = (
-        "Read the published heartbeat's standing-rule board and HUD. The heartbeat owns "
-        "enforcement; this read never repeats it. A missing or stale heartbeat is refused."
+        "Read the published Tristan board and HUD. Tristan owns "
+        "enforcement; this read never repeats it. Recorded failures precede stale retained rows; "
+        "a missing frame remains explicitly unavailable."
     )
 
 
@@ -377,6 +394,13 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         actor = comms.registry.require(caller.name).incarnation
         generation = todo.held().generation
         todo.require_assignee(actor, generation)
+        # The identical call resumes a retained claim's publication; nothing is claimed again.
+        link = PullRequestLink(todo.repo, self.pull_request)
+        for claim in todo.order.commander_claims():
+            if claim.resumed_by(link, self.head, self.report.text):
+                resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
+                    comms.goals, todo.id)
+                return TodoChanged(resumed, resumed.strike_count)
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report.text,
@@ -400,7 +424,7 @@ class CommsOrderDoneTool(CommsTodoTool):
     claims: Annotated[
         tuple[ProgressClaim, ...],
         *tool_field(
-            "Merged, installed or working claims, each with the artifact Core verifies in the order's "
+            "Typed evidence claims, each with the artifact Core verifies in the order's "
             "checkout; at least one for fix, none for triage reports"
         ),
     ]

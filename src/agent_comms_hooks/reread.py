@@ -2,7 +2,7 @@
 
 Claude Code runs this after every tool call. The session start hook orders the sources read
 once and deals them into a deck of short slices beside the transcript: the voice, the
-commander's indictment, the drift tells of the rules the session follows and the recorded
+commander's indictment, each followed rule's wake-up with its tell, and the recorded
 failures, interleaved. Every `every` tool calls one slice goes
 into context inline, the next one each time. Nothing repeats verbatim on every call, nothing
 waits on a read the commander may skip, and the cadence counts tool calls, so no transcript
@@ -35,9 +35,7 @@ class SliceReminder(DeckStart):
         deck = self.deck(reader)
         if not deck.exists():
             return self.dealt(reader)  # the session was bound, or changed role, after it started
-        with self.calls.open("ab") as calls:
-            calls.write(b".")
-            count = calls.tell()
+        count = self.count_call()
         if count % self.every:
             return ()
         slices = json.loads(deck.read_text(encoding="utf-8"))
@@ -79,7 +77,7 @@ def main() -> None:
     GatedCall.of(record).completed()
     hook = BoardReminder.decode(record)
     if texts := hook.take():
-        hook.warn("\n\n".join(texts))
+        hook.warn(*texts)
 
 
 if __name__ == "__main__":

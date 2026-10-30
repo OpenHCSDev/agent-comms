@@ -15,7 +15,8 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
-from .child_process import join_retirement
+from .child_process import AsyncWork, join_retirement
+from .native_build_inputs import GitLaunch
 from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,
@@ -116,7 +117,7 @@ class Coordination(ExecutionStore, AttemptStore):
 
     @staticmethod
     def worker_context() -> Context:
-        return MaintenanceHolder.in_context(StoreLock.worker_context())
+        return GitLaunch.in_context(MaintenanceHolder.in_context(StoreLock.worker_context()))
 
     @staticmethod
     async def run_worker(operation: Callable[[], Result]) -> Result:
@@ -126,10 +127,7 @@ class Coordination(ExecutionStore, AttemptStore):
         scheduling seam also supports registry-only acquisition/retirement;
         those operations must not depend on opening a coordinator connection.
         """
-        pending = asyncio.get_running_loop().run_in_executor(
-            None, Coordination.worker_context().run, operation
-        )
-        return await join_retirement(pending)
+        return await AsyncWork.run_async(partial(Coordination.worker_context().run, operation))
 
     @classmethod
     async def watch_worker(
@@ -146,6 +144,8 @@ class Coordination(ExecutionStore, AttemptStore):
             (outcome,) = await asyncio.gather(
                 watch.run(opened_wire), return_exceptions=True,
             )
+            if isinstance(outcome, asyncio.CancelledError):
+                raise outcome
             if isinstance(outcome, Exception):
                 logging.error("Service worker pass failed: %s", name, exc_info=outcome)
                 await cls.run_worker(partial(passes.failed, name, outcome))

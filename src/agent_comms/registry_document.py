@@ -15,6 +15,8 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
+from .channel_targets import CommandersTag
+from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -24,6 +26,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireValue,
@@ -55,6 +58,7 @@ from .thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -63,6 +67,7 @@ from .thread_status import (
     ActiveThreadPresence,
     ArchivedThreadStatus,
     StoppedThreadStatus,
+    StoppingThreadStatus,
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
@@ -77,6 +82,7 @@ if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
+    from .rule_deal import DealtSources, RuleDeal
 
 
 @dataclass(frozen=True, slots=True)
@@ -395,17 +401,32 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
 
+    def birth(self, name: str) -> CreationTime:
+        """One row's creation time, read alone: a stored row is never decoded for it."""
+        if name in self._decoded:
+            return self._decoded[name].created_at
+        try:
+            return CreationTime.from_wire(self._raw[name].get("created_at"))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def births(self) -> set[float]:
+        return {self.birth(name) for name in self}
+
+    def lookup_names(self) -> dict[ThreadLookup, str]:
+        """Each row's creation lookup, read from its birth alone: resolving one owner never
+        decodes the other threads."""
+        return {
+            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
+            .require_recorded().lookup: name
+            for name in self
+        }
+
     def require_distinct_births(self) -> None:
-        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
-        a stored row's birth is read alone, without decoding the rest of its thread."""
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
         births: set[float] = set()
         for name in self:
-            try:
-                birth = (self._decoded[name].created_at if name in self._decoded
-                         else CreationTime.from_wire(self._raw[name].get("created_at")))
-            except ValueError as error:
-                raise InvalidRegistryDocument(error) from error
-            births.add(birth.distinct_from(births))
+            births.add(self.birth(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -547,13 +568,23 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
     @abstractmethod
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """Every commander of this bus."""
+
+    @abstractmethod
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered commander that owns the project's board, repositories and orders."""
 
     def unique_repositories(self, name: str = '') -> tuple[Repo, ...]:
         return ()
 
     @abstractmethod
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]: ...
+
+    def linkable(self, primary: RepositoryName) -> tuple[RepositoryName, ...]:
+        """The repositories an order on ``primary`` may link pull requests in: its own and
+        each repository this project registers."""
+        return (primary, *self.repository_names())
 
     @abstractmethod
     def require(self) -> RegisteredCommanderProject: ...
@@ -565,15 +596,24 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
-    def session_output[Output](self, incarnation: ThreadIncarnation, *,
-                               commander: Output, commanded: Output) -> Output:
-        """A commanded session's last item replies to the senders delivered in its turn; the
-        commander answers its owner in its own transcript and messages units only by tool."""
+    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+                        commander: Answer, commanded: Answer) -> Answer:
+        """The answer for the commander this project names, or for a thread it commands."""
         return commanded
+
+    def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
+                   commander: type[DealtSources], commanded: type[DealtSources],
+                   prompts: tuple[str, ...]) -> None:
+        """The fleet's rules are dealt by the role this project gives the thread."""
+        deal.deal(self.by_role(incarnation, commander=commander, commanded=commanded), prompts)
 
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A bus with no commander project has no commanders, tagged or not."""
+        return ()
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
     def repository_names(self, name: str = "") -> tuple[RepositoryName, ...]:
@@ -597,6 +637,20 @@ class RegisteredCommanderProject(CommanderProject):
     repos: tuple[Repo, ...]
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered lead first, then every thread declared in #commanders. A commander
+        fork sits in that channel with its commander's tags but acts for it, never as one."""
+        return tuple(dict.fromkeys((
+            *self.leads(snapshot),
+            *(thread for thread in
+              ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
+              if not thread.execution.commander_forks(thread)))))
+
+    def lead(self, snapshot: RegistrySnapshot) -> Thread:
+        """The one registered commander a fork is declared under."""
+        (thread,) = self.leads(snapshot)
+        return thread
+
+    def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
         if not selected:
             raise RelationViolationError("The registered commander thread no longer exists.")
@@ -623,8 +677,8 @@ class RegisteredCommanderProject(CommanderProject):
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
 
-    def session_output[Output](self, incarnation: ThreadIncarnation, *,
-                               commander: Output, commanded: Output) -> Output:
+    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+                        commander: Answer, commanded: Answer) -> Answer:
         return commander if incarnation == self.commander else commanded
 
 
@@ -765,9 +819,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         return updated
 
     def set_commander_project(self, project: CommanderProject) -> CommanderProject:
-        """Publish a project only for its current registered commander identity."""
-        for thread in project.commanders(RegistrySnapshot.capture(self)):
-            thread.require_commander()
+        """Publish a project for its registered commander identity."""
         self.commander_project = project
         return project
 
@@ -797,8 +849,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        used = {existing.created_at for existing in self.threads.values()}
-        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        thread = replace(thread, created_at=thread.created_at.distinct_from(self.threads.births()))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
@@ -874,15 +925,16 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.owners.rename(canonical, new_name)
         return canonical, new_name
 
-    def fence_idle_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
-        """Atomically deny new turns for exactly one idle owner before signaling.
+    def fence_restart_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
+        """Atomically deny new turns for exactly one idle or wedged owner before signaling.
 
         The outer wire lock alone cannot exclude a direct registry claim; this
-        check and the STOPPED transition share the registry's own lock.
+        check and the STOPPED transition share the registry's own lock. A wedged
+        turn's reference is dropped here exactly as stop's fence drops it.
         """
         current = self.require_active(expected.name)
         try:
-            current.require_idle()
+            current.require_restartable()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
@@ -890,26 +942,30 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.set_status(expected.name, expected.execution.registered_status(
-            expected, StoppedThreadStatus()))
+            expected, StoppingThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
+        self.threads[expected.name] = current.without_turn()
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:
+        """Stopped: no session runs anywhere, so the row keeps no process binding."""
+        thread = self._withdraw(name, StoppedThreadStatus())
+        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+
+    def fence_owner(self, name: str) -> None:
+        """Refuse new work while the host completes the session; the binding stays."""
+        self._withdraw(name, StoppingThreadStatus())
+
+    def _withdraw(self, name: str, status: ThreadStatus) -> Thread:
         name = self.require(name).name
         self.status(name).require_mutable(name)
         self.status(name).withdraw_owner(self.owners, name)
         thread = self.threads[name]
-        self.set_status(name, thread.execution.registered_status(thread, StoppedThreadStatus()))
+        self.set_status(name, thread.execution.registered_status(thread, status))
         self.advance_claim(name)
         self.threads[name] = thread.without_turn()
-
-    def detach_process(self, name: str, process: ProcessIdentity) -> None:
-        """A completed session releases its binding, not the root host's physical process."""
-        thread = self.require(name)
-        if thread.process_identity != process:
-            raise RelationViolationError("Session process changed before retirement")
-        self.threads[thread.name] = replace(thread, process_identity=NoProcess())
+        return self.threads[name]
 
     def archive(self, name: str) -> None:
         name = self.require(name).name
@@ -1077,9 +1133,16 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
-    def by_lookup(self) -> Mapping[str, Thread]:
-        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
-                                 for thread in self.threads.values()})
+    def lookup_names(self) -> Mapping[ThreadLookup, str]:
+        return MappingProxyType(self.threads.lookup_names())
+
+    def born(self, lookup: ThreadLookup) -> Thread:
+        """The one thread a creation lookup names; only its row decodes."""
+        try:
+            name = self.lookup_names[lookup]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread lookup {lookup!r} is not registered.") from error
+        return self.threads[name]
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
@@ -1164,8 +1227,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
-        if lookup in self.by_lookup:
-            thread = self.by_lookup[lookup]
+        if lookup in self.lookup_names:
+            thread = self.born(lookup)
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)
@@ -1191,7 +1254,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         }
 
     def process_owners(self, process: ProcessIdentity) -> tuple[str, ...]:
-        return tuple(thread.name for thread in self.threads.values() if thread.process_identity == process)
+        return tuple(thread.name for thread in self.threads.values()
+                     if thread.process_identity == process and self.status(thread.name).holds_process)
 
     def owner_identity(self, name: str) -> OwnerIdentity:
         canonical = self.canonical_name(name)

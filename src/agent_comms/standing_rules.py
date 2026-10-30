@@ -10,11 +10,12 @@ import argparse
 import time
 from abc import abstractmethod
 from collections import Counter
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields
 from functools import cache
 from itertools import combinations
 from pathlib import Path
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
@@ -30,10 +31,12 @@ from agent_comms.heartbeat_subjects import (
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.messages import Message
+from agent_comms.message_reference import MessageReference
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.repo import GitCommandError
+from agent_comms.service_passes import FailingPass, ServicePasses, ServicePassStore
 from agent_comms.storage_rules import MemoryUse, StorageRule, UnitStorage
 from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
@@ -46,7 +49,9 @@ from agent_comms.todos import (
     ProgressSource,
     StoredHeadReview,
 )
-from agent_comms.work_branches import BranchDifference, SourceGrowth
+from agent_comms.work_branches import (
+    BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
+)
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -232,6 +237,10 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
     def attention(self) -> bool:
         return True
 
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return (ping,)
+
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """What a recorded action must touch to dispose of this rule's heartbeat line; a rule
         about nothing a verb can act on clears only when its condition does."""
@@ -289,11 +298,25 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         return next((owner for owner in cls.__mro__ if FamilyScan in owner.__bases__), cls)
 
     @classmethod
+    def scan_owners(cls) -> tuple[type[StandingRule], ...]:
+        return tuple(dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls)))
+
+    @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        """Rules acquire nothing unless their scan owner declares an input effect."""
+
+    @classmethod
+    def prepare_all(cls, comms: Comms, commander: str, holds: HeldOrders,
+                    pulls: ProgressRead) -> None:
+        for owner in cls.scan_owners():
+            owner.prepare(comms, commander, holds, pulls)
+
+    @classmethod
     def broken(cls, comms: Comms, commander: str, after: float = 0.0, *,
                observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[StandingRule, ...]:
         """Read each owner once against the supplied frame and its one progress reader."""
-        owners = dict.fromkeys(rule.scan_owner() for rule in cls.members_with(cls))
-        return tuple(rule for owner in owners
+        return tuple(rule for owner in cls.scan_owners()
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if rule.attention() and rule.broke_after(after))
 
@@ -302,25 +325,6 @@ class FamilyScan(StandingRule, declared_name=None):
     """The class naming this among its bases owns one scan its members share: a member its
     scan selects is never scanned a second time."""
 
-
-class OrderRefusingStandingRule(StandingRule, declared_name=None):
-    """An overdue review prevents new orders, through the same backend admission path."""
-
-    @classmethod
-    @abstractmethod
-    def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]: ...
-
-    @classmethod
-    def scan_observed(cls, comms: Comms, commander: str,
-                      observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_reviews(comms.goals, commander, frame.pulls)
-
-    @classmethod
-    def refusals(cls, goals: Goals, commander: str) -> tuple[str, ...]:
-        pulls = ProgressRead(goals.todos.held_for_commander(goals.registry.require(commander).incarnation))
-        owners = dict.fromkeys(member.scan_owner() for member in cls.members_with(cls))
-        return tuple(rule.line() for owner in owners
-                     for rule in owner.scan_reviews(goals, commander, pulls))
 
 
 class CoreActsStandingRule(StandingRule, declared_name=None):
@@ -413,12 +417,43 @@ class LostTools(UndatedStandingRule):
                 " who took them, and why? -> restore its required tools")
 
 
+class HolderBranch:
+    """A holder's branch difference; two of them may write the same files in parallel."""
+
+    holder: ThreadIncarnation
+    difference: BranchDifference
+
+    @staticmethod
+    def touching[Branch: HolderBranch](
+        branches: Sequence[Branch],
+    ) -> Iterator[tuple[Branch, Branch]]:
+        """Each pair of branches writing a common file of one repository, once. Indexing by
+        (repository, file) selects them; any other pair cannot conflict, and a pair on one
+        branch or under one holder that does conflict is still a conflict to resolve."""
+        sharing: dict[tuple[RepositoryName, str], list[int]] = {}
+        for position, branch in enumerate(branches):
+            for path in branch.difference.files:
+                sharing.setdefault((branch.difference.repository, path), []).append(position)
+        pairs = dict.fromkeys(pair for group in sharing.values() for pair in combinations(group, 2))
+        return ((branches[left], branches[right]) for left, right in pairs)
+
+
 @dataclass(frozen=True)
-class HeldBranch:
+class PreparedBranch(HolderBranch):
+    """One held order's captured branch difference, before the cut, in its repository."""
+
+    holder: ThreadIncarnation
+    todo: Todo
+    difference: BranchDifference
+    repository: Path
+
+
+@dataclass(frozen=True)
+class HeldBranch(HolderBranch):
     """One order still writing source, joined to its own allocated checkout. Only the branch
-    difference reads that worktree; its unit may retire it mid-frame, so every later Git read
-    goes through the order's repository, which owns the branch refs and remote heads and
-    outlives the worktree."""
+    difference and publication are captured from that worktree before observation; its unit
+    may retire it mid-frame. Later PR comparisons use the order's repository, which outlives
+    the worktree, never its possibly different local branch/upstream configuration."""
 
     todo: Todo
     holder: ThreadIncarnation
@@ -454,22 +489,51 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
     """Branch rules share the heartbeat's existing progress frame and one scan."""
 
     @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        storage = comms.registry.storage_rule
+        prepared: list[PreparedBranch] = []
+        for held in holds.live:
+            todo = held.todo
+            directory = todo.order.checked().check.directory
+            try:
+                reader = pulls.checkout(directory).branches
+                for pull in pulls.open_for(todo):
+                    pull.prepare_comparison(reader)
+                path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
+                if path.is_dir():
+                    pulls.checkout(path).branches.prepare_upstreams()
+                    prepared.append(PreparedBranch(held.holder, todo, pulls.branch_difference(path),
+                                                   pulls.checkout(directory).path))
+            except (OSError, GitCommandError,
+                    WorkBranchError, TimeoutExpired) as error:
+                pulls.unread((todo,), error)
+        for member in cls.members_with(cls):
+            member.prepare_captured(tuple(prepared), pulls)
+
+    @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        """A member that needs more than each branch's own difference reads it here, before
+        the cut; its scan consumes only what this captured."""
+
+    @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
         storage = comms.registry.storage_rule
-        snapshot = comms.registry.snapshot()
+        captured = frame.pulls.captured_branch_paths
         branches = []
         for state in observed:
             merges = state.source.merges()
-            writing = tuple(todo for todo in state.source.todos
-                            if todo.order.writes_source(todo, merges))
+            writing = frozenset(todo.id for todo in state.source.todos
+                                if todo.order.writes_source(todo, merges))
             for unit in state.readable_units():
-                for thread in snapshot.threads_for(unit.require_recorded()):
-                    for todo in writing:
-                        path = storage.order_checkout(storage.roots_of(thread), todo.id)
-                        if path.is_dir():
+                for held in frame.live:
+                    todo = held.todo
+                    if held.holder.incarnation == unit and todo.id in writing:
+                        path = storage.order_checkout(storage.roots_of(held.holder), todo.id)
+                        if path.resolve() in captured:
                             branches.append(HeldBranch(
-                                todo, unit, frame.pulls.branch_difference(path), path,
+                                todo, unit, frame.pulls.require_branch_difference(path), path,
                                 frame.pulls.checkout(todo.order.checked().check.directory),
                                 state.source,
                             ))
@@ -485,15 +549,22 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
 
 
 @dataclass(frozen=True)
-class BranchBehindMain(HeldBranchRule):
-    """A held branch needs a new base after too much main work passed it."""
+class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
+    """A held branch needs a new base after too much main work passed it. Syncing is the
+    holder's reflex, so Core tells the holder itself instead of waiting on a commander relay."""
 
     problem: str
     holder: ThreadIncarnation
     repository: RepositoryName
     branch: str
     behind: int = field(compare=False)
-    limit: ClassVar[int] = 30
+    limit: ClassVar[int] = 10
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        comms.messaging.send(commander, self.holder.name, (
+            f"{self.branch} is {self.behind} commits behind main. Merge origin/main into it now,"
+            " resolve every conflict yourself, push, and keep working; a stale tree turns your"
+            " next push into everyone's conflict."))
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
@@ -537,8 +608,39 @@ class BranchGrowth(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class SharedFileBranches(HeldBranchRule):
-    """Different held branches touch the same repository-relative file."""
+class UnparsedBranch(HeldBranchRule):
+    """A held branch pushed src that Python cannot parse; its growth cannot be counted."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    unparsed: tuple[UnparsedSource, ...] = field(compare=False)
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(
+            cls(problem=held.problem, holder=held.holder,
+                repository=held.difference.repository,
+                branch=held.difference.branch, unparsed=held.difference.growth.unparsed)
+            for held in branches if held.difference.growth.unparsed
+        )
+
+    def line(self) -> str:
+        return (
+            f"UNPARSED {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem})"
+            f" pushed src that does not parse: {', '.join(u.listing() for u in self.unparsed)}."
+            " conflict markers pushed? -> fix the file and push"
+        )
+
+
+@dataclass(frozen=True)
+class ConflictingBranches(HeldBranchRule):
+    """Two held branches that Git cannot merge: one row per pair, only for a real conflict.
+
+    Two branches touching the same file is ordinary parallel work; the row exists only
+    when ``git merge-tree`` of their heads conflicts, and merging one into the other clears
+    it, so no row asks a question nothing can answer."""
 
     problem: str
     holder: ThreadIncarnation
@@ -547,28 +649,33 @@ class SharedFileBranches(HeldBranchRule):
     other_holder: ThreadIncarnation
     other_branch: str
     repository: RepositoryName
-    path: str
+    paths: tuple[str, ...] = field(compare=False)
+
+    @classmethod
+    def prepare_captured(cls, prepared: tuple[PreparedBranch, ...], pulls: ProgressRead) -> None:
+        for first, second in HolderBranch.touching(prepared):
+            pulls.branch_conflicts(first.repository, first.difference.head, second.difference.head)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
-        found = []
-        for first, second in combinations(branches, 2):
-            left, right = first.difference, second.difference
-            if (first.holder == second.holder or left.repository != right.repository
-                    or left.branch == right.branch):
-                continue
-            found.extend(cls(problem=first.problem, holder=first.holder, branch=left.branch,
-                             other_problem=second.problem, other_holder=second.holder,
-                             other_branch=right.branch, repository=left.repository, path=path)
-                         for path in sorted(left.files & right.files))
-        return tuple(found)
+        return tuple(
+            cls(problem=first.problem, holder=first.holder, branch=first.difference.branch,
+                other_problem=second.problem, other_holder=second.holder,
+                other_branch=second.difference.branch, repository=first.difference.repository,
+                paths=conflicts)
+            for first, second in HolderBranch.touching(branches)
+            if (conflicts := first.source.frame.pulls.require_branch_conflicts(
+                first.difference.head, second.difference.head))
+        )
 
     def line(self) -> str:
-        return (f"SEQUENCE {self.holder.name} {self.problem} and {self.other_holder.name} {self.other_problem}"
-                f" both touch {self.repository.to_wire()}:{self.path}. who goes first? -> sequence"
-                " them")
+        return (f"CONFLICT {self.holder.name} {self.problem} ({self.branch}) and"
+                f" {self.other_holder.name} {self.other_problem} ({self.other_branch}) do not merge"
+                f" in {self.repository.to_wire()}: {', '.join(self.paths)}. -> merge one into the"
+                " other and resolve")
 
 
+@dataclass(frozen=True)
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 
@@ -630,13 +737,27 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         # Capture committed order/directive references before the bus cut.
-        snapshot = comms.registry.snapshot()
-        requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
+        cut = comms.registry.store.snapshot_with_authority()
+        snapshot = cut.snapshot
+        thread = snapshot.require(commander)
+        requests = comms.goals.todos.open_requests(thread.incarnation)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(source, snapshot, held, commander, requests))
-        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos))
+        references = tuple(dict.fromkeys(reference for rule in opened
+                                         for reference in rule.session_questions()))
+        answered = comms.transcripts.answered_inputs(thread, references, cut.privacy)
+        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
+                     and not rule.answered_in_session(answered))
+
+    def session_questions(self) -> tuple[MessageReference, ...]:
+        """Ordinary owed answers still require their existing bus answer relation."""
+        return ()
+
+    def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
+        questions = self.session_questions()
+        return bool(questions) and all(question in answered for question in questions)
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -755,14 +876,15 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
 
 
 class ReviewTimerUp(HeldOrderDue, FamilyScan):
-    """Each round of a held order's review timer is its own condition, so the heartbeat wakes
-    the commander once per round; the unit sees no timer and nothing is struck."""
+    """The timer owns the request and wake; the unit's ReviewDue row owns its display."""
+
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return ()
 
     @classmethod
     def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
-        return comms.goals.todos.timers_up_in(
-            frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
-        )
+        return frame.review_timers
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -886,9 +1008,8 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
 
 
 @dataclass(frozen=True)
-class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead, OrderRefusingStandingRule):
-    """A head linked to the caller's held order: the reader is registered with exactly the
-    caller's holds, so another commander's heads never freeze its orders."""
+class LinkedUnreviewedHead(OrderHeadReviewCommands, UnreviewedHead):
+    """An overdue linked head remains visible without preventing unrelated recovery work."""
 
     @classmethod
     def for_head(cls, request: PullRequestHead, due: float, todos: Sequence[Todo]) -> tuple[Self, ...]:
@@ -1000,7 +1121,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                     *(f"order {holder.name}" for holder in self.holders))
                    or (self.unowned,))
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
-                f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
+                f" {why}, unchanged since {RecordedEventTime(self.moved).stamp()}. who owns it, or are we"
                 f" pretending it doesn't exist? -> {'; '.join(actions)}")
 
 
@@ -1052,7 +1173,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
         age = time.time() - cls.hunted(comms, commander)
-        return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
+        return f"no hunt in the last {cls.seconds // 60} min" if age > cls.seconds else None
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
@@ -1078,7 +1199,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
                  for todo in todos}
         candidates: list[str] = []
         for repo in repos:
-            log = repo.git(repo.checkout, 'log', 'origin/main', '--since=7.days',
+            log = repo.git(repo.checkout, 'log', f'{repo.remote}/main', '--since=7.days',
                            '--name-only', '--format=', '--', repo.source)
             churn = Counter(str((repo.checkout / name).resolve())
                             for name in log.splitlines()
@@ -1110,6 +1231,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     request: OwnerRequestId
     directive: RequestDirective
+
+    def session_questions(self) -> tuple[MessageReference, ...]:
+        return (self.message.reference,)
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
@@ -1143,26 +1267,26 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class ServicePassFailing(IndependentStandingRule, DatedStandingRule, FamilyScan):
+class ServicePassFailing(FailingPass, IndependentStandingRule, DatedStandingRule, FamilyScan):
     """A Core service watch whose newest pass failed; the connector's log reaches nobody."""
 
     watch: str
-    since: float
     error: str = field(compare=False)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        failing = ServicePassStore.at(comms.root).read().failing
+        return cls.from_passes(ServicePassStore.at(comms.root).read())
+
+    @classmethod
+    def from_passes(cls, passes: ServicePasses) -> tuple[Self, ...]:
         return tuple(cls(watch=watch, since=failed.since, error=failed.error)
-                     for watch, failed in sorted(failing.items()))
+                     for watch, failed in sorted(passes.failing.items()))
 
     def began(self) -> float:
         return self.since
 
     def line(self) -> str:
-        return (f"FIX service pass {self.watch} failing since {RecordedEventTime(self.since).clock()}:"
-                f" {self.error}. is anyone fixing it, or letting it pile up?"
-                " -> fix the owner of the failing read this wake")
+        return self.failure_line(self.watch)
 
 @dataclass(frozen=True)
 class BoardDisagrees(UndatedStandingRule):

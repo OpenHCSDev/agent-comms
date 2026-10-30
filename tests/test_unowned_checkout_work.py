@@ -4,8 +4,10 @@
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 
+import asyncio
 import json
 import os
+from contextlib import nullcontext
 import subprocess
 import time
 from dataclasses import dataclass, replace
@@ -22,8 +24,7 @@ from agent_comms.commander_heartbeat import (
     CommanderObservation,
 )
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
-from agent_comms.commander_hud import CommanderHud, CodexUsage, UnreadableUsage
-from agent_comms.commander.vibe_check import OverloadDegradation
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
@@ -40,7 +41,6 @@ from agent_comms.standing_rules import (
 )
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
-from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -163,7 +163,6 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     c.transcripts.external('idle').finish(
         turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
             'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
-    CommanderHeartbeat.register(c.registry)
     configured_repository(c)
     return c
 
@@ -185,9 +184,9 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
 
 def run_heartbeat_rules(c: Comms, rules: tuple[StandingRule, ...]) -> None:
     lead = c.registry.require('lead')
-    hud = CommanderHud(lead.incarnation, (), (), OverloadDegradation.from_orders((), 0, 0), (),
-                       CodexUsage(UnreadableUsage(reason='not requested')))
-    CommanderHeartbeat().pass_body(c, (CommanderObservation(lead, (), rules, (), hud),))
+    frame = capture_frame(c, lead.name, ProgressRead())
+    observed = CommanderObservation(lead, frame, rules, ())
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(c)))
 
 
 def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bus):
@@ -199,7 +198,7 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         fresh = c.goals.todos.apply(current.id, VoidStrikeTodo(
             current.revision, c.registry.require('lead').incarnation, strike,
             'The cited failure was incorrect and the commander takes back this strike.'))
-        following = ServicePassFailing('following-rule', time.time(), 'independent source')
+        following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source')
         run_heartbeat_rules(c, (stale, following))
 
         assigned = c.goals.todos.get('P1')
@@ -207,8 +206,8 @@ def test_a_concurrent_unstrike_does_not_end_the_heartbeat_pass(struck_unowned_bu
         assert assigned.revision == fresh.revision + 1
         assert not assigned.strikes_against(c.registry.require('worker').incarnation)
         assert stale.redecided(c, 'lead', assigned) == ()
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None and not update.not_applied
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
+        assert not update.not_applied
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('lead').incarnation in (
             ServicePassStore.at(c.root).read().commander_completed)
@@ -226,11 +225,10 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
 
     current = c.goals.todos.get('P1')
     stale = ConflictingServicePass('stale-rule', time.time(), 'changed row', current)
-    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source')
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update.not_applied == (stale.rejected_line(StaleTodoDecision(current)),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
@@ -257,7 +255,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         previous.revision, c.registry.require('lead').incarnation, strike,
         'The cited failure was incorrect and the commander takes back this strike.'))
     stale = ChangingRow(previous, current)
-    following = ServicePassFailing('following-rule', time.time(), 'independent source')
+    following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source')
     with LaunchRoot.from_path(c.root).selected():
         rejected = StandingRule.enforce_all(c, 'lead', (stale, following))
         error, = rejected.values()
@@ -266,8 +264,7 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         assert caught.value.previous == previous
         assert caught.value.current == current
         run_heartbeat_rules(c, (stale, following))
-        update = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update is not None
+        update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
         assert update.not_applied == (stale.rejected_line(caught.value),)
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
@@ -287,7 +284,7 @@ def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
         read = WorkBranches(checkout).read_checkout()
         assert isinstance(read, UnreadableCheckoutRead) and read.holds_work
         unreadable, = (state for state in UnitState.current(
-            c, 'lead', HeartbeatFrame.capture(c, 'lead', ProgressRead()))
+            c, 'lead', capture_frame(c, 'lead', ProgressRead()))
                       if isinstance(state, Unreadable))
         assert unreadable.unit == c.registry.require('worker').incarnation
         assert str(checkout) in unreadable.reason
@@ -301,7 +298,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
     practice.include(tuple(RootFile.existing_in(practice.root)))
     c = wire(practice.path)
     with LaunchRoot.from_path(practice.path).selected():
-        frame = HeartbeatFrame.capture(c, 'lead', ProgressRead())
+        frame = capture_frame(c, 'lead', ProgressRead())
         worker, = (state for state in UnitState.current(c, 'lead', frame)
                    if state.unit == c.registry.require('worker').incarnation)
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)
@@ -309,8 +306,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         c.goals.todos.apply('P1', ReleaseTodo(
             row.revision, CoreWatcherIncarnation.watcher(), row.held(),
             StrikeReason('The commander closed this order after the heartbeat frame was read.')))
-        c.goals.todos.record_merges(
-            CommanderObservation.read(c, c.registry.require('lead'), ProgressRead).merged)
+        asyncio.run(CommanderHeartbeat().run(lambda: nullcontext(c)))
         assert c.goals.todos.get('P1').holder is None
 
 

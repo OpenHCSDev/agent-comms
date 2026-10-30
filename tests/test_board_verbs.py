@@ -13,7 +13,7 @@ from agent_comms.commander import judge, order
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
@@ -106,8 +106,8 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
-    assert (UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)) == claim_it
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
+    frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
@@ -166,15 +166,15 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
     assert {rule.todo.id for rule in rules} == {first.id, second.id}
     for rule in rules:
         verdicts = assert_review_preconditions(rule, comms, request)
-        assert (UnderReviewHeadVerdict in verdicts) == (rule.todo.id == second.id)
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead(()))
+        assert UnderReviewHeadVerdict in verdicts
+    frame = capture_frame(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
     frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
     timer, = timers
     assert timer.todo == timed
     assert timer.problem == first.id
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(timer, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(timer, comms, request)
 
 
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
@@ -203,7 +203,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert released.order.holds_head(request)
     assert comms.goals.todos.resolve_order(released.creator_identity, previous.owner, released.id) == released
     rule, = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
-    assert UnderReviewHeadVerdict not in assert_review_preconditions(rule, comms, request)
+    assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
     ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(

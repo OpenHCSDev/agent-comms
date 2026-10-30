@@ -36,7 +36,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     comms.messaging.send("sender", viewer, "Human DM").message.message_id
     comms.messaging.send("sender", "#ci", "Channel message").message.message_id
 
-    before = completed_snapshot(comms, str(tmp_path))
+    before = completed_snapshot(comms, Checkout(tmp_path))
     assert before.thread_unread["sender"] == ReplyUnread(1)
     assert before.unread["sender"].count == 1
     assert before.channel_unread["#ci"].count == 1
@@ -67,7 +67,7 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).unread["receiver"].count == 0
 
     answer(source, "New reply after manual read")
-    assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == ReplyUnread(1)
+    assert completed_snapshot(comms, Checkout(tmp_path)).thread_unread["sender"] == ReplyUnread(1)
     with pytest.raises(ValueError):
         comms.views.mark_user_view_read("missing", worktree=Checkout(tmp_path))
 

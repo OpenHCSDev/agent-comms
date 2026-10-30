@@ -34,7 +34,7 @@ from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
-from .errors import OverdueHeadRefusalError, RelationViolationError
+from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
@@ -53,7 +53,6 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
-from .standing_rules import OrderRefusingStandingRule
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
@@ -176,11 +175,6 @@ class GoalAction[Result: GoalDeclaration](
     def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
-        if ctx.model_report and any(
-            entry.reports_turn(ctx.reported_turn)
-            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
-        ):
-            raise ValueError("This goal was already reported in this turn.")
         goal = ctx.thread.goal.apply_action(self, ctx)
         if goal == ctx.thread.goal:
             return goal
@@ -225,7 +219,6 @@ class TransitionGoalAction(GoalAction[Goal]):
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ctx.reported_turn if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed
@@ -245,9 +238,20 @@ class TransitionGoalAction(GoalAction[Goal]):
         pass
 
 
+class GoalReportAction(TransitionGoalAction):
+    """A model's report consumes this goal's slot; recovery commands do not."""
+
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        if ctx.model_report:
+            if goal.reports_turn(ctx.reported_turn):
+                raise ValueError("This goal was already reported in this turn.")
+            goal = replace(goal, reported_turn=ctx.reported_turn)
+        return super().change(goal, ctx)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ActiveGoalAction(
-    TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
     schedules_goal = True
 
@@ -284,7 +288,7 @@ class CompliedGoalAction(TransitionGoalAction, OwnerInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
+class StandbyGoalAction(GoalReportAction, ModelInvocable, RuntimeInvocable):
     wait_for: tuple[str, ...] = ()
     reviewed_inputs: tuple[Annotated[InputKey, InputKeyText], ...] = ()
     preserve_wait = True
@@ -405,7 +409,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CompletionGoalAction(TransitionGoalAction):
+class CompletionGoalAction(GoalReportAction):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
 
@@ -454,7 +458,7 @@ class HeadReviewedOrderGoalAction(HeldOrderGoalAction):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
+class BlockedGoalAction(GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     block_reason: str | None = None
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
@@ -574,15 +578,6 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
                        revision=revision, mention_source=bind_goal_mentions(
                            ProblemGoalOrder.text, goal.id, revision, ctx.thread,
                            ctx.goals.registry.snapshot()))
-
-    def prepare(self, goals: Goals, name: str, actor: type) -> ProblemOrderGoalAction:
-        self.require_reviewed(goals)
-        return super().prepare(goals, name, actor)
-
-    def require_reviewed(self, goals: Goals) -> None:
-        """Read remote review facts before the registry lock or child allocation."""
-        if refused := OrderRefusingStandingRule.refusals(goals, self.commander):
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\n" + "\n".join(refused))
 
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""

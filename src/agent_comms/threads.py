@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import Tag
+from .channel_targets import CommandersTag, DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -252,6 +252,15 @@ class ThreadProvenance:
         """The declaration's birth member, created once and shared by its readers."""
         return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
 
+    @property
+    def acting_identity(self) -> ThreadIncarnation:
+        """Who this thread's own tool calls act as: a #commanders member holds commander
+        authority over every order on its bus, so no order outlives its creator's command."""
+        if CommandersTag.declared_name not in self.tags:
+            return self.incarnation
+        own = self.incarnation.require_recorded()
+        return own.peer_for(own)
+
 
 class ThreadCatalog(DurableFile, PatternFile):
     """The tool catalog a native launch reads from its thread's session directory."""
@@ -335,18 +344,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         return replace(self, offered=UnobservedTools(),
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
 
-    def require_commander(self) -> None:
-        """The thread's declared provider owns eligibility to command."""
-        if not self.model.native(NativeArguments(())).provider_type.may_command:
-            raise RelationViolationError(
-                f"Thread {self.name!r} with declared model {self.model.otherwise(None)!r} "
-                "cannot command: no Codex commander."
-            )
-
     def commanded_child(self, child: Thread) -> Thread:
-        """A commanded declaration inherits its initial audience from its commander."""
-        self.require_commander()
-        return replace(child, tags=self.tags)
+        """A commanded declaration inherits its initial audience from its commander, never its
+        commander's role."""
+        return replace(child, tags=DeclaredTag.for_child(self.tags))
 
     def inherited_history(self, registry, visited):
         if self.name in visited:
@@ -376,6 +377,16 @@ class Thread(ThreadProvenance, CatalogSelection):
         """The current project or one this conversation moved away from."""
         selected = worktree.resolved()
         return selected == self.worktree.resolved() or selected in self.earlier_projects
+
+    def relocated_checkout(self, source: Checkout, destination: Checkout) -> Thread:
+        """Replace only references to a physically relocated checkout; keep turn/history facts."""
+        original = source.resolved()
+        return replace(
+            self,
+            worktree=destination if self.worktree.resolved() == original else self.worktree,
+            earlier_projects=tuple(destination if project.resolved() == original else project
+                                   for project in self.earlier_projects),
+        )
 
     def moved_to_project(self, project: Checkout) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
@@ -508,6 +519,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         self.role.require_executable(RelationViolationError("A human thread owns no local process"))
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
+
+    def require_restartable(self) -> None:
+        """Idle, or wedged: its turn wrote nothing to its transcript for too long."""
+        self.turn_record.read().require_restartable(self.runtime.last_written())
 
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable(

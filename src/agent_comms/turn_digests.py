@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import ActivityExclude
+
 from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -15,23 +17,28 @@ from .context_store import ContextStore
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
+from .historical_native_inputs import HistoricalNativeAnswers
+from .message_reference import MessageReference
+from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
-from .storage_rules import StorageRule
+from .problem_number import ProblemNumber
+from .storage_rules import EditWorkplaces
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .thread_storage import StorageRoots
 from .threads import Thread
-from .todos import ProgressRead, Todo, TodoStore
+from .todos import NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
+from .service_passes import ServiceReading
 from .transcript_events import IncomingTranscript, TurnDigest
 from .turn_item import NativeTurnId
+from .work_branches import WorkBranchError
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .todos import OrderProgress
+    from .registry_document import RegistrySnapshot
     from .transcript_sources import TranscriptSource
 
 
@@ -50,7 +57,7 @@ class ActivityTurnView(TurnView):
     def project(cls, answer: ThreadTurns) -> JsonValue:
         selected = answer.turns[:cls.turn_limit]
         page = replace(answer, turns=selected, older=answer.older.older(selected))
-        return FieldCodec.project(page, "activity")
+        return FieldCodec.project(page, ActivityExclude)
 
 
 class OriginalTurnView(TurnView):
@@ -71,8 +78,26 @@ class ThreadTurns(ToolResult):
 
 
 @dataclass(frozen=True)
-class UnjudgedEdits(ToolResult):
+class UnavailableOrderEdits(ToolResult):
+    """One original-edit source failed at its foreign I/O boundary; other reads survive."""
+
+    problem: ProblemNumber
+    owner: ThreadIncarnation
+    cause: Annotated[WorkBranchError | OSError, WireTransient()]
+
+    @projected(view=WireExclude)
+    def error(self) -> str:
+        return str(self.cause)
+
+
+@dataclass(frozen=True)
+class UnjudgedEdits(ServiceReading):
     edits: tuple[EditCall, ...]
+    unavailable: tuple[UnavailableOrderEdits, ...] = ()
+
+    @projected(view=WireExclude)
+    def complete(self) -> bool:
+        return not self.unavailable
 
 
 class TurnBound(DeclaredFamily):
@@ -164,15 +189,37 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
-class TranscriptRead[Result](ConversationPreparation):
+class ThreadRead[Result](ConversationPreparation):
     """The original native/external source selection, shared by typed readers."""
 
     root: Path
     thread: Thread
-    bound: TurnBound
 
     def read(self) -> Result:
         return self.thread.execution.prepare_conversation(self)
+
+
+@dataclass(frozen=True)
+class InputAnswerRead(ThreadRead[frozenset[MessageReference]]):
+    references: tuple[MessageReference, ...]
+    privacy: RegistryPrivacy
+
+    def read(self) -> frozenset[MessageReference]:
+        if not self.references:
+            return frozenset()
+        return super().read()
+
+    def native(self) -> frozenset[MessageReference]:
+        return HistoricalNativeAnswers(self.root, self.thread.incarnation, self.privacy).answered_inputs(
+            self.references)
+
+    def external(self) -> frozenset[MessageReference]:
+        return ExternalTranscript(self.root, self.thread.incarnation).answered_inputs(self.references)
+
+
+@dataclass(frozen=True)
+class TranscriptRead[Result](ThreadRead[Result]):
+    bound: TurnBound
 
     def native(self) -> Result:
         source = self.thread.runtime.history_source(self.root, self.thread.incarnation)
@@ -227,38 +274,49 @@ class OrderRead[Result](TranscriptRead[Result]):
 class OrderEditRead[Result](OrderRead[Result]):
     """A held order's edits: the ones its workplaces own that no verdict names."""
     workplaces: EditWorkplaces
+    progress: OrderProgress = NoCommitProgress()
+
+    def read(self) -> Result:
+        self.progress.require_read()
+        return super().read()
 
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
-        held = HeldOrders.read(comms, commander)
+        snapshot = comms.registry.snapshot()
+        held = HeldOrders.of(comms.goals.todos, snapshot, commander)
+        history = comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation)
+        pulls = ProgressRead(history)
+        workplaces = EditWorkplaces.capture(comms, snapshot, held.live, pulls)
         yield from cls.judgeable(
-            comms.root, held.live, ProgressRead().progress(held.todos, comms.registry))
+            comms.root, held.live, pulls.progress(held.todos, comms.registry), workplaces)
 
     @classmethod
     def judgeable(cls, root: Path, holds: Iterable[LiveHold],
-                  progress: Mapping[str, OrderProgress]) -> Iterator[Self]:
+                  progress: Mapping[str, OrderProgress],
+                  workplaces: Mapping[ThreadIncarnation, EditWorkplaces]) -> Iterator[Self]:
         """The reads a verdict can still clear: an order whose PR merged has no head left to
         judge, so its edits are nobody's review and its transcript is never read."""
-        return (read for read in cls.for_orders(root, holds) if progress[read.todo.id].judgeable)
+        return (replace(read, progress=progress[read.todo.id])
+                for read in cls.for_orders(root, holds, workplaces)
+                if progress[read.todo.id].judgeable)
 
     @classmethod
-    def for_orders(cls, root: Path, holds: Iterable[LiveHold]) -> Iterator[Self]:
+    def for_orders(cls, root: Path, holds: Iterable[LiveHold],
+                   workplaces: Mapping[ThreadIncarnation, EditWorkplaces]) -> Iterator[Self]:
         """Read each live hold's transcript from its canonical review cut; each edit is
         read under the one order its workplace names."""
         store = TodoStore(root)
-        rule = StorageRule.load(root)
-        holds = tuple(holds)
         for hold in holds:
             yield cls(
                 root, hold.holder, TurnsSince(store.unjudged_since(hold.todo)), hold.todo,
-                EditWorkplaces.of(rule, hold.holder, tuple(
-                    other.todo for other in holds if other.holder.name == hold.holder.name)),
+                workplaces[hold.holder.incarnation],
             )
 
     def owned(self, edits: Iterable[EditCall]) -> tuple[EditCall, ...]:
         judged = frozenset(self.todo.judged_calls)
-        return tuple(edit for edit in edits if edit.id not in judged
-                     and self.workplaces.order_of(edit.path) == self.todo.id)
+        return tuple(replace(edit, problem=self.todo.id) for edit in edits
+                     if edit.id not in judged
+                     and self.workplaces.problems_for(edit.path) == frozenset((self.todo.id,)))
 
     def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         since = self.bound.at
@@ -268,24 +326,6 @@ class OrderEditRead[Result](OrderRead[Result]):
         return self.owned(reversed(edits.values()))
 
 
-@dataclass(frozen=True)
-class EditWorkplaces:
-    """Which of one unit's held orders an edit belongs to. An edit inside a problem checkout
-    belongs to that problem, held or not, so a released problem's edits join no other order;
-    any other path (scratch, a shared checkout) belongs to the order the unit was given last.
-    Each edit is read under at most one order."""
-
-    rule: StorageRule
-    roots: StorageRoots
-    latest: str
-
-    @classmethod
-    def of(cls, rule: StorageRule, holder: Thread, todos: tuple[Todo, ...]) -> Self:
-        return cls(rule, rule.roots_of(holder),
-                   max(todos, key=lambda todo: todo.order.checked().at.recorded_at("An order")).id)
-
-    def order_of(self, path: str) -> str:
-        return self.rule.checkout_problem(self.roots, Path(path), self.latest)
 
 
 class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):

@@ -23,8 +23,8 @@ from .private_send_rules import (
     RunningTurnRegistryCheck,
 )
 from .reservation_rules import ReservationViolationError
-from .threads import Thread
 from .turn_goal_permission import GoalPermission, OwnerGoalPermission
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .goals import Goal

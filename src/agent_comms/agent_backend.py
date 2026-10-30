@@ -22,6 +22,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -64,6 +65,11 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def require_forkable(self):
         pass
+
+    def last_written(self) -> float:
+        """When the native transcript last grew; one never written grew at the epoch."""
+        transcript = Path(self.path)
+        return transcript.stat().st_mtime if transcript.exists() else 0.0
 
     async def compact(self, operation):
         return await operation()
@@ -258,8 +264,9 @@ class ClearQueue(TurnInboxItem):
 class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compaction"):
     """The result of one requested compaction."""
 
-    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
-        return event(reason=reason, aborted=True)
+    def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
+                            reason: type[CompactionReason]) -> T:
+        return abort(reason=reason)
 
 
 @dataclass(frozen=True)
@@ -270,8 +277,9 @@ class PlacedCompaction(CompactionOutcome):
     first_kept: str | None
     tokens_before: PiCount
 
-    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
-        return event(reason=reason, aborted=False, summary=self.summary)
+    def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
+                            reason: type[CompactionReason]) -> T:
+        return end(reason=reason, summary=self.summary)
 
 
 @dataclass(frozen=True)

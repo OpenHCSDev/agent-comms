@@ -198,6 +198,9 @@ class RegistryEdit:
     original: RegistryRevision
     superseded: list[StoredTurnRecord] = field(default_factory=list)
     """Turn files a lease in this edit replaced; deleted once the registry stops naming them."""
+    released: list[Callable[[], None]] = field(default_factory=list)
+    """Other stores' writes this edit causes; they run after the registry lock is released, so
+    no unit's registry read waits behind a second store's lock."""
 
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         restored = self.document.restore_stopped(source, names)
@@ -207,12 +210,12 @@ class RegistryEdit:
             ).prepare_participant(self.store)
         return restored
 
-    def fence_idle_owners(
+    def fence_restart_owners(
         self, selected: Sequence[tuple[Thread, int]]
     ) -> tuple[tuple[Thread, int], ...]:
-        """Commit all original idle owner fences together, or change none."""
+        """Commit all original restart fences together, or change none."""
         fenced = tuple(
-            (thread, self.document.fence_idle_owner(
+            (thread, self.document.fence_restart_owner(
                 thread, expected_claimed_generation=generation
             ))
             for thread, generation in selected
@@ -481,7 +484,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         with self.guarded_write():
             original = self.read_revision_unlocked()
             original.document.purpose.require_write()
-            yield RegistryEdit(self, original.document.copy(), original)
+            edit = RegistryEdit(self, original.document.copy(), original)
+            yield edit
+        for write in edit.released:
+            write()
 
     def retire_processes(self) -> None:
         with self.editing() as edit:

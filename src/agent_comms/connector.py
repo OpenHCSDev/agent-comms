@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 
 import asyncio
 import base64
@@ -35,6 +37,7 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
@@ -48,6 +51,7 @@ from pydantic import JsonValue
 from .declared_verb import DeclaredVerb
 from .cli_protocol import CoreError
 from .command import Command
+from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .comms import Comms, client_wire, wire
 from .repo import Checkout
 from .declared_family import DeclaredFamily, UnknownFamilyMember
@@ -79,7 +83,7 @@ from .tool_result import ToolResult
 from .task_sources import OwnerRequestAttachment
 from .tools import CommsSendTool, SendTool
 from .order_tools import CommsHeadVerdictTool, HeadVerdictTool, MessagePublished
-from .tool_request import ReadTool, ToolCall, ToolRequest, tool_field
+from .tool_request import ToolCall, ToolRequest, tool_field
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
@@ -273,7 +277,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def code(self) -> int:
         return Refused.METHOD_NOT_FOUND
 
@@ -346,7 +350,7 @@ class ToolDescription:
     ) -> ToolDescription:
         """The name is the key tools/call dispatches on, so listing and calling share it."""
         return cls(name, tool.label, f"{tool.description} {tool.bus_effect}",
-                   caller.input_schema(tool), ToolAnnotations(issubclass(tool, ReadTool)))
+                   caller.input_schema(tool), ToolAnnotations(tool.read_only_hint))
 
 
 @dataclass(frozen=True)
@@ -456,7 +460,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
                 ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
-            reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments, caller)
+            reply = await connector.call(tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
         except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
             logging.exception("Connector tool %s failed", self.params.name)
@@ -503,6 +507,52 @@ class Connector:
         init=False, repr=False, compare=False,
     )
 
+    calls: dict[
+        asyncio.Task[dict[str, JsonValue]], type[ToolRequest] | type[ConnectorTool],
+    ] = field(
+        default_factory=dict, init=False, repr=False, compare=False,
+    )
+    git_children: GitChildren = field(default_factory=GitChildren, init=False, repr=False, compare=False)
+
+    watch_tasks: set[asyncio.Task[None]] = field(
+        default_factory=set, init=False, repr=False, compare=False,
+    )
+
+    def log_pending(self) -> None:
+        """The existing task owners name pending work; idle watches may also be listed."""
+        logging.info("Connector stopping; pending tools: %s; pending watches: %s",
+                     ", ".join(tool.declared_name for task, tool in self.calls.items()
+                               if not task.done()) or "none",
+                     ", ".join(sorted(task.get_name() for task in self.watch_tasks
+                                      if not task.done())) or "none")
+
+    async def call(
+        self, tool: type[ToolRequest] | type[ConnectorTool],
+        arguments: Mapping[str, object], caller: ConnectorCaller,
+    ) -> dict[str, JsonValue]:
+        """Start once; a disconnected HTTP client cannot abandon its write."""
+        if self.git_children.closing.is_set():
+            raise web.HTTPServiceUnavailable(text="Connector is stopping")
+        with OwnedGitOpening(self.git_children).bound():
+            pending = asyncio.create_task(tool.run_async(partial(self.invoke, tool, arguments, caller)))
+        self.calls[pending] = tool
+        pending.add_done_callback(self.calls.pop)
+        return await asyncio.shield(pending)
+
+    async def begin_shutdown(self, app: web.Application) -> None:
+        """Close acquisition launches before any shutdown hook can join entered work."""
+        retirement = self.git_children.start_shutdown()
+        for task in self.watch_tasks:
+            task.cancel()
+        await join_retirement(retirement)
+
+    async def stop_calls(self, app: web.Application) -> None:
+        """The runner has stopped accepting: drop readers and join declared mutations."""
+        pending = tuple(self.calls.items())
+        for call, tool in pending:
+            tool.cancel_on_shutdown(call)
+        await asyncio.gather(*(call for call, tool in pending), return_exceptions=True)
+
     @property
     def heartbeat(self) -> CommanderHeartbeat:
         return cast(CommanderHeartbeat, self.watches[CommanderHeartbeat])
@@ -531,17 +581,18 @@ class Connector:
         self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object],
         caller: ConnectorCaller,
     ) -> dict[str, JsonValue]:
+        tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
-            acting.commanding(comms, caller.own_thread())
+            acting.join(comms, caller.own_thread())
             return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
-        with self.opened_wire() as comms:
-            CommanderHeartbeat.register(comms.registry)
         app = web.Application(middlewares=[self.log_route])
         app.cleanup_ctx.append(self.watch_orders)
+        app.on_shutdown.append(self.begin_shutdown)
+        app.on_shutdown.append(self.stop_calls)
         app.add_routes(
             [
                 web.get("/.well-known/oauth-protected-resource", self.resource_metadata),
@@ -587,19 +638,21 @@ class Connector:
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """Core owns both order maintenance and the commander's changed-rule wakes."""
         passes = ServicePassStore.at(self.root)
-        tasks = tuple(
-            asyncio.create_task(Coordination.watch_worker(
-                watch, self.service_wire, passes))
-            for watch in self.watches.values()
-        )
+        with OwnedGitOpening(self.git_children).bound():
+            self.watch_tasks.update(
+                asyncio.create_task(Coordination.watch_worker(
+                    watch, self.service_wire, passes), name=type(watch).__name__)
+                for watch in self.watches.values()
+            )
         try:
             yield
         finally:
-            for task in tasks:
+            for task in self.watch_tasks:
                 task.cancel()
-            for task in tasks:
+            for task in self.watch_tasks:
                 with suppress(asyncio.CancelledError):
                     await task
+            self.watch_tasks.clear()
 
     async def resource_metadata(self, request: web.Request) -> web.Response:
         return web.json_response(FieldCodec.encode(
@@ -841,10 +894,10 @@ class ServeVerb(ConnectorOptions):
         except UnregisteredThreadError:
             return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s %(message)s")
-        asyncio.run(self.serve(app))
+        asyncio.run(self.serve(app, connector))
         return 0
 
-    async def serve(self, app: web.Application) -> None:
+    async def serve(self, app: web.Application, connector: Connector) -> None:
         """Bind, then report ready, so a restart returns only once the port answers."""
         runner = web.AppRunner(app, access_log=None)
         await runner.setup()
@@ -855,6 +908,7 @@ class ServeVerb(ConnectorOptions):
         try:
             await SystemdSite(runner, LOOPBACK, self.port).start()
             await stopped.wait()
+            connector.log_pending()
         finally:
             await runner.cleanup()
 

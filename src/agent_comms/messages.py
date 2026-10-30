@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKey
 
 from .class_fact import ClassFact
@@ -47,6 +49,7 @@ from .field_codec import (
     MessageId,
     NullMember,
     PublicationExclude,
+    ThreadLookup,
     WireName,
     WireOmitDefault,
     WireOrder,
@@ -116,6 +119,50 @@ class BusRow(BusTables):
             "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name=?), 0) + 1",
             (cls.declared_name,),
         ).fetchone()[0])
+
+
+@dataclass(frozen=True)
+class CommanderUpdatePosition(BusProjectionTables):
+    """Where each typed commander packet sits, by the commander birth it addresses. A rebuildable
+    search projection: the packet's content stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    indexes = (Index(("commander_lookup", "seq")),)
+
+    @classmethod
+    def latest(cls, db: sqlite3.Connection, commander: ThreadLookup) -> tuple[BusRecord, ...]:
+        """The newest packet for that commander through the covering index, decoded from its one
+        original record; a commander with no packet has none."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'ORDER BY {seq} DESC LIMIT 1'),
+            (FieldCodec.encode(commander),))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+
+@dataclass(frozen=True)
+class EscalationPosition(BusProjectionTables):
+    """Where each escalation line sits, by the commander birth it addresses and when it was sent.
+    It shares the owner's thread with every message he types, so this rebuildable projection, not
+    the sender, finds a burst; which burst a line belongs to stays on its original message's task."""
+
+    seq: Annotated[int, Column(primary_key=True, references=TableReference(BusRow, ("seq",)))]
+    commander_lookup: ThreadLookup
+    at: float
+    indexes = (Index(("commander_lookup", "at")),)
+
+    @classmethod
+    def sent(cls, db: sqlite3.Connection, commander: ThreadLookup, since: float,
+             before: float) -> tuple[BusRecord, ...]:
+        """Every escalation line to that commander birth in [since, before], newest first."""
+        positions = db.execute(
+            cls._sql(f'SELECT {{seq}} FROM "{cls.declared_name}" WHERE {{commander_lookup}}=? '
+                     'AND {at} >= ? AND {at} <= ? ORDER BY {seq} DESC'),
+            (FieldCodec.encode(commander), since, before))
+        headers = (BusRow.require(db, seq=FieldCodec.decode(int, seq)) for seq, in positions)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
 
 @dataclass(frozen=True)
@@ -479,6 +526,11 @@ class MessageKind(DeclaredFamily, MessageRoutes, ProjectionSource, affix="Kind")
     def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
         """Checks a send must pass before publication; base kinds declare none."""
 
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        """Human inputs need a reply even when their committed kind is informational."""
+        return message.sender_role.allows_automatic_reply()
+
 
 class SendableMessageKind(MessageKind, declared_name=None):
     """The declared kinds accepted by generic message commands."""
@@ -521,6 +573,10 @@ class InfoKind(SendableMessageKind):
 
 class NeedsAnswerKind(SendableMessageKind, declared_name=None):
     """Questions, alerts and handoffs ask their recipient to act."""
+
+    @classmethod
+    def allows_automatic_reply(cls, message: Message) -> bool:
+        return True
 
 
 class QuestionKind(NeedsAnswerKind):
@@ -915,6 +971,11 @@ class Message(MessageInput, TurnOrigin):
     def reference(self) -> MessageReference:
         return MessageReference(self.seq, self.message_id)
 
+    @property
+    def category(self) -> type[MessageCategory]:
+        """The filter category this message files under, answered by what it carries."""
+        return self.task.category(self.role.category)
+
     def require_decision(self) -> Decision:
         return self.task.require_decision()
 
@@ -967,7 +1028,7 @@ class Message(MessageInput, TurnOrigin):
     def view_order(self) -> tuple[int, int, int]:
         return 1, 0, self.seq
 
-    @projected(view="wire", name="id")
+    @projected(view=WireExclude, name="id")
     def message_id(self) -> MessageId:
         return MessageId.mint(f"{self.sender}:{self.target}:{self.timestamp}:{self.body}")
 
@@ -1010,6 +1071,17 @@ class Message(MessageInput, TurnOrigin):
         """The exact response destination owned by this opening message."""
         return CommandTarget.named(self.target).reply_target(self.sender)
 
+    def automatic_reply_targets(self) -> tuple[str, ...]:
+        """An owed answer uses the destination's existing automatic-reply route."""
+        if not self.type.allows_automatic_reply(self):
+            return ()
+        return CommandTarget.named(self.target).automatic_reply_targets(self.sender)
+
+    def opening_references(self, recipient: str) -> tuple[MessageReference, ...]:
+        """A confirmed delivery may open its intended reader's turn without owing a reply."""
+        return ((self.reference,)
+                if self.role.response_policy(self).starts_turn_for(self, recipient) else ())
+
     autonomous: ClassVar[bool] = False
 
     @property
@@ -1050,10 +1122,14 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         from .bus_display_index import BusDisplayIndex
         from .bus_route_counts import BusRouteCounts
         from .bus_tables import MessageIdentitySource, AnsweredSource
-        return (
+        # Task rows are written by the record that carries the task, so the record kinds own
+        # them too: that is what lets a carry replay old records into a new task row.
+        return tuple(dict.fromkeys((
             BusActivityIndex, SentActivity, BusDisplayIndex, BusRouteCounts,
             MessageIdentitySource, AnsweredSource,
-        )
+            *(row for task in TaskAttachment.members_with(TaskAttachment)
+              for owner in task.writer_declarations() for row in owner.writes),
+        )))
 
     def projections(self):
         from .bus_activity_index import BusActivityIndex
@@ -1071,6 +1147,7 @@ class BusRecord(CarriesEnvelope, Message, DeclaredFamily, affix="Record"):
         yield MessageIdentitySource(self.seq, self.message_id, self.sender)
         for original in self.answers:
             yield AnsweredSource(original.seq, self.seq)
+        yield from self.task.projections(self)
 
 
     @property

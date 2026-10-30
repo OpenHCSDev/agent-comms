@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.bus import Bus
+from agent_comms.native_build_inputs import ConfiguredChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
@@ -66,8 +67,8 @@ def _exec_adopter(claim):
         with claim.claimed() as held:
             child = owned.enter_context(SpawnedProcess.launch(
                 (sys.executable, __file__, str(claim.path), str(held.fileno())),
-                pass_fds=(held.fileno(),), stdin=subprocess.PIPE,
-                output=subprocess.PIPE, stderr=subprocess.PIPE,
+                pass_fds=(held.fileno(),), stdio=ConfiguredChildStdio(
+                    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE),
             ))
             assert select.select((child.process.stdout,), (), (), 10)[0], "adopter did not start"
             assert child.process.stdout.readline() == b"held\n"

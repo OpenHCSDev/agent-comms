@@ -1,5 +1,6 @@
 """Typed installer results use the real publisher and retained channel history."""
 import sys
+from io import StringIO
 from dataclasses import replace
 from agent_comms.cli_bridges.shared import UnobservedBridge
 from pathlib import Path
@@ -12,9 +13,9 @@ from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
+from agent_comms.installer.probes.services import CommanderHeartbeatProbe
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
-from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
@@ -26,8 +27,9 @@ from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTimin
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
-from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, TargetTree, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
+from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
 from agent_comms.installer.refusals import InstallRolledBack
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
@@ -38,6 +40,7 @@ from source_revision_fixture import SourceRepository
 
 
 RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/python"))
+HEARTBEAT = CommanderHeartbeatProbe(Path("/bus"), 1.0)
 
 
 @pytest.mark.parametrize("flags, mode, serialized", (
@@ -79,12 +82,12 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
         read=BusReadBack(2), stopped=("worker",), services=(RESTARTED,),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096),
-        backup=BackupReport("saved-before-install", 1024), retired_backups=(),
+        backup=BackupReport("saved-before-install", 1024), retired_backups=(), heartbeat=HEARTBEAT,
     ),
     UnchangedRun(),
-    CreatedRun((RESTARTED,), "created route"),
+    CreatedRun((RESTARTED,), "created route", heartbeat=HEARTBEAT),
     RetiredRun(services=(RESTARTED,), route="created route", stopped=("worker",),
-               retired=Path("retired-bus")),
+               retired=Path("retired-bus"), heartbeat=HEARTBEAT),
 ), ids=("carried", "unchanged", "created", "retired"))
 def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):
     comms = declare_test_bus(private_comms, channels=("comms",))
@@ -93,7 +96,8 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
         found.source, found.target, found.root, found.pending, FreshRehearsal(),
         live, InstallResult(NoCommanderProject(), {}),
         phases=[PhaseTiming(CommandPhase(("uv", "sync")), 61.2, 61.2),
-                PhaseTiming(CommandPhase(("git", "merge")), 0.1, 0.1)],
+                *(PhaseTiming(CommandPhase(("git", "show", str(index))), 0.1, 0.2)
+                  for index in range(7))],
     )
     # The wire codec still carries the same result family and fields after factoring.
     decoded = FieldCodec.decode(Upgrade, FieldCodec.encode(installed))
@@ -105,9 +109,12 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert tuple(message.sender for message in messages) == ("installer", "installer")
     assert all(found.target[:12] in message.body for message in messages)
     assert all(line in messages[1].body for line in live.lines())
-    assert "Phases: 2 in 61.3s; slowest:" in messages[1].body
+    assert "Phases: 8 in 61.9s; slowest:" in messages[1].body
     assert "61.200s CommandPhase: uv sync (61.200s elapsed)" in messages[1].body
-    assert "0.100s CommandPhase: git merge (0.100s elapsed)" in messages[1].body
+    diagnostics = StringIO()
+    decoded.write_phases(diagnostics)
+    assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
+    assert installed.phases[-1].line() not in messages[1].body
     sender = comms.registry.require("installer")
     assert sender.execution is ExternalThreadExecution
 
@@ -132,7 +139,6 @@ def test_rollback_and_refusal_are_published_from_their_error_types(private_comms
 
 def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(private_comms):
     # No thread carries the comms tag and nobody created it: CommsTag declares the channel.
-    CommanderHeartbeat.register(private_comms.registry)
     probe = InstallReportProbe(private_comms.root, "\n".join(
         UpgradeRefused("stopped before carrying").lines()))
     probe.run()
@@ -141,7 +147,6 @@ def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(priv
     original = private_comms.registry.require("installer")
     probe.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
-    assert private_comms.registry.require(CommanderHeartbeat.sender).execution is ExternalThreadExecution
 
 
 def test_a_read_back_that_differs_from_before_the_carry_refuses():
@@ -170,7 +175,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     comms = declare_test_bus(private_comms, channels=("comms",))
     source = SourceRepository.create(tmp_path / "source")
     target = source.main_commit
-    tree = TargetTree(source.checkout, tmp_path / "scratch", target)
+    tree = TargetTree(tmp_path / "scratch", target, repo=source.checkout)
     tree.add()
     # This source test selects its source interpreter explicitly. The installed journey
     # separately qualifies artifact-only imports and the predecessor runtime.

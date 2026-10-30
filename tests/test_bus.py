@@ -6,6 +6,7 @@ import signal
 import sqlite3
 import subprocess
 import sys
+from collections.abc import Callable
 from contextlib import closing, contextmanager
 from dataclasses import replace
 from pathlib import Path
@@ -20,20 +21,19 @@ from agent_comms.bus import (
     PrivateRecord,
     PublicRecord,
 )
-from agent_comms.activity_clocks import ChannelActivity
-from agent_comms.bus_activity_index import ActivityMaximum
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.bus_publication import Delivered, HumanOrigin, KeyedPublication
 from agent_comms.bus_tables import AnsweredSource, BusSchema, MessageIdentitySource
+from agent_comms.task_attachments.commander_pings import CommanderNotice, CommanderUpdate
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.messages import (
     BusProjectionTables,
     BusRow,
     BusTables,
+    CommanderUpdatePosition,
     Claimed,
-    ClaimHolders,
     ClaimHistoryKind,
     ClaimNoticeKind,
-    ConversationActivity,
     HandoffKind,
     InfoKind,
     MembershipTransition,
@@ -43,7 +43,6 @@ from agent_comms.messages import (
     MessageRoutes,
     NoticeRole,
 )
-from agent_comms.channel_targets import ThreadTarget
 from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.errors import (
     CommittedMessageError,
@@ -51,13 +50,14 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText, TimestampText
+from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
     canonical_publication_key,
 )
 from agent_comms.typed_table import (
+    ProducedTable,
     ProjectionProducer,
     RowNotFoundError,
     SQLiteTableName,
@@ -115,32 +115,98 @@ def projection_source_digest(source: Path) -> str:
     ).stdout.strip()
 
 
-def edit_inside(source: Path, owner: type, member: str | None = None) -> None:
-    """Change class source or a method's syntax without copying production code."""
+def edit_inside(
+    source: Path, owner: type, member: str, change: Callable[[ast.stmt], None],
+) -> None:
+    """Change an actual declaration in the private source, never a digest return value."""
     path = source.joinpath(*owner.__module__.split(".")[1:]).with_suffix(".py")
-    lines = path.read_text().splitlines(keepends=True)
-    declaration = next(
-        node for node in ast.walk(ast.parse("".join(lines)))
-        if isinstance(node, ast.ClassDef) and node.name == owner.__name__
-    )
-    if member is None:
-        first = declaration.body[0]
-        inserted = "# an edit inside the class\n"
-    else:
-        method = next(node for node in declaration.body
-                      if isinstance(node, ast.FunctionDef) and node.name == member)
-        first = method.body[0]
-        inserted = "pass  # changed producer implementation\n"
-    lines.insert(first.lineno - 1, " " * first.col_offset + inserted)
-    path.write_text("".join(lines))
+    module = ast.parse(path.read_text())
+    declaration, = (node for node in module.body
+                     if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
+    statement, = (node for node in declaration.body
+                   if member in ProducedTable.bound_names(ast.unparse(node)))
+    change(statement)
+    path.write_text(ast.unparse(ast.fix_missing_locations(module)) + "\n")
 
 
-@pytest.mark.parametrize("owner", (TypedTable, TimestampText))
-def test_projection_digest_ignores_infrastructure_source(
-    projection_source: Path, owner: type
+def return_no_rows(statement: ast.stmt) -> None:
+    assert isinstance(statement, ast.FunctionDef)
+    statement.body = [ast.Return(value=ast.Tuple(elts=[], ctx=ast.Load()))]
+
+
+def widen_spelling(statement: ast.stmt) -> None:
+    assert isinstance(statement, ast.Assign)
+    statement.value = ast.BinOp(left=statement.value, op=ast.Add(), right=ast.Constant(1))
+
+
+def change_column_type(statement: ast.stmt) -> None:
+    assert isinstance(statement, ast.AnnAssign)
+    statement.annotation = ast.Name(id="str", ctx=ast.Load())
+
+
+FIRST_POSITION_DIGEST = """
+import importlib, inspect, json, sys
+startup = sys.argv[1]
+if startup != "table-first":
+    importlib.import_module(startup)
+from agent_comms.messages import CommanderUpdatePosition
+if startup == "table-first":
+    # The cold direct call: nothing has completed the writer family yet.
+    from agent_comms.projection_source import ProjectionSource
+    ProjectionSource.writers_for(CommanderUpdatePosition)
+if startup == "agent_comms.cli_verbs.reconcile_stores":
+    from agent_comms.producer_stamp import stamped_digests
+    first = stamped_digests()[CommanderUpdatePosition.declared_name]
+else:
+    first = CommanderUpdatePosition.producer_digest()
+from agent_comms.messages import BusRecord
+from agent_comms.projection_source import ProjectionSource
+writers = ProjectionSource.writers_for(CommanderUpdatePosition)
+print(json.dumps(dict(
+    first=first, source=inspect.getfile(CommanderUpdatePosition),
+    kinds=sorted(kind.__name__ for kind in BusRecord.members_with(BusRecord) if kind in writers),
+)))
+"""
+STARTUPS = (
+    "table-first", "agent_comms.task_attachments.commander_pings", "agent_comms.worker",
+    "agent_comms.cli_verbs.reconcile_stores",
+)
+
+
+def first_position_digest(source: Path, startup: str) -> dict:
+    """The FIRST digest a fresh process computes for the commander position, from one startup."""
+    return json.loads(subprocess.run(
+        (sys.executable, "-P", "-c", FIRST_POSITION_DIGEST, startup),
+        check=True, capture_output=True, text=True, timeout=120,
+        env={**os.environ, "PYTHONPATH": str(source.parent)},
+    ).stdout)
+
+
+def test_the_first_commander_position_digest_does_not_depend_on_import_order(
+    projection_source: Path,
+) -> None:
+    """A table read before any task module is imported still commits to the task that
+    produces it; every startup path stamps one digest and one writer family."""
+    firsts = {startup: first_position_digest(projection_source, startup) for startup in STARTUPS}
+    assert all(Path(first["source"]).is_relative_to(projection_source) for first in firsts.values())
+    assert len({first["first"] for first in firsts.values()}) == 1
+    assert {tuple(first["kinds"]) for first in firsts.values()} == {
+        ("ClaimRecord", "KeyedPrivateRecord", "PrivateRecord", "PublicRecord")}
+    edit_inside(projection_source, CommanderUpdate, "projections", return_no_rows)
+    for startup in STARTUPS[:2]:
+        assert first_position_digest(projection_source, startup)["first"] != firsts[startup]["first"]
+
+
+@pytest.mark.parametrize("owner, member", (
+    (TypedTable, "select"),
+    (AnsweredSource, "unanswered_references"),
+    (CommanderUpdatePosition, "latest"),
+))
+def test_projection_digest_ignores_reader_bodies(
+    projection_source: Path, owner: type, member: str,
 ) -> None:
     before = projection_source_digest(projection_source)
-    edit_inside(projection_source, owner)
+    edit_inside(projection_source, owner, member, return_no_rows)
     assert projection_source_digest(projection_source) == before
 
 
@@ -149,7 +215,7 @@ def test_projection_digest_tracks_declared_column_spelling(
     projection_source: Path, owner: type, changes: bool
 ) -> None:
     before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
-    edit_inside(projection_source, owner)
+    edit_inside(projection_source, owner, "digits", widen_spelling)
     after = json.loads(projection_source_digest(projection_source))["message_identity_source"]
     assert (after != before) == changes
 
@@ -170,32 +236,33 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         assert restored == row
 
 
-@pytest.mark.parametrize(
-    "owner, changes",
-    (
-        (Delivered, True),
-        (ActivityMaximum, True),
-        (BusProjectionTables, True),
-        (BusRecord, True),
-        (Claimed, False),
-        (ClaimHolders, False),
-        (ConversationActivity, True),
-        (MessageKind, False),
-        (ThreadTarget, False),
-        (ChannelActivity, True),
-    ),
-)
-def test_projection_digest_tracks_producing_source(projection_source: Path, owner: type, changes: bool) -> None:
-    """Whole producers carry source; partial producers carry their contributing syntax."""
-    before = projection_source_digest(projection_source)
-    edit_inside(projection_source, owner)
-    assert (projection_source_digest(projection_source) != before) == changes
+def test_projection_digest_tracks_actual_delivery_production(projection_source: Path) -> None:
+    before = json.loads(projection_source_digest(projection_source))
+    edit_inside(projection_source, Delivered, "projections", return_no_rows)
+    after = json.loads(projection_source_digest(projection_source))
+    affected = {row.declared_name for row in Delivered.writes}
+    assert affected
+    assert all(after[name] != before[name] for name in affected)
+    assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
 
 
-def test_projection_digest_tracks_a_routing_override(projection_source: Path) -> None:
-    before = projection_source_digest(projection_source)
-    edit_inside(projection_source, ClaimNoticeKind, "route_rows")
-    assert projection_source_digest(projection_source) != before
+@pytest.mark.parametrize("owner", (MessageRoutes, ClaimNoticeKind))
+def test_projection_digest_tracks_inherited_routing(
+    projection_source: Path, owner: type,
+) -> None:
+    before = json.loads(projection_source_digest(projection_source))
+    edit_inside(projection_source, owner, "route_rows", return_no_rows)
+    after = json.loads(projection_source_digest(projection_source))
+    assert after[BusRouteCounts.declared_name] != before[BusRouteCounts.declared_name]
+    assert after[AnsweredSource.declared_name] == before[AnsweredSource.declared_name]
+
+
+def test_projection_digest_tracks_output_column_shape(projection_source: Path) -> None:
+    before = json.loads(projection_source_digest(projection_source))
+    edit_inside(projection_source, AnsweredSource, "original", change_column_type)
+    after = json.loads(projection_source_digest(projection_source))
+    assert after[AnsweredSource.declared_name] != before[AnsweredSource.declared_name]
+    assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
 
 
 def test_activity_source_changes_only_sent_activity(projection_source: Path) -> None:
@@ -574,6 +641,85 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
     assert bus.lookup(reply.seq).answers == (original.reference,)
     assert bus.replies((original.reference,)) == (reply,)
     assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
+
+
+def commander_packet(bus, commander, body):
+    return bus.append(lambda seq, db: PublicRecord.from_message(Message(
+        "user", commander.name, body, InfoKind, seq=seq,
+        task=CommanderNotice(commander, ()))))
+
+
+def test_commander_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
+    """Each typed packet's position is written in its own append; a taskless message from the
+    same sender writes none, and only that table rebuilds from the original records."""
+    lead, other = RecordedThreadIncarnation("lead", 1.0), RecordedThreadIncarnation("other", 2.0)
+    first = commander_packet(bus, lead, "first board")
+    raw = bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("user", "lead", "independent instruction", InfoKind, seq=seq)))
+    theirs = commander_packet(bus, other, "another commander's board")
+
+    def positions():
+        with bus.observing() as db:
+            return CommanderUpdatePosition.select(db, order_by=("seq",))
+
+    appended = positions()
+    assert appended == [CommanderUpdatePosition(first.seq, lead.lookup),
+                        CommanderUpdatePosition(theirs.seq, other.lookup)]
+    with bus.observing() as db:
+        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first,)
+        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs,)
+        assert CommanderUpdatePosition.latest(db, RecordedThreadIncarnation("lead", 3.0).lookup) == ()
+    with bus.writer_connection() as db:
+        ProjectionProducer.update(
+            db, where="{projection}=?", parameters=(CommanderUpdatePosition.declared_name,),
+            producer_digest="0" * 64,
+        )
+        db.execute(f'DELETE FROM "{CommanderUpdatePosition.declared_name}"')
+        assert BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
+        before = db.total_changes
+        assert not BusSchema.reconcile_schema(db, WriterOwnedFile())
+        assert db.total_changes == before
+    with bus.writing() as db:
+        BusProjectionTables.reset_schema(db)
+    Bus.install(bus.path)
+    assert positions() == appended
+    assert tuple(bus.lookup(record.seq) for record in (first, raw, theirs)) == (first, raw, theirs)
+    # A new bus installed from this history indexes the same packets from their copies.
+    copied = Bus.install(Bus.path_in(tmp_path / "history"), history=(first, raw, theirs))
+    with copied.observing() as db:
+        assert CommanderUpdatePosition.select(db, order_by=("seq",)) == appended
+        assert CommanderUpdatePosition.latest(db, lead.lookup) == (first.history_record,)
+        assert CommanderUpdatePosition.latest(db, other.lookup) == (theirs.history_record,)
+    for original in (first, raw, theirs):
+        kept = copied.lookup(original.seq)
+        assert (kept.reference, kept.body, kept.task) == (original.reference, original.body, original.task)
+
+
+def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, bus):
+    """The position is written inside the packet's own transaction; a real SQLite refusal
+    after it takes the header, task and position back together."""
+    lead = RecordedThreadIncarnation("lead", 1.0)
+    written = []
+
+    def build(seq, db):
+        record_from(PrivateRecord, Message(
+            "user", "lead", "not committed", InfoKind, seq=seq,
+            task=CommanderNotice(lead, ())),
+        ).append_to(db, seq)
+        written.append((seq, CommanderUpdatePosition.select(db)))
+        BusRow.require(db, seq=seq).insert(db)
+
+    with pytest.raises(HumanSendRefusedError) as refused:
+        HumanOrigin("author", 1, Checkout(tmp_path)).append(bus, build)
+    cause = refused.value.__cause__
+    assert type(cause) is sqlite3.IntegrityError
+    assert "UNIQUE constraint failed: bus.seq" in str(cause)
+    (seq, positions), = written
+    assert positions == [CommanderUpdatePosition(seq, lead.lookup)]
+    with closing(sqlite3.connect(bus.path)) as db:
+        assert CommanderUpdatePosition.count(db) == 0
+        assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

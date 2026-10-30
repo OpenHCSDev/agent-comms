@@ -17,7 +17,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
-from agent_comms.diagnostics import PublicationMeasurements
+from agent_comms.publication_measurements import PublicationMeasurements
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import (
     DEFAULT_STORE_CONTENTION, StoreContention,

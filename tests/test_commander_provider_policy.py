@@ -1,4 +1,4 @@
-"""Commander authority follows provider declarations, not thread/model spelling."""
+"""Provider declarations decode model spellings; unknown providers are refused."""
 
 import pytest
 
@@ -8,7 +8,6 @@ from agent_comms.native_arguments import NativeArguments, NoSelectedModel
 
 def test_no_selected_model_is_an_explicit_provider_case():
     assert NativeArguments(()).provider_type is NoSelectedModel
-    assert NoSelectedModel.may_command
 
 
 def test_unknown_provider_is_refused():

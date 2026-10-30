@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Concatenate
 
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import RelationViolationError
 from .field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
@@ -20,7 +20,7 @@ from .registry_document import RegistryDocument, RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import NoTurnRouting, Routing
 from .storage_rules import StorageRule
-from .thread_execution import CommanderForkExecution, ExternalThreadExecution
+from .thread_execution import ExternalThreadExecution, SubagentExecution
 from .thread_identity import GenerationCounter, UserThreadRole
 from .thread_status import (
     ConnectedThreadStatus,
@@ -28,8 +28,8 @@ from .thread_status import (
     ProcessThreadStatus,
     ThreadStatus,
 )
-from .thread_text import ForkedParent
-from .repo import Checkout
+from .thread_text import ForkedParent, SubagentRole
+from .repo import Checkout, CheckoutTransfer, Repo
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -98,6 +98,48 @@ class Registration:
                 )).thread
             return current
 
+    def transfer_checkout(
+        self, original: Thread, source: Checkout, destination: Path, repository: Repo,
+        require_target: Callable[[], None],
+    ) -> CheckoutTransfer:
+        """Move a stopped caller's tree and publish its changed paths in one owner boundary."""
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if current != original:
+                raise RelationViolationError('Caller changed before checkout transfer')
+            edit.document.status(current.name).require_stopped()
+            require_target()
+            if repository not in edit.document.commander_project.require().repos:
+                raise RelationViolationError('Registered repository changed before checkout transfer')
+            rule = self.storage_rule
+            if not rule.owns_checkout(current, destination, repository.github):
+                raise RelationViolationError('Target is not the caller\'s declared checkout')
+            if not source.path.exists() and destination.exists():
+                # No move to replay. Only recognize the caller's current physical allocation,
+                # never an occupied destination while the original tree still exists.
+                rule.require_completed_transfer(
+                    current, source.path, destination, edit.document.threads.values(), repository)
+                return CheckoutTransfer(source.path, destination,
+                    Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+                    Repo.git(destination, 'rev-parse', 'HEAD').strip())
+            # A child working in its parent's tree is part of that allocation: it stops and
+            # moves with the parent instead of counting as a foreign owner.
+            sharing = tuple(child for child in edit.document.threads.children(current.name)
+                            if child.worktree.resolved() == source.resolved())
+            for child in sharing:
+                edit.document.status(child.name).require_stopped()
+            rule.require_transfer_source(
+                current, source.path,
+                (thread for thread in edit.document.threads.values() if thread not in sharing),
+                repository)
+            with source.relocating(destination) as transfer:
+                require_target()
+                for moved in (current, *sharing):
+                    self._commit_registration(edit, edit.document.prepare_registration(
+                        moved.relocated_checkout(source, Checkout(destination)),
+                        edit.document.status(moved.name), new_owner=False))
+                return transfer
+
     def replace_original(self, original: Thread, replacement: Thread) -> Thread:
         """Publish a prepared declaration only against its complete original value."""
         with self.store.editing() as edit:
@@ -133,24 +175,40 @@ class Registration:
                 )
             return self._declare_in(edit, child, _DEFAULT_PRESENCE)
 
-    def register_commander_child(self, name: str, parent_name: str, goals: Goals) -> Thread:
-        """Declare or resume one child and its own goal under the registry's lock."""
+    def register_child(
+        self, name: str, parent_name: str, execution: type[SubagentExecution], goals: Goals,
+    ) -> Thread:
+        """Declare or resume one named child of `parent_name` under the registry's lock."""
+        with self.store.editing() as edit:
+            return self._child_in(edit, name, edit.document.require(parent_name), execution, goals)
+
+    def claim_slot(self, parent_name: str, role: SubagentRole, goals: Goals) -> Thread:
+        """Seat a subagent in the first vacant slot of its role under `parent_name`; a slot it
+        takes over keeps its bus history, so the new occupant reads what the last one did."""
         with self.store.editing() as edit:
             parent = edit.document.require(parent_name)
-            if edit.document.canonical_name(name) != name:
-                raise RelationViolationError(f"Commander fork {name!r} is an alias.")
-            if edit.document.taken(name):
-                existing = edit.document.require(name)
-                existing.execution.require_commander_fork()
-                if not existing.parent.named(parent.name):
-                    raise RelationViolationError(f"Thread {name!r} is not a fork of {parent.name!r}.")
-                return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
-            child = parent.commanded_child(Thread(name, frozenset(), parent.worktree,
-                parent=ForkedParent(parent.name), model=parent.model,
-                thinking_level=parent.thinking_level, service_tier=parent.service_tier,
-                execution=CommanderForkExecution))
-            return self._declare_in(edit, child, _DEFAULT_PRESENCE,
-                prepare_goal=lambda prepared: goals.fork_goal(parent, prepared))
+            name = next(slot for slot in role.slot_names(parent.name)
+                        if not edit.document.taken(slot) or edit.document.status(slot).vacant)
+            return self._child_in(edit, name, parent, SubagentExecution, goals)
+
+    def _child_in(
+        self, edit: RegistryEdit, name: str, parent: Thread,
+        execution: type[SubagentExecution], goals: Goals,
+    ) -> Thread:
+        if edit.document.canonical_name(name) != name:
+            raise RelationViolationError(f"Child thread {name!r} is an alias.")
+        if edit.document.taken(name):
+            existing = edit.document.require(name)
+            execution.require_resumes(existing)
+            if not existing.parent.named(parent.name):
+                raise RelationViolationError(f"Thread {name!r} is not a child of {parent.name!r}.")
+            return self._declare_in(edit, existing, _DEFAULT_PRESENCE)
+        child = execution.child_of(parent, Thread(name, frozenset(), parent.worktree,
+            parent=ForkedParent(parent.name), model=parent.model,
+            thinking_level=parent.thinking_level, service_tier=parent.service_tier,
+            execution=execution))
+        return self._declare_in(edit, child, _DEFAULT_PRESENCE,
+            prepare_goal=execution.child_goal(goals, parent))
 
     def register_commanded_unit(
         self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,
@@ -435,12 +493,7 @@ class Registration:
 
     def require_lookup(self, lookup: ThreadLookup) -> Thread:
         """Resolve a recorded birth, refusing a missing reader by its lookup."""
-        snapshot = self.snapshot()
-        try:
-            return snapshot.by_lookup[lookup]
-        except KeyError as error:
-            raise UnregisteredThreadError(
-                f"Thread lookup {lookup!r} is not registered.") from error
+        return self.snapshot().born(lookup)
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""

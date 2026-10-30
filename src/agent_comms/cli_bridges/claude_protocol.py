@@ -1,10 +1,13 @@
 """Claude's completed JSONL blocks own transcript items and activity."""
 from __future__ import annotations
 
+import asyncio
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import Literal, Self
+from dataclasses import dataclass, field, replace
+from functools import cached_property
+from pathlib import Path
+from typing import TYPE_CHECKING, Literal, Self
 from xml.etree import ElementTree
 
 from pydantic import (
@@ -35,7 +38,7 @@ from agent_comms.pi_counts import PiCount, PiCountWire
 from agent_comms.recorded_time import EventTime
 from agent_comms.runtime_updates import (
     ActiveItem,
-    AllTurnsEnded,
+    AllTurnsCancelled, AllTurnsEnded,
     FinishedItem,
     HiddenItem,
     HistoryNotice,
@@ -48,6 +51,7 @@ from agent_comms.runtime_updates import (
     StatusUpdate,
     Summarized,
     ToolDraft,
+    TurnEnded,
     TurnStarted,
 )
 from agent_comms.thread_identity import OfferedTools, ToolName, UnobservedTools
@@ -60,20 +64,26 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
-from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
+    ConfirmedDelivery,
     ForeignMonitorFrame,
+    LineMonitorBridge,
     MonitorFrame,
     MonitorIncomingFrame,
     MonitorObservation,
     MonitorPart,
     MonitorProtocolFrame,
+    MonitorReadFile,
     ObservedMonitor,
 )
+
+if TYPE_CHECKING:
+    from .monitor import MonitorAttachment
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):
@@ -83,15 +93,19 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     HEADER = 'Comms in'
     JSON_TEXT = WireModel.adapter(str)
 
+    @staticmethod
+    def units(line: str) -> int:
+        return len(line.encode('utf-16-le')) // 2
+
     @classmethod
     def event_size(cls, text: str) -> int:
-        return len(json.dumps(text, ensure_ascii=False).encode('utf-16-le')) // 2
+        return cls.units(json.dumps(text, ensure_ascii=False))
 
     def header(self, number: int, total: int) -> str:
         return (f'{self.HEADER} · {self.message.sender} · '
                 f'{self.message.message_id} · {number}/{total}\n')
 
-    @property
+    @cached_property
     def parts(self) -> tuple[str, ...]:
         # At least one body character fits each part. Using the maximum possible
         # ordinal width avoids rebuilding the body to discover its final count.
@@ -113,6 +127,22 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
         total = len(bodies)
         return tuple(self.header(number, total) + body
                      for number, body in enumerate(bodies, 1))
+
+    async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
+        """A body that fits one event goes inline as its one part. Any larger body is exported
+        as all its parts, one per line, and only the notice naming that file is emitted, so no
+        part reaches the model as an instruction on its own."""
+        lines = tuple(LineMonitorBridge.encode(part) for part in self.parts)
+        if len(lines) == 1:
+            await attachment.emit(self.message.message_id, 1, lines[0], window_bytes)
+            return
+        notice = MonitorReadFile.naming(exports, self.message.reference)
+        line = notice.model_dump_json()
+        if self.units(line) > self.EVENT_CHARS:
+            raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
+                             f'Monitor event: {notice.path}')
+        await asyncio.to_thread(notice.export, lines)
+        await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
 
     @classmethod
     def decode_line(cls, line: str) -> MonitorFrame:
@@ -143,7 +173,8 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
 
     @classmethod
     def decode_event(cls, event: str) -> tuple[MonitorFrame, ...]:
-        return tuple(cls.decode_line(line) for line in event.splitlines())
+        """Monitor joins event lines with LF only; an encoded part may hold U+2028 or U+0085."""
+        return tuple(cls.decode_line(line) for line in event.split('\n'))
 
 
 class ClaudeReaderPhase(ReadingPhase):
@@ -213,9 +244,26 @@ class ClaudeToolDraft(ToolDraft):
     ) -> tuple[TranscriptEvent, ...]:
         return (*self.events, self.call.ended(text, ok, record.position, record.timestamp))
 
+    def read_results(self, record: TimedRecord, text: str, ok: bool,
+                     reading: frozenset[str], source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        """What a Read showed the model, timed by its own result record, beside the paths other
+        Reads in this session still have open. A failed Read showed no file but ends its call."""
+        observed = ReadResultObserved if ok else FailedReadObserved
+        return tuple(observed(path, text, ObservedMonitor(record.uuid, record.timestamp), reading,
+                              source_turn=source_turn)
+                     for path in self.call.context_read_paths())
+
 
 class ClaudeTurn(ABC):
     """The transcript's identified turn owns item identities."""
+
+    def opened(self, record: TimedRecord) -> ClaudeTurn:
+        """Further prompt records belong to the turn already running."""
+        return self
+
+    @property
+    def source(self) -> SourceTurn:
+        return NoSourceTurn()
 
     @abstractmethod
     def started(self, tool: ClaudeToolDraft,
@@ -231,6 +279,9 @@ class ClaudeTurn(ABC):
 
 
 class UnknownTurn(ClaudeTurn):
+    def opened(self, record: TimedRecord) -> ClaudeTurn:
+        return KnownTurn(NativeTurnId(record.uuid))
+
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
@@ -247,6 +298,10 @@ class UnknownTurn(ClaudeTurn):
 @dataclass(frozen=True)
 class KnownTurn(ClaudeTurn):
     id: NativeTurnId
+
+    @property
+    def source(self) -> SourceTurn:
+        return NamedSourceTurn(self.id)
 
     def started(self, tool: ClaudeToolDraft,
                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
@@ -309,10 +364,17 @@ class ClaudeSession:
         except KeyError:
             return self.phase.missing_tool(tool_id)
         return (*self.finished(tool_id, tool.completed(record, text, ok)),
-                *self.turn.active(tool_id, self.phase, ModelWaitPhase()))
+                *self.turn.active(tool_id, self.phase, ModelWaitPhase()),
+                *tool.read_results(record, text, ok, frozenset(
+                    path for other in self.tools.values()
+                    for path in other.call.context_read_paths()), self.turn.source))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
+
+    def retired(self, ending: TurnEnded) -> tuple[RuntimeUpdate, ...]:
+        self.turn = UnknownTurn()
+        return (ending,)
 
 
 class TimedRecord(TimestampedWire):
@@ -327,6 +389,7 @@ class ClaudeUserHeader(WireHeader):
     origin: KindHeader = Field(default_factory=lambda: KindHeader(kind=''))
     is_compact_summary: bool = Field(default=False, alias='isCompactSummary')
     is_meta: bool = Field(default=False, alias='isMeta')
+    turn_origin: str = Field(default='', alias='turnOrigin')
 
     def record_type(self) -> str:
         if self.origin.type == TaskNotification.declared_name:
@@ -335,7 +398,7 @@ class ClaudeUserHeader(WireHeader):
             return LocalCommandOutput.declared_name
         if self.is_compact_summary:
             return CompactSummary.declared_name
-        if self.is_meta and 'origin' not in self.model_fields_set:
+        if self.is_meta and not {'origin', 'turn_origin'} & self.model_fields_set:
             return HarnessNote.declared_name
         return UserRecord.declared_name
 
@@ -362,9 +425,19 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """Whether Claude replaced everything before this record (compaction)."""
         return False
 
+    def ends_turn(self) -> bool:
+        return False
+
+    def opening_position(self, following: int) -> int:
+        return following
+
     def request(self) -> str:
         """The prompt this record carries, read without the session around it."""
         return ''
+
+    def owner_words(self) -> tuple[str, ...]:
+        """What the person typed in this record; most records carry none."""
+        return ()
 
 
 class AssistantBlock(TaggedWire, ABC, affix=""):
@@ -498,6 +571,10 @@ class PromptOrigin(TaggedWire, ABC, affix=""):
     def request(self, text: str) -> str:
         return ''
 
+    def owner_words(self, text: str) -> tuple[str, ...]:
+        """The words the person typed; only a person's prompt carries any."""
+        return ()
+
 
 class Prompting(PromptOrigin, ABC, declared_name=None):
     """An origin whose text is a request to the model."""
@@ -525,6 +602,9 @@ class AgentPrompt(Prompting, declared_name=None):
 
 class HumanPrompt(Prompting, declared_name='human'):
 
+    def owner_words(self, text: str) -> tuple[str, ...]:
+        return (text,)
+
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(
@@ -538,7 +618,7 @@ class TaskNotification(PromptOrigin, declared_name='task-notification'):
 
     def absorbed(self, record: TimedRecord, text: str,
                  session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return TaskEnvelope.from_text(text).updates(record)
+        return TaskEnvelope.from_text(text).updates(record, session.turn.source)
 
 
 class PeerMessage(AgentPrompt, declared_name='peer'):
@@ -565,6 +645,9 @@ class Originated(WireModel):
 
 class UserBlock(TaggedWire, ABC, affix=""):
 
+    def ends_turn(self) -> bool:
+        return False
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
 
@@ -577,9 +660,12 @@ class UserText(TextWire, UserBlock, TextContent, declared_name='text'):
     def prompt_text(self) -> str:
         return self.text
 
+    def ends_turn(self) -> bool:
+        return self.text.startswith('[Request interrupted by user')
+
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        if self.text.startswith('[Request interrupted by user'):
-            return (AllTurnsEnded(),)
+        if self.ends_turn():
+            return session.retired(AllTurnsCancelled())
         return record.origin.prompt(record, self.text, session)
 
 
@@ -610,22 +696,73 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class ReadResultObserved(ConfirmedDelivery):
+    """The text a successful Read showed the model. Only the bridge that exported the file
+    decides whether it was a message; any other read confirms nothing."""
+
+    path: str
+    text: str
+    record: ObservedMonitor
+    reading: frozenset[str]
+    """Paths other Reads in this session had open when this one returned."""
+
+    def closing(self, export: MonitorReadFile) -> tuple[MonitorReadFile, ...]:
+        """The export this Read may retire: none while another Read of it is still open."""
+        return () if export.path in self.reading else (export,)
+
+    def frames(self) -> tuple[MonitorFrame, ...]:
+        """Claude shows each file line as its number, a tab, then the line. The leading
+        numbered block is the file; numbers that do not run consecutively make no line count.
+        Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
+        characters str.splitlines would split on. A Read reaching the end of a file that ends
+        in LF also numbers the empty row after that LF: once the numbering holds, that one
+        final empty row is the tool's terminator, not a record. Any other row, empty or not,
+        stays a frame the all-lines gate judges."""
+        numbers: list[int] = []
+        lines: list[str] = []
+        for row in self.text.split('\n'):
+            number, tab, line = row.partition('\t')
+            if not (tab and number.isdecimal()):
+                break
+            numbers.append(int(number))
+            lines.append(line)
+        start = numbers[0] if numbers else 0
+        if numbers != list(range(start, start + len(numbers))):
+            return ()
+        if len(lines) > 1 and lines[-1] == '':
+            lines.pop()
+        return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
+
+    async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
+        return replace(self, references=await bridge.read_export(self))
+
+
+@dataclass(frozen=True)
+class FailedReadObserved(ReadResultObserved):
+    """A failed Read's text is its error, never file lines: it confirms no part, and only
+    releases the export once no other Read of it is open."""
+
+    def frames(self) -> tuple[MonitorFrame, ...]:
         return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return tuple(MonitorObservation(frame,
-                                        ObservedMonitor(record.uuid, record.timestamp))
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return tuple(MonitorObservation(frame, ObservedMonitor(record.uuid, record.timestamp),
+                                        source_turn=source_turn)
                      for frame in self.frames)
 
 
@@ -638,8 +775,8 @@ class TaskContent(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return self.text.updates(record)
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return self.text.updates(record, source_turn)
 
 
 class TaskText(TaskContent):
@@ -649,8 +786,8 @@ class TaskText(TaskContent):
 class TaskMessage(ContentBlocks):
     content: list[TaskText]
 
-    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
-        return tuple(update for block in self.content for update in block.updates(record))
+    def updates(self, record: TimedRecord, source_turn: SourceTurn) -> tuple[RuntimeUpdate, ...]:
+        return tuple(update for block in self.content for update in block.updates(record, source_turn))
 
 
 class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
@@ -671,35 +808,54 @@ class UserMessage(ContentBlocks):
         return '\n'.join(text for block in self.content if (text := block.prompt_text()))
 
 
-class UserRecord(ClaudeRecord, TimedRecord, Originated, declared_name='user'):
-    promptId: str
-    message: UserMessage
+class PromptRecord(ClaudeRecord, TimedRecord, ABC, declared_name=None):
+    """The first prompt after retirement owns the turn; promptId may be reused."""
+
+    promptId: NativeTurnId
+
+    def opening_position(self, following: int) -> int:
+        return self.position
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
+        session.turn = session.turn.opened(self)
+        return self.opened_updates(session)
+
+    @abstractmethod
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+
+class UserRecord(PromptRecord, Originated, declared_name='user'):
+    message: UserMessage
+
+    def ends_turn(self) -> bool:
+        return any(block.ends_turn() for block in self.message.content)
+
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
     def request(self) -> str:
         return self.origin.request(self.message.text())
 
+    def owner_words(self) -> tuple[str, ...]:
+        return self.origin.owner_words(self.message.text())
+
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
     """Claude's summary of the conversation before its latest compaction."""
 
-    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        session.turn = KnownTurn(FieldCodec.decode(NativeTurnId, self.promptId))
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(), Summarized(self.message.text()))
 
     def request(self) -> str:
         return ''
 
 
-class TaskUserRecord(ClaudeRecord, TimedRecord, declared_name='task-user'):
+class TaskUserRecord(PromptRecord, declared_name='task-user'):
     origin: TaskNotification
     message: TaskMessage
 
-    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return self.message.updates(self)
+    def opened_updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return self.message.updates(self, session.turn.source)
 
 
 class SubtypeHeader(WireHeader):
@@ -708,6 +864,9 @@ class SubtypeHeader(WireHeader):
 
 class SystemEvent(TaggedWire, ABC, affix=""):
     header = SubtypeHeader
+
+    def ends_turn(self) -> bool:
+        return False
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
@@ -725,8 +884,11 @@ class BridgeStatus(SystemEvent, declared_name='bridge_status'):
 
 class TurnDuration(SystemEvent, declared_name='turn_duration'):
 
+    def ends_turn(self) -> bool:
+        return True
+
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (AllTurnsEnded(),)
+        return session.retired(AllTurnsEnded())
 
 
 class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'):
@@ -782,6 +944,9 @@ class SystemRecord(ClaudeRecord, declared_name='system'):
     def begins_history(self) -> bool:
         return self.subtype.begins_history()
 
+    def ends_turn(self) -> bool:
+        return self.subtype.ends_turn()
+
 
 class MetadataRecord(ClaudeRecord, ABC, declared_name=None):
     pass
@@ -791,6 +956,10 @@ class AttachmentPayload(OpenWire, ABC, affix=""):
 
     @abstractmethod
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+    def owner_words(self) -> tuple[str, ...]:
+        """What the person typed in this attachment; only a queued prompt carries any."""
+        return ()
 
 
 class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command'):
@@ -806,6 +975,9 @@ class QueuedCommand(Originated, AttachmentPayload, declared_name='queued_command
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.origin.absorbed(record, self.prompt.text(), session)
 
+    def owner_words(self) -> tuple[str, ...]:
+        return self.origin.owner_words(self.prompt.text())
+
 
 class ForeignAttachment(AttachmentPayload, declared_name='foreign'):
 
@@ -818,6 +990,9 @@ class Attachment(ClaudeRecord, TimedRecord, declared_name='attachment'):
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self, session)
+
+    def owner_words(self) -> tuple[str, ...]:
+        return self.attachment.owner_words()
 
 
 class QueueOperation(MetadataRecord, declared_name='queue-operation'):

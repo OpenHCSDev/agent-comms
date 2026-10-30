@@ -49,7 +49,7 @@ from .transcript_sources import (
     TranscriptSource,
     WireFrontier,
 )
-from .turn_digests import ThreadTurns, TurnBound, TurnDigestRead
+from .turn_digests import InputAnswerRead, ThreadTurns, TurnBound, TurnDigestRead
 from .turn_lease import TurnLeaseFence
 
 if TYPE_CHECKING:
@@ -289,7 +289,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
     def transcript_root(self) -> Path:
         return Path(self.root)
 
-    @projected(view="content", name="thread")
+    @projected(view=ContentExclude, name="thread")
     def content_thread(self) -> ThreadIncarnation:
         return self.thread.incarnation
 
@@ -320,7 +320,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         if self.thread.incarnation.resolved(registry) != requested.incarnation:
             raise StaleRevision("Transcript witness belongs to another original thread")
 
-    @projected(view="content", name="bus")
+    @projected(view=ContentExclude, name="bus")
     def content_bus(self) -> RecordedBusIdentity:
         # Appends beyond this page's assigned messages do not change its content.
         # Replacing the bus file does.
@@ -343,7 +343,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
         Records appended beyond this page belong to a later update.
         """
         return self.contains_records_cut(other) and (
-            FieldCodec.project(self, "content") == FieldCodec.project(other, "content")
+            FieldCodec.project(self, ContentExclude) == FieldCodec.project(other, ContentExclude)
         )
 
     def same_snapshot(self, other: TranscriptReadIdentity) -> bool:
@@ -360,7 +360,7 @@ class TranscriptReadIdentity(DeclaredFamily, affix="TranscriptReadIdentity"):
 class LiveTranscriptReadIdentity(TranscriptReadIdentity):
     thread: Annotated[Thread, ContentExclude()]
 
-    @projected(view="content", name="thread")
+    @projected(view=ContentExclude, name="thread")
     def content_thread(self) -> tuple[ThreadIncarnation, ThreadParent, ThreadText]:
         return self.thread.incarnation, self.thread.parent, self.thread.task
 
@@ -394,7 +394,7 @@ class RecordedTranscriptReadIdentity(TranscriptReadIdentity):
     def historical_source(self) -> str:
         return self.source.key
 
-    @projected(view="content", name="source")
+    @projected(view=ContentExclude, name="source")
     def content_source(self) -> tuple[str, str, RecordedBusIdentity, RecordedBusIdentity, int, FileObservation]:
         return (self.source.key, self.source.original_root, self.source.bus_identity,
                 self.source.snapshot_bus_identity, self.source.snapshot_bus_revision,
@@ -514,6 +514,12 @@ class Transcripts:
         self.messaging = messaging
         self.routes = TranscriptRoutes(root)
         self.page_reads = 0
+
+    def answered_inputs(
+        self, thread: Thread, references: tuple[MessageReference, ...], privacy: RegistryPrivacy,
+    ) -> frozenset[MessageReference]:
+        """The same source family owns bounded answer evidence for native and external turns."""
+        return InputAnswerRead(self.root, thread, references, privacy).read()
 
     def bind_page_read(
         self,

@@ -63,7 +63,9 @@ def test_draft_query_row_preserves_membership_without_review_or_git_reads(tmp_pa
     assert request.as_ready() == ()
     assert request.as_draft() == (request,)
     # This is not a repository: even attempting the diff would fail.
-    assert request.empty_changes(WorkBranches(tmp_path / 'not-a-repository')) == ()
+    reader = WorkBranches(tmp_path / 'not-a-repository')
+    request.prepare_comparison(reader)
+    assert request.empty_changes(reader) == ()
     assert FieldCodec.decode(ListedPullRequest, FieldCodec.encode(row)) == row
 
 

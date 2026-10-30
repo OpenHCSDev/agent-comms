@@ -34,7 +34,7 @@ from .acp_extension import (
     GoalChangedUpdate,
     encode_updates,
 )
-from .child_process import join_retirement
+from .child_process import ProcessIdentity, join_retirement
 from .comms import Comms
 from .config_options import ConfigOptions
 from .input_key import InputKey, InputKeyText
@@ -46,6 +46,7 @@ from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
+from .pi_rule_gate import PiRedeal
 from .registry_document import RegistryEntry
 from .runtime import RuntimeProxy, RuntimeServer
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
@@ -209,6 +210,7 @@ class SessionLifecycle:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
         state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
+        await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
         self.published[session_id] = PublishedSession.of(thread)
         if self.runtime_enabled:
             await self.runtime.start()
@@ -278,28 +280,32 @@ class SessionLifecycle:
                     original_keys=(key,), original_owner_input=True,
                 )
 
+    async def complete_unheld(self, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+        """A fenced owner whose session this host never held (an aborted start) completes
+        here, the process its row is bound to."""
+        await Coordination.run_worker(partial(
+            self.comms.owners.complete_session, expected, expected,
+            ProcessIdentity.capture(os.getpid()), claim.claimed_generation,
+        ))
+
     async def retire_owner(self, state: OwnerSession, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+        """Only a completed retirement is remembered: a failed attempt (a busy store lock)
+        fails its own stop request and leaves the next stop to retry every idempotent step."""
         async with state.retirement_lock:
             if state.retired.done():
-                await state.retired
                 return
-            try:
-                state.request_stop()
-                self.runtime.retire_session(state.identifier)
-                await self.effects.inputs.close_sessions((state,))
-                await self.effects.turns.close_sessions((state,))
-                await Coordination.run_worker(partial(
-                    self.comms.owners.complete_session, state.owner, expected,
-                    state.configuration.launch.process, claim.claimed_generation,
-                ))
-                self.config.stop_observing_configuration(state.identifier)
-                del self.published[state.identifier]
-                self.effects.inputs.end_session(state.identifier)
-            except BaseException as error:
-                state.retired.set_exception(error)
-                raise
-            else:
-                state.retired.set_result(None)
+            state.request_stop()
+            self.runtime.retire_session(state.identifier)
+            await self.effects.inputs.close_sessions((state,))
+            await self.effects.turns.close_sessions((state,))
+            await Coordination.run_worker(partial(
+                self.comms.owners.complete_session, state.owner, expected,
+                state.configuration.launch.process, claim.claimed_generation,
+            ))
+            self.config.stop_observing_configuration(state.identifier)
+            del self.published[state.identifier]
+            self.effects.inputs.end_session(state.identifier)
+            state.retired.set_result(None)
 
     async def _acquire_loaded(self, cwd: Checkout, session_id: str) -> Thread:
         await Coordination.run_worker(self.comms.owners.require_private_launch)

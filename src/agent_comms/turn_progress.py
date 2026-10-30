@@ -24,7 +24,8 @@ from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
 from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_request_progress, record_terminal_failure
+from .diagnostics import record_request_progress, record_terminal_failure
+from .publication_measurements import PublicationMeasurements
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity

@@ -4,7 +4,6 @@ import json
 import pytest
 
 from agent_comms.cli import build_parser
-from agent_comms.cli_command import CliCommand
 from agent_comms.field_codec import FieldCodec
 from agent_comms.page_traversal import (
     HistoryCursor,
@@ -27,7 +26,7 @@ def test_cursor_owns_traversal_and_cli_json(cursor, wire, source):
     assert FieldCodec.encode(cursor) == wire
     assert FieldCodec.decode(PageCursor, wire) == cursor
     args = build_parser().parse_args(['history', '--before', json.dumps(wire)])
-    command = CliCommand.member_named(args.command).from_arguments(args)
+    command = args.command_declaration.from_arguments(args)
     assert command.before == cursor
 
 

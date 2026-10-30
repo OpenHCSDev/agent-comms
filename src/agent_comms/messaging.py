@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
+from .field_codec import ThreadLookup
+from .thread_identity import ThreadIncarnation
 from .errors import (
     CommittedMessageError,
     RelationViolationError,
@@ -17,6 +21,9 @@ from .errors import (
 )
 from .message_bus import MessageBus
 from .message_reference import MessageReference
+from .coordination_session import NativeCapture
+from .external_transcript import ExternalTranscript
+from .turn_item import NoSourceTurn, SourceTurn
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
@@ -39,6 +46,32 @@ if TYPE_CHECKING:
     from .goal_management import Goals
 from .errors import TodoError
 from .todos import TodoStore
+
+
+class AnswerAuthority(ABC):
+    """Whose receipts a send may answer."""
+
+    @abstractmethod
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]: ...
+
+
+class SenderReceipts(AnswerAuthority):
+    """An ordinary send answers only what its sender received."""
+
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]:
+        return owner.incarnation.require_recorded().answerable(())
+
+
+@dataclass(frozen=True)
+class CommanderReceipts(AnswerAuthority):
+    """A commander verb answers what its actor received, and what each commander it acts
+    for received; ``ThreadIncarnation.commands`` decides which, as it does for orders."""
+
+    actor: ThreadIncarnation
+    commanders: tuple[ThreadIncarnation, ...]
+
+    def lookups(self, owner: Thread) -> tuple[ThreadLookup, ...]:
+        return self.actor.answerable(self.commanders)
 
 
 class Messaging:
@@ -71,6 +104,8 @@ class Messaging:
         report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
         origin: AgentOrigin = AgentOrigin(),
+        source_turn: SourceTurn = NoSourceTurn(),
+        answerer: AnswerAuthority = SenderReceipts(),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -84,11 +119,11 @@ class Messaging:
         with todos.snapshot():
             pass  # The store validates its schema before any envelope is committed.
         self.bus.bus.messages_for_references(answers)
-        unreceived = self.bus.bus.unreceived(owner.incarnation.require_recorded().lookup, answers)
+        unreceived = self.bus.bus.unreceived(answerer.lookups(owner), answers)
         if unreceived:
             raise UnreceivedAnswerError(
                 f"{owner.name} never received {', '.join(r.message_id for r in unreceived)}"
-                " and cannot answer it")
+                " and acts for no commander who did, so it cannot answer it")
         message = Message(
             sender=owner.name,
             target=target,
@@ -97,7 +132,7 @@ class Messaging:
             role=role,
             task=task,
             report=report,
-            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
+            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target, source_turn)))),
         )
         committed = self._publish(message, origin, destination=CommandTarget.named(target))
         correction: CorrectionResult
@@ -109,9 +144,15 @@ class Messaging:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
 
-    def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
-        """What this owner's message to target answers among its running turn's inputs."""
-        return owner.turn_lease.answered_inputs(self, owner, target)
+    def _answered_by(self, owner: Thread, target: str,
+                     source_turn: SourceTurn) -> tuple[MessageReference, ...]:
+        """Native lease or explicitly named external source; never a newest-row guess."""
+        references = list(owner.turn_lease.answered_inputs(self, owner, target))
+        references.extend(source_turn.external_answers(
+            NativeCapture(self.bus), ExternalTranscript(self.root, owner.incarnation),
+            CommandTarget.named(target),
+        ))
+        return tuple(dict.fromkeys(references))
 
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
@@ -122,6 +163,12 @@ class Messaging:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         user = self.user_identity(worktree)
         return self._publish_user(user, target, body, task)
+
+    def send_owner_notice(self, target: NamedTarget, body: str, notice: TaskAttachment, *,
+                          role: MessageRole) -> Message:
+        """Core speaks in the owner's voice, under his own thread; the notice task, not the sender,
+        says nobody typed it, so it directs nothing and adds no owner words to any task."""
+        return self._publish_user(self.user_identity(Checkout(self.root)), target, body, notice, role=role)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: Checkout,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
