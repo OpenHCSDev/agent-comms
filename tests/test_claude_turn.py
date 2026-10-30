@@ -3,10 +3,13 @@ from contextlib import nullcontext
 
 import pytest
 
+import json
+
 from transcript_record_fixture import transcript_record
 
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.cli_bridges.claude_protocol import (
     CatchUp, ClaudeSession, ClaudeToolDraft, KnownTurn, Live, RedactedThinking,
     TimedRecord, ToolUse, UserRecord,
@@ -56,3 +59,21 @@ def test_prompt_identifies_finished_and_active_items_with_the_same_turn():
         call.ended('done', True, result.position, result.timestamp),
     ))
     assert active == ActiveItem(turn_id_turn_id, NativeItemId('call'), ModelWaitPhase())
+
+
+def test_scheduled_wake_after_turn_end_opens_the_turn_its_thinking_belongs_to():
+    """A scheduled-task fire is a meta prompt without an origin; its turnOrigin opens the turn."""
+    session = ClaudeSession(phase=Live())
+    records = (
+        dict(type='system', subtype='turn_duration'),
+        dict(type='system', subtype='scheduled_task_fire', uuid=transcript_record('fire'),
+             timestamp='2026-10-30T06:57:12.685Z', content='Running scheduled task'),
+        dict(type='user', uuid=transcript_record('wake'), timestamp='2026-10-30T06:57:13.123Z',
+             sessionId='session', promptId='scheduled-prompt', isMeta=True, turnOrigin='scheduled',
+             promptSource='system', message=dict(content='OVERNIGHT SWEEP')),
+        dict(type='assistant', uuid=transcript_record('thinking'), timestamp='2026-10-30T06:57:14.899Z',
+             message=dict(content=[dict(type='thinking', thinking='Read the board')])),
+    )
+    for position, data in enumerate(records):
+        ClaudeJsonLines().decode_line(json.dumps(data).encode(), position).updates(session)
+    assert session.turn == KnownTurn(NativeTurnId(transcript_record('wake')))
