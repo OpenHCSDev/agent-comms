@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.registry_document import RegisteredCommanderProject
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
@@ -886,6 +886,24 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
         thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
+
+
+def test_a_closed_lead_session_leaves_the_board_for_the_live_commanders(notification_bus):
+    """The lead's process going away must not empty the heartbeat for #commanders still running."""
+    comms = notification_bus
+    comms.registry.register(replace(
+        comms.registry.require("worker"), tags=frozenset({"comms", CommandersTag.declared_name}),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.register(replace(comms.registry.require("lead"),
+                                    process_identity=NoProcess()))
+    lead = comms.registry.require("lead")
+    assert not lead.process_alive
+    assert CommanderHeartbeat.boards(comms.registry, comms.goals) == (lead,)
+    beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
+                                    error="independent source", failed_at=time.time()),))
+    worker = comms.registry.require("worker").incarnation
+    assert CommanderUpdate.latest(comms, worker)
+    assert CommanderFrame.current(comms, "worker").commander == worker
 
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
