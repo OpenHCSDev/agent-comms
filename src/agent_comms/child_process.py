@@ -195,7 +195,7 @@ class ProcessState(SubclassUnion, affix=""):
     def signal(self, signum: int) -> None: ...
 
     @abstractmethod
-    def require_release_by(self, process: ProcessState) -> None: ...
+    def require_release_by(self, process: ProcessIdentity) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -254,7 +254,7 @@ class NoProcess(NullMember, ProcessState):
     def signal(self, signum: int) -> None:
         pass
 
-    def require_release_by(self, process: ProcessState) -> None:
+    def require_release_by(self, process: ProcessIdentity) -> None:
         # Stopping before the first start still produces a valid release.
         pass
 
@@ -363,7 +363,7 @@ class ProcessIdentity(RecordMember, ProcessState):
     async def wait_exited(self) -> None:
         await Platform.current().wait_exited(self)
 
-    def require_release_by(self, process: ProcessState) -> None:
+    def require_release_by(self, process: ProcessIdentity) -> None:
         if self != process:
             raise RelationViolationError("Only the registered owner may release itself.")
 
