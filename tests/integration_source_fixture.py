@@ -1,6 +1,6 @@
 """One real Git/forge/Todo setup for matched source capture and promotion controls."""
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
@@ -12,7 +12,6 @@ from agent_comms.commander.order import Commander, CommanderContext
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
-from agent_comms.installer.commands import InstallCommands
 from agent_comms.integration import IntegrationCheckout, IntegrationRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
@@ -113,12 +112,11 @@ def source_pair(
 
 
 @pytest.fixture
-def materialized_clients(test_uv: Path) -> Iterator[Callable[[Path, IntegrationInput], MaterializedClients]]:
-    """The root test run supplies the actual frontend; every test owns one command lifetime."""
-    with InstallCommands() as commands:
-        def acquire(directory: Path, inputs: IntegrationInput) -> MaterializedClients:
-            return MaterializedClients(directory, inputs, test_uv, Path(sys.executable), commands)
-        yield acquire
+def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], MaterializedClients]:
+    """The root test run supplies the frontend; metadata acquisition owns its command lifetime."""
+    def acquire(directory: Path, inputs: IntegrationInput) -> MaterializedClients:
+        return MaterializedClients(directory, inputs, test_uv, Path(sys.executable))
+    return acquire
 
 
 @pytest.fixture

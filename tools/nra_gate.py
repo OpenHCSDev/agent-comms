@@ -8,10 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms_project import AgentCommsProject
-from agent_comms.installer.commands import InstallCommands
 from nominal_refactor_advisor import audit
 
 if __name__ == "__main__":
-    with InstallCommands() as commands:
-        project, arguments = AgentCommsProject.from_arguments(Path.cwd(), commands)
-        raise SystemExit(audit.gate.main(project, arguments))
+    project, arguments = AgentCommsProject.from_arguments(Path.cwd())
+    raise SystemExit(audit.gate.main(project, arguments))

@@ -43,7 +43,6 @@ from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.head_review import Side as CutSide
 from agent_comms.field_codec import boundary_decoder
-from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
@@ -94,7 +93,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     cloned once, unless CI already materialized each side's exact cut."""
 
     @classmethod
-    def from_arguments(cls, root: Path, commands: InstallCommands) -> tuple[AgentCommsProject, list[str]]:
+    def from_arguments(cls, root: Path) -> tuple[AgentCommsProject, list[str]]:
         """This checkout measured with the clients its command line names, and the arguments
         left for the audit's own command line. --ci-inputs names the integration entrypoint's
         already-materialized exact source input."""
@@ -103,7 +102,7 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
             "--ci-inputs", dest="clients", default=ClientSources(),
             type=lambda directory: MaterializedClients.read(
                 Path(directory).resolve(), uv=StackSources.frontend(),
-                python=Path(sys.executable), commands=commands),
+                python=Path(sys.executable)),
             help="use the integration entrypoint's already-materialized exact source input")
         known, rest = parser.parse_known_args()
         return cls(root, clients=known.clients), rest

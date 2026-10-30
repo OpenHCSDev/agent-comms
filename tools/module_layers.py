@@ -36,7 +36,7 @@ import tomllib
 import typing
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from functools import cache, cached_property
 from pathlib import Path
 
@@ -429,13 +429,9 @@ class MaterializedClients(ClientSources):
     inputs: IntegrationInput
     uv: Path
     python: Path
-    # The executor's lifetime is operational; source cuts and their interpreters identify this input.
-    commands: InstallCommands = field(compare=False, repr=False)
-
     @classmethod
-    def read(cls, directory: Path, *, uv: Path, python: Path,
-             commands: InstallCommands) -> MaterializedClients:
-        return cls(directory, IntegrationInput.at(directory), uv, python, commands)
+    def read(cls, directory: Path, *, uv: Path, python: Path) -> MaterializedClients:
+        return cls(directory, IntegrationInput.at(directory), uv, python)
 
     @cached_property
     def environment(self) -> dict[str, str]:
@@ -447,24 +443,26 @@ class MaterializedClients(ClientSources):
         _ = self.environment  # Prove the selected interpreter once before using its Python version.
         result: dict[type[Side], dict[RepositoryName, ProjectMetadata]] = {}
         core_source = self.inputs.source(CorePackage.repository)
-        for side in Side.sides():
-            core = side.require_materialized(self.directory, core_source)
-            packages = {core_source.repository: CorePackage.distribution,
-                        **{Repo.repository_url(url): name
-                           for name, (url, branch) in self.sources(core / "stack").items()}}
-            projects: dict[RepositoryName, ProjectMetadata] = {}
-            for identity in sorted(packages, key=lambda identity: identity.key):
-                source = self.inputs.source(identity)
-                checkout = side.require_materialized(self.directory, source)
-                try:
-                    metadata = ProjectMetadata.acquire(checkout, uv=self.uv, python=self.python,
-                        commands=self.commands, output=self.directory / "metadata")
-                    self.require_package(metadata, packages[identity])
-                    ProjectMetadata.require_python(metadata.python)
-                    projects[identity] = metadata
-                finally:
-                    side.require_materialized(self.directory, source)
-            result[side] = projects
+        # Acquisition owns and retires its runner; the measured value carries no locks or workers.
+        with InstallCommands() as commands:
+            for side in Side.sides():
+                core = side.require_materialized(self.directory, core_source)
+                packages = {core_source.repository: CorePackage.distribution,
+                            **{Repo.repository_url(url): name
+                               for name, (url, branch) in self.sources(core / "stack").items()}}
+                projects: dict[RepositoryName, ProjectMetadata] = {}
+                for identity in sorted(packages, key=lambda identity: identity.key):
+                    source = self.inputs.source(identity)
+                    checkout = side.require_materialized(self.directory, source)
+                    try:
+                        metadata = ProjectMetadata.acquire(checkout, uv=self.uv, python=self.python,
+                            commands=commands, output=self.directory / "metadata")
+                        self.require_package(metadata, packages[identity])
+                        ProjectMetadata.require_python(metadata.python)
+                        projects[identity] = metadata
+                    finally:
+                        side.require_materialized(self.directory, source)
+                result[side] = projects
         return result
 
     def projects(self, side: type[Side]) -> dict[RepositoryName, ProjectMetadata]:
@@ -865,7 +863,7 @@ def main() -> int:
             local = inputs.source(Repo.of(ROOT).github)
             core = HeadSide.require_materialized(arguments.ci_inputs, local)
             resource = MaterializedClients(arguments.ci_inputs, inputs, StackSources.frontend(),
-                                           Path(sys.executable), commands)
+                                           Path(sys.executable))
             package = Package(core, resource.cuts[HeadSide])
             base = BaseSide.require_materialized(arguments.ci_inputs, local)
             if arguments.base and Repo.git(ROOT, "rev-parse", arguments.base).strip() != local.baseline.commit:

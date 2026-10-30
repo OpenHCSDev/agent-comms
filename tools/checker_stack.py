@@ -63,7 +63,7 @@ class CheckerStack(Stack, StackSources):
 
     @cached_property
     def clients(self) -> MaterializedClients:
-        return MaterializedClients(self.source_directory, self.inputs, self.uv, self.python, self.commands)
+        return MaterializedClients(self.source_directory, self.inputs, self.uv, self.python)
 
     def requirements(self, side: type[Side]) -> tuple[Requirement, ...]:
         core = side.require_materialized(self.source_directory, self.inputs.source(CorePackage.repository))
