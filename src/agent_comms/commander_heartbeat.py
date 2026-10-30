@@ -19,7 +19,7 @@ from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
-from agent_comms.service_passes import CompletedWatch, ServicePassStore
+from agent_comms.service_passes import CommanderPass, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
@@ -62,12 +62,8 @@ class CommanderObservation:
 
 
 class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, CommanderService,
-                         CompletedWatch,
+                         CommanderPass,
                          PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
-
-    pass_duration: ClassVar[float] = 270
-    """The longest pass on the live bus: first passes after the 2026-10-30 installs took
-    190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:

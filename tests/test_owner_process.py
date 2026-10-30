@@ -54,8 +54,8 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
     comms = wire(native_workers.root)
     declared = Thread('worker', frozenset(), Checkout(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
-    first = await Coordination.run_worker(partial(
-        comms.owners.start, "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
+    (first,) = await Coordination.run_worker(partial(
+        comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
     ))
     owner = comms.registry.require("worker")
     try:
@@ -64,7 +64,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             await asyncio.sleep(0.02)
-        assert (await Coordination.run_worker(partial(comms.owners.start, "worker"))).pid == owner.require_process().pid
+        assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
         from agent_comms.owner_cutover import PreserveOwnerRuntime
@@ -145,7 +145,7 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
             comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path),
                                           model=DeclaredModel("response-local/fixture")))
             await Coordination.run_worker(partial(
-                comms.owners.start, name,
+                comms.owners.start_many, (name,),
                 agent_bin=GivenBinary(str(Path(sys.executable).with_name("pi-comms-native").resolve())),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
@@ -217,6 +217,8 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
         assert all(not comms.registry.storage_rule.host_memory_exceeded(sample.memory)
                    for sample in measurements)
         assert all(sample.fleet_resident_bytes <= sample.fleet_budget_bytes
+                   for sample in measurements)
+        assert all(len(sample.memory.holders) == 3 and sample.memory.tracer > 0
                    for sample in measurements)
         await Coordination.run_worker(partial(comms.owners.stop, names[0]))
         assert host.alive()
@@ -369,7 +371,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             with monkeypatch.context() as patch:
                 patch.setenv("BATCH_OWNER_CREDENTIAL", credential)
                 patch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / (name + "-config")))
-                await Coordination.run_worker(partial(comms.owners.start, name, agent_args=GivenArguments(tuple(arguments))))
+                await Coordination.run_worker(partial(comms.owners.start_many, (name,), agent_args=GivenArguments(tuple(arguments))))
             original = comms.registry.require(name)
             await ready(original)
             originals.append(original)

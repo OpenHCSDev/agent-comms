@@ -33,6 +33,14 @@ class CompletedWatch:
         return 2 * cls.pass_duration + Coordination.watch_period
 
 
+class CommanderPass(CompletedWatch):
+    """The commander's board pass: its service runs it, and its readers judge freshness by it."""
+
+    pass_duration: ClassVar[float] = 270
+    """The longest pass on the live bus: first passes after the 2026-10-30 installs took
+    190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
+
+
 @dataclass(frozen=True)
 class FailingPass:
     """A watch failing since its first failed pass, with its newest error and the time of its
@@ -71,7 +79,7 @@ class ServicePasses:
 
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
         """Only the commander's completion clock determines heartbeat freshness."""
-        return heartbeat.since(time.time() - 3 * Coordination.watch_period)
+        return heartbeat.since(time.time() - CommanderPass.completion_ceiling())
 
     def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
         """A pass for this commander completed at or after ``since``."""
