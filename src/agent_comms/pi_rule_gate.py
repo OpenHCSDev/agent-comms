@@ -23,7 +23,7 @@ from agent_comms_hooks.skill import (
 )
 
 from .bus_publication import Delivered
-from .rule_deal import DealtRuleGate, Redeals
+from .rule_deal import DealTrigger, DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
@@ -67,14 +67,15 @@ class PiRedeal(PiRuleGate, Redeals):
         gate = PiRuleGate.of(comms, thread)
         return cls(gate.scratch, gate.worktree, comms, thread)
 
-    def renew(self) -> None:
+    def renew(self, trigger: DealTrigger) -> None:
         """A start or compaction deals the papers, then the rules."""
-        self.deal_from(CommanderReader, FleetReader)
+        self.deal_from(CommanderReader, FleetReader, trigger)
 
-    def reread(self) -> None:
-        self.deal_from(CommanderRulesReader, FleetRulesReader)
+    def reread(self, trigger: DealTrigger) -> None:
+        self.deal_from(CommanderRulesReader, FleetRulesReader, trigger)
 
-    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader]) -> None:
+    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader],
+                  trigger: DealTrigger) -> None:
         """The registry's commander project picks the deck reader whose sources it deals."""
         snapshot = self.comms.registry.snapshot()
         snapshot.commander_project.deal_rules(
@@ -83,6 +84,7 @@ class PiRedeal(PiRuleGate, Redeals):
             commander=commander,
             commanded=commanded,
             prompts=self.owner_words(snapshot),
+            trigger=trigger,
         )
 
     def owner_words(self, snapshot: RegistrySnapshot) -> tuple[str, ...]:
