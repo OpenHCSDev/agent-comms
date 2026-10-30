@@ -9,6 +9,8 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from agent_comms.field_codec import AcpSessionId, FieldCodec
 from acp import RequestError
 
 from delivery_owner_fixture import canonical_agent
@@ -64,14 +66,12 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
 
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")
 async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_runtime_package):
-    from agent_comms.runtime import RuntimeProxy, socket_path
-
     old, new = tmp_path / "old", tmp_path / "new"
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
     owner = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()), runtime_enabled=True)
-    session = (await owner.new_session(str(old))).session_id
+    session = FieldCodec.decode(AcpSessionId, (await owner.new_session(str(old))).session_id)
     proxies, updates = [], [[], []]
 
     class Client(SessionUpdateSink):
@@ -86,7 +86,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_run
         for values in updates:
             client = canonical_agent(comms)
             client.on_connect(Client(values))
-            proxy = RuntimeProxy(client, session, socket_path(comms.root, os.getpid()))
+            proxy = client._create_runtime_proxy(comms.registry.require(session), session)
             proxies.append(proxy)
             assert next(
                 update.worktree

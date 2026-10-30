@@ -30,7 +30,7 @@ from .goal_actions import (
     SentBackOrderGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import Generation, GoalAttemptStore
+from .goal_attempts import Generation, GoalAttemptFile, GoalAttemptStore
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
@@ -83,7 +83,9 @@ class Goals(GoalWaitRecovery):
         self.bus = bus
         self.agents = agents
         self.waits = GoalWaits(root)
-        self.goal_store: GoalAttemptStore | None = None
+        self.dispositions = InputDispositions(root)
+        self.goal_store: GoalAttemptFile = GoalAttemptFile(GoalAttemptStore.path_in(
+            GoalAttemptStore.directory_in(root)))
 
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a commander's child goal from its parent's active work."""
@@ -158,11 +160,9 @@ class Goals(GoalWaitRecovery):
         return store.fire(owner, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
-        if self.goal_store is None:
-            private = GoalAttemptStore.directory_in(self.root)
-            private.mkdir(mode=0o700, exist_ok=True)
-            self.goal_store = GoalAttemptStore.initialize(private)
-        return self.goal_store
+        store = self.goal_store.open()
+        self.goal_store = store
+        return store
 
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
@@ -187,7 +187,7 @@ class Goals(GoalWaitRecovery):
     def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         entry = self.registry.entry(name).entry
-        rows = InputDispositions(self.root).unresolved((entry,)).unknown(entry.names)
+        rows = self.dispositions.unresolved((entry,)).unknown(entry.names)
         return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
@@ -199,14 +199,14 @@ class Goals(GoalWaitRecovery):
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         entry = self.registry.entry(name).entry
-        return InputDispositions(self.root).unresolved((entry,)).delivery_overview(
+        return self.dispositions.unresolved((entry,)).delivery_overview(
             entry.names, include_history=include_history, scope=scope)
 
     def dismiss_historical_inputs(
         self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        return InputDispositions(self.root).dismiss_historical(
+        return self.dispositions.dismiss_historical(
             (self.registry.entry(name).entry,), scope=scope)
 
     def goal_input_review(
@@ -232,7 +232,7 @@ class Goals(GoalWaitRecovery):
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         owners = captured.owners
-        dispositions = InputDispositions(self.root)
+        dispositions = self.dispositions
         unknown = {row.key: row for row in
                    dispositions.unresolved((snapshot.entry(thread.name),)).unknown(owners)}
         eligible = set()
@@ -309,11 +309,7 @@ class Goals(GoalWaitRecovery):
         return self._goal_snapshot(name).execution
 
     def goal_changed(self, name: str, previous: GoalPublicationSnapshot) -> GoalChange:
-        """Announce a durable change through S1's event vocabulary.
-
-        Existing registry/history and wait persistence are the cross-process
-        authority. Each observer supplies its last successfully published view.
-        """
+        """Compare a rebuilt view after its publication owner observed a source change."""
         current = self.goal_snapshot(name)
         return GoalChanged(current) if previous.changed_by(current) else GoalUnchanged()
 
@@ -331,12 +327,16 @@ class Goals(GoalWaitRecovery):
         """All goal readers build the same source from the original records."""
         for goal in owner.goal:
             store = self.open_goal_store()
-            generation = store.require_generation(goal.id)
-            source = GoalExecutionSource(
-                goal, GoalWaits.for_goal(goal, waits), generation,
-                generation.lifecycle.evidence(store, generation), owner, snapshot, self.agents,
-            )
-            return GoalSnapshot(goal, source.execution())
+            # Generation and its failure evidence come from one cut. Permit
+            # attestation keeps GoalAttemptStore's independent fresh readback.
+            with store.reader_snapshot() as connection:
+                generation = Generation.require_in(connection, goal.id)
+                source = GoalExecutionSource(
+                    goal, GoalWaits.for_goal(goal, waits), generation,
+                    generation.lifecycle.evidence(connection, generation),
+                    owner, snapshot, self.agents,
+                )
+                return GoalSnapshot(goal, source.execution())
         return GoalSnapshot(owner.goal, IdleGoalExecution())
 
     def direct(self, name: str, message: Message) -> None:

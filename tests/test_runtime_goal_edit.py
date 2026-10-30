@@ -9,14 +9,13 @@ import pytest
 from delivery_owner_fixture import canonical_agent
 from agent_comms.acp_extension import GoalChangedUpdate, decode_updates
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import AcpSessionId, FieldCodec
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_actions import (
     OwnerInvocable,
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
@@ -32,7 +31,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
     owner = canonical_agent(comms, agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()), runtime_enabled=True)
     # Keep this non-provider test's goal paused. Edits must preserve that state.
     response = await owner.new_session(str(tmp_path / "project"))
-    session = response.session_id
+    session = FieldCodec.decode(AcpSessionId, response.session_id)
     goal = comms.goals.update_goal(session, SetGoalAction(text="Review @child's implementation"))
     paused = comms.goals.update_goal(session, PausedGoalAction(), actor=OwnerInvocable)
     updates = []
@@ -44,7 +43,7 @@ async def test_goal_edit_and_history_over_owner_socket(tmp_path, monkeypatch, na
 
     observer = canonical_agent(comms)
     observer.on_connect(Client())
-    proxy = RuntimeProxy(observer, session, socket_path(comms.root, os.getpid()))
+    proxy = observer._create_runtime_proxy(comms.registry.require(session), session)
     try:
         (presented,) = goal_updates(await proxy.subscribe())
         assert presented.goal == paused

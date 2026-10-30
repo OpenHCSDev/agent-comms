@@ -122,3 +122,19 @@ def test_target_heartbeat_probe_reports_unconfigured_root(private_comms: Comms, 
     CommanderHeartbeatProbe(private_comms.root, time.time()).run()
     assert "no live served commander; not qualified" in capsys.readouterr().out
     assert services.path.exists() == present
+
+
+async def test_heartbeat_wait_returns_on_one_pass_and_reports_the_unreached_commander(
+        published_board: Comms) -> None:
+    """One completed pass is the service running; a commander the pass did not reach has no
+    live bridge, which the install reports instead of awaiting (claude-nra held the
+    2026-10-30 installs 518 s and 376 s)."""
+    comms = published_board
+    lead = comms.registry.require("lead").incarnation.require_recorded()
+    worker = comms.registry.require("worker").incarnation.require_recorded()
+    services = ServicePassStore.at(comms.root)
+    since = time.time()
+    services.heartbeat_passed((lead,), (lead, worker))
+    async with asyncio.timeout(10):
+        unreached = await services.wait_completed((lead, worker), since, CommanderHeartbeat)
+    assert unreached == (worker,)

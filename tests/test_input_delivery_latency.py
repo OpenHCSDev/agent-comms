@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from agent_comms import backend
-from agent_comms.agent_backend import SteerInputPolicy
+from agent_comms.turn_inbox import SteerInputPolicy
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import InputId

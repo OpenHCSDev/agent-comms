@@ -20,7 +20,8 @@ from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.channel_targets import CommsTag
+from agent_comms.channel_targets import CommandersTag, CommsTag
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.todos import DoneTodoState
@@ -820,6 +821,20 @@ def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp
         SendVerb(unit="worker", body_file=order_file(held_bus, tmp_path)).apply(ctx)
     SayVerb(units="worker", body_file=str(reply), answers=(ask.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (ask.reference,)
+
+
+def test_a_peer_commanders_answer_clears_the_vibe_check_for_the_seat(held_bus):
+    """Answering a burst sent to the seat opens the gate: the reply author is any commander."""
+    check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
+    held_bus.registry.declare(Thread("peer", frozenset({CommandersTag.declared_name}),
+                                     Checkout(Path.cwd())), StoppedThreadStatus())
+    peer, lead = (held_bus.registry.require(name) for name in ("peer", "lead"))
+    held_bus.messaging.send("peer", "lead", "Answered.", answers=(check.reference,),
+                            answerer=CommanderReceipts(peer.acting_identity,
+                                                       (peer.incarnation, lead.incarnation)))
+    with held_bus.bus.bus.reading() as source:
+        assert VibeCheckNotice.unanswered(
+            source, held_bus.registry.snapshot(), "lead", time.time()) == ()
 
 
 def test_an_answer_sent_to_another_unit_is_refused_and_leaves_the_ask_owed(held_bus, tmp_path):

@@ -49,11 +49,11 @@ class CliInvocation:
         if unknown and (len(unknown) != 2 or unknown[0] != LaunchRoot.argument):
             raise ValueError(f"unrecognized arguments: {' '.join(unknown)}")
         declaration = args.command_declaration
-        LaunchRoot.startup(
+        launch_root = LaunchRoot.startup(
             arguments,
             lambda: args.root.resolve(declaration.published_launch),
         )
-        route = resolve_comms_route(args.root.resolve(LaunchRoot.current).path)
+        route = resolve_comms_route(args.root.resolve(lambda: launch_root).path)
         with LaunchRoot.from_path(route.root).selected():
             command = declaration.from_arguments(args)
             return command.execute(route, output)

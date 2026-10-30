@@ -60,7 +60,7 @@ class AnnotationWorker:
         grant.require_segment(segment)
         version = QuestionVersion.current(question, rules)
         rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels,
-            CoordinationStore.path_in(self.comms.root), span, version, grant.classifier))
+            self.comms.registry.store.coordinator_reader, span, version, grant.classifier))
         if rows:
             from .coordination_tables.annotations import SpanAnnotationsRow
 

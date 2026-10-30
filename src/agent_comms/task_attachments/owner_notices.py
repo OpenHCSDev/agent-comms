@@ -117,8 +117,13 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     @classmethod
     def newest_answer(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
                       lines: Sequence[Message]) -> tuple[Message, ...]:
-        """The commander's newest answer naming any of those lines, from one read."""
-        return source.latest_reply(tuple(line.reference for line in lines), snapshot.names_for(commander))
+        """The newest answer naming any of those lines from this commander or any commander of
+        the bus: every one of them holds the gate this burst closes, so one answer opens it."""
+        answerers = (commander, *(thread.name for thread
+                                  in snapshot.commander_project.commanders(snapshot)))
+        return source.latest_reply(
+            tuple(line.reference for line in lines),
+            frozenset().union(*(snapshot.names_for(name) for name in answerers)))
 
     @classmethod
     def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,

@@ -11,8 +11,10 @@ import pytest
 from agent_comms.session_file import NoSessionFile
 from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.native_turn_context import NativeContextData, NativeContextManifestData
-from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
+from agent_comms.native_turn_context import NativeContextManifestData
+from agent_comms.pi_payloads import NativeContextData
+from agent_comms.owner_connection import RuntimeRequest
+from agent_comms.runtime_requests import (ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools
@@ -68,16 +70,18 @@ def test_current_native89_shape_and_authenticated_file_read(tmp_path):
     })
     assert data.segments == (segment,)
     assert data.observation() == original
-    result = data.public_source_text(None, original, 0, source)
+    selected = data.public_source(original, 0, source)
+    assert selected == source
+    result = ContextSourceText(selected.public_description(), selected.public_text(None))
     assert FieldCodec.decode(ContextSourceText, FieldCodec.encode(result)) == result
     assert result.text == path.read_text()
     with pytest.raises(ValueError):
-        data.public_source_text(None, original, 0, replace(source, path=str(tmp_path / "foreign")))
+        data.public_source(original, 0, replace(source, path=str(tmp_path / "foreign")))
     with pytest.raises(ValueError):
-        data.public_source_text(None, replace(original, context_digest="b" * 64), 0, source)
+        data.public_source(replace(original, context_digest="b" * 64), 0, source)
     path.write_text("Today's different instruction")
     with pytest.raises(ValueError):
-        data.public_source_text(None, original, 0, source)
+        data.public_source(original, 0, source).public_text(None)
 
 
 def test_current_core_context_is_independent_and_source_selection_is_current(tmp_path):
@@ -115,7 +119,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(tmp_p
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
         assert owner.session_file == NoSessionFile()
-        connection = RuntimeConnection(comms, owner.name,
+        connection = RuntimeConnection(comms, owner.incarnation,
                                        socket_path(comms.root, owner.require_process().pid))
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))

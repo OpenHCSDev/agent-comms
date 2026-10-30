@@ -24,7 +24,6 @@ from agent_comms.goals import (
 
 from .field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
-from agent_comms.input_disposition import InputDispositions
 from agent_comms.todos import (
     ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
     TodoCommand, TodoOperation,
@@ -323,7 +322,7 @@ class PreparedStandbyGoalAction(StandbyGoalAction, declared_name=None):
         reported_turn = ctx.reported_turn
         wait_targets = review.targets
         aliases = review.owners
-        dispositions = InputDispositions(ctx.goals.root)
+        dispositions = ctx.goals.dispositions
         unknown = {row.key: row for row in review.unknown}
         # An input delivered into this recipient's turn after the inbox cut is already handled.
         delivered = dispositions.read(
