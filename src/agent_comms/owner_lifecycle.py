@@ -339,11 +339,12 @@ class OwnerReleaseStore(ThreadOwnedState, DurableStore):
             return
         with self.writing() as db:
             for original, before in owners:
-                thread = snapshot.require(original.name)
-                thread.turn_record.read().require_idle()
-                OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth,
-                                     thread.process_identity, before,
-                                     snapshot.claim_generation(thread.name)).upsert(db)
+                # A stopped dead owner is already unregistered in `snapshot`: the release
+                # names the process the original held, as record_session does.
+                original.turn_record.read().require_idle()
+                OwnerReleaseEvidence(original.name, original.incarnation.wire_birth,
+                                     original.process_identity, before,
+                                     snapshot.claim_generation(original.name)).upsert(db)
 
     def record_session(
         self, snapshot: RegistrySnapshot, original: Thread, before: int, owner: OwnerIdentity,
