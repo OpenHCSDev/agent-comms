@@ -61,7 +61,7 @@ def test_registry_snapshot_constructor_and_pickle_own_immutable_maps(comms, decl
     for restored in (snapshot, pickle.loads(pickle.dumps(snapshot, protocol=5))):
         assert restored.purpose == captured.purpose
         assert restored.threads[original.name] == original
-        assert restored.by_lookup[original.incarnation.require_recorded().lookup] == original
+        assert restored.born(original.incarnation.require_recorded().lookup) == original
         for declaration in fields(restored):
             value = getattr(restored, declaration.name)
             if isinstance(value, Mapping):
@@ -86,8 +86,8 @@ def test_snapshot_constructor_retains_namespace_validation_and_derives_birth_ind
     with pytest.raises(RelationViolationError, match="alias"):
         replace(captured, aliases={"unowned": "absent"})
     retired = replace(captured, threads=ThreadRows.from_threads({}))
-    assert not retired.by_lookup
-    assert captured.by_lookup[original.incarnation.lookup] == original
+    assert not retired.lookup_names
+    assert captured.born(original.incarnation.lookup) == original
 
 
 def test_current_reference_resolves_original_birth_after_registry_rename(comms, declare_reference):
