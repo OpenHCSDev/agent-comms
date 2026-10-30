@@ -405,6 +405,24 @@ class StorageRule(RoomAllocation, DurableFile):
         return any(allocation.owns_present(self, owner, path)
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
+    def require_transfer_source(self, owner: Thread, source: Path,
+                                threads: Iterable[Thread], repository: Repo) -> None:
+        """Relocation ownership is not permission to edit the old order."""
+        if source.is_symlink() or source != source.resolve() or source.parent != self.checkout_base:
+            self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
+        if source == repository.checkout.resolve():
+            self.deny(f'{source} is the registered repository checkout, not an isolated allocation')
+        owners = tuple(thread for thread in threads
+                       if (self.owns_present_checkout(thread, source)
+                           or Checkout(source) in thread.earlier_projects))
+        if tuple(thread.incarnation for thread in owners) != (owner.incarnation,):
+            self.deny(f'{source} has foreign or ambiguous checkout owners: '
+                      + ', '.join(thread.name for thread in owners))
+        if Repo.of(source).github != repository.github:
+            self.deny(f'{source} is not a checkout of {repository.github}')
+        if not (source / '.git').is_file():
+            self.deny(f'{source} is a shared main/home checkout, not a linked worktree')
+
     def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
         """Declared home and work allocations; Git metadata supplies their branches."""
         ordered = self.order_checkout(self.roots_of(owner), '*')

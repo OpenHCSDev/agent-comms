@@ -4,7 +4,6 @@ from abc import abstractmethod
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import CheckoutGrant
 from agent_comms.cli_commands import CheckoutOperation
-from agent_comms.cli_commands import CheckoutResult
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
@@ -30,6 +29,11 @@ class PreparedCheckoutCliCommand(CliCommand):
         ),
     ]
     operation: Annotated[type[CheckoutOperation], Argument(flags=("operation",))]
+    source_checkout: Annotated[
+        tuple[Path, ...],
+        Argument(flags=("--source",), options={"nargs": 1, "type": Path,
+                 "help": "Existing isolated checkout to transfer; required for transfer"}),
+    ] = ()
 
     @abstractmethod
     def destination(self, rule: StorageRule, thread: Thread) -> Path: ...
@@ -43,5 +47,4 @@ class PreparedCheckoutCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.caller.own_thread())
         destination = self.destination(ctx.registry.storage_rule, thread)
-        self.operation.apply(self, ctx, thread, destination)
-        return CheckoutResult(destination)
+        return self.operation.apply(self, ctx, thread, destination)

@@ -19,11 +19,12 @@ from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, LaunchCheckout, Repo, ScratchCheckout
+from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
+from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import PendingProblemOrder, WithdrawTodo
 from cli_command import core, core_process
@@ -379,3 +380,95 @@ def test_retiring_a_checkout_with_submodules_keeps_held_work_and_drops_scratch(
     listed = git(repository, "worktree", "list", "--porcelain")
     assert str(held.path.resolve()) in listed
     assert str(scratch.path) not in listed and str(clean.path) not in listed
+
+
+@pytest.fixture
+def retained_transfer(checkout_command_bus, repository):
+    comms = checkout_command_bus
+    worker = comms.registry.require('worker')
+    rule = comms.registry.storage_rule
+    source = rule.order_checkout(rule.roots_of(worker), 'P0')
+    source.parent.mkdir(parents=True, exist_ok=True)
+    checkout = Checkout.add(repository, source, NewBranchStart('retained-transfer', 'HEAD'))
+    comms.registry.register(replace(worker, worktree=checkout), StoppedThreadStatus())
+    (source / 'owner.py').write_text('staged bytes\n')
+    git(source, 'add', 'owner.py')
+    (source / 'owner.py').write_text('unstaged bytes\n')
+    (source / 'untracked.bin').write_bytes(b'\x00retained\xff')
+    (source / 'pinned' / 'catalog.md').write_text('dirty submodule\n')
+    destination = rule.order_checkout(rule.roots_of(worker), 'P1')
+    return comms, checkout, destination
+
+
+def test_public_transfer_keeps_dirty_index_branch_modules_and_current_thread(retained_transfer, repository):
+    comms, source, destination = retained_transfer
+    original = comms.registry.require('worker')
+    branch = git(source.path, 'branch', '--show-current')
+    head = git(source.path, 'rev-parse', 'HEAD')
+    status = git(source.path, 'status', '--porcelain')
+    index = Path(git(source.path, 'rev-parse', '--path-format=absolute', '--git-path', 'index').strip())
+    index_bytes = index.read_bytes()
+    shared_config = (repository / '.git' / 'config').read_bytes()
+    arguments = ('--root', str(comms.root), 'checkout', '--from', 'worker', 'transfer',
+                 'P1', '--source', str(source.path))
+    result = core_process(*arguments)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not source.path.exists()
+    assert git(destination, 'branch', '--show-current') == branch
+    assert git(destination, 'rev-parse', 'HEAD') == head
+    assert index.read_bytes() == index_bytes
+    assert git(destination, 'status', '--porcelain') == status
+    assert (destination / 'owner.py').read_text() == 'unstaged bytes\n'
+    assert (destination / 'untracked.bin').read_bytes() == b'\x00retained\xff'
+    assert (destination / 'pinned' / 'catalog.md').read_text() == 'dirty submodule\n'
+    assert git(destination / 'pinned', 'rev-parse', '--show-toplevel').strip() == str(destination / 'pinned')
+    assert (repository / '.git' / 'config').read_bytes() == shared_config
+    current = comms.registry.require('worker')
+    assert current.worktree == Checkout(destination)
+    assert current.incarnation == original.incarnation and current.goal == original.goal
+    assert comms.goals.todos.get('P1').held().owner_identity == original.incarnation
+    repeated = core_process(*arguments)
+    assert repeated.returncode == 0, repeated.stdout + repeated.stderr
+    assert git(destination, 'rev-parse', 'HEAD') == head
+
+
+@pytest.mark.parametrize('refusal', ('occupied', 'foreign', 'stale'))
+def test_transfer_refuses_before_moving_retained_work(retained_transfer, refusal):
+    comms, source, destination = retained_transfer
+    worker = comms.registry.require('worker')
+    repository = comms.goals.todos.get('P1').repository
+    if refusal == 'occupied':
+        destination.mkdir()
+    elif refusal == 'foreign':
+        comms.registry.declare(Thread('another-owner', frozenset(), source,
+                                      execution=ExternalThreadExecution))
+    else:
+        current = comms.goals.todos.get('P1')
+        stale = OrderCheckoutGrant(worker, replace(current, revision=current.revision - 1))
+        with pytest.raises(ValueError, match='changed before checkout transfer'):
+            stale.require_transfer(comms, repository)
+        assert source.path.exists() and not destination.exists()
+        return
+    before = git(source.path, 'status', '--porcelain'), git(source.path, 'rev-parse', 'HEAD')
+    result = core_process('--root', str(comms.root), 'checkout', '--from', 'worker',
+                          'transfer', 'P1', '--source', str(source.path))
+    assert result.returncode != 0
+    assert source.path.exists()
+    assert (git(source.path, 'status', '--porcelain'), git(source.path, 'rev-parse', 'HEAD')) == before
+
+
+def test_transfer_restores_original_tree_and_modules_after_actual_git_failure(repository, tmp_path):
+    source = Checkout.add(repository, tmp_path / 'before', NewBranchStart('failed-transfer', 'HEAD'))
+    destination = tmp_path / 'after'
+    (source.path / 'owner.py').write_text('keep after failure\n')
+    (source.path / 'pinned' / 'catalog.md').write_text('keep module after failure\n')
+    before = git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')
+    config = (repository / '.git' / 'config').read_bytes()
+    with pytest.raises(GitCommandError):
+        with source.relocating(destination):
+            Repo.git(destination, 'not-a-git-command')
+    assert source.path.exists() and not destination.exists()
+    assert (git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')) == before
+    assert (source.path / 'pinned' / 'catalog.md').read_text() == 'keep module after failure\n'
+    assert git(source.path / 'pinned', 'rev-parse', '--show-toplevel').strip() == str(source.path / 'pinned')
+    assert (repository / '.git' / 'config').read_bytes() == config
