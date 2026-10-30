@@ -13,7 +13,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registration import Registration
 from agent_comms.thread_identity import ReportedTools, ToolName, UnreportedTools
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.turn_lease import NoFinishedTurn
+from agent_comms.turn_lease import ActiveTurn, NoFinishedTurn
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
 
@@ -106,15 +106,15 @@ def test_idle_restart_fence_cannot_borrow_metadata_or_claim(tmp_path):
     registry.register(replace(expected, title=GivenThreadText('changed')))
     with pytest.raises(RelationViolationError):
         with registry.store.editing() as edit:
-            edit.fence_idle_owners(((expected, claim_scope),))
+            edit.fence_restart_owners(((expected, claim_scope),))
     current = registry.require('owner')
     registry.register(current, new_owner=True)
     with pytest.raises(RelationViolationError):
         with registry.store.editing() as edit:
-            edit.fence_idle_owners(((current, claim_scope),))
+            edit.fence_restart_owners(((current, claim_scope),))
     generation = registry.snapshot().claim_generation('owner')
     with registry.store.editing() as edit:
-        assert edit.fence_idle_owners(((current, generation),))[0][1] > generation
+        assert edit.fence_restart_owners(((current, generation),))[0][1] > generation
     assert registry.status('owner').stopped
 
 
@@ -128,5 +128,21 @@ def test_batch_idle_fence_refuses_busy_second_without_partial_commit(tmp_path):
     protected = registry.snapshot()
     with pytest.raises(RelationViolationError):
         with registry.store.editing() as edit:
-            edit.fence_idle_owners(selected)
+            edit.fence_restart_owners(selected)
     assert registry.snapshot() == protected
+
+
+def test_restart_fence_ends_a_wedged_turn_the_way_stop_does(tmp_path, monkeypatch):
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(Thread("owner", frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
+    registry.lease_local_turn("owner", TurnId("c9bc072f4fa8189466c2a8f2c36a56a4"))
+    busy = registry.snapshot()
+    selected = ((busy.threads["owner"], busy.claim_generation("owner")),)
+    with pytest.raises(RelationViolationError):
+        with registry.store.editing() as edit:
+            edit.fence_restart_owners(selected)  # a turn that just wrote is working, not wedged
+    monkeypatch.setattr(ActiveTurn, "wedged_after", 0.0)  # its transcript has been silent past the limit
+    with registry.store.editing() as edit:
+        edit.fence_restart_owners(selected)
+    assert registry.status("owner").stopped
+    assert not registry.require("owner").executing

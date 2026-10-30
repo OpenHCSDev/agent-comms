@@ -37,12 +37,12 @@ from agent_comms.installer.upgrade import (
     Stack,
     StepRun,
     TargetStack,
-    TargetTree,
     UnchangedInstall,
     UnchangedRehearsal,
     carried,
 )
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.cli_bridges.shared import SessionBridgeResumes
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.maintenance_barrier import (
@@ -162,7 +162,7 @@ def stack(tmp_path):
 
 @pytest.fixture(scope="module")
 def noisy_step(tmp_path_factory):
-    tree = TargetTree(REPO, tmp_path_factory.mktemp("noisy-step"), "noisy-step")
+    tree = TargetTree(tmp_path_factory.mktemp("noisy-step"), "noisy-step", repo=REPO)
     (tree.path / "tools" / "cutover").mkdir(parents=True)
     (tree.path / "tools" / "cutover" / "__init__.py").touch()
     (tree.path / "src").symlink_to(REPO / "src", target_is_directory=True)

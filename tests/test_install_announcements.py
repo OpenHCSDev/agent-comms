@@ -13,6 +13,7 @@ from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
+from agent_comms.installer.probes.services import CommanderHeartbeatProbe
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
 from agent_comms.field_codec import FieldCodec
@@ -26,8 +27,9 @@ from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTimin
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter
-from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, TargetTree, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
+from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
 from agent_comms.installer.refusals import InstallRolledBack
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
@@ -38,6 +40,7 @@ from source_revision_fixture import SourceRepository
 
 
 RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/python"))
+HEARTBEAT = CommanderHeartbeatProbe(Path("/bus"), 1.0)
 
 
 @pytest.mark.parametrize("flags, mode, serialized", (
@@ -79,12 +82,12 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
         read=BusReadBack(2), stopped=("worker",), services=(RESTARTED,),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096),
-        backup=BackupReport("saved-before-install", 1024), retired_backups=(),
+        backup=BackupReport("saved-before-install", 1024), retired_backups=(), heartbeat=HEARTBEAT,
     ),
     UnchangedRun(),
-    CreatedRun((RESTARTED,), "created route"),
+    CreatedRun((RESTARTED,), "created route", heartbeat=HEARTBEAT),
     RetiredRun(services=(RESTARTED,), route="created route", stopped=("worker",),
-               retired=Path("retired-bus")),
+               retired=Path("retired-bus"), heartbeat=HEARTBEAT),
 ), ids=("carried", "unchanged", "created", "retired"))
 def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):
     comms = declare_test_bus(private_comms, channels=("comms",))
@@ -172,7 +175,7 @@ def test_terminal_report_follows_real_tree_cleanup_and_keeps_original_error(
     comms = declare_test_bus(private_comms, channels=("comms",))
     source = SourceRepository.create(tmp_path / "source")
     target = source.main_commit
-    tree = TargetTree(source.checkout, tmp_path / "scratch", target)
+    tree = TargetTree(tmp_path / "scratch", target, repo=source.checkout)
     tree.add()
     # This source test selects its source interpreter explicitly. The installed journey
     # separately qualifies artifact-only imports and the predecessor runtime.
