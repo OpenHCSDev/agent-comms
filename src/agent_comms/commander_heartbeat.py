@@ -65,7 +65,6 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
         """The service loop has already recorded the failure; each commander's board gains that
         retained occurrence once, and every line it already holds keeps its age."""
         with opened_wire() as comms:
-            self.register(comms.registry)
             name = type(self).__name__
             retained = ServicePassStore.at(comms.root).read().failing[name]
             failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
@@ -89,7 +88,6 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
         """The committed packet survives connector replacement; local memory owns nothing."""
-        self.register(comms.registry)
         completed = []
         huds = []
         now = time.time()
