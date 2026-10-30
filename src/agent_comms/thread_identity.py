@@ -459,9 +459,7 @@ class ThreadIncarnationRecord:
     created_at: float
 
     def __post_init__(self) -> None:
-        ThreadName.require(self.name, ValueError(
-            f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores."
-        ))
+        ThreadName.require(self.name)
 
     @property
     def birth(self) -> float:

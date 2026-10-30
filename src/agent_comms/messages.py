@@ -446,8 +446,11 @@ class BusCapability(TypedRow, ProjectionSource):
         """One cursor reads only the capability tables this value inherits."""
         tables = cls.tables()
         joined: tuple[type[BusTables], ...] = (BusRow, *tables)
-        offsets = dict(zip(tables, accumulate(
-            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        offsets = dict(zip(
+            tables,
+            accumulate((len(BusRow.columns()), *(len(table.columns()) for table in tables))),
+            strict=False,  # The final accumulated value is the row end, not a table start.
+        ))
         header = BusRow.qualified("seq")
         order = "DESC" if descending else "ASC"
         with closing(db.execute(
@@ -461,10 +464,13 @@ class BusCapability(TypedRow, ProjectionSource):
             for stored in cursor:
                 original = BusRow.decode_at(stored, 0)
                 try:
-                    value = cls.assembled(table.decode_at(stored, offsets[table]) for table in tables)
+                    value = cls.assembled(
+                        table.decode_at(stored, offsets[table]) for table in tables
+                    )
                 except MalformedRecord as error:
                     raise RelationViolationError(
-                        f"Bus row {original.seq} has malformed required {cls.__name__} capability: {error}"
+                        f"Bus row {original.seq} has malformed required "
+                        f"{cls.__name__} capability: {error}"
                     ) from error
                 yield value
 
@@ -481,8 +487,11 @@ class BusCapability(TypedRow, ProjectionSource):
     ) -> Iterator[BusCapability]:
         """Records after one sequence, using the same joined cursor for full and tail replay."""
         tables = TypedTable.members_with(CapabilityRow)
-        offsets = dict(zip(tables, accumulate(
-            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        offsets = dict(zip(
+            tables,
+            accumulate((len(BusRow.columns()), *(len(table.columns()) for table in tables))),
+            strict=False,  # The final accumulated value is the row end, not a table start.
+        ))
         header = BusRow.qualified("seq")
         predicate, parameters = ("", ()) if kinds is None else (
             f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',

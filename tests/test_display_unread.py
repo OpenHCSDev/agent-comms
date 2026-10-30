@@ -201,7 +201,7 @@ def test_tag_membership_keeps_alias_births_and_defers_unselected_full_fields(com
     assert scope.memberships[member.name].incarnation == member.incarnation
     assert scope.memberships["renamed"].incarnation == member.incarnation
     assert not scope.includes_participant(unrelated.name)
-    assert not narrow.threads._decoded
+    assert all("decoded" not in row.__dict__ for row in narrow.threads._rows.values())
     assert original.includes_participant(member.name)
     comms.registry.unregister("renamed")
     comms.threads.delete("renamed")

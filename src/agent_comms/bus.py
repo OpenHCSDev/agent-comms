@@ -254,7 +254,10 @@ class BusReader(RouteCounts, ABC):
     def input_page(self, before: int, limit: int) -> tuple[MessageInput, ...]:
         """The same global sequence window, without attachment/report/answer acquisition."""
         with self.observing() as db:
-            return tuple(MessageInput.read_from(db, row.seq) for row in self._page_rows(db, before, limit))
+            return tuple(
+                MessageInput.read_from(db, row.seq)
+                for row in self._page_rows(db, before, limit)
+            )
 
     @staticmethod
     def _page_rows(db: sqlite3.Connection, before: int, limit: int) -> list[BusRow]:
@@ -477,7 +480,8 @@ class BusReader(RouteCounts, ABC):
                 counts[query] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
+                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
+                    f'WHERE seq > ? AND seq <= ? '
                     f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                     (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,

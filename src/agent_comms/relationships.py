@@ -358,8 +358,10 @@ class ParentRelationshipGroup(RelationshipGroup):
 
     @classmethod
     def sources(cls, inputs: RelationshipInputs) -> tuple[RelationshipEntrySource, ...]:
-        return tuple(NamedEntrySource(RelationshipEntrySource.canonical_target(name, inputs.registry))
-                     for name in inputs.thread.parent.names())
+        return tuple(
+            NamedEntrySource(RelationshipEntrySource.canonical_target(name, inputs.registry))
+            for name in inputs.thread.parent.names()
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -370,7 +372,9 @@ class SortableRelationshipGroup(RelationshipGroup):
     default_order: ClassVar[type[ThreadSort]]
 
     @classmethod
-    def selected_order(cls, orders: Mapping[type[SortableRelationshipGroup], type[ThreadSort]]) -> type[ThreadSort]:
+    def selected_order(
+        cls, orders: Mapping[type[SortableRelationshipGroup], type[ThreadSort]],
+    ) -> type[ThreadSort]:
         return orders.get(cls, cls.default_order)
 
     @classmethod
@@ -793,7 +797,9 @@ class ThreadRelationships:
         diagnostics: list[GoalMentionDiagnostic] = []
         for owner in registry.threads.active_goal_owners():
             for goal in owner.goal.active():
-                ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
+                ThreadRelationships._project_goal_contacts(
+                    goal, owner, registry, contacts, diagnostics,
+                )
         return (tuple(row for row in contacts if row.incident(thread)),
                 tuple(row for row in diagnostics if row.owner == thread.name))
 
@@ -926,7 +932,10 @@ class ThreadRelationships:
         """One bounded sequence page, on a single committed read snapshot."""
         with self.bus.bus.reading() as source:
             messages = source.input_page(source.revision() + 1, self.RECENT_MESSAGES + 1)
-        return tuple(reversed(messages[:self.RECENT_MESSAGES])), len(messages) > self.RECENT_MESSAGES
+        return (
+            tuple(reversed(messages[:self.RECENT_MESSAGES])),
+            len(messages) > self.RECENT_MESSAGES,
+        )
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
@@ -938,7 +947,9 @@ class ThreadRelationships:
         delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         messages, limited = self._recent_messages()
 
-        orders = {row.group: row.order for row in state.orders if row.incarnation == thread.incarnation}
+        orders = {
+            row.group: row.order for row in state.orders if row.incarnation == thread.incarnation
+        }
         sent: dict[str, float] = {}
         for order in {
             group.selected_order(orders)

@@ -767,7 +767,9 @@ class ThreadRecord(CliResult):
 class NoThreadView(NullMember):
     """A named navigation target has no captured thread presentation."""
 
-    def sort_key(self, order: type[ThreadSort], target: str, sent: float) -> tuple[float, float, str]:
+    def sort_key(
+        self, order: type[ThreadSort], target: str, sent: float,
+    ) -> tuple[float, float, str]:
         return order.key(target, 0, 0, 0)
 
 
@@ -796,7 +798,9 @@ class ThreadView(ThreadRecord, PresentMember):
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
 
-    def sort_key(self, order: type[ThreadSort], target: str, sent: float) -> tuple[float, float, str]:
+    def sort_key(
+        self, order: type[ThreadSort], target: str, sent: float,
+    ) -> tuple[float, float, str]:
         return order.key(target, self.thread.birth, self.activity.timestamp, sent)
 
     @property

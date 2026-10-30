@@ -9,6 +9,8 @@ class ThreadName:
     )
 
     @classmethod
-    def require(cls, name: str, refusal: ValueError) -> None:
+    def require(cls, name: str) -> None:
         if not name or not set(name) <= cls.characters:
-            raise refusal
+            raise ValueError(
+                f"Thread name {name!r} must be alphanumeric with hyphens/underscores."
+            )

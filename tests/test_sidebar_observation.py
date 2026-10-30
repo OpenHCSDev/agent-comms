@@ -171,9 +171,10 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
     rows = ThreadRows.from_wire(raw)
     rows.bind(comms.registry.store._bind_thread)
     if decoded:
-        rows[selected.name] = selected  # A genuine write removes this row from _raw.
+        rows[selected.name] = selected  # A genuine write supplies the row's actual Thread.
     snapshot = replace(captured, threads=rows)
-    decoded_before = frozenset(snapshot.threads._decoded)
+    decoded_before = frozenset(name for name, row in snapshot.threads._rows.items()
+                               if "decoded" in row.__dict__)
     expected = {thread.name: thread.incarnation.lookup for thread in originals}
 
     lookup = snapshot.lookup_names
@@ -188,7 +189,8 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
     with pytest.raises(KeyError) as caught:
         lookup[missing]
     assert caught.value.args == (missing,)
-    assert frozenset(snapshot.threads._decoded) == decoded_before
+    assert frozenset(name for name, row in snapshot.threads._rows.items()
+                     if "decoded" in row.__dict__) == decoded_before
 
     acquired = snapshot.born(selected.incarnation.lookup)
     assert acquired is snapshot.require(selected.name)
@@ -196,7 +198,8 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
     assert acquired.session_file.bound_to(comms.root) is acquired.session_file
     assert lookup.get(selected.incarnation.lookup) == selected.name
     assert snapshot.born(selected.incarnation.lookup) is acquired
-    assert frozenset(snapshot.threads._decoded) == decoded_before | {selected.name}
+    assert frozenset(name for name, row in snapshot.threads._rows.items()
+                     if "decoded" in row.__dict__) == decoded_before | {selected.name}
     with pytest.raises(InvalidRegistryDocument):
         snapshot.born(invalid.incarnation.lookup)
     with pytest.raises(InvalidRegistryDocument):
@@ -292,12 +295,12 @@ def test_cold_shape_and_birth_capture_do_not_acquire_unrequested_goal_fields(
     raw = captured.threads.to_wire()
     raw[original.name][entry.key] = []
     rows = ThreadRows.from_wire(raw)
-    assert not rows._captured
-    assert not rows._decoded
+    assert all("birth_record" not in row.__dict__ for row in rows._rows.values())
+    assert all("decoded" not in row.__dict__ for row in rows._rows.values())
     snapshot = replace(captured, threads=rows)
     assert snapshot.incarnation(original.name) == original.incarnation
     assert original.incarnation.lookup in snapshot.lookup_names
-    assert not snapshot.threads._decoded
+    assert all("decoded" not in row.__dict__ for row in snapshot.threads._rows.values())
     with pytest.raises(MalformedRecord):
         snapshot.threads.determining(original.name)
     with pytest.raises(InvalidRegistryDocument):

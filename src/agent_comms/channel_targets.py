@@ -420,9 +420,7 @@ class ThreadTarget(NamedTarget):
     def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
             raise RelationViolationError(f"Thread {message.sender!r} cannot message itself.")
-        ThreadName.require(self.name, ValueError(
-            f"Message target {self.name!r} is not a thread name or #channel."
-        ))
+        ThreadName.require(self.name)
 
     def wake_policy(self, recipient: FrozenRecipient, mentions: frozenset[str]) -> FullWake:
         return FullWake()

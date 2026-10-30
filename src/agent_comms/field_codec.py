@@ -3662,8 +3662,12 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
-        supplied = {key for entry in entries if entry.name in decoded_fields for key in entry.wire_keys}
-        problems = {key: issue for key, issue in self.missing_fields(data).items() if key not in supplied}
+        supplied = {
+            key for entry in entries if entry.name in decoded_fields for key in entry.wire_keys
+        }
+        problems = {
+            key: issue for key, issue in self.missing_fields(data).items() if key not in supplied
+        }
         unknown = list(self.unknown_fields(data))
         target = self.target
         values = dict(decoded_fields)

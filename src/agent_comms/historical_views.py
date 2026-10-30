@@ -491,7 +491,9 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         if FileRevision.capture(self.path) != revision:
             raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
 
-    def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
+    def attach(
+        self, source_root: Path, *, source_read: HistorySource | None = None,
+    ) -> HistorySource:
         """Prepare a source without archive exclusion, then publish it exactly once."""
         source_root = source_root.resolve()
         if source_root == self.path.parent.resolve():
