@@ -709,8 +709,8 @@ class FieldPlan(ViewColumn):
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
-    def encoded(self, value, *, key=None):
-        return {key or self.key: value}
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
+        return {key: value}
 
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
@@ -840,7 +840,7 @@ class ContextFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return ()
 
-    def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
         return {}
 
     def decoded(self, data: object) -> dict[str, object]:
@@ -901,7 +901,9 @@ class InlineFieldPlan(DeclaredFieldPlan):
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(entry.key for entry in self.record.fields)
 
-    def encoded(self, value, *, key=None):
+    def encoded(self, value: JsonValue, *, key: str) -> dict[str, JsonValue]:
+        if not isinstance(value, dict):
+            raise MalformedRecord("An inline record must encode a JSON object.")
         return value
 
     def captured(self, data: object) -> dict[str, object]:
@@ -2546,7 +2548,7 @@ class FieldCodec(MroDispatch, Sealed):
         return RecordTag.of(value)
 
     @classmethod
-    def encode_fields(cls, value: object) -> dict[str, object]:
+    def encode_fields(cls, value: object) -> dict[str, JsonValue]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
         return _member_decoder(type(value)).encode(value)
@@ -2559,15 +2561,37 @@ class FieldCodec(MroDispatch, Sealed):
     def decode_record(
         cls, target: type[T], data: object, *,
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
-        """Decode declared fields, with nominal narrowing supplied by their contextual owner."""
+        """Continue a boundary's record decode, retaining fields it already decoded."""
         decoder = _RecordDecoder(target)
         for name, narrowed in field_types.items():
             annotation, _ = cls.representation(cls.field_plan(target, name).annotation)
             if not issubclass(narrowed, annotation):
                 raise TypeError(f"{target.__name__}.{name} cannot widen its declared type")
         return cast(T, decoder.decode_selected(
-            data, {}, field_types=field_types))
+            data, {}, field_types=field_types, decoded_fields=decoded_fields))
+
+    @classmethod
+    def recorded_fields(cls, record: object) -> dict[str, object]:
+        """Already-decoded values supplied by this record's stored-field declarations."""
+        return {entry.name: entry.current(record)
+                for entry in cls.field_plans(type(record)) if entry.records}
+
+    @classmethod
+    def project_record(
+        cls, target: type[T], data: object, *, source: type,
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
+    ) -> T:
+        """Acquire a declared record projection without decoding unrelated source fields."""
+        raw = _RecordDecoder(source).checked(data)
+        projected: dict[str, object] = {}
+        for entry in cls._record_plan(target).bindings:
+            original = cls.field_plan(source, entry.name)
+            captured = original.captured(raw)
+            if entry.name in captured:
+                projected[entry.key] = captured[entry.name]
+        return cls.decode_record(target, projected, decoded_fields=decoded_fields)
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
@@ -2708,7 +2732,7 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def _project_record(cls, value: object, view: type[ViewExclusion]) -> JsonValue:
         """A record's view: its tag, its view's fields and the properties the view owns."""
-        result = cls._tag(value)
+        result: dict[str, JsonValue] = {**cls._tag(value)}
         result.update(cls._record_plan(type(value)).encoded(
             value, view, lambda entry, current: cls.project(current, view, entry.annotation)
         ))
@@ -2739,8 +2763,11 @@ class FieldCodec(MroDispatch, Sealed):
         def record_fields(self) -> tuple[tuple[Field[object], str], ...]:
             return tuple((plan.declared, plan.key) for plan in self.bindings)
 
-        def encoded(self, value, view, encode_value) -> dict[str, object]:
-            result: dict[str, object] = {}
+        def encoded(
+            self, value: object, view: str,
+            encode_value: Callable[[FieldPlan, object], JsonValue],
+        ) -> dict[str, JsonValue]:
+            result: dict[str, JsonValue] = {}
             for entry in self.bindings:
                 current = entry.current(value)
                 if not entry.excluded_in(view) and not entry.omitted(
@@ -3586,7 +3613,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         plan = self.plan
         return plan.required_wire_keys <= data.keys() <= plan.accepted_keys
 
-    def encode(self, value: object) -> dict[str, object]:
+    def encode(self, value: object) -> dict[str, JsonValue]:
         if not isinstance(value, self.target):
             raise MalformedRecord(f"Expected {self.target.__name__} record")
         result = self.plan.encoded(
@@ -3645,23 +3672,34 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         self, data: object, selections: Mapping[tuple[type, str], object], *,
         context: Mapping[str, object] = {},
         field_types: Mapping[str, type[object]] = types.MappingProxyType({}),
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
-        return self.decode_entries(data, self.plan.bindings, selections, context, field_types)
+        return self.decode_entries(
+            data, self.plan.bindings, selections, context, field_types, decoded_fields,
+        )
 
     def decode_entries(
         self, data: object, entries: tuple[FieldPlan, ...],
         selections: Mapping[tuple[type, str], object], context: Mapping[str, object],
         field_types: Mapping[str, type[object]],
+        decoded_fields: Mapping[str, object] = types.MappingProxyType({}),
     ) -> T:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object; fix: supply a JSON object.")
-        problems = self.missing_fields(data)
+        supplied = {
+            key for entry in entries if entry.name in decoded_fields for key in entry.wire_keys
+        }
+        problems = {
+            key: issue for key, issue in self.missing_fields(data).items() if key not in supplied
+        }
         unknown = list(self.unknown_fields(data))
         target = self.target
-        values = {}
+        values = dict(decoded_fields)
         for entry in entries:
             key = (target, entry.name)
             try:
+                if entry.name in decoded_fields:
+                    continue
                 if entry.name in field_types:
                     narrowed = compile_decoder(field_types[entry.name])
                     values.update(entry.decoded_using(
@@ -3749,14 +3787,14 @@ class _PydanticDecoder(ValueDecoder[object]):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target.model_validate(data)
 
-    def encode(self, value: object) -> object:
+    def encode(self, value: object) -> dict[str, JsonValue]:
         if not isinstance(value, self.target):
             raise TypeError(f"Expected {self.target.__name__}, received {type(value).__name__}")
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
 @lru_cache(maxsize=None)
-def _member_decoder(target: object) -> ValueDecoder[object]:
+def _member_decoder(target: object) -> _RecordDecoder[object] | _PydanticDecoder:
     """A concrete record, enum or scalar, after any family tag is removed."""
     if isinstance(target, type) and is_dataclass(target):
         return _RecordDecoder(target)

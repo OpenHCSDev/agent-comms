@@ -61,7 +61,10 @@ async def main():
     assert original.outcomes[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(AllOutcomes(),
         (message.reference,) * (NotificationWindow.window_limit + 1)).outcomes == original.outcomes
-    page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(Checkout(root)).name))
+    page = comms.views.channel_display_view(
+        '#team',
+        viewer=NamedViewer(comms.messaging.user_identity(Checkout(root)).name),
+    ).page(comms.views.presentation)
     comms.views.mark_page_read(page, worktree=Checkout(root))
     assert comms.views.viewer_snapshot(Checkout(root)).channel_unread['#team'].count == 0
     assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1

@@ -38,6 +38,7 @@ from agent_comms.messages import (
     InfoKind,
     MembershipTransition,
     Message,
+    MessageInput,
     MessageKind,
     MessageRoleWire,
     MessageRoutes,
@@ -50,7 +51,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText
+from agent_comms.field_codec import FieldCodec, GitCommitText, MalformedRecord, MessageId, MessageIdText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -123,8 +124,8 @@ def edit_inside(
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
-    statement, = (node for node in declaration.body
-                   if member in ProducedTable.bound_names(ast.unparse(node)))
+    statement = next(node for node in reversed(declaration.body)
+                     if member in ProducedTable.bound_names(ast.unparse(node)))
     change(statement)
     path.write_text(ast.unparse(ast.fix_missing_locations(module)) + "\n")
 
@@ -132,6 +133,11 @@ def edit_inside(
 def return_no_rows(statement: ast.stmt) -> None:
     assert isinstance(statement, ast.FunctionDef)
     statement.body = [ast.Return(value=ast.Tuple(elts=[], ctx=ast.Load()))]
+
+
+def return_inherited_routes(statement: ast.stmt) -> None:
+    assert isinstance(statement, ast.FunctionDef)
+    statement.body = ast.parse("return super().route_rows(message)").body
 
 
 def widen_spelling(statement: ast.stmt) -> None:
@@ -246,12 +252,15 @@ def test_projection_digest_tracks_actual_delivery_production(projection_source: 
     assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
 
 
-@pytest.mark.parametrize("owner", (MessageRoutes, ClaimNoticeKind))
+@pytest.mark.parametrize("owner, change", (
+    (MessageRoutes, return_no_rows),
+    (ClaimNoticeKind, return_inherited_routes),
+))
 def test_projection_digest_tracks_inherited_routing(
-    projection_source: Path, owner: type,
+    projection_source: Path, owner: type, change: Callable[[ast.stmt], None],
 ) -> None:
     before = json.loads(projection_source_digest(projection_source))
-    edit_inside(projection_source, owner, "route_rows", return_no_rows)
+    edit_inside(projection_source, owner, "route_rows", change)
     after = json.loads(projection_source_digest(projection_source))
     assert after[BusRouteCounts.declared_name] != before[BusRouteCounts.declared_name]
     assert after[AnsweredSource.declared_name] == before[AnsweredSource.declared_name]
@@ -392,6 +401,24 @@ def test_real_message_record_round_trip(bus, declaration, role):
     assert bus.lookup(stored.seq) == stored == record
     assert Bus(bus.path).lookup(stored.seq) == stored
     assert bus.page(stored.seq + 1, 10) == (stored,)
+    expected_input = FieldCodec.construct(MessageInput, {
+        entry.name: entry.current(stored) for entry in FieldCodec.field_plans(MessageInput)
+    })
+    with bus.reading() as snapshot:
+        with snapshot.observing() as db:
+            allowed = {table.declared_name for table in MessageInput.tables()} | {BusRow.declared_name}
+
+            def input_reads_only(action, table, column, database, trigger):
+                return (sqlite3.SQLITE_DENY if action == sqlite3.SQLITE_READ and table not in allowed
+                        else sqlite3.SQLITE_OK)
+
+            db.set_authorizer(input_reads_only)
+            try:
+                assert snapshot.input_page(stored.seq + 1, 10) == (expected_input,)
+                with pytest.raises(sqlite3.DatabaseError):
+                    snapshot.page(stored.seq + 1, 10)
+            finally:
+                db.set_authorizer(None)
     assert stored.message is stored
     assert stored.publication_snapshot == message.publication_snapshot
     assert type(stored.publication_snapshot) is Message
@@ -432,8 +459,11 @@ def test_record_family_rebuild_and_history_install_preserve_scope(bus, declarati
     assert bus.lookup_message(record.message_id) == record
     assert bus.page(record.seq + 1, 10) == (record, original)
     scope = RepliesDisplayScope(frozenset({"author"}), frozenset({"worker"}))
+    history = scope.history(bus, limit=2)
+    assert history == (original, record)
+    assert tuple(type(item) for item in history) == (type(original), declaration)
     copied = Bus.install(
-        Bus.path_in(tmp_path / "selected-history"), history=scope.history(bus, limit=2),
+        Bus.path_in(tmp_path / "selected-history"), history=history,
     )
     kept = copied.lookup(record.seq)
     assert kept == record.history_record
@@ -556,9 +586,12 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
         Message("author", "worker", "notice", ClaimHistoryKind, seq=seq)))
     reply = bus.append(lambda seq, db: record_from(PrivateRecord,
         Message("author", "worker", "reply", InfoKind, seq=seq, answers=(original.reference,))))
-    assert bus.scoped_page("target=?", ("worker",), descending=True, limit=1) == (reply,)
-    assert bus.scoped_page("target=?", ("worker",), upper=reply.seq, limit=1) == (notice,)
-    assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (reply,)
+    assert bus.scoped_page("target=?", ("worker",), descending=True, limit=1) == (
+        Message.from_message(reply),)
+    assert bus.scoped_page("target=?", ("worker",), upper=reply.seq, limit=1) == (
+        Message.from_message(notice),)
+    assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (
+        Message.from_message(reply),)
     assert bus.conversation("b" * 32, limit=2) == (reply, notice)
     assert bus.sent("a" * 32, limit=1) == (reply,)
     assert bus.direct_replies("b" * 32, after=original.seq, limit=1, descending=False,
@@ -720,6 +753,19 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
     with closing(sqlite3.connect(bus.path)) as db:
         assert CommanderUpdatePosition.count(db) == 0
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
+
+
+def test_required_capability_corruption_is_not_hidden_by_the_join(bus):
+    with bus.writing() as db:
+        # A retained header without its required capability rows is corruption,
+        # not an empty page or an absent optional field.
+        BusRow(1, PublicRecord, 1.0).insert(db)
+        with pytest.raises(RelationViolationError, match="malformed required Message capability") as refused:
+            Message.read_from(db, 1)
+        assert isinstance(refused.value.__cause__, MalformedRecord)
+        with pytest.raises(RelationViolationError) as history_refused:
+            tuple(BusCapability.history(db))
+        assert isinstance(history_refused.value.__cause__, MalformedRecord)
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

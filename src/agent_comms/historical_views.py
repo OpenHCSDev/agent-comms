@@ -76,12 +76,24 @@ class HistoryView(ABC):
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         """Bind the query to the bus owner's snapshot and read that exact source."""
-        with presentation.bus.snapshot() as (basis, source):
+        with presentation.snapshot(self.viewer) as (basis, source):
             request = self.page_request(self.capture(basis.registry), bounds)
             return request.read_opened(source)
 
+    @contextmanager
+    def reading(self, presentation: BusPresentation) -> Iterator[Callable[[PageBounds], MessagePage]]:
+        """Borrow one cut for the first tail, subsequent pages and scroll-back.
+
+        The caller retains this lifetime only while its conversation revision is
+        unchanged, and retires it off the UI thread when that source is replaced.
+        """
+        with presentation.reading(self.viewer) as captured:
+            history = captured.bus.history.captured()
+            yield partial(history.checked_page, self, captured)
+
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return presentation.bus.history.integrated_page(self, presentation, bounds)
+        with self.reading(presentation) as read:
+            return read(bounds)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
@@ -238,19 +250,16 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         bus = presentation.bus
-        snapshot = presentation.registry.snapshot()
-        peer = self.second.selected_name(snapshot)
-        missing = peer not in snapshot.threads
-        if missing and bus.history.threads(peer):
-            return MessagePage((), False, False, NoDisplaySelection())
-        return DMDisplayBasis.fetch_page(
-            bus,
-            presentation.registry,
-            bus.bus.path.parent,
-            snapshot.require(self.first),
-            self.second,
-            worktree=self.worktree, bounds=bounds,
-        )
+        with presentation.snapshot(self.viewer) as (basis, source):
+            snapshot = basis.registry
+            peer = self.second.selected_name(snapshot)
+            missing = peer not in snapshot.threads
+            if missing and bus.history.threads(peer):
+                return MessagePage((), False, False, NoDisplaySelection())
+            return DMDisplayBasis.fetch_captured(
+                bus, presentation.registry, bus.bus.path.parent,
+                self.second, basis, source, worktree=self.worktree, bounds=bounds,
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,20 +479,37 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         with self.read_sources() as sources:
             return sources
 
+    def captured(self) -> CapturedHistoryArchive:
+        """Retain the catalogue and its revision from the same original descriptor."""
+        document = self._capture_unlocked()
+        return CapturedHistoryArchive(
+            self.path, self.read_copied(document), document.revision,
+        )
+
+    @property
+    def history_revision(self) -> FileObservation:
+        return self.captured().catalogue_revision
+
+    @contextmanager
+    def reading(self) -> Iterator[CapturedHistoryArchive]:
+        """Validate a page's original catalogue before and after using it."""
+        captured = self.captured()
+        self._require_revision(captured.catalogue_revision)
+        yield captured
+        self._require_revision(captured.catalogue_revision)
+
     @contextmanager
     def read_sources(self) -> Iterator[tuple[HistorySource, ...]]:
-        """Decode one read's catalogue; reject changes without decoding it again."""
-        captured = self._capture_unlocked()
-        sources = self.read_copied(captured)
-        self._require_revision(captured.revision)
-        yield sources
-        self._require_revision(captured.revision)
+        with self.reading() as captured:
+            yield captured.sources()
 
     def _require_revision(self, revision: FileObservation) -> None:
         if FileRevision.capture(self.path) != revision:
             raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
 
-    def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
+    def attach(
+        self, source_root: Path, *, source_read: HistorySource | None = None,
+    ) -> HistorySource:
         """Prepare a source without archive exclusion, then publish it exactly once."""
         source_root = source_root.resolve()
         if source_root == self.path.parent.resolve():
@@ -536,15 +562,14 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             snapshot = source.provenance
             current = replace(bounds, traversal=traversal.for_source(index == start))
             request = view.page_request(view.capture(snapshot), current)
-            current_snapshot = presentation.registry.snapshot()
-            document = presentation.bus.reads.read()
-            opened = Bus(Bus.path_in(Path(source.root)))
-            raw = request.read_opened(opened)
-            projected = replace(raw, messages=tuple(
-                HistoricalMessage.project(message, source, index, snapshot)
-                for message in raw.messages))
-            page = replace(projected, selection=view.viewer.historical_selection(
-                projected, presentation, source, opened, document, current_snapshot))
+            with presentation.snapshot(view.viewer) as (basis, _):
+                opened = Bus(Bus.path_in(Path(source.root)))
+                raw = request.read_opened(opened)
+                projected = replace(raw, messages=tuple(
+                    HistoricalMessage.project(message, source, index, snapshot)
+                    for message in raw.messages))
+                page = replace(projected, selection=view.viewer.historical_selection(
+                    projected, presentation, source, opened, basis.document, basis.registry))
             if page.messages:
                 return replace(
                     page,
@@ -552,6 +577,13 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                     has_newer=page.has_newer or index < len(sources) - 1,
                 )
         return MessagePage((), False, False, NoDisplaySelection())
+
+    def checked_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
+    ) -> MessagePage:
+        """One integrated page read from a catalogue checked unchanged before and after it."""
+        with self.reading() as captured:
+            return captured.integrated_page(view, presentation, bounds)
 
     def integrated_page(
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds
@@ -577,10 +609,16 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
         self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds,
         live_follows: Callable[[], bool],
     ) -> MessagePage:
+        page = self._select_source_page(view, presentation, bounds, live_follows)
+        return replace(page, selection=replace(
+            page.selection, history_revision=self.history_revision,
+        ))
+
+    def _select_source_page(
+        self, view: HistoryView, presentation: BusPresentation, bounds: PageBounds,
+        live_follows: Callable[[], bool],
+    ) -> MessagePage:
         historical = bounds.traversal.historical
-        if not self.sources() and not historical:
-            return view.live_page(presentation, bounds)
-        history_revision = FileRevision.capture(self.path)
         def historical_page() -> MessagePage:
             history = self.page(
                 view, presentation, bounds if historical else replace(bounds, traversal=OlderTraversal())
@@ -588,27 +626,21 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             if history.messages:
                 return replace(
                     history,
-                    selection=replace(history.selection, history_revision=history_revision),
                     has_newer=history.has_newer or live_follows(),
                 )
             selected = history if historical else page
-            result = replace(selected, selection=replace(selected.selection, history_revision=history_revision))
             if historical:
                 return bounds.traversal.after_exhausted_history(
                     lambda traversal: view.live_page(presentation, replace(bounds, traversal=traversal)),
-                    result,
+                    selected,
                 )
-            return result
+            return selected
 
         if historical:
             return historical_page()
         page = view.live_page(presentation, bounds)
         return bounds.traversal.source_page(
-            replace(
-                page,
-                has_older=page.has_older or bool(self.sources()),
-                selection=replace(page.selection, history_revision=history_revision),
-            ),
+            replace(page, has_older=page.has_older or bool(self.sources())),
             historical_page,
         )
 
@@ -620,3 +652,17 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
                           for thread in source.provenance.threads.values()
                           if name is None or thread.incarnation.matches_recorded_name(name, source.provenance))
         return tuple(result)
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedHistoryArchive(HistoryArchive, declared_name=None):
+    """One reading's immutable catalogue; page logic remains on HistoryArchive."""
+
+    captured_sources: tuple[HistorySource, ...]
+    catalogue_revision: FileObservation
+
+    def captured(self) -> CapturedHistoryArchive:
+        return self
+
+    def sources(self) -> tuple[HistorySource, ...]:
+        return self.captured_sources

@@ -29,8 +29,8 @@ def test_new_relation_reuses_owned_incident_and_counterpart_behavior(*, thread_r
 
     relation = ReviewRelation()
     assert relation.incident(first) and relation.incident(second)
-    assert relation.counterpart(first) == second.incarnation
-    assert relation.counterpart(second) == first.incarnation
+    assert tuple(relation.counterparts(first)) == (second.incarnation,)
+    assert tuple(relation.counterparts(second)) == (first.incarnation,)
     assert not relation.incident(replacement)
-    assert relation.counterpart(replacement) is None
+    assert tuple(relation.counterparts(replacement)) == ()
     assert relation.record(second.incarnation).peer == "second"

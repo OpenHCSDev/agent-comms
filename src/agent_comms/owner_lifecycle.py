@@ -206,7 +206,7 @@ class ReleasedOwner(ThreadIncarnationRecord):
     process_identity: Annotated[ProcessState, Column(storage=JsonStorage, nullable=True)]
 
     def matches(self, expected: Thread) -> bool:
-        return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
+        return self.incarnation == expected.incarnation and self.process_identity == expected.process_identity
 
 
 class OwnerReleaseStoreRows(StoreRows):
@@ -226,7 +226,7 @@ class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
         """The row still binds the released process or, once a dead owner's stop
         unregistered it, none; a different process is a successor."""
         current = snapshot.require(release.name)
-        return (release.incarnation() == current.incarnation
+        return (release.incarnation == current.incarnation
                 and not current.process_identity.conflicts_with(release.process_identity))
 
 
@@ -266,14 +266,14 @@ class SessionRetiredOwnerCompletion(OwnerCompletion):
             raise RelationViolationError("Retired session acquired another process")
 
     def require_loss(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> None:
-        if self.owner.incarnation != release.incarnation():
+        if self.owner.incarnation != release.incarnation:
             raise RelationViolationError("Retired session belongs to another incarnation")
         if snapshot.owner_identity(release.name).generation <= self.owner.generation:
             raise RelationViolationError("Retired session still holds its original owner lease")
 
     def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
         self.require_loss(snapshot, release)
-        return release.incarnation().current(snapshot)
+        return release.incarnation.current(snapshot)
 
 
 @dataclass(frozen=True)
@@ -284,13 +284,14 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
     completion: Annotated[OwnerCompletion, Column()] = ProcessExitedOwnerCompletion()
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         if self.before <= 0 or self.after <= self.before:
             raise ValueError("Owner release requires an advanced claim_scope and a closed turn")
 
     def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
         if self.before != claim_scope or not self.matches(expected):
             return False
-        if not self.incarnation().current(snapshot) or not self.completion.matches_current(snapshot, self):
+        if not self.incarnation.current(snapshot) or not self.completion.matches_current(snapshot, self):
             return False
         return self.after == snapshot.claim_generation(self.name) and snapshot.status(self.name).stopped
 
@@ -311,13 +312,13 @@ class OwnerReleaseEvidence(OwnerReleaseStoreRows, ReleasedOwner, OwnerRelease, T
         Input generation belongs to the recorded input, not to owner-loss proof.
         Neither this release nor missing input proves bytes were unwritten.
         """
-        if not self.incarnation().current(snapshot):
+        if not self.incarnation.current(snapshot):
             raise RelationViolationError("Released native owner incarnation changed")
         current = snapshot.require(self.name)
         owner_identity.require_recorded_owner(current)
         self.completion.require_loss(snapshot, self)
         actual = snapshot.claimed_identity(current.name)
-        released = ClaimedIdentity(self.incarnation(), self.after)
+        released = ClaimedIdentity(self.incarnation, self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
         return self

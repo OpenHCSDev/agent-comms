@@ -33,4 +33,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     assert isinstance(human.message.role, NoticeRole)
     assert human.recipients == ()
     assert human.decisions == ()
-    assert comms.views.dm_display_page(ThreadTarget("sender"), worktree=Checkout(tmp_path)).messages[-1] == reply
+    assert comms.views.dm_display_view(
+        ThreadTarget('sender'),
+        worktree=Checkout(tmp_path),
+    ).page(comms.views.presentation).messages[-1] == reply

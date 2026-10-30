@@ -49,6 +49,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreCommittedError
 from agent_comms.message_reference import MessageReference
@@ -130,13 +131,18 @@ class DisplayUnread:
     def advanced(self, source: BusReader, selection: DisplayUnreadSelection) -> DisplayUnread:
         queries = selection.queries()
         through = source.revision()
-        if through == self.through and tuple(self.counted) == queries:
-            return self
         earlier = {query.counting: query for query in self.counted}
-        kept = {query: query for query in queries if query in self.counted}
-        moved = {query: (earlier[query.counting], parts) for query in queries
-                 if query not in kept and query.counting in earlier
-                 and (parts := query.moved(earlier[query.counting]))}
+        reusable = {query: earlier[query.counting] for query in queries
+                    if query.counting in earlier
+                    and query.same_membership(earlier[query.counting])}
+        kept = {query: previous for query, previous in reusable.items()
+                if query == previous}
+        if through == self.through and len(kept) == len(queries):
+            if tuple(self.counted) == queries:
+                return self
+            return DisplayUnread(through, {query: self.counted[kept[query]] for query in queries})
+        moved = {query: (previous, parts) for query, previous in reusable.items()
+                 if query not in kept and (parts := query.moved(previous))}
         progressed = (*kept, *(previous for previous, _ in moved.values()))
         appended = source.count_unread(
             progressed if through != self.through else (), through=through, after=self.through)
@@ -174,6 +180,10 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             yield BusSnapshot.from_connection(db)
 
+    @abstractmethod
+    def captured_reading(self) -> AbstractContextManager[BusSnapshot]:
+        """Retain a cut independently of ordinary reads on the acquiring thread."""
+
     def revision(self) -> int:
         with self.observing() as db:
             return BusRow.last_seq(db)
@@ -186,10 +196,10 @@ class BusReader(RouteCounts, ABC):
         with self.observing() as db:
             return BusActivityIndex.aggregate(db, predicate, parameters)
 
-    def participant_activity(self, names: frozenset[str]) -> ChannelActivity:
-        marks = ','.join('?' for _ in names)
+    def participant_activity(self, predicate: str,
+                             parameters: tuple[object, ...]) -> ChannelActivity:
         with self.observing() as db:
-            return BusDisplayIndex.aggregate(db, f'participant IN ({marks})', tuple(names))
+            return BusDisplayIndex.aggregate(db, predicate, parameters)
 
     def claim_projection(self) -> ClaimProjection:
         with self.observing() as db:
@@ -253,9 +263,24 @@ class BusReader(RouteCounts, ABC):
 
     def page(self, before: int, limit: int) -> tuple[BusRecord, ...]:
         with self.observing() as db:
-            return BusCapability.at_sequences(db, tuple(row.seq for row in BusRow.select(
-                db, where="{seq} < ?", parameters=(before,),
-                order_by=("seq",), descending=True, limit=limit)))
+            return BusCapability.at_sequences(
+                db, tuple(row.seq for row in self._page_rows(db, before, limit)),
+            )
+
+    def input_page(self, before: int, limit: int) -> tuple[MessageInput, ...]:
+        """The same global sequence window, without attachment/report/answer acquisition."""
+        with self.observing() as db:
+            return tuple(
+                MessageInput.read_from(db, row.seq)
+                for row in self._page_rows(db, before, limit)
+            )
+
+    @staticmethod
+    def _page_rows(db: sqlite3.Connection, before: int, limit: int) -> list[BusRow]:
+        return BusRow.select(
+            db, where="{seq} < ?", parameters=(before,),
+            order_by=("seq",), descending=True, limit=limit,
+        )
 
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""
@@ -288,22 +313,22 @@ class BusReader(RouteCounts, ABC):
         upper: int | None = None, descending: bool = False, limit: int = 100,
         kinds: tuple[type[MessageKind], ...] = (),
     ) -> tuple[Message, ...]:
-        """A captured display scope narrows the addressed table before decoding."""
+        """A captured display scope reads public message capabilities, not delivery payloads."""
         with self.observing() as db:
             upper = BusRow.last_seq(db) + 1 if upper is None else upper
             order = "DESC" if descending else "ASC"
             members = ""
             if kinds:
                 members = MessageInput.render(' AND {type} IN (') + ','.join('?' for _ in kinds) + ')'
-            rows = db.execute(
+            return tuple(Message.selected(
+                db,
                 f'SELECT seq FROM "{Addressed.table.declared_name}" '
                 f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
                 f'WHERE ({predicate}) AND seq > ? AND seq < ?{members} '
                 f'ORDER BY seq {order} LIMIT ?',
                 (*parameters, lower, upper, *(kind.declared_name for kind in kinds), limit),
-            )
-            headers = (BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
-            return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+                descending=descending,
+            ))
 
     def latest_conversations(
         self, predicate: str, parameters: tuple[object, ...], through: int,
@@ -469,7 +494,8 @@ class BusReader(RouteCounts, ABC):
                 counts[query] = FieldCodec.decode(int, db.execute(
                     f'WITH {ReadCursor.sql("?")}, requests AS ('
                     f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) WHERE seq > ? AND seq <= ? '
+                    f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
+                    f'WHERE seq > ? AND seq <= ? '
                     f'AND ({query.predicate}) AND sender NOT IN (SELECT value FROM json_each(?))), '
                     f'{ReadCursor.joined_sql} SELECT count(*) FROM cursors WHERE {ReadCursor.unread_sql}',
                     (CursorRow.binding(query.cursors), max(after, query.lower_bound), through,
@@ -497,6 +523,14 @@ class StoredBusReader(BusReader, SQLiteReader):
     def observing(self) -> Iterator[sqlite3.Connection]:
         with self.reader_snapshot() as db:
             yield db
+
+    @contextmanager
+    def captured_reading(self) -> Iterator[BusSnapshot]:
+        # Unlike a nested ordinary read, a presentation outlives this worker's
+        # next request. Its transaction must never enter the thread-local pool.
+        with CoordinationReadUnavailable.checking():
+            with closing(self.read_snapshot(self.path, check_same_thread=False)) as db:
+                yield BusSnapshot.from_connection(db)
 
 
 class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
@@ -654,4 +688,8 @@ class BusSnapshot(PresentPath, BusReader):
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
+        yield self
+
+    @contextmanager
+    def captured_reading(self) -> Iterator[BusSnapshot]:
         yield self

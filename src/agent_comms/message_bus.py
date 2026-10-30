@@ -144,13 +144,17 @@ class MessageBus[Writes: Publisher]:
         with self.opened_activity() as activity:
             return self._channels.read().views(activity)
 
+    def capture_selection(self, viewer: DisplayViewer, source: BusSnapshot) -> CapturedSelection:
+        return CapturedSelection.load(
+            self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
+        )
+
     @contextmanager
-    def snapshot(self, viewer: DisplayViewer = AnonymousViewer()) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+    def snapshot(
+        self, viewer: DisplayViewer = AnonymousViewer(),
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         with self.bus.reading() as source:
-            basis = CapturedSelection.load(
-                self._registry, self._channels, self.reads, viewer, source.activity_clocks(),
-            )
-            yield basis, source
+            yield self.capture_selection(viewer, source), source
 
     def inbox(
         self, name: str, target: NamedTarget = AnyChannel.target(), *,

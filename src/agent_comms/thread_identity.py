@@ -6,7 +6,10 @@ does not create a new historical thread; a new turn does not change its owner.
 
 from __future__ import annotations
 
+from .thread_name import ThreadName
+
 from .class_fact import ClassFact
+from .thread_creation import CreationSeconds, CreationTime, RequiredCreationTime
 import hashlib
 import math
 from abc import ABC, abstractmethod
@@ -24,7 +27,7 @@ from .declared_family import (
     UnknownFamilyMember,
     declared_words,
 )
-from .errors import RelationViolationError
+from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
     DisclosureIdentity,
     FieldCodec,
@@ -191,7 +194,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
 
     @classmethod
     def from_wire(cls, data: dict) -> ThreadIncarnation:
-        return FieldCodec.decode(ThreadIncarnationRecord, data).incarnation()
+        return FieldCodec.decode(ThreadIncarnationRecord, data).incarnation
 
     @classmethod
     def deleted(cls, name: str) -> DeletedThreadIncarnation:
@@ -209,15 +212,24 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def renamed(self, name: str) -> ThreadIncarnation:
         """Retain this member's birth state under an original alias."""
 
+    def require_current(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
+        """Require this original birth and return its current canonical incarnation."""
+        original = self.require_recorded()
+        current = snapshot.incarnation(original.name)
+        if not original.current(snapshot):
+            raise UnregisteredThreadError(
+                f"Thread {original.name!r} no longer has its recorded birth."
+            )
+        return current
+
     def resolved(self, snapshot: RegistryProvenance) -> ThreadIncarnation:
         """Follow retained rename aliases only for this exact historical owner."""
         if not self.current(snapshot):
             return self
-        return snapshot.threads[snapshot.canonical_name(self.name)].incarnation
+        return snapshot.incarnation(self.name)
 
     def current(self, snapshot: RegistryProvenance) -> bool:
-        thread = snapshot.threads.get(snapshot.canonical_name(self.name))
-        return thread is not None and thread.incarnation == self
+        return snapshot.registered(self.name) and snapshot.incarnation(self.name) == self
 
     def recorded_or(
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
@@ -255,8 +267,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         The registry owns aliases and birth. A stored name does not supply or
         manufacture either fact, including after a name is reused.
         """
-        thread = snapshot.threads.get(snapshot.canonical_name(name))
-        return thread is not None and self.resolved(snapshot) == thread.incarnation
+        return snapshot.registered(name) and self.resolved(snapshot) == snapshot.incarnation(name)
 
     def recorded_names(self, snapshot: RegistryProvenance) -> tuple[ThreadIncarnation, ...]:
         """Original names retained for this exact current incarnation."""
@@ -434,25 +445,47 @@ class CoreWatcherIncarnation(BirthlessIncarnation):
         return cls.watcher()
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class ThreadIncarnationRecord:
     """The single exact external name/birth record; members own its meaning."""
 
     name: str
     created_at: float
 
+    def __post_init__(self) -> None:
+        ThreadName.require(self.name)
+
+    @property
+    def birth(self) -> float:
+        """The external identity clock; float records already carry its wire value."""
+        return self.created_at
+
+    @cached_property
     def incarnation(self) -> ThreadIncarnation:
+        """One birth derivation, shared by full declarations and captured narrow rows."""
+        birth = self.birth
         try:
-            member = BirthlessIncarnation.member_selected(self.created_at)
+            member = BirthlessIncarnation.member_selected(birth)
         except UnknownFamilyMember:
-            return RecordedThreadIncarnation(self.name, self.created_at)
+            return RecordedThreadIncarnation(self.name, birth)
         return member.recorded_as(self.name)
 
-    @classmethod
-    def decode(cls, name: str, birth: float) -> ThreadIncarnation:
-        return FieldCodec.decode(cls, {"name": name, "created_at": birth}).incarnation()
 
+@dataclass(frozen=True, kw_only=True)
+class ThreadBirthRecord(ThreadIncarnationRecord):
+    """A registered declaration retains its recorded/generated creation-clock capability."""
 
+    created_at: RequiredCreationTime
+
+    @property
+    def birth(self) -> float:
+        return self.created_at.to_wire()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "created_at", FieldCodec.decode(
+            Annotated[CreationTime, CreationSeconds], self.created_at,
+        ))
+        super().__post_init__()
 
 
 @dataclass(frozen=True, slots=True)

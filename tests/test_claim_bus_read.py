@@ -218,7 +218,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
     assert ConversationMessagePageRequest(dm_scope).read_opened(comms.bus.bus).messages == ()
     raw_channel = comms.views.history_page(CommandTarget.named("#team")).messages
     assert [message.body for message in raw_channel] == ["@Alice investigate"]
-    channel = comms.views.channel_display_page("#team").messages
+    channel = comms.views.channel_display_view("#team").page(comms.views.presentation).messages
     assert [message.body for message in channel] == ["@Alice investigate"]
     assert all(message.role.notification_references(message) for message in channel)
     with pytest.raises(ValueError):

@@ -5,11 +5,12 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import partial
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import relationships
@@ -28,7 +29,7 @@ from .commander_frame_file import CommanderFrameFile
 from .coordination_database import CoordinationStore
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .declared_family import DeclaredFamily
-from .display_order import ChannelSort, NameChannelSort
+from .display_order import ChannelSort, NameChannelSort, ThreadSort
 from .display_references import CurrentDisplayReferences
 from .external_transcript import ExternalTranscript
 from .field_codec import (
@@ -37,6 +38,7 @@ from .field_codec import (
     JsonShapeFamily,
     JsonShapeMember,
     NullMember,
+    PresentMember,
     PresenceExclude,
     RecordMember,
     SubclassUnion,
@@ -529,10 +531,29 @@ class BusPresentation:
         self._display_unread = DisplayUnread()
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+    def snapshot(
+        self, viewer: DisplayViewer,
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         """Borrow the bus-owned source cut without preparing a second store."""
         with self.bus.snapshot(viewer) as selected:
             yield selected
+
+    @contextmanager
+    def reading(self, viewer: DisplayViewer) -> Iterator[CapturedBusPresentation]:
+        """One page-source lifetime owns the SQLite cut and its selection/read document.
+
+        The preparation owner may move a read between workers. A captured presentation
+        serializes page use and retirement, without keeping any store exclusion held.
+        """
+        with ExitStack() as lifetime:
+            source = lifetime.enter_context(self.bus.bus.captured_reading())
+            basis = self.bus.capture_selection(viewer, source)
+            captured = CapturedBusPresentation(self, basis, source)
+            try:
+                yield captured
+            finally:
+                with captured.reading(viewer):
+                    lifetime.close()
 
     def roster(
         self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
@@ -562,7 +583,7 @@ class BusPresentation:
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
         channel = CommandTarget.named(target).require_channel()
-        with self.bus.snapshot(viewer) as (basis, source):
+        with self.snapshot(viewer) as (basis, source):
             return basis.viewer.read_page(basis.scope(channel.name), bounds, basis, source)
 
     def mark_channel_read(
@@ -590,6 +611,34 @@ class BusPresentation:
         counted = self._display_unread.advanced(source, selection)
         self._display_unread = counted
         return activity, counted.counts
+
+
+class CapturedBusPresentation(BusPresentation):
+    """The existing display API borrowing one original cut, never a second store.
+
+    Its caller closes the reading when the conversation source is replaced or retired.
+    Read acknowledgements still go through the live ledger and identity validation.
+    """
+
+    def __init__(self, original: BusPresentation, basis: CapturedSelection, source: BusSnapshot):
+        super().__init__(original.bus, original.registry, original.catalog,
+                         original.agents, original.goals)
+        self.basis, self.source = basis, source
+        self._use = RLock()
+
+    @contextmanager
+    def snapshot(
+        self, viewer: DisplayViewer,
+    ) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+        with self._use:
+            if viewer.resolve(self.basis.registry) != self.basis.viewer:
+                raise ValueError("A captured display cut belongs to its original viewer")
+            yield self.basis, self.source
+
+    @contextmanager
+    def reading(self, viewer: DisplayViewer) -> Iterator[CapturedBusPresentation]:
+        with self.snapshot(viewer):
+            yield self
 
 
 @dataclass(frozen=True, slots=True)
@@ -720,8 +769,30 @@ class ThreadRecord(CliResult):
         return " · ".join(part for part in (self.activity.detail, *shown.status.details) if part)
 
 
+class ThreadPresence(ABC):
+    """A person-row consumer visits only complete captured thread views."""
+
+    def views(self) -> tuple[ThreadView, ...]:
+        return ()
+
+    @abstractmethod
+    def sort_key(
+        self, order: type[ThreadSort], target: str, sent: float,
+    ) -> tuple[float, float, str]: ...
+
+
 @dataclass(frozen=True, slots=True)
-class ThreadView(ThreadRecord):
+class NoThreadView(NullMember, ThreadPresence):
+    """A named navigation target has no captured thread presentation."""
+
+    def sort_key(
+        self, order: type[ThreadSort], target: str, sent: float,
+    ) -> tuple[float, float, str]:
+        return order.key(target, 0, 0, 0)
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadView(ThreadRecord, PresentMember, ThreadPresence):
     activity: Annotated[ObservedActivity, PresenceExclude()]
     runtime: Annotated[RuntimeInfo, PresenceExclude()]
     last_seen: float
@@ -744,6 +815,14 @@ class ThreadView(ThreadRecord):
             goals.snapshot_for(thread, snapshot, waits).execution, runtime[thread.name],
             snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
+
+    def views(self) -> tuple[ThreadView, ...]:
+        return (self,)
+
+    def sort_key(
+        self, order: type[ThreadSort], target: str, sent: float,
+    ) -> tuple[float, float, str]:
+        return order.key(target, self.thread.birth, self.activity.timestamp, sent)
 
     @property
     def presentation(self) -> ThreadPresentation:

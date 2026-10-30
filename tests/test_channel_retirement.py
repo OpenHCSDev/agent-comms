@@ -74,9 +74,13 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     assert set(
         next(v.members for v in comms.views.channel_views() if v.channel.name == "#engineering")
     ) == {"a", "b"}
-    tail = comms.views.channel_display_page("#engineering", bounds=PageBounds(limit=2))
+    tail = comms.views.channel_display_view(
+        '#engineering',
+    ).page(comms.views.presentation, bounds=PageBounds(limit=2))
     assert [m.seq for m in tail.messages] == [3, 4]
-    older = comms.views.channel_display_page("#engineering", bounds=PageBounds(LiveCursor(3).older(), 2))
+    older = comms.views.channel_display_view(
+        '#engineering',
+    ).page(comms.views.presentation, bounds=PageBounds(LiveCursor(3).older(), 2))
     assert [m.seq for m in older.messages] == [1, 2]
     assert [m.target for m in read_history(comms, "#engineering")] == [
         m.target for m in rows
