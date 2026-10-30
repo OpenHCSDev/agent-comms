@@ -111,6 +111,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
     reading_order: ClassVar[tuple[str, ...]] = (
         "spine",
         "self-protection",
+        "after-compaction",
         "unnecessary",
         "correct-maintenance",
         "slop-and-polymorphism",

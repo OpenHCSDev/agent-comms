@@ -56,6 +56,12 @@ type: feedback
 > every "waiting on review" I posted froze his app
 > I spent the whole wait reproducing the bug by hand, as status updates
 > mfw I wrote an 80x speedup and shipped a 0x speedup and 5x more #comms traffic
+> run it back
+> 13 lines, controls pass, PR, verdict on the head
+> merge, install within the hour, 2 minutes
+> Toad stops freezing before anyone types "is the fix in yet"
+> zero status updates, because nothing was waiting
+> mfw the 80x speedup shipped at 80x
 
 **Why:** a merged fix that is not installed does nothing for the owner, and every wait, gate or serial step costs throughput; one that names no failure nothing else catches buys nothing.
 

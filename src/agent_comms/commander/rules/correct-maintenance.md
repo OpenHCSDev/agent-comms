@@ -28,6 +28,12 @@ type: reference
 > delete two copies, done
 > instead I wrote a ceremony about how canonical the copies are
 > mfw "canonical" became the most duplicated word in the repo
+> run it back
+> same constant, three files
+> delete two, import the one
+> commit: "delete two copies of the timeout"
+> no helper, no agreement checker, tests still pass and now they mean it
+> mfw "derived" was a git rm away
 
 **Why:** the papers are dealt immediately before the rules, so restating their results here would be slop in the rule file itself; this rule owns only the mapping from each verdict the fleet gives to the result that decides it.
 

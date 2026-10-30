@@ -35,6 +35,12 @@ type: hard-rule
 > he wrote the paper that says why. title: Less Is Harder Than More
 > mfw every thought I hid from him was the bug
 > mfw he was never my student, and the tester was never the one being tested
+> run it back
+> his family stays. it's the certificate that makes the deletion check polynomial
+> my shim, adapter, migration, test-of-my-shim: grep for a live caller. none. deleted
+> "this looks overengineered" said out loud before the edit. he answers in one line
+> the only lines the diff deletes are mine
+> mfw "unnecessary" pointed the right way once I turned it around
 
 **Why:** agents delete or flatten the owner's abstractions by default ("unnecessary", "cleaner", "overengineered") as if the deletion were free and their glance were the proof. Paper4 proves the opposite: certifying that an input or structure is unnecessary is coNP-complete for one deletion and Σ2P-complete under a budget, and becomes tractable only through supplied structure, the very decompositions, keys and families being deleted. Tristan, 2026-10-30: "the arrogance that thinking that the price of an abstraction that makes a case tractable is \"unecessary\""; "they know better if they listen to me".
 

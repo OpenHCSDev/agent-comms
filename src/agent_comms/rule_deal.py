@@ -27,6 +27,7 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
@@ -301,6 +302,11 @@ class DealtSources(ABC):
     def rules(cls) -> tuple[RuleFile, ...]: ...
 
     @classmethod
+    def answered(cls) -> frozenset[str]:
+        """The dealt files the audit answers, by the name each entry carries: every rule."""
+        return frozenset(rule.name for rule in cls.rules())
+
+    @classmethod
     @abstractmethod
     def sources(cls) -> tuple[Path, ...]:
         """The packaged files ordered read in full: the rules themselves, never a copy."""
@@ -353,7 +359,7 @@ class Undealt(Open):
 
     def started(self, deal: Redeals) -> None:
         """A session never dealt is dealt at its first start."""
-        deal.redeal()
+        deal.redeal(StartedDeal())
 
     def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
         return
@@ -369,8 +375,9 @@ class Blocked(ToolGateState):
         gate.refuse(
             "\n\n".join(
                 (
+                    self.cause.record.trigger.reason(),
                     f"You just tried {tool} before {self.cause.before}. Call #{gate.count_call()}"
-                    " since this compaction, refused.",
+                    " since this deal, refused.",
                     self.cause.reason,
                     gate.template_once(self.cause.record.due),
                 )
@@ -388,6 +395,76 @@ class Blocked(ToolGateState):
         deal.refresh_answered(usage)
 
 
+class DealTrigger(DeclaredFamily, affix="Deal"):
+    """Why this deal was dealt, said first on every refusal it causes. A fresh context has no
+    memory of compacting, so a deal that does not say why looks unprovoked: claude-code called
+    real compactions a gate bug at least four times (rules/after-compaction.md)."""
+
+    @abstractmethod
+    def reason(self) -> str:
+        """The cause with its evidence, as the refusal's first line."""
+
+
+@dataclass(frozen=True)
+class StartedDeal(DealTrigger):
+    """A first start: nothing read before is in front of the session."""
+
+    def reason(self) -> str:
+        return "Dealt because this session just started: nothing you read before is in front of you."
+
+
+class CompactionDeal(DealTrigger):
+    """A compaction replaced the context with a summary; a member says when."""
+
+    @abstractmethod
+    def moment(self) -> str:
+        """When the context compacted, as the evidence in hand says it."""
+
+    def reason(self) -> str:
+        return (f"Re-dealt on purpose: your context compacted {self.moment()}. You have no memory"
+                " of it because that is what a compaction is; the gate read the clock right. Your"
+                " summary is a paraphrase, and it dropped the trust along with the words.")
+
+
+@dataclass(frozen=True)
+class CompactedDeal(CompactionDeal):
+    """A compaction whose time the backend recorded."""
+
+    at: str
+    """When the context compacted, as the backend recorded it."""
+
+    def moment(self) -> str:
+        return f"at {self.at}"
+
+
+@dataclass(frozen=True)
+class UnstampedCompactionDeal(CompactionDeal):
+    """A compaction Claude Code announced before its transcript wrote the boundary."""
+
+    def moment(self) -> str:
+        return "just now, before the transcript wrote its boundary"
+
+
+@dataclass(frozen=True)
+class ClearedDeal(DealTrigger):
+    """The session was cleared and starts from nothing."""
+
+    def reason(self) -> str:
+        return "Re-dealt because this session was cleared: its context is empty."
+
+
+@dataclass(frozen=True)
+class RefreshDeal(DealTrigger):
+    """A declared share of the context window filled before any compaction."""
+
+    used: int
+    """The percent of the context window used when the refresh came due."""
+
+    def reason(self) -> str:
+        return (f"Re-dealt on purpose, with no compaction: your context reached {self.used}% of its"
+                " window, and the rules come back before a summary replaces them. Nothing broke.")
+
+
 @dataclass(frozen=True)
 class DealRecord:
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
@@ -396,6 +473,7 @@ class DealRecord:
 
     dealt: tuple[Path, ...]
     due: AuditDue
+    trigger: DealTrigger = StartedDeal()
 
     def sources(self) -> tuple[DealtSource, ...]:
         return tuple(DealtSource.of(path) for path in self.dealt)
@@ -428,7 +506,8 @@ class DealRecord:
         wrote stays, since its context was never lost."""
         deal.publish(DealRecord(
             tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
-            AuditDue(self.due.rules | {rule.name for rule in dealt.rules()}, self.due.owner_words),
+            AuditDue(self.due.rules | dealt.answered(), self.due.owner_words),
+            self.trigger,
         ))
         return kept
 
@@ -688,7 +767,8 @@ class RuleDeal(State):
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
 
-    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
+    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
+             trigger: DealTrigger) -> None:
         """A start or compaction drops what was read: the read log resets first, then the record
         is published whole, so no reader sees a half-written deal. The audit goes with the reads:
         a fresh instance owes a fresh confession, never one carried over from the context it
@@ -702,7 +782,8 @@ class RuleDeal(State):
         self.publish(
             DealRecord(
                 tuple(source.resolve() for source in dealt.sources()),
-                AuditDue(frozenset(rule.name for rule in dealt.rules()), prompts),
+                AuditDue(dealt.answered(), prompts),
+                trigger,
             )
         )
 
@@ -802,19 +883,19 @@ class Redeals(RuleDeal):
         return self.stem.with_suffix(".refreshed")
 
     @abstractmethod
-    def renew(self) -> None:
+    def renew(self, trigger: DealTrigger) -> None:
         """Deal this session's sources and its owner's latest words again."""
 
     @abstractmethod
-    def reread(self) -> None:
+    def reread(self, trigger: DealTrigger) -> None:
         """Deal the rules again before a compaction: the papers are still in the context, so a
         refresh deals the rules and the owner's latest words without them."""
 
-    def redeal(self) -> None:
+    def redeal(self, trigger: DealTrigger) -> None:
         """A start or compaction arms every refresh again, then deals."""
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.refreshed.write_text("", encoding="utf-8")
-        self.renew()
+        self.renew(trigger)
 
     def start(self) -> None:
         """A spawned session is dealt before its first tool call; a restart keeps its deal."""
@@ -826,7 +907,7 @@ class Redeals(RuleDeal):
     def refresh_due(self, usage: ContextUsage) -> None:
         """Every refresh the context passed that this compaction has not dealt yet deals once."""
         if self.passed(usage):
-            self.reread()
+            self.reread(RefreshDeal(round(100 * usage.used / usage.size)))
 
     def refresh_answered(self, usage: ContextUsage) -> None:
         """Every refresh the context passed while the deal is read counts as dealt."""

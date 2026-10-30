@@ -425,6 +425,10 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """Whether Claude replaced everything before this record (compaction)."""
         return False
 
+    def compacted_at(self) -> tuple[float, ...]:
+        """When this record says the context compacted: nothing, unless it is the boundary."""
+        return ()
+
     def ends_turn(self) -> bool:
         return False
 
@@ -874,6 +878,9 @@ class SystemEvent(TaggedWire, ABC, affix=""):
     def begins_history(self) -> bool:
         return False
 
+    def compacted_at(self) -> tuple[float, ...]:
+        return ()
+
 
 class BridgeStatus(SystemEvent, declared_name='bridge_status'):
     """The remote-control banner and link, not a conversation or turn update."""
@@ -898,6 +905,9 @@ class CompactBoundary(SystemEvent, TimedRecord, declared_name='compact_boundary'
 
     def begins_history(self) -> bool:
         return True
+
+    def compacted_at(self) -> tuple[float, ...]:
+        return (self.timestamp,)
 
 
 class StopHookSummary(SystemEvent, declared_name='stop_hook_summary'):
@@ -943,6 +953,9 @@ class SystemRecord(ClaudeRecord, declared_name='system'):
 
     def begins_history(self) -> bool:
         return self.subtype.begins_history()
+
+    def compacted_at(self) -> tuple[float, ...]:
+        return self.subtype.compacted_at()
 
     def ends_turn(self) -> bool:
         return self.subtype.ends_turn()
