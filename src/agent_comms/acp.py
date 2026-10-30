@@ -574,7 +574,7 @@ class CommsClient(CommsAgent):
 
 
 def main() -> int:
-    LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
+    root = LaunchRoot.startup(sys.argv, ActiveRoute.published_launch)
     if "--login" in sys.argv[1:]:
         from .login import run_login
 
@@ -592,7 +592,7 @@ def main() -> int:
     # The stdio ACP client only attaches to a separately owned worker. A
     # private launch is checked before it can request an owner; the worker
     # independently repeats the same preflight.
-    comms = wire()
+    comms = wire(root.path)
     comms.owners.require_launch_authority()
 
     async def run() -> None:
