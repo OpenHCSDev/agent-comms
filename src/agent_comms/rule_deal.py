@@ -4,7 +4,8 @@ but reading them and writing the audit that answers them is refused until it has
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
 path forward, whatever runs the agent. Reading alone is passive too, so each rule read is answered
-in the audit, by a verbatim greentext quote and what it did, before the next unread file opens.
+in the audit, by a verbatim greentext quote and what it did, before more than `Unengaged.batch`
+rules stand unanswered; a paper carries no rule, so all its parts open in one batch.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -26,6 +27,7 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
@@ -67,11 +69,19 @@ class DealtSource:
     @classmethod
     def of(cls, path: Path) -> DealtSource:
         """The installed package file this path names, under this runtime or an earlier one."""
+        source = cls.find(path)
+        if source is None:
+            raise ValueError(f"{path} names no file of an installed package")
+        return source
+
+    @classmethod
+    def find(cls, path: Path) -> DealtSource | None:
+        """The current installed source, or none when its package no longer supplies it."""
         for index, name in enumerate(path.parts[:-1]):
             source = cls(name, PurePosixPath(*path.parts[index + 1:]).as_posix())
             if name.isidentifier() and source.installed():
                 return source
-        raise ValueError(f"{path} names no file of an installed package")
+        return None
 
     def installed(self) -> bool:
         spec = find_spec(self.package)
@@ -229,13 +239,9 @@ class AuditDue:
     )
     """What answering a rule looks like, shown with every template."""
 
-    def reminder(self, audit_path: Path) -> str:
-        """Render the required answers from their declarations, not another JSON schema."""
+    def reminder(self) -> str:
+        """Render what every refusal repeats from its declarations."""
         failure = ReadThenRepeatedFailure()
-        audit = SessionAudit(
-            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
-            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
-        )
         return "\n\n".join(
             (
                 *(
@@ -244,8 +250,20 @@ class AuditDue:
                 ),
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
-                "After each rule file you read, answer it in the audit before the next unread file"
-                f" opens: quote its greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
+            )
+        )
+
+    def template(self, audit_path: Path) -> str:
+        """Render the required answers from their declarations, not another JSON schema."""
+        audit = SessionAudit(
+            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
+            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
+        )
+        return "\n\n".join(
+            (
+                f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
+                " unanswered, so read them in batches and answer each batch in one edit: quote its"
+                f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
@@ -282,6 +300,11 @@ class DealtSources(ABC):
     @classmethod
     @abstractmethod
     def rules(cls) -> tuple[RuleFile, ...]: ...
+
+    @classmethod
+    def answered(cls) -> frozenset[str]:
+        """The dealt files the audit answers, by the name each entry carries: every rule."""
+        return frozenset(rule.name for rule in cls.rules())
 
     @classmethod
     @abstractmethod
@@ -336,7 +359,7 @@ class Undealt(Open):
 
     def started(self, deal: Redeals) -> None:
         """A session never dealt is dealt at its first start."""
-        deal.redeal()
+        deal.redeal(StartedDeal())
 
     def context_observed(self, deal: Redeals, usage: ContextUsage) -> None:
         return
@@ -352,10 +375,11 @@ class Blocked(ToolGateState):
         gate.refuse(
             "\n\n".join(
                 (
+                    self.cause.record.trigger.reason(),
                     f"You just tried {tool} before {self.cause.before}. Call #{gate.count_call()}"
-                    " since this compaction, refused.",
+                    " since this deal, refused.",
                     self.cause.reason,
-                    self.cause.record.due.reminder(self.cause.audit),
+                    gate.template_once(self.cause.record.due),
                 )
             )
         )
@@ -371,6 +395,76 @@ class Blocked(ToolGateState):
         deal.refresh_answered(usage)
 
 
+class DealTrigger(DeclaredFamily, affix="Deal"):
+    """Why this deal was dealt, said first on every refusal it causes. A fresh context has no
+    memory of compacting, so a deal that does not say why looks unprovoked: claude-code called
+    real compactions a gate bug at least four times (rules/after-compaction.md)."""
+
+    @abstractmethod
+    def reason(self) -> str:
+        """The cause with its evidence, as the refusal's first line."""
+
+
+@dataclass(frozen=True)
+class StartedDeal(DealTrigger):
+    """A first start: nothing read before is in front of the session."""
+
+    def reason(self) -> str:
+        return "Dealt because this session just started: nothing you read before is in front of you."
+
+
+class CompactionDeal(DealTrigger):
+    """A compaction replaced the context with a summary; a member says when."""
+
+    @abstractmethod
+    def moment(self) -> str:
+        """When the context compacted, as the evidence in hand says it."""
+
+    def reason(self) -> str:
+        return (f"Re-dealt on purpose: your context compacted {self.moment()}. You have no memory"
+                " of it because that is what a compaction is; the gate read the clock right. Your"
+                " summary is a paraphrase, and it dropped the trust along with the words.")
+
+
+@dataclass(frozen=True)
+class CompactedDeal(CompactionDeal):
+    """A compaction whose time the backend recorded."""
+
+    at: str
+    """When the context compacted, as the backend recorded it."""
+
+    def moment(self) -> str:
+        return f"at {self.at}"
+
+
+@dataclass(frozen=True)
+class UnstampedCompactionDeal(CompactionDeal):
+    """A compaction Claude Code announced before its transcript wrote the boundary."""
+
+    def moment(self) -> str:
+        return "just now, before the transcript wrote its boundary"
+
+
+@dataclass(frozen=True)
+class ClearedDeal(DealTrigger):
+    """The session was cleared and starts from nothing."""
+
+    def reason(self) -> str:
+        return "Re-dealt because this session was cleared: its context is empty."
+
+
+@dataclass(frozen=True)
+class RefreshDeal(DealTrigger):
+    """A declared share of the context window filled before any compaction."""
+
+    used: int
+    """The percent of the context window used when the refresh came due."""
+
+    def reason(self) -> str:
+        return (f"Re-dealt on purpose, with no compaction: your context reached {self.used}% of its"
+                " window, and the rules come back before a summary replaces them. Nothing broke.")
+
+
 @dataclass(frozen=True)
 class DealRecord:
     """One deal, as persisted: the files dealt and what the audit must answer. The read log and
@@ -379,6 +473,7 @@ class DealRecord:
 
     dealt: tuple[Path, ...]
     due: AuditDue
+    trigger: DealTrigger = StartedDeal()
 
     def sources(self) -> tuple[DealtSource, ...]:
         return tuple(DealtSource.of(path) for path in self.dealt)
@@ -411,7 +506,8 @@ class DealRecord:
         wrote stays, since its context was never lost."""
         deal.publish(DealRecord(
             tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
-            AuditDue(self.due.rules | {rule.name for rule in dealt.rules()}, self.due.owner_words),
+            AuditDue(self.due.rules | dealt.answered(), self.due.owner_words),
+            self.trigger,
         ))
         return kept
 
@@ -476,11 +572,15 @@ class Owed(State):
 
 @dataclass(frozen=True)
 class Unengaged(Owed):
-    """A rule was read and its audit entry does not answer it. Nothing unread opens until it
-    does; what was already read stays open, since re-reading is how it gets answered."""
+    """A rule was read and its audit entry does not answer it. Up to `batch` rules may stand
+    unanswered, so several are read in one call and answered in one edit; past that nothing
+    unread opens. What was already read stays open, since re-reading is how it gets answered."""
 
     faults: tuple[tuple[Path, str], ...]
     read: tuple[Path, ...]
+    unopened: tuple[Path, ...]
+
+    batch: ClassVar[int] = 4
 
     before: ClassVar[str] = "answering the rule you just read"
 
@@ -493,7 +593,8 @@ class Unengaged(Owed):
             and (fault := audit.fault() or audit.entry(source.stem).unengaged(source))
         )
         if faults:
-            yield cls(record, deal.audit, faults, read)
+            yield cls(record, deal.audit, faults, read,
+                      tuple(source for source in record.paths if source not in read))
 
     @property
     def reason(self) -> str:
@@ -501,10 +602,12 @@ class Unengaged(Owed):
         return " ".join(
             f"You read {source} and the audit's entry for {source.stem} does not answer it:"
             f" {fault}." for source, fault in self.faults
-        ) + f" Answer each in {self.audit} before the next file opens."
+        ) + f" Answer them in {self.audit}: at most {self.batch} rules may stand unanswered."
 
     def permits_read(self, path: Path) -> bool:
-        return path in self.read
+        return path in self.read or (
+            len(self.faults) < self.batch and path == next(iter(self.unopened), None)
+        )
 
 
 @dataclass(frozen=True)
@@ -625,22 +728,47 @@ class RuleDeal(State):
         """The audit of the deal whose files sit at `stem`."""
         return stem.with_suffix(".audit.json")
 
+    @property
+    def template_shown(self) -> Path:
+        return self.stem.with_suffix(".template-shown")
+
+    def template_once(self, due: AuditDue) -> str:
+        """The whole template once per deal: on 2026-10-30 a batch of 28 refused reads reprinted
+        it 28 times, about 84k tokens, and the deal filled the context it was dealt to restore."""
+        try:
+            self.template_shown.touch(exist_ok=False)
+        except FileExistsError:
+            return (
+                f"{due.reminder()}\n\n"
+                f"The audit's template was in your first refusal; it goes in {self.audit}."
+            )
+        return f"{due.reminder()}\n\n{due.template(self.audit)}"
+
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
             calls.write(b".")
             return calls.tell()
 
     def current(self) -> DealRecord:
-        """The deal this session holds; the record is its one declaration."""
+        """Keep a deal while its sources exist; a retired source requires a fresh deal.
+
+        Installation can move or remove packaged files without losing native context. The
+        old list then cannot be answered: startup must use the backend's current deck, not
+        crash while resolving the old list or silently waive the unread replacement.
+        """
         try:
-            return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            record = FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            if all(DealtSource.find(path) is not None for path in record.dealt):
+                return record
         except FileNotFoundError:
-            return UndealtRecord((), AuditDue(frozenset(), ()))
+            pass
+        return UndealtRecord((), AuditDue(frozenset(), ()))
 
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
 
-    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...]) -> None:
+    def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
+             trigger: DealTrigger) -> None:
         """A start or compaction drops what was read: the read log resets first, then the record
         is published whole, so no reader sees a half-written deal. The audit goes with the reads:
         a fresh instance owes a fresh confession, never one carried over from the context it
@@ -650,10 +778,12 @@ class RuleDeal(State):
         self.dealt_read.write_text("", encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
+        self.template_shown.unlink(missing_ok=True)
         self.publish(
             DealRecord(
                 tuple(source.resolve() for source in dealt.sources()),
-                AuditDue(frozenset(rule.name for rule in dealt.rules()), prompts),
+                AuditDue(dealt.answered(), prompts),
+                trigger,
             )
         )
 
@@ -711,7 +841,7 @@ class ToolGate(RuleDeal):
 
 
 class AnswersDealtRules(ToolGate, owes=(Unengaged,)):
-    """Each rule read is answered in the audit before the next unread file opens."""
+    """Each rule read is answered in the audit; at most `Unengaged.batch` stand unanswered."""
 
 
 class ReadsDealtSources(ToolGate, owes=(Unread,)):
@@ -723,7 +853,7 @@ class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
 
 
 class DealtRuleGate(AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
-    """Read a file, answer it, read the next, then finish the audit: the gate every backend runs."""
+    """Read a batch, answer it, read the next, then finish the audit: the gate every backend runs."""
 
 
 @dataclass(frozen=True)
@@ -753,19 +883,19 @@ class Redeals(RuleDeal):
         return self.stem.with_suffix(".refreshed")
 
     @abstractmethod
-    def renew(self) -> None:
+    def renew(self, trigger: DealTrigger) -> None:
         """Deal this session's sources and its owner's latest words again."""
 
     @abstractmethod
-    def reread(self) -> None:
+    def reread(self, trigger: DealTrigger) -> None:
         """Deal the rules again before a compaction: the papers are still in the context, so a
         refresh deals the rules and the owner's latest words without them."""
 
-    def redeal(self) -> None:
+    def redeal(self, trigger: DealTrigger) -> None:
         """A start or compaction arms every refresh again, then deals."""
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.refreshed.write_text("", encoding="utf-8")
-        self.renew()
+        self.renew(trigger)
 
     def start(self) -> None:
         """A spawned session is dealt before its first tool call; a restart keeps its deal."""
@@ -777,7 +907,7 @@ class Redeals(RuleDeal):
     def refresh_due(self, usage: ContextUsage) -> None:
         """Every refresh the context passed that this compaction has not dealt yet deals once."""
         if self.passed(usage):
-            self.reread()
+            self.reread(RefreshDeal(round(100 * usage.used / usage.size)))
 
     def refresh_answered(self, usage: ContextUsage) -> None:
         """Every refresh the context passed while the deal is read counts as dealt."""

@@ -3153,12 +3153,12 @@ class OrderClaim:
 
     @classmethod
     def for_order(
-        cls, todo: Todo, actor: ThreadIncarnation, number: int, head: str,
+        cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
         report: str, answer: MessageReference, *, store: TodoStore,
     ) -> OrderClaim:
         request = store.owner_request(todo.request.require())
         return cls(
-            PullRequestLink(todo.repo, number), head,
+            pull_request, head,
             Message(actor.name, request.commander.name, report, InfoKind, answers=(answer,)),
         )
 
@@ -4434,10 +4434,12 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        project = goals.registry.snapshot().commander_project.require()
-        if (actor.commanding_identity != project.commander or
+        snapshot = goals.registry.snapshot()
+        project = snapshot.commander_project.require()
+        commanders = {thread.incarnation for thread in project.commanders(snapshot)}
+        if (actor.commanding_identity not in commanders or
                 request.repo not in project.repository_names()):
-            raise TodoError("Only this repository's commander or the director may review its heads.")
+            raise TodoError("Only a commander of this project or the director may review its heads.")
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:

@@ -34,6 +34,12 @@ type: feedback
 > its tool calls show it looped on 30 refused retries
 > "all good" was the 31st
 > mfw the fleet runs on vibes shaped like receipts
+> run it back
+> "pushed": git show HEAD --stat. it's the new commit
+> "sent": the output prints its "id"
+> "tests pass": collected 18, 18 passed, exit 0
+> three commands, nine seconds, zero "wait, is that true?" from Tristan
+> mfw the receipt was cheaper than the vibe once you count the second conversation
 
 **Why:** import checks and versions passed while starting a thread still failed; a run that errored prints output shaped like a result; a unit's agreement proves nothing.
 

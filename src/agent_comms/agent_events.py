@@ -9,6 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
+from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar
 
@@ -40,6 +41,7 @@ from .native_failures import NativePiUnavailable
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
+from .rule_deal import CompactedDeal
 from .pi_vocabulary import (
     CompactionReason,
     NoThinkingOverride,
@@ -300,8 +302,9 @@ class CompactionEnd(CompactionFinish):
         return "end"
 
     def deal_rules(self, deal: Redeals) -> None:
-        """The summary that replaced the context is a paraphrase of the rules: deal them again."""
-        deal.redeal()
+        """The summary that replaced the context is a paraphrase of the rules: deal them again,
+        saying when it compacted so the fresh context reads the cause instead of guessing it."""
+        deal.redeal(CompactedDeal(datetime.now().astimezone().isoformat(timespec="seconds")))
 
     async def transcript_changed(self, publish: Callable[[], Awaitable[None]]) -> None:
         await publish()

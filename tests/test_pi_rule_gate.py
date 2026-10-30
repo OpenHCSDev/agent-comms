@@ -4,8 +4,11 @@ in full and written the audit, through the same deal the Claude Code hooks judge
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 
 import pytest
+
+from agent_comms.rule_deal import Unengaged
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
@@ -44,6 +47,21 @@ def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(commander_bus):
         deal.audit.write_text("{}")
         deal.start()
         assert deal.audit.exists()
+
+
+def test_a_retired_package_source_redeals_before_owner_binding(unit_deal):
+    unit_deal.start()
+    old = unit_deal.current()
+    first = old.paths[0]
+    unit_deal.audit.write_text("{}")
+    unit_deal.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
+
+    unit_deal.start()
+
+    assert unit_deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+    assert not unit_deal.audit.exists()
+    with pytest.raises(RulesUnread):
+        unit_deal.judge_tool("bash")
 
 
 def test_every_dealt_file_fits_one_default_read_on_every_backend():
@@ -85,8 +103,13 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         bash.judge_under(unit_deal)  # a partial read is not a reading
     for source in sources:
         call("read", {"path": str(source)}).completed_under(unit_deal)
+    with pytest.raises(RulesUnread, match="template was in your first refusal"):
+        bash.judge_under(unit_deal)  # the whole template is printed once per deal
+    answered = [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()]
+    unit_deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     with pytest.raises(RulesUnread, match="then fix the gate"):
         bash.judge_under(unit_deal)  # the audit answers the owner's words too
+    unit_deal.audit.unlink()
     with pytest.raises(RulesUnread):
         call("write", {"path": "notes.md", "content": "x"}).judge_under(unit_deal)
     call("write", {"path": str(unit_deal.audit), "content": "{}"}).judge_under(unit_deal)
@@ -101,7 +124,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     bash.judge_under(unit_deal)
     call("read", {"path": "notes.md"}).judge_under(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)  # the next compaction
-    with pytest.raises(RulesUnread, match="Call #1 since this compaction"):
+    with pytest.raises(RulesUnread, match="Call #1 since this deal"):
         bash.judge_under(unit_deal)
 
 
@@ -114,24 +137,28 @@ def refused(deal: PiRedeal) -> bool:
 
 
 def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(unit_deal):
-    """A refresh deals no papers, and each rule it deals is still answered before the next
-    opens; the audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
+    """A refresh deals no papers, and a batch of its rules is answered before the next opens;
+    the audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
     unit_deal.observe_context(ContextUsage(35, 100))
     unit_deal.audit.write_text(json.dumps({"rules": [], "owner_words": []}))
-    first, following = unit_deal.current().dealt[:2]
-    call("read", {"path": str(first)}).judge_under(unit_deal)
-    unit_deal.record_read(first, ReadInput(first).span())
+    dealt = unit_deal.current().dealt
+    rules = [source for source in dealt if source.stem in unit_deal.current().due.rules]
+    batch, following = rules[:Unengaged.batch], rules[Unengaged.batch]
+    for source in dealt[:dealt.index(following)]:
+        call("read", {"path": str(source)}).judge_under(unit_deal)
+        unit_deal.record_read(source, ReadInput(source).span())
     with pytest.raises(RulesUnread, match="does not answer it"):
         call("read", {"path": str(following)}).judge_under(unit_deal)
+    first = batch[0]
     call("read", {"path": str(first)}).judge_under(unit_deal)
     edit = {"edits": [{"oldText": "a", "newText": "b"}]}
     call("edit", {"path": str(unit_deal.audit), **edit}).judge_under(unit_deal)
     with pytest.raises(RulesUnread):
         call("edit", {"path": "notes.md", **edit}).judge_under(unit_deal)
     unit_deal.audit.write_text(json.dumps(
-        {"rules": [engaged(first.stem, first)], "owner_words": []}))
+        {"rules": [engaged(source.stem, source) for source in batch], "owner_words": []}))
     call("read", {"path": str(following)}).judge_under(unit_deal)
 
 
@@ -166,4 +193,46 @@ def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, 
     assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
 
 
+def test_every_refusal_opens_with_why_its_deal_was_dealt(unit_deal):
+    """Start, compaction and refresh each say their own cause first, so a fresh context reads
+    why it was dealt instead of diagnosing the gate (rules/after-compaction.md)."""
+    import re
 
+    from agent_comms.rule_deal import RefreshDeal, StartedDeal
+
+    bash = call("bash", {"command": "ls"})
+    unit_deal.start()
+    with pytest.raises(RulesUnread, match=re.escape(StartedDeal().reason())):
+        bash.judge_under(unit_deal)
+    events.CompactionEnd().deal_rules(unit_deal)
+    with pytest.raises(RulesUnread, match="Re-dealt on purpose: your context compacted at "):
+        bash.judge_under(unit_deal)
+    answer_deal(unit_deal)
+    unit_deal.observe_context(ContextUsage(35, 100))
+    with pytest.raises(RulesUnread, match=re.escape(RefreshDeal(35).reason())):
+        bash.judge_under(unit_deal)
+
+
+def test_the_dealt_commander_skill_owes_an_answer_like_a_rule(commander_bus):
+    """The commander skill is dealt and read, so it fills the unanswered window like a rule:
+    on 2026-10-30 claude-nra read it owing nothing and broke its rotation within the hour."""
+    import sys
+
+    from agent_comms.rule_deal import ReadSpan, StartedDeal
+
+    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("claude-code"))
+    deal.redeal(StartedDeal())
+    record = deal.current()
+    skill = CommanderPackage.skill().resolve()
+    assert skill.stem in record.due.rules
+    order = list(record.dealt)
+    before = [source for source in order[:order.index(skill)] if source.stem in record.due.rules]
+    unanswered = {*before[-(Unengaged.batch - 1):], skill}
+    answered = []
+    for source in order[:order.index(skill) + 1]:
+        deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
+        if source.stem in record.due.rules and source not in unanswered:
+            answered.append(engaged(source.stem, source))
+        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
+    with pytest.raises(RulesUnread, match=f"audit's entry for {skill.stem} does not answer it"):
+        deal.judge_read("read", order[order.index(skill) + 1])

@@ -25,6 +25,12 @@ type: feedback
 > the batch codemod for all 40 was one command
 > it was in the recipe frontier the whole time
 > mfw the scoreboard updated more often than the source
+> run it back
+> one scan, 40 findings, one retained map
+> pick the batch codemod from the recipe frontier
+> one command, 40 sites, one review, one rescan: 0
+> 6 minutes of scanning instead of 48
+> mfw the speedrun was ignoring the scoreboard
 
 **Why:** Tristan, 2026-10-26: "write as many codemods as possible ... get as much slop out in one scan before the next. thats the game"; "you can start playing the commander game single player". Repeated scans and busy agents consume time without removing an obligation.
 

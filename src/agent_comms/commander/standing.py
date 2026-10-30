@@ -43,8 +43,8 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     CoreActsStandingRule,
     DatedStandingRule,
-    HeadReviewRule,
     IndependentStandingRule,
+    OrderHeadReviewCommands,
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
@@ -390,8 +390,9 @@ class UnitAskUnanswered(UnitOwedAnswer, UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewRule):
-    """A holder's delivery needs a verdict or a replacement order, never a chat reply."""
+class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, OrderHeadReviewCommands):
+    """A holder's delivery needs a verdict or a replacement order, never a chat reply; it offers
+    only the verdicts its claimed order takes, the same as every linked head line."""
 
     problem: str
     request: PullRequestHead
@@ -402,7 +403,8 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewR
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
         """The retained claim owns the report and the head owed a verdict, published or not:
         a claim whose answer never reached the bus is still owed its judgement."""
-        return tuple(cls(claim.message, owner.name, todo.id, claim.request())
+        return tuple(cls(message=claim.message, unit=owner.name, problem=todo.id,
+                         request=claim.request(), todo=todo)
                      for owner, todos in held.items() for todo in todos
                      for claim in todo.order.owed_claims())
 
@@ -416,9 +418,7 @@ class DeliveryAwaitingJudgement(UnitOwedAnswer, UndatedStandingRule, HeadReviewR
         return (HeadSubject(self.request),)
 
     def command_values(self) -> Mapping[str, str]:
-        return {"unit": self.unit, "problem": self.problem,
-                "repo": self.request.repo.to_wire(), "pr": str(self.request.pr),
-                "head": self.request.head}
+        return {"unit": self.unit, **super().command_values()}
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         return False

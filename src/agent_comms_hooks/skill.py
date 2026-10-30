@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import json
+from datetime import datetime
 import sys
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping
@@ -29,7 +30,10 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
-from agent_comms.rule_deal import DealtSources, RuleDeal
+from agent_comms.rule_deal import (
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, RuleDeal, StartedDeal,
+    UnstampedCompactionDeal,
+)
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
 from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook, ClaudeTranscriptHook
@@ -185,6 +189,13 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         return (*super().leading(), CommanderPackage.skill(), Slop.catalog() / "README.md",
                 CommanderPackage.indictment())
 
+    @classmethod
+    def answered(cls) -> frozenset[str]:
+        """The commander skill is dealt and read like a rule, so it is answered like one: on
+        2026-10-30 claude-nra read it owing nothing, then ended six turns on a wait with no
+        review fork at load 104 (bus 46591)."""
+        return super().answered() | {CommanderPackage.skill().stem}
+
     def header(self, start: DeckStart) -> str:
         return start.held()
 
@@ -227,9 +238,29 @@ class StartReason(DeclaredFamily):
         """The context is gone: the deck is dealt from its start and every file is read again."""
         return start.dealt(reader)
 
+    def trigger(self, start: DeckStart) -> DealTrigger:
+        """The cause every refusal of this deal opens with."""
+        return StartedDeal()
+
 
 class LostContext(StartReason):
-    """A first start, a compaction or a clear: what the session read is no longer in front of it."""
+    """A first start, or any start Claude Code names that no member declares: what the session
+    read is no longer in front of it."""
+
+
+class Compaction(StartReason, declared_name="compact"):
+    """A summary replaced the context. The fresh context cannot remember it, so the deal says
+    when, from the transcript's own compact boundary."""
+
+    def trigger(self, start: DeckStart) -> DealTrigger:
+        return start.compaction()
+
+
+class Clear(StartReason, declared_name="clear"):
+    """The session was cleared."""
+
+    def trigger(self, start: DeckStart) -> DealTrigger:
+        return ClearedDeal()
 
 
 class Resume(StartReason, declared_name="resume"):
@@ -270,16 +301,17 @@ class DeckStart(DealtDeck):
         return self.source.reason().deal(self, reader)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
-        """The order to read every dealt file, once, by its packaged path."""
+        """The order to read every dealt file, once, by its packaged path, opening with why."""
         prompts = self.prompts()
-        self.prepare(reader, prompts)
+        trigger = self.source.reason().trigger(self)
+        self.prepare(reader, prompts, trigger)
         sources = reader.sources()
         return (
-            self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
+            trigger.reason() + " " + self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
-            " until each one is read. After each rule file, before the next unread file opens,"
-            " answer it in the audit: greentext lines it holds quoted verbatim, what they did, and why"
+            " until each one is read. Read them in order, at most four unanswered rule files at"
+            " a time, and answer those in the audit: greentext lines it holds quoted verbatim, what they did, and why"
             " it holds. Check what you did since your last start or compaction against it and"
             " name every action that broke it, and fix what you can: reading alone is passive, the"
             " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
@@ -307,6 +339,17 @@ class DeckStart(DealtDeck):
             *(f"> {words}" for words in prompts),
         ))
 
+    def compaction(self) -> CompactionDeal:
+        """The compaction, timed by the newest compact boundary in the transcript."""
+        transcript = Path(self.transcript_path)
+        lines = ClaudeJsonLines()
+        with transcript.open("rb") as stream:
+            for offset, raw in lines.reverse_lines(stream, transcript.stat().st_size):
+                for moment in lines.decode_line(raw, offset).compacted_at():
+                    return CompactedDeal(
+                        datetime.fromtimestamp(moment).astimezone().isoformat(timespec="seconds"))
+        return UnstampedCompactionDeal()
+
     def prompts(self) -> tuple[str, ...]:
         """A new session starts before Claude Code writes its transcript: nobody has spoken."""
         transcript = Path(self.transcript_path)
@@ -333,9 +376,9 @@ class DeckStart(DealtDeck):
             for thread in snapshot.commander_project.commanders(snapshot):
                 yield root, snapshot, thread
 
-    def prepare(self, reader: DeckReader, prompts: tuple[str, ...]) -> None:
+    def prepare(self, reader: DeckReader, prompts: tuple[str, ...], trigger: DealTrigger) -> None:
         """The deal, and the deck dealt again from its start."""
-        self.deal(type(reader), prompts)
+        self.deal(type(reader), prompts, trigger)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
     def widened(self, reader: DeckReader) -> tuple[str, ...]:
