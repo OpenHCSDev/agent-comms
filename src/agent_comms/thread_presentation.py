@@ -13,9 +13,9 @@ from .declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 from .notification_evidence import NotificationWindow
+from .message_reference import MessageReference
 
 if TYPE_CHECKING:
-    from .message_reference import MessageReference
     from .presentation import MessageNotification
     from .transcripts import TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot

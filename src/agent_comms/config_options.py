@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import Refused
 
-from .active_route import resolve_comms_route
+from .active_route import CommsRoute, resolve_comms_route
 from .launch_root import LaunchRoot
 from .bus import Bus
 from .declared_family import DeclaredFamily
@@ -26,7 +26,7 @@ from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice
 from .coordinator import Coordination
 from .field_codec import FieldCodec
-from .threads import ChosenServiceTier, NextTurnConfiguration
+from .threads import ChosenServiceTier, NextTurnConfiguration, Thread
 from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
     GetAvailableModels,
@@ -39,10 +39,8 @@ from .watched import FileSource
 if TYPE_CHECKING:
     from .field_codec import AcpSessionId
     from .session_config_options import SessionConfigOptions
-    from .active_route import CommsRoute
     from .native_package import VerifiedNativePackage
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
 
 
 class InvalidConfigChoice(ValueError):

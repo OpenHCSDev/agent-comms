@@ -2479,32 +2479,31 @@ class FieldCodec(MroDispatch, Sealed):
         parameters and dict as locals, keeping typing's None-to-NoneType and extras."""
         hints: dict[str, type[object]] = {}
         for base in reversed(declaration.__mro__):
-            hints |= {
-                name: FieldCodec._declared_type(base, name)
-                for name in annotationlib.get_annotations(
-                    base, format=annotationlib.Format.FORWARDREF)
-            }
+            hints |= FieldCodec._evaluate_annotations(base, annotationlib.get_annotations(
+                base, format=annotationlib.Format.FORWARDREF))
         return hints
 
     @staticmethod
-    @cache
-    def _declared_type(declaration: type, name: str) -> type[object]:
-        """Evaluate one annotation in its declarer's namespace, including metadata lambdas."""
+    def _evaluate_annotations(
+        declaration: type, annotations: dict[str, object],
+    ) -> dict[str, type[object]]:
+        """One evaluator for complete records and individual compared fields."""
         own = types.ModuleType(declaration.__qualname__)
-        own.__annotations__ = {name: annotationlib.get_annotations(
-            declaration, format=annotationlib.Format.FORWARDREF)[name]}
+        own.__annotations__ = annotations
         return get_type_hints(
             own, globalns=vars(sys.modules[declaration.__module__]),
             localns={param.__name__: param for param in declaration.__type_params__}
             | dict(vars(declaration)), include_extras=True,
-        )[name]
+        )
 
     @classmethod
+    @cache
     def field_annotation(cls, record: type, name: str) -> type[object]:
         """A field resolves where it was declared, without evaluating unrelated annotations."""
         declarer = next(owner for owner in record.__mro__ if name in
                         annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
-        return cls._declared_type(declarer, name)
+        annotations = annotationlib.get_annotations(declarer, format=annotationlib.Format.FORWARDREF)
+        return cls._evaluate_annotations(declarer, {name: annotations[name]})[name]
 
     @overload
     @classmethod

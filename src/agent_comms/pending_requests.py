@@ -6,12 +6,12 @@ import asyncio
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from .pi_events import Response
 from .sealed import Sealed
 from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
     from .pi_commands import PiCommand
-    from .pi_events import Response
 
 @dataclass(frozen=True)
 class PendingRequest[Command: PiCommand]:

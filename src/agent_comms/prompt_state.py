@@ -9,10 +9,10 @@ from . import turn_failure as failures
 from .native_input_proof import NativeInputCommit
 from .turn_inbox import TurnInboxItem
 from .native_pi import NativePiInputNotSent
+from .pi_events import AgentSettled, MessageStart, Response
 
 if TYPE_CHECKING:
     from .backend import NativeSession
-    from .pi_events import AgentSettled, MessageStart, Response
 
 
 class PromptState:

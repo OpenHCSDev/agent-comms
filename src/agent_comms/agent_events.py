@@ -55,12 +55,14 @@ from .turn_failure import BackendFailed, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
+from .goal_presentation import GoalSnapshot
+from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate, TextNoticeUpdate
     from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
-    from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
+    from .goal_presentation import GoalPublicationSnapshot
     from .input_disposition import InputDocument
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
@@ -68,7 +70,6 @@ if TYPE_CHECKING:
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
-    from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
     from .turn_phase import TurnPhase
     from .turn_progress import TurnProgress

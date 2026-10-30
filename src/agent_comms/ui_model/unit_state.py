@@ -13,7 +13,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from subprocess import TimeoutExpired
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
@@ -25,6 +25,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goal_presentation import GoalSnapshot
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
+from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.repo import GitCommandError
@@ -42,10 +43,6 @@ from agent_comms.todos import (
 )
 from agent_comms.transcript_events import OrderCall, TurnDigest
 from agent_comms.work_branches import WorkBranchError
-
-if TYPE_CHECKING:
-    from agent_comms.heartbeat_frame import HeartbeatFrame
-
 
 class UnitClock(DisclosedRecord, DeclaredFamily, affix="Clock"):
     """When a holder last acted and last committed on its pending orders."""
