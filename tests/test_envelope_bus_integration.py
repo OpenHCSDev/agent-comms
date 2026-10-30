@@ -166,7 +166,7 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path):
         acquire_message(reopened, "bob", Path("a.py"), turn_id=bob_turn, input_id=InputId.mint())
     assert reopened.bus.bus.since(0, 2) == (claimed,)
     with pytest.raises(RelationViolationError):
-        dict(reopened.registry.snapshot().by_lookup)
+        dict(reopened.registry.snapshot().lookup_names)
 
 
 def test_owner_can_release_acquisition_after_file_deletion(tmp_path):
