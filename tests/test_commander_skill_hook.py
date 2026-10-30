@@ -470,6 +470,24 @@ def test_a_demoted_commander_keeps_its_deck_files_but_they_get_no_vote(
     assert transcript.with_suffix(".deck.json").exists()
 
 
+def test_a_commander_fork_registers_in_the_hook_with_its_commanders_tags(
+        tmp_path, capsys, commanding_session):
+    """No CLI subprocess: the hook declares the fork in its own process, carrying every tag its
+    commander carries, while the commander role stays with the commander."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
+                         "transcript_path": str(transcript), "agent_id": "a7",
+                         "agent_type": "fork"}).register()
+    assert "commander fork claude-a7" in capsys.readouterr().out
+    snapshot = commanding_session.registry.snapshot()
+    fork = snapshot.require("claude-a7")
+    fork.execution.require_commander_fork()
+    assert fork.tags == snapshot.require("claude-code").tags
+    assert "claude-a7" not in {
+        thread.name for thread in snapshot.commander_project.commanders(snapshot)}
+
+
 def gated(transcript, tool, tool_input, **extra):
     return GatedCall.of({"hook_event_name": "PreToolUse", "session_id": "s",
                          "transcript_path": str(transcript), "tool_name": tool,

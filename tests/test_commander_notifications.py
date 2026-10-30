@@ -885,7 +885,8 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     """#commanders declares who commands: one board read, one packet per live member under its
-    own incarnation. A thread outside the channel, and a fork of a commander, get none."""
+    own incarnation. A thread outside the channel, and a fork of a commander (in the channel
+    with its commander's tags, acting for it), get none."""
     comms = notification_bus
     live = ProcessIdentity.capture(os.getpid())
     for name, tags in (("worker", {"comms", CommandersTag.declared_name}), ("outsider", {"comms"})):
@@ -893,7 +894,7 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
                                         process_identity=live))
     fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
     comms.registry.register(replace(fork, process_identity=live))
-    assert CommandersTag.declared_name not in comms.registry.require("worker-fork").tags
+    assert CommandersTag.declared_name in comms.registry.require("worker-fork").tags
     failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,))
     lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
@@ -934,7 +935,8 @@ def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_
 
 def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
     """The hook's role answer reads the one derivation: a thread registered with the tag
-    commands, fork or not; a fork or bound unit of a commander does not inherit the role."""
+    commands; a fork carries its commander's tags but acts for it, and a bound unit of a
+    commander does not inherit the role."""
     comms = notification_bus
     tag = CommandersTag.declared_name
     for name in ("lead", "worker"):
@@ -951,11 +953,11 @@ def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
         return RecordedWatch(WatchClaim(name, home=tmp_path),
                              WatchRecord(name, str(comms.root), (), tmp_path)).commands()
 
-    assert commands("lead") and commands("worker") and commands("declared-fork")
+    assert commands("lead") and commands("worker")
     assert not commands("outsider")
-    assert not commands("copied-fork")
+    assert not commands("declared-fork") and not commands("copied-fork")
     assert not commands("bound-unit")
-    assert "comms" in comms.registry.require("copied-fork").tags
+    assert {"comms", tag} <= comms.registry.require("copied-fork").tags
 
 
 def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_inbound(notification_bus):

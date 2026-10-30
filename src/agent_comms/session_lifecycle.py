@@ -34,7 +34,7 @@ from .acp_extension import (
     GoalChangedUpdate,
     encode_updates,
 )
-from .child_process import join_retirement
+from .child_process import ProcessIdentity, join_retirement
 from .comms import Comms
 from .config_options import ConfigOptions
 from .input_key import InputKey, InputKeyText
@@ -279,6 +279,14 @@ class SessionLifecycle:
                     session_id, session_id, text, acceptance=NoTurnAcceptance(),
                     original_keys=(key,), original_owner_input=True,
                 )
+
+    async def complete_unheld(self, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
+        """A fenced owner whose session this host never held (an aborted start) completes
+        here, the process its row is bound to."""
+        await Coordination.run_worker(partial(
+            self.comms.owners.complete_session, expected, expected,
+            ProcessIdentity.capture(os.getpid()), claim.claimed_generation,
+        ))
 
     async def retire_owner(self, state: OwnerSession, expected: OwnerIdentity, claim: ClaimedIdentity) -> None:
         async with state.retirement_lock:
