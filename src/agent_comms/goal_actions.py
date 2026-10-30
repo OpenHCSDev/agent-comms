@@ -117,10 +117,6 @@ class GoalActionContext:
     def reported_turn(self) -> ReportedTurnState:
         return self.thread.turn_record.read().reported_turn
 
-    @property
-    def model_report(self) -> bool:
-        return self.actor is ModelInvocable
-
 
 @dataclass(frozen=True, kw_only=True)
 class GoalPublicationContext(GoalActionContext):
@@ -136,6 +132,10 @@ class GoalAction[Result: GoalDeclaration](
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
     schedules_goal: ClassVar[bool] = False
+    reports: ClassVar[bool] = True
+
+    def model_report(self, ctx: GoalActionContext) -> bool:
+        return self.reports and ctx.actor is ModelInvocable
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
@@ -175,7 +175,7 @@ class GoalAction[Result: GoalDeclaration](
     def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
-        if ctx.model_report and any(
+        if self.model_report(ctx) and any(
             entry.reports_turn(ctx.reported_turn)
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
@@ -224,7 +224,7 @@ class TransitionGoalAction(GoalAction[Goal]):
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
-            reported_turn=ctx.reported_turn if ctx.model_report else goal.reported_turn,
+            reported_turn=ctx.reported_turn if self.model_report(ctx) else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed
@@ -465,7 +465,7 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
     block_reason: str | None = None
 
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
-        if ctx.model_report:
+        if self.model_report(ctx):
             goal.order.require_model_block()
         return BlockedGoal(
             required_block_reason(
@@ -710,6 +710,8 @@ def required_block_reason(reason: str | None) -> str:
 class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
     every attempt against the unresolved one."""
+
+    reports = False
 
     @classmethod
     def model_precondition(cls, goal_id: GoalId) -> GoalPrecondition:

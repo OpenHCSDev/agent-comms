@@ -246,6 +246,43 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     assert (comms.root / "registry.json").read_bytes() == before
 
 
+def test_retry_allows_one_named_standby_report_in_the_same_turn(comms, monkeypatch, tmp_path):
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
+    for name in ("owner", "writer"):
+        comms.registry.declare(Thread(
+            name, frozenset(), Checkout(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
+    started = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
+    goal_id = FieldCodec.decode(GoalId, started["id"])
+    store = comms.goals.open_goal_store()
+    generation = store.require_generation(goal_id)
+    store.reserve(goal_id, generation.number).fail(store, FailedTurnResolution(BackendFailed))
+    before = comms.registry.require("owner").goal.require()
+    turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
+    comms.agents.begin_turn("owner", turn)
+
+    invoke_tool(comms, "comms_goal", {
+        "goal_id": started["id"], "status": "retry", "progress": "cause fixed",
+    })
+    retried = comms.registry.require("owner").goal.require()
+    assert retried.reported_turn == before.reported_turn
+    retried.require_active()
+
+    invoke_tool(comms, "comms_goal", {
+        "goal_id": started["id"], "status": "standby", "progress": "writer owns the next step",
+        "wait_for": ["writer"],
+    })
+    reported = comms.registry.require("owner").goal.require()
+    assert reported.reported_turn == ReportedTurn(turn)
+    with pytest.raises(ValueError, match="already reported"):
+        invoke_tool(comms, "comms_goal", {
+            "goal_id": started["id"], "status": "standby", "progress": "duplicate",
+            "wait_for": ["writer"],
+        })
+    assert comms.registry.require("owner").goal.require() == reported
+
+
 def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_guards_each(comms, monkeypatch):
     """No owner session exists: the unit retries through comms_goal, the commander retries and
     replaces through the runtime actor, and an unresolved attempt still refuses a retry."""
