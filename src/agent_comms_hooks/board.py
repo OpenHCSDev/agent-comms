@@ -21,6 +21,10 @@ class UnexpectedBoardReply(ValueError):
     """The session bridge refused or could not answer the board read."""
 
 
+class AbsentSessionSocket(UnexpectedBoardReply):
+    """Nothing listens at the session socket: its file is gone, or no bridge accepts on it."""
+
+
 class SessionWire:
     """The session socket's records: one JSON line each, its family member named by the key."""
 
@@ -86,6 +90,8 @@ class SessionBoard(SessionWire):
                 peer.sendall(json.dumps({cls.family_discriminator: cls.request}).encode() + b"\n")
                 with peer.makefile("rb") as stream:
                     return cls.replied(**json.loads(stream.readline()))
+        except (FileNotFoundError, ConnectionRefusedError) as error:
+            raise AbsentSessionSocket(f"No session bridge is listening: {error}") from error
         except (OSError, json.JSONDecodeError) as error:
             raise UnexpectedBoardReply(f"The session bridge did not answer: {error}") from error
 
