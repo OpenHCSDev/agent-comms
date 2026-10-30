@@ -551,15 +551,14 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
 
 @dataclass(frozen=True)
 class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
-    """A held branch needs a new base after too much main work passed it. Syncing is the
-    holder's reflex, so Core tells the holder itself instead of waiting on a commander relay."""
+    """A held branch needs a new base the moment main passes it. Syncing is the holder's
+    reflex, so Core tells the holder itself instead of waiting on a commander relay."""
 
     problem: str
     holder: ThreadIncarnation
     repository: RepositoryName
     branch: str
     behind: int = field(compare=False)
-    limit: ClassVar[int] = 10
 
     def enforce(self, comms: Comms, commander: str) -> None:
         comms.messaging.send(commander, self.holder.name, (
@@ -572,11 +571,11 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
         return tuple(cls(problem=held.problem, holder=held.holder,
                          repository=held.difference.repository,
                          branch=held.difference.branch, behind=held.difference.behind)
-                     for held in branches if held.difference.behind > cls.limit)
+                     for held in branches if held.difference.behind)
 
     def line(self) -> str:
         return (f"MERGE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
-                f" {self.behind} commits behind main, limit {self.limit}. building on a stale tree"
+                f" {self.behind} commits behind main. building on a stale tree"
                 " for fun? -> merge main into it")
 
 

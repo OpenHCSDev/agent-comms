@@ -241,7 +241,7 @@ class BranchBehindMainSeed(IncidentSeed):
             todo.held().owner_identity,
             fleet.repository,
             "behind",
-            BranchBehindMain.limit + 1,
+            1,
         )
 
 
@@ -431,9 +431,8 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
     github_cli.configure(source.github, *(repo.github for repo in project.repos))
     old_main = source.main_commit
     built = Fleet(comms, source, tmp_path / "worktrees", old_main, request, github_cli)
-    # Main moves past the oldest branch's base by exactly one commit more than the limit.
-    for count in range(BranchBehindMain.limit + 1):
-        built.commit(source.checkout, "main.py", f"count = {count}\n")
+    # One commit on main already puts the oldest branch behind.
+    built.commit(source.checkout, "main.py", "count = 0\n")
     built.git(source.checkout, "push", "-q", "origin", "main")
     expected = tuple(
         IncidentSeed.seeds[member].seed(built)
