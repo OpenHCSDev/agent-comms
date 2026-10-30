@@ -219,6 +219,10 @@ class ServiceTier(StrEnum):
     STANDARD = "standard"
     PRIORITY = "priority"
 
+    @classmethod
+    def default(cls) -> ServiceTier:
+        return cls.STANDARD
+
 
 class ThinkingChoice(ABC):
     @classmethod

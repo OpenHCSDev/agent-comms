@@ -39,7 +39,7 @@ class CommanderHeartbeatProbe(TargetProbe, RuntimeProbe[None]):
             print("Commander heartbeat: no live served commander; not qualified")
             return
         asyncio.run(ServicePassStore.at(self.root).wait_completed(
-            commanders, self.since, CommanderHeartbeat.__name__,
+            commanders, self.since, CommanderHeartbeat,
         ))
         current = comms.registry.snapshot()
         if not all(owner.current(current) for owner in commanders):

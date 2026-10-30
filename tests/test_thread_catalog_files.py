@@ -6,11 +6,11 @@ from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.locked_store import LockedFile, RootFile
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.store_files import store_lock_path
-from agent_comms.threads import ThreadCatalog
+from agent_comms.threads import ThreadCatalogFile
 
 
 def _catalog(root):
-    catalog = ThreadCatalog.path_in(root, lookup="0" * 32)
+    catalog = ThreadCatalogFile.path_in(root, lookup="0" * 32)
     catalog.parent.mkdir(parents=True)
     catalog.write_text("{}")
     return catalog
@@ -20,7 +20,7 @@ def test_session_locks_are_undeclared_and_never_locked(tmp_path):
     catalog = _catalog(tmp_path)
     lock = store_lock_path(catalog)
     lock.touch()
-    assert ThreadCatalog.matching_in(tmp_path) == frozenset((catalog,))
+    assert ThreadCatalogFile.matching_in(tmp_path) == frozenset((catalog,))
     RootFile.copy_group(lock, tmp_path / "copy")
     with pytest.raises(ValueError, match="never itself a lockable store"):
         LockedFile.copy_group(lock, tmp_path / "locked-copy")
