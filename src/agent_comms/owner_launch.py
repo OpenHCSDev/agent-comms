@@ -112,6 +112,13 @@ class HostResources(ToolResult):
     fleet_resident_bytes: int
     fleet_budget_bytes: int
 
+    @classmethod
+    def read(cls, root: Path, thread: Thread) -> HostResources:
+        """The host's own status read, asked through one thread it owns."""
+        return FieldCodec.decode(cls, OwnerConnection.exchange(
+            root, thread.require_process(), ReadHostResourcesRuntimeRequest(thread=thread.name),
+        ))
+
 
 @dataclass(frozen=True, kw_only=True)
 class ReadHostResourcesRuntimeRequest(ResultRuntimeRequest):
