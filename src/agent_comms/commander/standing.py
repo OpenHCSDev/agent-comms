@@ -594,9 +594,10 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
         return (*super().comparison_values(), self.previous.owner_identity)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        actor = comms.registry.require(commander).incarnation
         comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
-            self.todo.revision, comms.registry.require(commander).incarnation, self.previous,
-        ), commander)
+            self.todo.revision, actor, self.previous,
+        ), actor)
 
     def line(self) -> str:
         return (f"KEEP Core restored {self.previous.owner} as {self.todo.id}'s holder. why would you"
