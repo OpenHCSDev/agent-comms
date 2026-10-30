@@ -193,8 +193,8 @@ class RegistryCache:
     # Observers wake on the same registry change from several threads; one
     # decodes the new revision and the others take its result.
     decoding: threading.Lock = field(default_factory=threading.Lock)
-    # A successful guard check, keyed by the revisions of the three files it
-    # reads. Unchanged files give the same answer; failures are never kept.
+    # A successful guard check, keyed by the revisions of the files its answer
+    # was decided from. Unchanged files give the same answer; failures are never kept.
     guard: tuple[tuple, RegistryPrivacy] | None = None
     counts: RegistryReadCounts = field(default_factory=RegistryReadCounts)
     measurement: threading.Lock = field(default_factory=threading.Lock)
@@ -552,16 +552,22 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         # The root is keyed by which directory it is, never by its mtime: every entry created or
         # removed under it, such as a coordinator transaction's journal, moves the mtime, and the
         # entries this guard reads are keyed by their own revisions below.
-        key = (
-            _link_revision(self.path.parent).file_identity(),
-            _link_revision(CoordinationStore.path_in(self.path.parent)),
+        # Observed before the check, so a change during it moves the key and forces a recheck.
+        # Each answer keys on the files it was decided from: the coordinator commits on every
+        # coordination write, and a private root never reads it, so keying a private answer
+        # on it re-hashed the whole registry on every coordination write.
+        root = _link_revision(self.path.parent).file_identity()
+        observed = (
             _link_revision(self.guard_path),
+            _link_revision(CoordinationStore.path_in(self.path.parent)),
             _link_revision(self.path),
         )
-        if (checked := self.cache.guard) is not None and checked[0] == key:
-            return checked[1]
+        if (checked := self.cache.guard) is not None:
+            key, guard = checked
+            if key == (root, *guard.guard_evidence(*observed)):
+                return guard
         guard = self._check_guard_unlocked()
-        self.cache.guard = key, guard
+        self.cache.guard = (root, *guard.guard_evidence(*observed)), guard
         return guard
 
     @PublishedProperty
