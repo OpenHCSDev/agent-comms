@@ -258,6 +258,11 @@ class Prime(DeclaredFamily):
     fleet: ClassVar[type[DeckReader]]
     commander: ClassVar[type[DeckReader]]
 
+    @classmethod
+    def trigger(cls) -> PrimedDeal:
+        """Why this variant's deal was dealt: the owner asked for it by this variant's name."""
+        return PrimedDeal(cls.declared_name)
+
 
 class FullPrime(Prime, declared_name="full"):
     """Papers, rules and, for a commander, the indictment: the same deal as a compaction."""
@@ -337,7 +342,7 @@ class SessionSource(str):
         return StartReason.member_or_default(self, LostContext)()
 
 
-class UnboundPrime(Exception):
+class UnboundPrimeError(Exception):
     """/prime asked of a session no bus thread holds: no gate holds a deal for it, so it is
     refused out loud instead of printing nothing."""
 
@@ -372,11 +377,11 @@ class DeckStart(DealtDeck):
         whatever its context holds, through the same gate as a compaction."""
         return WatchClaim(self.session_id).state().by_role(
             unbound=self.refuse_unbound,
-            fleet=lambda record: self.dealt(prime.fleet(), PrimedDeal(prime.declared_name)),
-            commander=lambda record: self.dealt(prime.commander(), PrimedDeal(prime.declared_name)))
+            fleet=lambda record: self.dealt(prime.fleet(), prime.trigger()),
+            commander=lambda record: self.dealt(prime.commander(), prime.trigger()))
 
     def refuse_unbound(self) -> tuple[str, ...]:
-        raise UnboundPrime(self)
+        raise UnboundPrimeError(self)
 
     def dealt(self, reader: DeckReader, trigger: DealTrigger) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path, opening with why."""

@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.rule_deal import (CompactedDeal, PrimedDeal, StartedDeal, Unengaged,
+from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
@@ -53,7 +53,7 @@ from agent_comms_hooks.forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
-                                     Prime, UnboundPrime)
+                                     Prime, UnboundPrimeError)
 from agent_comms_hooks.watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
@@ -472,7 +472,7 @@ def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indic
 
 def test_every_prime_variant_says_it_was_primed_never_that_the_session_started():
     for prime in Prime.members_with(Prime):
-        reason = PrimedDeal(prime.declared_name).reason()
+        reason = prime.trigger().reason()
         assert f"/prime ({prime.declared_name})" in reason
         assert reason != StartedDeal().reason()
 
@@ -483,7 +483,7 @@ def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, mo
     transcript.write_text("")
     start = DeckStart.decode({"hook_event_name": "SessionStart", "session_id": "loose",
                               "transcript_path": str(transcript)})
-    with pytest.raises(UnboundPrime, match="loose"):
+    with pytest.raises(UnboundPrimeError, match="loose"):
         start.primed(FullPrime)
     assert not transcript.with_suffix(".deal.json").exists()
 

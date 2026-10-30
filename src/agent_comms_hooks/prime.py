@@ -18,7 +18,6 @@ from collections.abc import Sequence
 from agent_comms.cli_bridges.claude_transcript import RunningClaude
 from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
-from agent_comms.rule_deal import PrimedDeal
 from agent_comms_hooks.skill import DeckStart, FullPrime, Prime, SessionSource
 from agent_comms_hooks.watch import WatchClaim
 
@@ -37,17 +36,22 @@ def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
         for name in names:
             thread = comms.registry.require(name)
             thread.execution.require_native()
-            PiRedeal.of(comms, thread).deal_from(prime.commander, prime.fleet,
-                                                  PrimedDeal(prime.declared_name))
+            PiRedeal.of(comms, thread).deal_from(prime.commander, prime.fleet, prime.trigger())
             print(f"{name}: dealt {prime.__name__}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="agent-comms-prime", description=__doc__)
-    parser.add_argument("--variant", type=Prime.member_named, default=FullPrime,
-                        metavar="|".join(Prime.names()))
-    parser.add_argument("--to", nargs="+", metavar="THREAD", default=(),
-                        help="deal these native threads instead of this session")
+    parser.add_argument(
+        "--variant", type=Prime.member_named, default=FullPrime, metavar="|".join(Prime.names())
+    )
+    parser.add_argument(
+        "--to",
+        nargs="+",
+        metavar="THREAD",
+        default=(),
+        help="deal these native threads instead of this session",
+    )
     arguments = parser.parse_args()
     if arguments.to:
         prime_threads(arguments.variant, arguments.to)
