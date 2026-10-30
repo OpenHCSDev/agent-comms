@@ -677,13 +677,14 @@ class RegisteredCommanderProject(CommanderProject):
                               actor: ThreadIncarnation) -> None:
         self.require_review_repository(repository)
         if actor.current(snapshot):
-            if actor.commanding_identity == self.commander and self.commander.current(snapshot):
+            if any(actor.commanding_identity == thread.incarnation
+                   for thread in self.commanders(snapshot)):
                 return
             if any(reviewer.current(snapshot) and actor == reviewer
                    for selection in self.repository_head_reviewers if selection.repository == repository
                    for reviewer in selection.reviewers):
                 return
-        raise TodoError("Only this repository's commander, selected head reviewer or the director may review its heads.")
+        raise TodoError("Only a commander of this project, selected head reviewer or the director may review its heads.")
 
     def require_head_review_grant_author(self, snapshot: RegistrySnapshot,
                                          actor: ThreadIncarnation) -> None:

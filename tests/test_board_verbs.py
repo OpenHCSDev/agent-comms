@@ -10,6 +10,11 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.commander import judge, order
+from agent_comms.channel_targets import CommandersTag
+from agent_comms.errors import TodoError
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_model import DeclaredModel
+from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
@@ -17,7 +22,7 @@ from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
 from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
@@ -72,6 +77,7 @@ def author_arguments(command, todo):
         "ok": ["--why", REASON.text, "--serves", QUOTE],
         "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
         "reviewing": [],
+        "superseded": ["--why", REASON.text, "--by", todo.id],
     }
     return arguments[1:] + authored[verb]
 
@@ -263,3 +269,21 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == (opened,)
     NoHeadOrder().record_review(comms.goals, request, ReviewedHeadVerdict(REASON), lead)
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
+
+
+def test_every_commander_of_the_project_may_review_its_heads(board_review):
+    """Review authority is the project's commanders, not its registered lead alone: a #commanders
+    peer judges the same heads, and a commanded unit still may not."""
+    comms, request, _, _ = board_review
+    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+                                  comms.registry.require("lead").worktree,
+                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
+                                  execution=ExternalThreadExecution))
+    NoHeadOrder().require_reviewer(comms.goals, request, comms.registry.require("peer").incarnation)
+    fork = CommanderForkCaller("peer-review-fork")
+    fork.join(comms, "peer")
+    NoHeadOrder().require_reviewer(comms.goals, request,
+                                   fork.identity_in(comms.registry.snapshot()))
+    with pytest.raises(TodoError, match="Only a commander of this project"):
+        NoHeadOrder().require_reviewer(comms.goals, request,
+                                       comms.registry.require("worker").incarnation)
