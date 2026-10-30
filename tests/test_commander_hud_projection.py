@@ -154,3 +154,14 @@ def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> N
     units = [plain.index(section.heading()) for section in hud.groups]
     assert new < min(units) and max(units) < watching
     assert all(ping.text in "\n".join(plain) for ping in pings)
+
+
+def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
+    hud = example_hud()
+    section = hud.alarms[0]
+    lines = section.text_lines(1000)
+    for kind, pings in section.by_kind().items():
+        start = lines.index(f"{kind.declared_name} · {len(pings)}")
+        assert [line.startswith(f"  {ping.text}") for line, ping in zip(lines[start + 1:], pings)] == [True] * len(pings)
+    assert "Kind:" not in "\n".join(lines)
+    assert sum(len(pings) for pings in section.by_kind().values()) == len(section.pings)

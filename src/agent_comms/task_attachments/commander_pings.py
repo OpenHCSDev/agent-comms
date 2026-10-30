@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.channel_targets import ThreadTarget
@@ -441,6 +442,20 @@ class AlarmSection:
 
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
+
+    def by_kind(self) -> Mapping[type[DeclaredFamily], tuple[Ping, ...]]:
+        """Rows of one rule share what they ask, so the reader takes them as one decision."""
+        grouped: dict[type[DeclaredFamily], list[Ping]] = {}
+        for ping in self.pings:
+            grouped.setdefault(ping.alarm_kind, []).append(ping)
+        return {kind: tuple(pings) for kind, pings in grouped.items()}
+
+    def text_lines(self, now: float) -> tuple[str, ...]:
+        """Every original line under its rule's count; the kind and labels print once."""
+        return tuple(line for kind, pings in self.by_kind().items() for line in (
+            f"{kind.declared_name} · {len(pings)}",
+            *(f"  {ping.text} · {ping.since.age(now)}" for ping in pings),
+        ))
 
     def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
         return (ViewTable(AlarmLine, HudExclude, tuple(
