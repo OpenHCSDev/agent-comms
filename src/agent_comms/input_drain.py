@@ -238,7 +238,7 @@ class InputObservation(ABC):
                         for state in targets.values():
                             state.observation_ready.set()
                     else:
-                        await self.effects.turns.goals.observe_root(
+                        self.effects.turns.goals.observe_root(
                             document, (owner.identifier for state in targets.values()
                                        for owner in state.executors()), watcher.observed_paths,
                         )

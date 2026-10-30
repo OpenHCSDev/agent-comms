@@ -262,26 +262,17 @@ class GoalScheduler:
                 AcpEventConsumer(self.effects, session_id, self.effects._runtime), record.snapshot
             )
 
-    async def observe_root(
+    def observe_root(
         self, document: RegistryDocument, session_ids: Iterable[AcpSessionId], paths: frozenset[Path],
     ) -> None:
-        # RuntimeServer reports this task's original failure. Joining it keeps
-        # its lifetime with the watcher without inventing a failed input drain.
-        attachments = tuple(session_ids)
-        publication = self.effects._runtime.background(
-            self._publish_root_goals(document, attachments, paths))
-        await asyncio.gather(publication, return_exceptions=True)
+        """Request independent publications without holding up the root's inbox wake.
 
-    async def _publish_root_goals(
-        self, document: RegistryDocument, session_ids: tuple[AcpSessionId, ...], paths: frozenset[Path],
-    ) -> None:
+        RuntimeServer owns each task's retirement and original failure; these
+        projections are not work on a nonexistent inbox input.
+        """
         execution_changed = not paths.isdisjoint(GoalWakeFile.execution_paths_in(self.comms.root))
-        publications: list[asyncio.Task[None]] = []
         for session_id in session_ids:
             thread_name = self.sessions.require(session_id)
             request = (GoalRefresh() if execution_changed else
                        DeclaredGoalRefresh(document.entry(thread_name).thread.goal))
-            publications.append(self.effects._runtime.background(
-                self.sync_goal_execution(session_id, request)))
-        # An independent session's failed projection must not cancel its peers.
-        await asyncio.gather(*publications, return_exceptions=True)
+            self.effects._runtime.background(self.sync_goal_execution(session_id, request))

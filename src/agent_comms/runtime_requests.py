@@ -182,7 +182,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
 
     async def ready(self, ctx: RuntimeRequestContext) -> None:
         await ctx.send(OwnerReady(
-            ready=await ctx.server.agent.sessions.metadata(ctx.name),
+            ready=await ctx.server.agent.sessions.metadata(ctx.name, session_id=ctx.session),
             controller_token=ctx.client.token,
         ))
 
