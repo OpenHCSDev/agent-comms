@@ -126,3 +126,18 @@ def test_a_schema_changed_after_its_check_is_refused_on_the_next_read(tmp_path):
         connection.execute(f'DROP INDEX "{index}"')
     with pytest.raises(RelationViolationError), store.snapshot():
         pytest.fail("A schema changed in place must be compared again")
+
+
+def test_in_memory_schema_checks_remember_nothing():
+    """An in-memory database has no file identity, so its checks compare again and keep no
+    record: one remembered entry per read was an unbounded set on the reader path."""
+    import sqlite3
+    from agent_comms.typed_table import FiledSchema, SchemaRevision, TableSchema, UnfiledSchema
+
+    connection = sqlite3.connect(":memory:")
+    before = len(FiledSchema.verified_schemas)
+    for _ in range(50):
+        revision = SchemaRevision.read(connection)
+        assert isinstance(revision, UnfiledSchema)
+        revision.remember(TableSchema, ())
+    assert len(FiledSchema.verified_schemas) == before

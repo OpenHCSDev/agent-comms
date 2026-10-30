@@ -1058,27 +1058,51 @@ class WriterOwnedFile(SchemaChange):
         schema.reconcile_schema(db, self)
 
 
+class SchemaRevision(ABC):
+    """One schema state of one database, which decides whether a verified schema is remembered."""
+
+    @classmethod
+    def read(cls, db: sqlite3.Connection) -> SchemaRevision:
+        # The main database is always database_list's first row; an in-memory one has no path.
+        path = db.execute("PRAGMA database_list").fetchone()[2]
+        if not path:
+            return UnfiledSchema()
+        info = os.stat(path)
+        return FiledSchema(info.st_dev, info.st_ino, db.execute("PRAGMA schema_version").fetchone()[0])
+
+    @abstractmethod
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool: ...
+
+    @abstractmethod
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None: ...
+
+
 @dataclass(frozen=True, slots=True)
-class SchemaRevision:
-    """One schema state of one database file: SQLite raises schema_version on every schema
-    change, and a replaced file is another inode. An in-memory database has no file, so each
-    of its reads is a revision of its own and is compared again."""
+class FiledSchema(SchemaRevision):
+    """A file's schema state: SQLite raises schema_version on every schema change, and a
+    replaced file is another inode, so an equal file and version stays verified."""
 
     device: int
     inode: int
     version: int
 
-    @classmethod
-    def read(cls, db: sqlite3.Connection) -> SchemaRevision | object:
-        # The main database is always database_list's first row.
-        path = db.execute("PRAGMA database_list").fetchone()[2]
-        if not path:
-            return object()
-        info = os.stat(path)
-        return cls(info.st_dev, info.st_ino, db.execute("PRAGMA schema_version").fetchone()[0])
+    verified_schemas: ClassVar[set[tuple[type[TableSchema], tuple[type[TypedTable], ...], FiledSchema]]] = set()
+
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool:
+        return (schema, sharing, self) in self.verified_schemas
+
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None:
+        self.verified_schemas.add((schema, sharing, self))
 
 
-_VERIFIED_SCHEMAS: set[tuple[type[TableSchema], tuple[type[TypedTable], ...], object]] = set()
+class UnfiledSchema(SchemaRevision):
+    """An in-memory database has no file identity to remember, so every read compares again."""
+
+    def verified(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> bool:
+        return False
+
+    def remember(self, schema: type[TableSchema], sharing: tuple[type[TypedTable], ...]) -> None:
+        """Nothing outlives an in-memory database's connection."""
 
 
 class TableSchema(ABC):
@@ -1155,13 +1179,13 @@ class TableSchema(ABC):
         A file and schema version already found equal stay equal, so readers compare the stored
         SQL once per schema change instead of on every read (0.44 ms a coordinator read, 4% of
         the resident worker's pool samples, 2026-10-30)."""
-        verified = cls, sharing, SchemaRevision.read(db)
-        if verified in _VERIFIED_SCHEMAS:
+        revision = SchemaRevision.read(db)
+        if revision.verified(cls, sharing):
             return
         if cls.schema_differs(db, sharing):
             raise cls.schema_error(
                 f"{subject}: " + " | ".join(map(str, cls.schema_differences(db, sharing))))
-        _VERIFIED_SCHEMAS.add(verified)
+        revision.remember(cls, sharing)
 
     @classmethod
     def changed_families(
