@@ -432,7 +432,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
         unresolved = InputDispositions(held_bus.root).lookup(UNRESOLVED_INPUT_KEY)
         with LaunchRoot.from_path(held_bus.root).selected():
             await Coordination.run_worker(partial(
-                held_bus.owners.start, "worker", agent_bin=GivenBinary("pi")))
+                held_bus.owners.start_many, ("worker",), agent_bin=GivenBinary("pi")))
             try:
                 await wait_for(lambda: fixture.provider.posts == 1)
                 assert held_bus.registry.require("worker").executing
