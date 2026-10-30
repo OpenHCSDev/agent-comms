@@ -29,7 +29,7 @@ from agent_comms.cli import main
 from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.cli_bridges.codex_protocol import InitializeResponse, RequestParams, ItemsList
+from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord, ResponseItemRecord
 from agent_comms.cli_bridges.history import (
     AnySession, DefaultAddress, NamedSession, OfflineHistory, OnlineHistory,
@@ -38,7 +38,7 @@ from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MessageId
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness, PiHarness
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
@@ -630,9 +630,7 @@ def codex_entry(turn: str, item: dict[str, JsonValue]) -> dict[str, JsonValue]:
 
 
 def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs() -> None:
-    from agent_comms.cli_bridges.codex_protocol import BusInput
-
-    bus = BusInput.for_message("thread", "m1", "from the bus")
+    bus = BusInput.for_message("thread", MessageId.mint("imported-bus-input"), "from the bus")
     newest: dict[str, JsonValue] = {"data": [
         codex_entry("t2", {"type": "agentMessage", "id": "i3", "text": "second answer"}),
         codex_entry("t2", {"type": "userMessage", "id": "i1", "clientId": bus.clientUserMessageId,

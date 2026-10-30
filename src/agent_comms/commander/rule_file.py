@@ -110,6 +110,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
 
     reading_order: ClassVar[tuple[str, ...]] = (
         "spine",
+        "unnecessary",
         "correct-maintenance",
         "slop-and-polymorphism",
         "owner-authority",
@@ -127,11 +128,11 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "commander-self-correction",
         "deadlines",
     )
-    """The one declaration of the order every deal and unit prompt presents the rules in. Paper1
-    is dealt before all of them; the spine comes next and kills the hedge on what it proved; each
-    rule after it is set up by the one before: the proved results, the slop they define, the
-    owner whose positions they are, evidence, reporting, the work, then how the commander enforces
-    it. A rule this tuple does not name still loads, after the named ones; the package test
+    """The one declaration of the order every deal and unit prompt presents the rules in. The
+    papers are dealt before all of them; the spine comes next and kills the hedge on what they
+    proved, then the price of calling an abstraction unnecessary; each rule after it is set up by
+    the one before: the verdict index, the slop it defines, the owner whose positions they are,
+    evidence, reporting, the work, then how the commander enforces it. A rule this tuple does not name still loads, after the named ones; the package test
     holds the tuple to exactly the packaged rules."""
 
     @classmethod
