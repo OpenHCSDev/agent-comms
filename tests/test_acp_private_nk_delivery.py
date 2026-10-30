@@ -51,8 +51,9 @@ def _private_comms(tmp_path):
 def _session(tmp_path):
     comms, root_id = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
-    agent.sessions.published[AcpSessionId("beta")] = PublishedSession.of(comms.registry.require("beta"))
-    return comms, agent, root_id
+    session_id = AcpSessionId("beta")
+    agent.sessions.published[session_id] = PublishedSession.of(comms.registry.require("beta"))
+    return comms, agent, root_id, session_id
 
 
 def cursor_fact(metadata):
@@ -118,9 +119,9 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
 
 
 async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):
-    comms, agent, _ = _session(tmp_path)
-    assert cursor_envelope((await agent.sessions.metadata("beta"))) is not None
+    comms, agent, _, session_id = _session(tmp_path)
+    assert cursor_envelope((await agent.sessions.metadata("beta", session_id=session_id))) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_triage_members")
     with pytest.raises(PublicationActivationBlocked):
-        await agent.sessions.metadata("beta")
+        await agent.sessions.metadata("beta", session_id=session_id)

@@ -19,7 +19,7 @@ from . import agent_events as events
 from . import pi_commands as commands
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .agent_backend import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
+from .turn_inbox import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
 from .field_codec import InputId
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
@@ -223,11 +223,6 @@ class InputForwarding(MroDispatch):
             ) as outcome:
                 completion = outcome.dispatch(self, session, item, write)
         return await completion
-
-    def refuse(self, session: TurnSession, input_ids: tuple[InputId, ...]) -> None:
-        for input_id in input_ids:
-            session.rejected_commands.append(events.FollowingInputRefused(id=input_id))
-            session.rejected_signal.set()
 
     def mark_started(
         self, session: TurnSession, payload: MessageStart,

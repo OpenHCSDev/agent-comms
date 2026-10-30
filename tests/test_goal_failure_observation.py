@@ -13,7 +13,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import TurnId, GoalId
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
-from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore
+from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
@@ -70,10 +70,8 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
             )
         with pytest.raises(UnresolvedAttemptError):
             current.resume(owner.goal.id, 1)
-        assert (
-            current.require_generation(owner.goal.id).failure_evidence(current)
-            == observation.evidence
-        )
+        with current.reader_snapshot() as connection:
+            assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == observation.evidence
     assert store.path.read_bytes() == before
     assert len(rows(store, "failed_turn_evidence")) == 1
     encoded = json.dumps(rows(store, "failed_turn_evidence"))
@@ -96,7 +94,8 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     assert rejected is None
     observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=rejected)
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
-    assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
+    with store.reader_snapshot() as connection:
+        assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
 
 
 @pytest.mark.parametrize("binding", ["token", "evidence_identity"])
@@ -111,7 +110,8 @@ def test_mismatched_permit_cannot_attach_observation_or_weaken_failure(bound, bi
     observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=forged)
     assert rows(store, "failed_turn_evidence") == []
     assert store.snapshot(owner.goal.id).lifecycle == BlockedGeneration()
-    assert store.require_generation(owner.goal.id).failure_evidence(store) == NoFailedTurnEvidence()
+    with store.reader_snapshot() as connection:
+        assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == NoFailedTurnEvidence()
 
 
 def test_unclaimed_attempt_failure_has_no_backend_incident(bound):

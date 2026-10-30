@@ -15,7 +15,7 @@ from pydantic import JsonValue
 from . import agent_events as events
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
-from .agent_backend import InputRequest, StreamingInputPolicy
+from .turn_inbox import InputRequest, StreamingInputPolicy
 from .child_process import BoundedRun
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import (
@@ -33,11 +33,11 @@ from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
-from .native_turn_context import NativeContextData
 from .pi_payloads import (
     CompactionData,
     EmptyData,
     ModelsData,
+    NativeContextData,
     PiOmitted,
     PiRequestId,
     PiResponseData,

@@ -51,7 +51,7 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .acp_failure import ProviderRetryResult
-    from .agent_backend import TurnInbox
+    from .turn_inbox import TurnInbox
     from .coordinated_runtime import NativeExecution
     from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend

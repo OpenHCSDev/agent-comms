@@ -14,11 +14,11 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Self
 
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, NullMember, TurnId
-from .locked_store import DocumentBytes, LockedStore, RegistryFile
+from .locked_store import DocumentBytes, LockedStore, PublishedProperty, RegistryFile
 from .maintenance_barrier import CarriedDocument
 from .native_input_owner import RegistryOwner
 from .private_path import FileObservation, FileRevision, MissingFile
@@ -564,6 +564,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         self.cache.guard = key, guard
         return guard
 
+    @PublishedProperty
+    def coordinator_reader(self) -> ReadableStore:
+        return ReadableStore(CoordinationStore.path_in(self.path.parent))
+
     def _check_guard_unlocked(self) -> RegistryPrivacy:
         if self.guard_path.exists() or self.guard_path.is_symlink():
             return PrivateRegistryGuard.load(self.path)
@@ -571,7 +575,7 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
         if coordinator.exists() or coordinator.is_symlink():
             from .private_runtime_schema import PrivateCoordinatorTable
 
-            with CoordinationStore.opened_reader(coordinator) as db:
+            with self.coordinator_reader.reader_snapshot() as db:
                 if PrivateCoordinatorTable.stored_schema(db):
                     raise RelationViolationError("Native runtime has no registry authority")
         return PublicRegistry()

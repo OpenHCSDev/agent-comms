@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -15,7 +15,7 @@ from .native_pi import CAPABILITY
 from .native_failures import NativePiUnavailable
 from .native_session_reopen import NativeSessionIdentity
 from .pi_events import PiEvent
-from .pi_payloads import StateData
+from .pi_payloads import NativeSessionSnapshot, SnapshotAttestation, StateData
 from .turn_item import PiRequestKey
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ class IdentityAttestationError(AttestationError):
         await super().refuse(session)
 
 
-class NativeAttestation(ABC):
+class NativeAttestation(SnapshotAttestation):
     @property
     @abstractmethod
     def observed(self) -> bool: ...
@@ -71,7 +71,7 @@ class NativeAttestation(ABC):
     def allows_extension_input(self, inputs) -> bool:
         return False
 
-    def conflicts(self, data) -> bool:
+    def conflicts(self, data: NativeSessionSnapshot) -> bool:
         return False
 
 
@@ -129,7 +129,7 @@ class KnownSessionAttestation(NativeAttestation):
     def allows_extension_input(self, inputs) -> bool:
         return inputs.permits_interaction
 
-    def conflicts(self, data) -> bool:
+    def conflicts(self, data: NativeSessionSnapshot) -> bool:
         """Reject every reported component that differs from the known identity."""
         return any(
             observed != expected
@@ -169,7 +169,7 @@ class ObservedAttestation(NativeAttestation):
     def allows_extension_input(self, inputs) -> bool:
         return self.identity is not None and inputs.permits_interaction
 
-    def conflicts(self, data):
+    def conflicts(self, data: NativeSessionSnapshot) -> bool:
         return self.state.conflicts(data)
 
 
