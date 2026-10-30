@@ -1760,6 +1760,10 @@ class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     def require_read(self) -> None:
         """A normal progress answer has no acquisition failure."""
 
+    def unjudged(self, edits: Callable[[], int]) -> int:
+        """A readable checkout counts its edits."""
+        return edits()
+
     def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
         """These source roots may still qualify edit ownership in this progress cut."""
         return paths
@@ -1830,6 +1834,10 @@ class UnreadProgress(OrderProgress):
 
     def require_read(self) -> None:
         raise WorkBranchError(self.reason)
+
+    def unjudged(self, edits: Callable[[], int]) -> int:
+        """The holder's card reports this checkout; a count must not fail the whole pass."""
+        return 0
 
     def readable_paths(self, paths: tuple[Path, ...]) -> tuple[Path, ...]:
         return ()
