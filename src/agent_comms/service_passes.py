@@ -20,12 +20,32 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .watched import FileSource, Watched
 
 
+class CompletedWatch:
+    """A service watch whose ordinary completion an install waits on after a restart; each
+    member declares how long its longest pass takes."""
+
+    pass_duration: ClassVar[float]
+
+    @classmethod
+    def completion_ceiling(cls) -> float:
+        """How long a new runtime may take to record its first completion: one cadence (a pass,
+        then the service loop's sleep) plus one pass of slack."""
+        return 2 * cls.pass_duration + Coordination.watch_period
+
+
 @dataclass(frozen=True)
 class FailingPass:
-    """A watch failing since its first failed pass, with its newest error."""
+    """A watch failing since its first failed pass, with its newest error and the time of its
+    newest failed pass."""
 
     since: float
     error: str
+    failed_at: float
+
+    def failed_since(self, moment: float) -> bool:
+        """Its newest pass failed at or after ``moment``; an older failure is a runtime's that
+        ``moment`` replaced, and the next pass either clears or rewrites it."""
+        return self.failed_at >= moment
 
     def failure_line(self, watch: str) -> str:
         return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}'
@@ -104,7 +124,8 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
         return ServicePasses()
 
     async def wait_completed(
-        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float, watch: str,
+        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
+        watch: type[CompletedWatch],
     ) -> None:
         """Join ordinary recorded completions, never run the watch being qualified.
 
@@ -112,14 +133,15 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
         cannot disappear. A partial pass plus a recorded failure is not acceptance.
         """
         pending = commanders
-        timeout = asyncio.timeout(Coordination.watch_period)
+        timeout = asyncio.timeout(watch.completion_ceiling())
+        name = watch.__name__
         try:
             async with timeout:
                 async with aclosing(self.watch_sources(FileSource(self.path))) as changes:
                     async for _ in changes:
                         passes = await Coordination.run_worker(self.read)
-                        if watch in passes.failing:
-                            raise ToolRefusedError(passes.failing[watch].failure_line(watch))
+                        if name in passes.failing and passes.failing[name].failed_since(since):
+                            raise ToolRefusedError(passes.failing[name].failure_line(name))
                         pending = tuple(owner for owner in commanders
                                         if not passes.completed_since(owner, since))
                         if not pending:
@@ -128,14 +150,16 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
             if not timeout.expired():
                 raise
             raise ToolRefusedError(
-                f"{watch} has no ordinary completion since service restart {since}: "
+                f"{name} has no ordinary completion since service restart {since}: "
                 + ", ".join(owner.name for owner in pending)
             ) from error
 
     def failed(self, watch: str, error: BaseException) -> None:
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
-            since = passes.failing.get(watch, FailingPass(time.time(), "")).since
-            failing = FailingPass(since, f"{type(error).__name__}: {error}")
+            now = time.time()
+            since = passes.failing[watch].since if watch in passes.failing else now
+            failing = FailingPass(
+                since=since, error=f"{type(error).__name__}: {error}", failed_at=now)
             return DocumentChange.to(replace(passes, failing=passes.failing | {watch: failing}))
 
         self.update(change)
