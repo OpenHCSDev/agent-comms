@@ -124,7 +124,7 @@ class ThreadCaller(ToolCaller):
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).incarnation
+        return comms.registry.require(self.name).acting_identity
 
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
@@ -223,6 +223,10 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
 
     def commander(self, comms: Comms) -> Thread:
         return comms.registry.require(self.authority)
+
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return own.peer_for(self.commander(comms).incarnation)
 
 
 @dataclass(frozen=True)

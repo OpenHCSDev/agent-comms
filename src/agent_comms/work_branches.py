@@ -118,10 +118,28 @@ class WorkBranch:
 
 
 @dataclass(frozen=True)
+class UnparsedSource:
+    """A changed src module whose pushed text Python cannot parse: conflict markers, or a
+    half-saved edit. It is that branch's fact on the board, never an error out of the pass."""
+
+    path: str
+    line: int
+    reason: str
+
+    @classmethod
+    def of(cls, path: str, error: SyntaxError) -> UnparsedSource:
+        return cls(path, error.lineno or 0, error.msg)
+
+    def listing(self) -> str:
+        return f"{self.path}:{self.line} ({self.reason})"
+
+
+@dataclass(frozen=True)
 class SourceGrowth:
     """Code lines each changed src module gains between two commits."""
 
     files: tuple[tuple[str, int], ...]
+    unparsed: tuple[UnparsedSource, ...] = ()
     limit: ClassVar[int] = 40
     tree: ClassVar[str] = "src/"
 
@@ -138,6 +156,12 @@ class SourceGrowth:
 
     def listing(self) -> str:
         return ", ".join(f"{path} {lines:+d}" for path, lines in self.files if lines)
+
+    def require_parsed(self) -> None:
+        """A head is judged only when every changed module parses."""
+        if self.unparsed:
+            raise WorkBranchError("Changed src does not parse: "
+                                  + ", ".join(source.listing() for source in self.unparsed))
 
 
 @dataclass(frozen=True)
@@ -598,9 +622,14 @@ query($owner: String!, $name: String!, $after: String) {
         contents = Repo.blobs(self.checkout, *(blob for _path, blob, _weight in sources),
                               timeout=self.timeout)
         growth = dict.fromkeys(paths, 0)
+        unparsed: list[UnparsedSource] = []
         for (path, _blob, weight), content in zip(sources, contents, strict=True):
-            growth[path] += weight * CodeLines.of(content.decode())
-        return SourceGrowth(tuple(growth.items()))
+            try:
+                growth[path] += weight * CodeLines.of(content.decode())
+            except SyntaxError as error:
+                # A pushed branch is foreign text: the parse refusal is the branch's fact.
+                unparsed.append(UnparsedSource.of(path, error))
+        return SourceGrowth(tuple(growth.items()), tuple(unparsed))
 
     def reviewed_growth(self, pr: int, head: str, branch: str) -> SourceGrowth:
         """A pull request head against its declared base branch, so a request stacked on

@@ -888,7 +888,11 @@ class DirectiveVerb(CommanderVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        # A peer acting for the commander owes that commander's asks too: debts follow the
+        # live commanders, so a retired creator's asks are never orphaned.
+        owers = tuple(dict.fromkeys((self.who(ctx), ctx.commander)))
+        opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
+        owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
         with ctx.comms.bus.bus.reading() as source:
@@ -897,6 +901,11 @@ class DirectiveVerb(CommanderVerb):
                     source.message_reference(identity)
                 except RowNotFoundError:
                     problems[f'--answers {identity}'] = 'unknown message id'
+                    continue
+                if identity not in owed:
+                    problems[f'--answers {identity}'] = (
+                        f'not an open ask owed by {" or ".join(owers)}; recording it would '
+                        'answer nothing')
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
