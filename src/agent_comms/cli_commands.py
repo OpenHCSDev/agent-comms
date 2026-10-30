@@ -124,6 +124,12 @@ class ThreadTagsResult(CliResult):
 
 
 @dataclass(frozen=True)
+class CommandersResult(CliResult):
+    leads: tuple[str, ...]
+    commanders: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TagRenamedResult(CliResult):
     renamed: str
     name: str
