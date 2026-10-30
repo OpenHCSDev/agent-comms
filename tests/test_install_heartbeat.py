@@ -10,12 +10,15 @@ from pathlib import Path
 import pytest
 
 from agent_comms.channel_targets import CommandersTag
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
 from agent_comms.errors import ToolRefusedError
 from agent_comms.installer.probes.services import CommanderHeartbeatProbe
 from agent_comms.locked_store import DocumentChange
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from test_recorded_board_health import published_board
+
+pytest_plugins = ('test_commander_forks',)
 
 
 class ReadServicePassStore(ServicePassStore):
@@ -45,7 +48,7 @@ async def test_heartbeat_wait_rejects_old_evidence_and_wakes_on_commit(
     )))
     reads: asyncio.Queue[ServicePasses] = asyncio.Queue()
     observed = ReadServicePassStore(services.path, reads)
-    pending = asyncio.create_task(observed.wait_completed((owner,), since, "CommanderHeartbeat"))
+    pending = asyncio.create_task(observed.wait_completed((owner,), since, CommanderHeartbeat))
     try:
         async with asyncio.timeout(10):
             first = await reads.get()
@@ -68,10 +71,10 @@ async def test_heartbeat_wait_refuses_recorded_failure_even_with_fresh_completio
     services = ServicePassStore.at(comms.root)
     since = time.time()
     services.heartbeat_passed((owner,), (owner,))
-    services.failed("CommanderHeartbeat", ValueError("actual source cannot be read"))
+    services.failed(CommanderHeartbeat.__name__, ValueError("actual source cannot be read"))
     before = services.path.read_bytes()
     with pytest.raises(ToolRefusedError, match="actual source cannot be read"):
-        await services.wait_completed((owner,), since, "CommanderHeartbeat")
+        await services.wait_completed((owner,), since, CommanderHeartbeat)
     assert services.path.read_bytes() == before
 
 
@@ -95,6 +98,22 @@ def test_target_heartbeat_probe_waits_only_on_served_commanders(published_board:
     owner = comms.registry.require("lead").incarnation.require_recorded()
     completed = ServicePassStore.at(comms.root).read().commander_completed[owner]
     CommanderHeartbeatProbe(comms.root, completed).run()
+
+
+async def test_heartbeat_wait_refuses_only_a_failure_recorded_after_the_restart(
+        published_board: Comms) -> None:
+    """Install e584e4dc0 was refused on the 03:59 failure the old runtime recorded, which the
+    new runtime's first pass at 04:30 cleared; only the new runtime's own failure refuses."""
+    comms = published_board
+    owner = comms.registry.require("lead").incarnation.require_recorded()
+    services = ServicePassStore.at(comms.root)
+    services.failed(CommanderHeartbeat.__name__, TypeError("the old runtime's failure"))
+    since = time.time()
+    services.heartbeat_passed((owner,), (owner,))
+    await services.wait_completed((owner,), since, CommanderHeartbeat)
+    services.failed(CommanderHeartbeat.__name__, ValueError("the new runtime's failure"))
+    with pytest.raises(ToolRefusedError, match="the new runtime's failure"):
+        await services.wait_completed((owner,), since, CommanderHeartbeat)
 
 
 def test_target_heartbeat_probe_reports_unconfigured_root(private_comms: Comms, capsys) -> None:

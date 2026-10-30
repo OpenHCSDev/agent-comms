@@ -20,7 +20,7 @@ from agent_comms.task_attachments.owner_notices import RestartNotice
 from agent_comms.threads import Thread
 from agent_comms_hooks.read_gate import ReadInput
 from agent_comms_hooks.skill import CommanderReader, FleetReader
-from conftest import answer_deal
+from conftest import answer_deal, engaged
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -40,7 +40,7 @@ def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(commander_bus):
     for name, reader in (("claude-code", CommanderReader), ("unit-x", FleetReader)):
         deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
         deal.start()
-        assert deal.current().sources() == tuple(path.resolve() for path in reader.sources())
+        assert deal.current().dealt == tuple(path.resolve() for path in reader.sources())
         deal.audit.write_text("{}")
         deal.start()
         assert deal.audit.exists()
@@ -93,7 +93,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     unit_deal.audit.write_text(
         json.dumps(
             {
-                "rules": [{"rule": rule.name} for rule in FleetReader.rules()],
+                "rules": [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()],
                 "owner_words": [{"words": text, "doing": "reading the gate"} for text in words],
             }
         )
@@ -113,20 +113,41 @@ def refused(deal: PiRedeal) -> bool:
     return False
 
 
+def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(unit_deal):
+    """A refresh deals no papers, and each rule it deals is still answered before the next
+    opens; the audit is edited in place by Pi's edit tool, which waits like a write elsewhere."""
+    events.CompactionEnd().deal_rules(unit_deal)
+    answer_deal(unit_deal)
+    unit_deal.observe_context(ContextUsage(35, 100))
+    first, following = unit_deal.current().dealt[:2]
+    call("read", {"path": str(first)}).judge_under(unit_deal)
+    unit_deal.record_read(first, ReadInput(first).span())
+    with pytest.raises(RulesUnread, match="does not answer it"):
+        call("read", {"path": str(following)}).judge_under(unit_deal)
+    call("read", {"path": str(first)}).judge_under(unit_deal)
+    edit = {"edits": [{"oldText": "a", "newText": "b"}]}
+    call("edit", {"path": str(unit_deal.audit), **edit}).judge_under(unit_deal)
+    with pytest.raises(RulesUnread):
+        call("edit", {"path": "notes.md", **edit}).judge_under(unit_deal)
+    unit_deal.audit.write_text(json.dumps(
+        {"rules": [engaged(first.stem, first)], "owner_words": []}))
+    call("read", {"path": str(following)}).judge_under(unit_deal)
+
+
 def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_deal):
     """Pi's own context report deals the rules again when 66% and then 33% of the window is
     left, once each, without the papers still in its context; each compaction arms both again
     and deals the papers too."""
     assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
     events.CompactionEnd().deal_rules(unit_deal)
-    assert unit_deal.current().sources()[:len(CommanderPackage.paper())] == tuple(
+    assert unit_deal.current().dealt[:len(CommanderPackage.paper())] == tuple(
         path.resolve() for path in CommanderPackage.paper())
     answer_deal(unit_deal)
     for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
         unit_deal.observe_context(ContextUsage(used, 100))
         assert refused(unit_deal) is closes, used
         if closes:
-            assert not set(unit_deal.current().sources()) & {
+            assert not set(unit_deal.current().dealt) & {
                 path.resolve() for path in CommanderPackage.paper()}
         answer_deal(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)
@@ -141,4 +162,4 @@ def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, 
     unit = comms.registry.declare(Thread("unit-y", frozenset(), Checkout(tmp_path)))
     deal = PiRedeal.of(comms, unit)
     deal.start()
-    assert deal.current().sources() == tuple(path.resolve() for path in FleetReader.sources())
+    assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())

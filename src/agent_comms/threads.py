@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
 from .channel_targets import CommandersTag, DeclaredTag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
@@ -34,12 +33,10 @@ from .goals import (
     GoalDeclaration,
     NoGoal,
 )
-from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Executing
 from .locked_store import DurableFile, PatternFile
-from .native_arguments import NativeArguments
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -52,7 +49,6 @@ from .registration_inheritance import (
 )
 from .repo import Checkout
 from .session_file import NoSessionFile, SessionFile
-from .store_files import AtomicFile
 from .task_sources import TaskScope
 from .thread_creation import GeneratedCreationTime, RequiredCreationTime
 from .thread_execution import NativeThreadExecution, ThreadExecution
@@ -84,7 +80,6 @@ from .thread_storage import (
     UnassignedThreadStorage,
 )
 from .thread_text import NoParent, NoThreadText, ThreadParent, ThreadText
-from .tool_declaration import NativeRequestTools
 from .turn_lease import FinishedTurn, NoTurnRecord, TurnLease, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
@@ -243,8 +238,8 @@ class ThreadProvenance(ThreadMembership):
         return own.peer_for(own)
 
 
-class ThreadCatalog(DurableFile, PatternFile):
-    """The tool catalog a native launch reads from its thread's session directory."""
+class ThreadCatalogFile(DurableFile, PatternFile):
+    """The catalog's path declaration, usable without importing the registry reader."""
 
     __slots__ = ()
     filename: ClassVar[str] = "native-sessions/{lookup}/comms-catalog.json"
@@ -282,7 +277,7 @@ class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
         ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
     service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
-        field(default=ServiceTier.PRIORITY, kw_only=True)
+        field(default_factory=ServiceTier.default, kw_only=True)
     )
     created_at: RequiredCreationTime = field(
         default_factory=GeneratedCreationTime.now, kw_only=True
@@ -427,27 +422,12 @@ class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
             **project.environment(root),
         }
 
-    def native_launch_arguments(
-        self, arguments: NativeArguments, package: Path, root: Path,
-    ) -> tuple[str, ...]:
-        """The existing native session directory owns this root's launch catalog."""
-        if not arguments.loads(NativeRequestTools.native_extension(package)):
-            return arguments.argv
-        launch = LaunchRoot.from_path(root)
-        path = self.catalog_path(launch.path)
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        catalog = ThreadToolCatalogResult(
-            tuple(NativeRequestTools.catalog()), self.service_tier, launch.arguments(),
-        )
-        AtomicFile(path).write_text(FieldCodec.compact(catalog.to_wire()))
-        return (*arguments.argv, "--comms-catalog", str(path))
-
     def launch(self) -> ThreadLaunch:
         """The launch environment this thread's owner process carries."""
         return ThreadLaunch.from_thread(self)
 
     def catalog_path(self, root: Path) -> Path:
-        return ThreadCatalog.path_in(root, lookup=self.incarnation.require_recorded().lookup)
+        return ThreadCatalogFile.path_in(root, lookup=self.incarnation.require_recorded().lookup)
 
     def native_session_directory(self, root: Path) -> Path:
         return self.catalog_path(root).parent

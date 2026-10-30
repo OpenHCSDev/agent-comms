@@ -425,7 +425,6 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
-    from agent_comms.launch_runtime import LaunchRuntime
     from agent_comms.repo import Repo
 
     repository = Repo.of(Path(__file__).resolve().parents[1])
@@ -437,16 +436,27 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
                 url=str(source.remote_path), vcs_info=CommitRecord(commit_id=source.main_commit),
             ),
         )
-    runtime = tmp_path / 'installed-runtime'
-    (runtime / 'bin').mkdir(parents=True)
-    (runtime / 'bin/python').symlink_to(sys.executable)
-    RuntimeResolution(
+    return record_installed_runtime(tmp_path / 'installed-runtime', RuntimeResolution(
         core_commit=repository.git(repository.checkout, 'rev-parse', 'HEAD').strip(),
         packages=packages,
-    ).save(runtime)
-    current = durable_home / '.local/share/agent-comms/current'
-    current.parent.mkdir(parents=True)
-    current.symlink_to(runtime, target_is_directory=True)
+    ))
+
+
+def record_installed_runtime(runtime: Path, resolution: RuntimeResolution) -> LaunchRuntime:
+    """The one test writer of an installation: interpreter, resolution and HOME's pointer.
+
+    A later record re-points the pointer, as a reinstall does, so fixtures that each install
+    a build can share one HOME.
+    """
+    from agent_comms.launch_runtime import LaunchRuntime
+
+    (runtime / 'bin').mkdir(parents=True)
+    (runtime / 'bin/python').symlink_to(sys.executable)
+    resolution.save(runtime)
+    pointer = LaunchRuntime.current_pointer()
+    pointer.parent.mkdir(parents=True, exist_ok=True)
+    pointer.unlink(missing_ok=True)
+    pointer.symlink_to(runtime, target_is_directory=True)
     return LaunchRuntime.installed()
 
 
@@ -554,14 +564,25 @@ def answer_rules(comms: Comms, name: str) -> None:
     answer_deal(deal)
 
 
+def engaged(rule: str, source: Path) -> dict[str, str]:
+    """An audit entry answering one rule file with a line it really holds."""
+    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.strip())
+    return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
+
+
 def answer_deal(deal: PiRedeal) -> None:
-    """Read every file of the current deal in full and write the audit answering it."""
-    for source in deal.current().sources():
+    """Read every file of the current deal in full, answering each rule as it is read, and write
+    the audit answering the deal."""
+    record = deal.current()
+    answered = []
+    for source in record.dealt:
         deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
-    due = deal.current().due
+        if source.stem in record.due.rules:
+            answered.append(engaged(source.stem, source))
+        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     deal.audit.write_text(json.dumps({
-        "rules": [{"rule": rule} for rule in sorted(due.rules)],
-        "owner_words": [{"words": words, "doing": "testing"} for words in due.owner_words],
+        "rules": answered,
+        "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
     }))
 
 

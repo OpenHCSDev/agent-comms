@@ -223,7 +223,11 @@ class OwnerCompletion(DeclaredFamily, affix="OwnerCompletion"):
         """``thread`` is the registry's current declaration; ``process`` is the released one."""
 
     def matches_current(self, snapshot: RegistrySnapshot, release: OwnerReleaseEvidence) -> bool:
-        return release.matches(snapshot.require(release.name))
+        """The row still binds the released process or, once a dead owner's stop
+        unregistered it, none; a different process is a successor."""
+        current = snapshot.require(release.name)
+        return (release.incarnation() == current.incarnation
+                and not current.process_identity.conflicts_with(release.process_identity))
 
 
 @dataclass(frozen=True)
@@ -233,7 +237,8 @@ class ProcessExitedOwnerCompletion(OwnerCompletion):
         # The registry still binds the released process (a fenced self-release) or none
         # (a stopped owner was unregistered). A release that names no process was
         # recorded only after its stop saw the owner dead: nothing of it is alive.
-        thread.process_identity.require_release_by(process)
+        if thread.process_identity.conflicts_with(process):
+            raise RelationViolationError("live owner is not the current process incarnation")
         if process.alive():
             raise RelationViolationError("Original owner survived retirement")
 
@@ -243,7 +248,8 @@ class ProcessExitedOwnerCompletion(OwnerCompletion):
         current = snapshot.require(release.name)
         if release.matches(current):
             snapshot.status(current.name).require_inactive("Released native process is still the registry owner")
-        if snapshot.claim_generation(current.name) == release.after and not release.matches(current):
+        if (snapshot.claim_generation(current.name) == release.after
+                and current.process_identity.conflicts_with(release.process_identity)):
             raise RelationViolationError("Native release process differs from its original declaration")
 
 
