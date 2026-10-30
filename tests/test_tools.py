@@ -164,7 +164,8 @@ class TestToolCatalog:
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
         outcomes = presentation.notification_window.outcomes[sent.seq, sent.message_id]
-        assert [summary.reference for summary in SentMessageSummary.recent(presentation)] == [sent.reference]
+        assert [summary.reference for summary in SentMessageSummary.for_sources(
+            presentation.sent_notifications())] == [sent.reference]
 
         result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
         # One row per sent message, never one per recipient, and never the message body.

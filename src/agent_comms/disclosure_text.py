@@ -213,6 +213,11 @@ class ViewTable[R]:
             lines.extend(self.row_separator)
         return tuple(lines)
 
+    def plain_lines(self) -> tuple[str, ...]:
+        """One line per row, every cell kept, for a reader with no columns to align to."""
+        return tuple(" · ".join(" / ".join(cell.splitlines()) for cell in row if cell)
+                     for row in self.texts)
+
     def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""
         return tuple(" · ".join(f"{column.label}: {cell}"

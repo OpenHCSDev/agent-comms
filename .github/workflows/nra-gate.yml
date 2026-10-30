@@ -10,6 +10,17 @@ on:
 permissions:
   contents: read
 
+# Materialization merges and tree proofs create Git objects; every child inherits this
+# process-only identity/signing policy. No global or shared repository config is written.
+env:
+  GIT_AUTHOR_NAME: ${{ github.actor }}
+  GIT_AUTHOR_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+  GIT_COMMITTER_NAME: ${{ github.actor }}
+  GIT_COMMITTER_EMAIL: ${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com
+  GIT_CONFIG_COUNT: "1"
+  GIT_CONFIG_KEY_0: commit.gpgsign
+  GIT_CONFIG_VALUE_0: "false"
+
 # A superseded push to a pull request stops its old run; queue groups never share a group.
 # The draft state is part of the key: a draft run skips every job but the NRA gate, so one that
 # starts in the same second as ready_for_review must not cancel the ready run (#3164 and #3154 lost
@@ -34,27 +45,36 @@ jobs:
       - run: true
         shell: bash
 
-  # The base every job measures from, drafts included. A pull request checks out its merge into
-  # current main, so the base is that merge's first parent; pull_request.base.sha is main when the
-  # PR was opened, and measuring from it charges the PR with everything main merged since.
+  # The native event/source reader owns both the comparison base and combined-job selection.
+  # Ordinary sources still get diagnostics; naming a branch batch/ grants nothing.
   base:
     runs-on: ubuntu-latest
-    timeout-minutes: 1
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
-      base: ${{ steps.base.outputs.base }}
+      base: ${{ steps.sources.outputs.base }}
+      combined: ${{ steps.sources.outputs.combined }}
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 2
-      - id: base
-        shell: bash
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install the native source-input reader
+        run: python -m pip install -e .
+      - name: Derive job selection from the actual tested sources
+        id: sources
         env:
-          QUEUE_BASE: ${{ github.event.merge_group.base_sha }}
-        run: echo "base=${QUEUE_BASE:-$(git rev-parse HEAD^1)}" >> "$GITHUB_OUTPUT"
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/job-sources" --workflow-output "$GITHUB_OUTPUT"
 
   smoke:
     needs: [ready, base]
-    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
+    if: needs.base.outputs.combined == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,8 +84,18 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
-      - name: Install agent-comms and test dependencies
-        run: python -m pip install -e '.[dev]'
+      - name: Bootstrap only Core and locked checker dependencies
+        run: |
+          python -m pip install packaging
+          python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/checker-venv" uv sync --locked --all-extras
+          echo "$RUNNER_TEMP/checker-venv/bin" >> "$GITHUB_PATH"
+      - name: Resolve the actual tested source tuple once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+      - name: Build the one common checker environment
+        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
       - name: Compile production and tools
         run: python -m compileall -q src tools
       - name: Import every Core and hook module
@@ -89,7 +119,11 @@ jobs:
       - name: Stack clients import only names Core has; the outgoing wire matches the base
         env:
           BASE: ${{ needs.base.outputs.base }}
-        run: python tools/module_layers.py --check --base "$BASE" --report "$GITHUB_STEP_SUMMARY"
+        run: PYTHONPATH=src:tools python tools/module_layers.py --check --base "$BASE" --ci-inputs "$RUNNER_TEMP/paired-sources" --report "$GITHUB_STEP_SUMMARY"
+      - name: The same sources are still current before success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
 
   native-scripts:
     name: native-scripts
@@ -116,7 +150,7 @@ jobs:
   install-rehearsal:
     name: install-rehearsal
     needs: [ready, base]
-    if: github.event_name == 'merge_group' || startsWith(github.head_ref, 'batch/')
+    if: needs.base.outputs.combined == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -158,18 +192,29 @@ jobs:
     name: review-verdict
     needs: ready
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     permissions:
+      contents: read
       statuses: write
       pull-requests: read
     env:
       GH_TOKEN: ${{ github.token }}
-      QUEUE_REF: ${{ github.event.merge_group.head_ref }}
     steps:
-      # A pull request is pushed before its verdict exists; the queue's group
-      # is where the commander's verdict on the head must already be success.
-      # Main requires agent-comms/review directly, and a verdict names a pull request's
-      # head, so the group's own commit carries the status its verified head holds.
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - name: Install the native source-input reader
+        run: python -m pip install -e .
+      # The PR check proves a separate combined carrier and exact reviewed members.
+      # The queue additionally requires the root's explicit promotion at this head.
+      # A hand gh auto-merge request cannot turn source acceptance into that permission.
+      - name: Only the captured combined carrier may merge
+        run: PYTHONPATH=src python -m agent_comms.integration --check-merge-inputs "$RUNNER_TEMP/merge-inputs"
+      # A verdict names the pull request head, not the merge group's own commit.
       - name: The commander's verdict on the queued head is success
         if: github.event_name == 'merge_group'
         shell: bash
@@ -204,14 +249,20 @@ jobs:
         with:
           python-version-file: pyproject.toml
 
-      - name: Install agent-comms
+      - name: Bootstrap only Core and locked checker dependencies
         run: |
           python -m pip install packaging
           python -m pip install "$(python -I src/agent_comms/installer/declared_uv.py pyproject.toml)"
-          uv lock --project stack --upgrade
-          UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv" uv sync --project stack --locked
-          uv pip install --python "$GITHUB_WORKSPACE/.venv/bin/python" -e '.[dev]'
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/checker-venv" uv sync --locked --all-extras
+          echo "$RUNNER_TEMP/checker-venv/bin" >> "$GITHUB_PATH"
+
+      - name: Resolve the actual tested source tuple once
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --resolve-ci-inputs "$RUNNER_TEMP/paired-sources"
+
+      - name: Build the one common checker environment
+        run: PYTHONPATH=src:tools python tools/checker_stack.py --ci-inputs "$RUNNER_TEMP/paired-sources"
 
       # Saved by nra-gate-cache.yml on main; entries are keyed by content, so any
       # older main's cache only misses where the code differs.
@@ -228,9 +279,15 @@ jobs:
           set -o pipefail
           gate_status=0
           PYTHONPATH=src:tools python tools/nra_gate.py \
+            --ci-inputs "$RUNNER_TEMP/paired-sources" \
             --root ${{ matrix.kind }} --base "$BASE" --head HEAD 2>gate-findings.txt | tee gate.txt || gate_status=$?
           cat gate-findings.txt >&2
           exit "$gate_status"
+
+      - name: The same sources are still current before success
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: PYTHONPATH=src python -m agent_comms.integration --revalidate-ci-inputs "$RUNNER_TEMP/paired-sources"
 
       # Hosted annotations stop at ten per step, so a unit never saw a long list (88 findings
       # on the bus batch, 2026-10-21). The whole list goes on the pull request, one comment per

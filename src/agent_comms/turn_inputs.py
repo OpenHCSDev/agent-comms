@@ -239,6 +239,7 @@ class InputForwarding(MroDispatch):
             if not session.input_start.following(public_id, native_id, entry.content.text):
                 return ()
             self.retire(native_id)
+            session.following_started(command)
             self.started = True
             return (public_id,)
         return ()

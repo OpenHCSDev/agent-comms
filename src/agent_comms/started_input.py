@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.lifecycle_capability import Unresolved
 
 from .coordinator import Coordination
+from .field_codec import AcpSessionId
 
 if TYPE_CHECKING:
     from .acp_extension import InputStartedUpdate, QueueScope
@@ -36,10 +37,11 @@ class StartedInput:
         if any(stored is not None and not stored.items_with(Unresolved, stored)
                for stored in map(document.rows.get, self.keys)):
             await inputs.emit_input_delivery_changed(session_id)
+        session = AcpSessionId(session_id)
         await inputs.runtime.publish_update(
             session_id=session_id, update=(await self.acceptance.started_update(
-                self, inputs, session_id, row, scope,
+                self, inputs, session, row, scope,
             )).acp_chunk(),
         )
-        self.acceptance.release(inputs, session_id)
+        self.acceptance.release(inputs, session)
         await inputs.emit_queue_state(session_id)

@@ -5,26 +5,22 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import AssignmentId, GoalId, GoalWaitId
-from agent_comms.assignment_states import DeliveredAssignment, PendingDecision
+from agent_comms.field_codec import GoalId, GoalWaitId
 from agent_comms.bus import BusRecord, PublicRecord
-from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message, NoticeRole
-from agent_comms.notification_assignment import (
-    AnsweredResponse, AssignmentActivity, NotificationAssignment, UnansweredResponse,
-)
-from agent_comms.notification_progress import ShownToModelProgress
+from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_evidence import AnsweredResponse, NotificationAssignmentRead
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.registration import Registration
 from agent_comms.proven_source_coverage import SourcePrefix
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.wake_candidate_index import WakeCandidateIndex
-from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import append_reply, record_from
 from agent_comms.threads import Thread
 
@@ -131,24 +127,15 @@ def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
 
 def test_notification_answers_require_frozen_delivery_not_a_public_answer_reference(bus, owner, peer):
     original = append_reply(bus, peer, owner)
-    assignment = WakeAssignment(
-        assignment_id=AssignmentId("shown"), recipient=owner.name, recipient_lookup=owner.lookup,
-        wire_seq=original.seq, message_id=original.message_id, audience=MessageAudience.DIRECT,
-        lifecycle=DeliveredAssignment(PendingDecision(FullWake())),
-        accepted_at_ms=1, updated_at_ms=1)
-    row = NotificationAssignment(assignment, AssignmentActivity(
-        False, ShownToModelProgress(1), UnansweredResponse()))
+    read = NotificationAssignmentRead(AllOutcomes().selection((original,)), ())
+    key = (owner.lookup, original.reference)
     bus.append(lambda seq, db: PublicRecord.from_message(Message(
         owner.name, peer.name, "public answer is not frozen delivery evidence", InfoKind,
         seq=seq, answers=(original.reference,))))
-    unanswered, = NotificationAssignment._recorded_conversation_responses(
-        bus.path.parent, (original,), (row,))
-    assert isinstance(unanswered.activity.response, UnansweredResponse)
+    assert key not in NotificationAssignment.capture_responses(bus.path.parent, read).responses
     reply = append_reply(bus, owner, peer, answers=(original.reference,))
-    answered, = NotificationAssignment._recorded_conversation_responses(
-        bus.path.parent, (original,), (row,))
-    assert answered.activity.response == AnsweredResponse(
-        reply.reference, int(reply.timestamp * 1000))
+    assert NotificationAssignment.capture_responses(bus.path.parent, read).responses[key] == (
+        AnsweredResponse(reply.reference, reply.at_ms))
 
 
 def test_wait_finds_dependency_reply_after_its_recorded_sequence(bus, owner, peer):

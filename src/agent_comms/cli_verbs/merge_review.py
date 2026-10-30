@@ -41,6 +41,9 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
             for bypass in QueueBypass.matching(simple):
                 target = bypass.target()
                 request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-                StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(request)
+                project = snapshot.commander_project.require()
+                StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(
+                    request, project.repos
+                )
                 heads.append(request)
         return MergeReviewResult(tuple(heads))

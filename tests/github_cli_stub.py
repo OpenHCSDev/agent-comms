@@ -22,9 +22,22 @@ def main():
     repositories = json.loads((directory / "pull_requests.json").read_text())
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
-    if arguments[:2] == ["pr", "view"]:
-        data = repositories[arguments[arguments.index("-R") + 1]]
-        request = data["requests"][arguments[2]]
+    if arguments[:2] == ["pr", "create"]:
+        repository = arguments[arguments.index("-R") + 1]
+        data = repositories[repository]
+        row = data.pop("next_creation")
+        assert "--draft" in arguments and arguments[-2:] == ["--body-file", "-"]
+        data["requests"][str(row["number"])] = {"body": sys.stdin.read(), "listed": row}
+        (directory / "pull_requests.json").write_text(json.dumps(repositories))
+        print(f"https://github.com/{repository}/pull/{row['number']}")
+    elif arguments[:2] == ["pr", "view"]:
+        repository = arguments[arguments.index("-R") + 1]
+        data = repositories[repository]
+        reference = arguments[2].removeprefix(f"https://github.com/{repository}/pull/")
+        request = data["requests"][reference]
+        if refusal := request.get("read_refusal"):
+            print(refusal, file=sys.stderr)
+            raise SystemExit(1)
         field = arguments[arguments.index("--json") + 1]
         assert arguments[arguments.index("--jq") + 1] == "." + field
         print({"number": request["listed"]["number"], "body": request["body"]}[field])
@@ -37,27 +50,31 @@ def main():
                     print(entry["listed"]["number"])
         elif parts[:1] == ["pulls"] and len(parts) == 2:
             assert arguments[arguments.index("--jq") + 1] == (
-                '.head.sha + " " + .base.ref + " " + (.draft | tostring)')
+                '.head.sha + " " + .base.ref + " " + (.draft | tostring) + " " + .state')
             listed = data["requests"][parts[1]]["listed"]
-            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower())
+            state = "open" if listed["kind"] in data["open_kinds"] else "closed"
+            print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower(), state)
+        elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "pulls":
+            assert arguments[arguments.index("--jq") + 1] == "map(.number)"
+            print(json.dumps([entry["listed"]["number"] for entry in data["requests"].values()
+                              if entry["listed"].get("merge", {}).get("oid") == parts[1]
+                              or entry["listed"]["head"] == parts[1]]))
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
-            if refusal := data.get("status_refusal"):
-                sys.exit(refusal)
+            fields = dict(arguments[index + 1].split("=", 1)
+                          for index, word in enumerate(arguments) if word == "-f")
+            if refusal := data.get("status_refusals", {}).get(parts[1], {}).get(fields["context"]):
+                if not refusal["state"] or refusal["state"] == fields["state"]:
+                    sys.exit(refusal["message"])
+            data.setdefault("statuses", {}).setdefault(parts[1], {})[fields["context"]] = fields["state"]
+            (directory / "pull_requests.json").write_text(json.dumps(repositories))
             print("{}")
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "status":
             query = arguments[arguments.index("--jq") + 1]
             selected = re.search(r'select\(\.context == ("(?:\\.|[^"\\])*")\)', query)
             assert selected, query
             context = json.loads(selected.group(1))
-            states = {}
-            endpoint = f"repos/{owner}/{name}/statuses/{parts[1]}"
-            for line in (directory / "calls.jsonl").read_text().splitlines():
-                posted = json.loads(line)
-                if posted[:2] == ["api", endpoint] and "--method" in posted:
-                    fields = dict(posted[index + 1].split("=", 1)
-                                  for index, word in enumerate(posted) if word == "-f")
-                    states[fields["context"]] = fields["state"]
+            states = data.get("statuses", {}).get(parts[1], {})
             print(json.dumps([states[context]] if context in states else []))
         else:
             raise AssertionError(f"Unexpected repository endpoint: {parts}")

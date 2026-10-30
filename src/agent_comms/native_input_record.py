@@ -8,12 +8,8 @@ from __future__ import annotations
 
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import (
-    dataclass,
-    field,
-    replace,
-)
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Literal
 
 from agent_comms.coordination_tables.executions import ExecutionRecord
 
@@ -35,12 +31,12 @@ from .field_codec import (
     MalformedRecord,
     NativeContext,
     ThreadLookup,
-    WireName,
 )
+from .native_input_proof import NativeContextProof
+from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
-from .turn_item import FreshNativeId
 from .transcript_routes import InputDisplay, NoDisplayText
-from .typed_table import Column, IntegerStorage, SqlStorage, TextStorage
+from .typed_table import SqlStorage, TextStorage
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
@@ -55,38 +51,6 @@ if TYPE_CHECKING:
     from .native_entries import MessageEntry, RecordedEntry, TranscriptProjection
     from .native_runtime_input import NativeRuntimeInput
     from .transcript_events import TranscriptEvent
-
-
-@dataclass(frozen=True, slots=True)
-class NativeInputCommit:
-    """Original emitted input identity shared with its assembled context."""
-
-    input_id: Annotated[
-        InputId,
-        WireName("inputId"),
-        Column(primary_key=True),
-    ]
-    session_id: Annotated[PiSessionId, WireName("sessionId")]
-    session_entry_id: Annotated[FreshNativeId, WireName("sessionEntryId")]
-
-    @property
-    def input_commit(self) -> NativeInputCommit:
-        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
-
-
-@dataclass(frozen=True)
-class NativeInputLocation(NativeInputCommit):
-    """Emitted byte placement; only the original runtime input row persists it."""
-
-    # SQL permits an uncommitted row; the emitted offset remains a required int.
-    position_column: ClassVar[Column] = Column(
-        check="session_entry_start>0",
-        nullable=True,
-        storage=IntegerStorage,
-    )
-    session_entry_start: Annotated[
-        int, WireName("sessionEntryStart"), position_column
-    ] = field(kw_only=True)
 
 
 class NativeInputPosition(DeclaredFamily, JsonShapeFamily, affix="NativePosition"):
@@ -404,6 +368,12 @@ class NativeContextReference(DeclaredFamily, affix="Reference"):
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         """An unrecorded context grants no committed-input identity."""
 
+    def acknowledge_context(
+        self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof
+    ) -> None:
+        """The first verified entry is immutable; later settlement does not own it."""
+        row.write_context(db, context)
+
 
 @dataclass(frozen=True)
 class UnrecordedNativeInputReference(NativeContextReference):
@@ -411,7 +381,7 @@ class UnrecordedNativeInputReference(NativeContextReference):
 
 
 @dataclass(frozen=True)
-class NativeInputReference(NativeContextReference):
+class NativeInputReference(NativeContextReference, PositiveNativeIntegerBounds):
     """A cursor's bounded reference to original recorded native context."""
 
     input_id: InputId
@@ -421,6 +391,11 @@ class NativeInputReference(NativeContextReference):
 
     recorded = True
 
+    def __post_init__(self) -> None:
+        self.require_integer(self.request_generation, "Native reference generation")
+        if not self.session_id:
+            raise ValueError("Native reference lacks recorded identity")
+
     def require_recorded(self) -> NativeInputReference:
         return self
 
@@ -428,20 +403,23 @@ class NativeInputReference(NativeContextReference):
     def acquire(cls, row: NativeInputContext) -> NativeInputReference:
         """Decode the complete original SQL reference, never a partial projection."""
         try:
-            result = FieldCodec.construct(cls, dict(
-                input_id=row.context_value("input_id"),
-                stage=row.reference_stage,
-                session_id=row.context_value("session_id"),
-                request_generation=row.context_value("request_generation"),
-            ))
-            result = FieldCodec.decode(cls, FieldCodec.encode(result, cls))
-            if not 0 < result.request_generation <= 2**53 - 1:
-                raise MalformedRecord("Native reference generation is outside its native range")
-            if not result.session_id:
-                raise MalformedRecord("Native reference lacks recorded identity")
+            result = FieldCodec.construct(
+                cls,
+                dict(
+                    input_id=row.context_value("input_id"),
+                    stage=row.reference_stage,
+                    session_id=row.reference_session_id,
+                    request_generation=row.context_value("request_generation"),
+                ),
+            )
             return result
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context reference is incomplete") from error
+
+    def acknowledge_context(
+        self, row: NativeRuntimeInput, db: sqlite3.Connection, context: NativeContextProof
+    ) -> None:
+        row.require_context_proof().require_continuation(context)
 
     def require_recorded_input(self, owner: CursorOwner, db: sqlite3.Connection) -> None:
         owner.require_recorded_reference(db, self)
@@ -469,7 +447,6 @@ class NativeInputContext:
 
     input_id: InputId | NativeColumn
     stage: type[NativeInputExecution] | NativeColumn
-    session_id: PiSessionId | NativeColumn
     request_generation: NativeColumn
 
     @property
@@ -480,6 +457,19 @@ class NativeInputContext:
     @property
     def reference_stage(self) -> type[NativeInputExecution]:
         return self.context_value("stage")
+
+    @property
+    def reference_session_id(self) -> object:
+        """Acquire the session through its existing NativeContext column directive."""
+        return self.context_value("session_id")
+
+    def context_columns(self, context: NativeContextProof) -> dict[str, object]:
+        """Build the context group through each column's declared codec, not a caller roster."""
+        return {
+            plan.name: plan.value.decode(FieldCodec.encode(getattr(context, plan.name)))
+            for plan in FieldCodec.field_plans(type(self))
+            if NativeContext.single(plan.annotation)
+        }
 
     def context_value(self, name: str) -> object:
         """A context field decoded as its NativeContext directive declares it."""
@@ -505,10 +495,13 @@ class NativeInputContext:
         return UnrecordedNativeInputReference()
 
     def recorded_reference(self) -> NativeContextReference:
+        reference = NativeInputReference.acquire(self)
+        reference_fields = {name for name, _annotation in FieldCodec.record_fields(type(reference))}
         try:
             for plan in FieldCodec.field_plans(type(self)):
-                for directive in NativeContext.single(plan.annotation):
-                    FieldCodec.decode(directive.value, getattr(self, plan.name).value)
+                if plan.name not in reference_fields:
+                    for directive in NativeContext.single(plan.annotation):
+                        FieldCodec.decode(directive.value, getattr(self, plan.name).value)
         except MalformedRecord as error:
             raise IdentityConflict("Native recorded context group is partial") from error
-        return NativeInputReference.acquire(self)
+        return reference

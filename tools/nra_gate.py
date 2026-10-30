@@ -11,4 +11,5 @@ from agent_comms_project import AgentCommsProject
 from nominal_refactor_advisor import audit
 
 if __name__ == "__main__":
-    raise SystemExit(audit.gate.main(AgentCommsProject(Path.cwd())))
+    project, arguments = AgentCommsProject.from_arguments(Path.cwd())
+    raise SystemExit(audit.gate.main(project, arguments))
