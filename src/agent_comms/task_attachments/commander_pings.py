@@ -462,6 +462,10 @@ class AlarmSection:
                            for kind, pings in self.by_kind().items())
         return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
 
+    def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
+        return (ViewTable(AlarmLine, HudExclude, tuple(
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)
+
     def text_lines(self, now: float) -> tuple[str, ...]:
         """Every line of every rule, its shared words printed once in the rule's header."""
         return tuple(line for kind, pings in self.by_kind().items()
