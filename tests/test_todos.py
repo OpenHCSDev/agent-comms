@@ -37,7 +37,7 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
-from agent_comms.installer.runtime_resolution import CorePackage
+from agent_comms.installer.runtime_resolution import CorePackage, TextualPackage, ToadPackage
 from agent_comms.owner_requests import NewestOpenRequest
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.launch_root import LaunchRoot
@@ -457,16 +457,68 @@ def pr_order(
         order=replace(order(source), id=OrderId.mint(), run=run))
 
 
-def adopt_pr(ctx, pid, number):
+def order_pr(ctx, checkout, *arguments):
     parser = argparse.ArgumentParser()
     PullRequestVerb.add_arguments(parser)
-    command = PullRequestVerb.from_arguments(
-        parser.parse_args([pid, "--existing", str(number)]))
-    todo = ctx.comms.goals.todos.get(pid)
-    checkout = Path(ctx.comms.registry.require(todo.held().owner).project_path)
+    command = PullRequestVerb.from_arguments(parser.parse_args(arguments))
     with chdir(checkout):
         command.apply(ctx)
+
+
+def adopt_pr(ctx, pid, number):
+    todo = ctx.comms.goals.todos.get(pid)
+    order_pr(ctx, Path(ctx.comms.registry.require(todo.held().owner).project_path),
+             pid, "--existing", str(number))
     return ctx.comms.goals.todos.get(pid)
+
+
+def test_order_pr_adopts_a_registered_companion_once(pr_commander, proof_build_checkouts,
+                                                     github_cli, tmp_path):
+    """An agent-comms order records a registered Toad PR from its companion checkout; an
+    unregistered repository's PR is refused at the Todo write; repeating changes nothing."""
+    core = pr_commander.repos[0]
+    toad, textual = (next(graph.repository for graph in proof_build_checkouts
+                          if graph.repository.github == package.repository)
+                     for package in (ToadPackage, TextualPackage))
+    ctx = Commander.on_root('lead', (core, toad), pr_commander.root)
+    # Core already has PR 1: the companion link must name Toad's 1, never the order's repo.
+    for repository in (toad, textual):
+        github_cli.configure(repository.github)
+        github_cli.put(repository.github, UnmergedListedPullRequest(
+            number=1, branch="companion", head=repository.git(
+                repository.checkout, 'rev-parse', 'HEAD').strip(),
+            updated="2026-10-20T12:00:00Z", base=WorkBranches.main,
+            reviewable_times=("2026-10-20T12:00:00Z",)))
+    original = pr_order(ctx, "P1")
+    rule = StorageRule.load(ctx.root)
+    roots = rule.roots_of(ctx.comms.registry.require(original.held().owner))
+    toad_checkout, textual_checkout = (
+        rule.repository_checkout(roots, original.id, repository.github)
+        for repository in (toad, textual))
+    for repository, checkout in ((toad, toad_checkout), (textual, textual_checkout)):
+        repository.git(repository.checkout, 'worktree', 'add', '-q', '-b', 'companion',
+                       str(checkout))
+
+    body = tmp_path / "body.md"
+    body.write_text("A companion PR is never created by this order.")
+    with pytest.raises(SystemExit, match="adopt a companion PR with --existing"):
+        order_pr(ctx, toad_checkout, original.id, "--title", "Companion", "--body-file", str(body))
+    with pytest.raises(TodoError, match="OpenHCSDev/textual is not a repository"):
+        order_pr(ctx, textual_checkout, original.id, "--existing", "1")
+    assert TodoStore(ctx.root).get(original.id) == original
+
+    order_pr(ctx, toad_checkout, original.id, "--existing", "1")
+    linked = TodoStore(ctx.root).get(original.id)
+    assert linked == replace(original, revision=original.revision + 1,
+                             order=original.order.checked().linked_to(
+                                 PullRequestLink(toad.github, 1)))
+    order_pr(ctx, toad_checkout, original.id, "--existing", "1")
+    assert TodoStore(ctx.root).get(original.id) == linked
+    assert [call[:5] for call in github_cli.calls() if call[:2] == ("pr", "view")] == [
+        ("pr", "view", "1", "-R", textual.github.to_wire()),
+        ("pr", "view", "1", "-R", toad.github.to_wire()),
+        ("pr", "view", "1", "-R", toad.github.to_wire()),
+    ]
 
 
 def github_body(ctx, number):

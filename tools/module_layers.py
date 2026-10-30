@@ -51,7 +51,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo
 from agent_comms.installer.runtime_wire import ClientImport, CrossesRuntimes
 
-from typing_names import TypingImports, TypingReference
+from agent_comms.pinned_audit import audit
 
 from agent_comms.declared_family import DeclaredFamily
 
@@ -217,11 +217,11 @@ class ImportNames(ModuleReferences):
         self.visit_scope(node, [node.body])
 
     def visit_Module(self, node: ast.Module) -> None:
-        self.typing = TypingImports.of(node)
+        self.typing = audit.typing_names.TypingImports.of(node)
         self.generic_visit(node)
 
     def visit_If(self, node: ast.If) -> None:
-        test = TypingReference(self.typing)
+        test = audit.typing_names.TypingReference(self.typing)
         test.dispatch_sync(node.test)
         if test.is_type_checking:
             self.visit(node.test)

@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import Annotated, Literal
 
 from pydantic import JsonValue
 
@@ -37,12 +37,16 @@ from agent_comms.todos import (
 from .acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate, TurnChangedUpdate, UpdateMetadata
 from .bus_read import OwnerLiveRead, UiRead
 from .read_basis import ReadAuthority
-from .commander.vibe_check import OverloadDegradation
 from .commander_hud import CommanderFrame, CommanderHud, CommanderUnitDetail
+from .commander_hud import CommanderLoad
+from .service_passes import ServicePassStore
 from .comms import Comms
 from .coordinator import Coordination
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from .problem_number import ProblemNumber
+from .tool_declaration import EditCall
+from .work_branches import WorkBranchError
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
@@ -76,6 +80,7 @@ from .turn_digests import (
     TurnView,
     TurnsSince,
     UnjudgedEdits,
+    UnavailableOrderEdits,
 )
 
 @dataclass(frozen=True)
@@ -234,8 +239,17 @@ class CommsUnjudgedTool(ThreadReadTool):
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        return UnjudgedEdits(tuple(edit for read in OrderEditsRead.for_commander(
-            comms, caller.subject(self.thread)) for edit in read.read()))
+        owner = comms.registry.require(caller.subject(self.thread)).incarnation.require_recorded()
+        passes = ServicePassStore.at(comms.root).read()
+        edits: list[EditCall] = []
+        unavailable: list[UnavailableOrderEdits] = []
+        for read in OrderEditsRead.for_commander(comms, owner.name):
+            try:
+                edits.extend(read.read())
+            except (WorkBranchError, OSError) as error:
+                unavailable.append(UnavailableOrderEdits(
+                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, error))
+        return UnjudgedEdits(tuple(edits), tuple(unavailable)).with_services(passes, owner)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -250,10 +264,10 @@ class BoardReadTool(ThreadReadTool, declared_name=None):
 @dataclass(frozen=True, kw_only=True)
 class CommsCommanderLoadTool(BoardReadTool):
     label = "Measured commander load"
-    description = "Read open orders, review timers and unjudged edits used by the overload rule."
+    description = "Read retained commander load with recorded service failures and its original completion clock."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> OverloadDegradation:
-        return CommanderHud.read(comms, caller.subject(self.thread)).load
+    def apply(self, comms: Comms, caller: ToolCaller) -> CommanderLoad:
+        return CommanderHud.read(comms, caller.subject(self.thread)).load_reading()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -261,7 +275,8 @@ class CommsHudTool(ThreadReadTool):
     label = "Commander HUD"
     description = (
         "Read the commander's latest published Tristan frame: orders, review timers, "
-        "strikes, edits, PRs, plan phases and load. A missing or stale Tristan frame is refused."
+        "strikes, edits, PRs, plan phases and load. Recorded failures precede retained data; "
+        "stale rows stay explicitly stale, and missing frames remain unavailable."
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> CommanderHud:
@@ -331,7 +346,8 @@ class CommsStandingRulesTool(CommsHudTool):
     label = "Read broken standing rules"
     description = (
         "Read the published Tristan board and HUD. Tristan owns "
-        "enforcement; this read never repeats it. A missing or stale Tristan frame is refused."
+        "enforcement; this read never repeats it. Recorded failures precede stale retained rows; "
+        "a missing frame remains explicitly unavailable."
     )
 
 
@@ -612,6 +628,7 @@ class CommanderUnitRead(
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
         hud = CommanderFrame.current(comms, self.commander.name)
+        hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
                 return card.detail(comms, self.commander, self.orders)

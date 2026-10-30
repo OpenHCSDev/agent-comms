@@ -30,6 +30,7 @@ from .wake_candidate_index import WakeCandidateIndex
 from .context_segments.wake import SelectedWakeSegment
 from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
 from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
+from .turn_goal_account import VerifiedGoalSettlement
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
 
 
@@ -236,6 +237,11 @@ class SelectedAttempt:
             published = await participant.response_owner.publish_responses(
                 participant.store.session.path, participant.bus, self.stage.fence, replies
             )
+            owner = participant.owner
+            await Coordination.run_worker(partial(
+                VerifiedGoalSettlement.settle_current,
+                participant.comms, owner.thread, owner.require_active_turn().id,
+            ))
             return await CoordinatedTurn.capture(
                 participant, result.context.input_id, CompletedAssignment,
                 published.publication_evidence,

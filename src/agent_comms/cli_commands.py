@@ -506,7 +506,7 @@ class AddCheckoutOperation(CheckoutOperation):
         grant = command.grant(ctx, thread)
         grant.require()
         repository = command.source(ctx, grant)
-        projection = StorageProjection(ctx.registry.storage_rule, thread)
+        projection = StorageProjection(ctx.registry.storage_rule, thread, ctx)
         if destination.exists():
             CheckoutStorageEffect(destination, repository).check(projection)
             Checkout(destination).prepare()
@@ -527,7 +527,7 @@ class RemoveCheckoutOperation(CheckoutOperation):
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
               destination: Path) -> None:
         RemoveCheckoutStorageEffect(destination).check(
-            StorageProjection(ctx.registry.storage_rule, thread))
+            StorageProjection(ctx.registry.storage_rule, thread, ctx))
         Checkout(destination).retire()
 
 

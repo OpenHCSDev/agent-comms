@@ -26,6 +26,9 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import MergeHeadReview
 from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
+import agent_comms
+from agent_comms import skills
+from agent_comms.pinned_audit import SKILL, audit
 from agent_comms.private_path import FileObservation, FileRevision
 from agent_comms.repo import GitCommandError, Repo
 
@@ -99,6 +102,12 @@ class MainTree:
                 row.split(":", 3) for row in self.grep("-n", pattern=pattern, paths=paths)
             )
         )
+
+    def pinned(self, path: str) -> MainTree:
+        """The tree of the submodule this commit pins at ``path``: another repository's tree,
+        read at exactly the commit its gitlink names, from that repository's own objects."""
+        commit = Repo.git(self.repo.checkout, "rev-parse", f"{self.commit}:{path}").strip()
+        return MainTree(Repo.of(self.repo.checkout / path), commit)
 
     def module(self, path: str) -> ParsedModule:
         blob, = Repo.blobs(self.repo.checkout, f"{self.commit}:{path}")
@@ -413,6 +422,27 @@ class PatternPresent(PatternEvidence):
 
 
 @dataclass(frozen=True)
+class AuditPatternPresent(PatternPresent):
+    """A pattern in the audit package of the refactor-audit main pins, at the commit it pins:
+    code this repository runs from that repository. Where the submodule sits and where its
+    package sits inside it are pinned_audit's, read from the loaded skill."""
+
+    def read(self, main: MainTree) -> bool:
+        # The skills package's place under the source root, read from the loaded package.
+        installed = Path(skills.__path__[0]).relative_to(Path(agent_comms.__path__[0]).parent)
+        submodule = Path(main.repo.source, installed, SKILL.name)
+        package = Path(audit.__path__[0]).relative_to(SKILL)
+        if not main.has(submodule.as_posix()):
+            # A commit that pins no audit holds none of its patterns.
+            return self.satisfied(0)
+        pinned = main.pinned(submodule.as_posix())
+        return self.satisfied(pinned.count(self.pattern, (package.as_posix(),)))
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in the audit package of the refactor-audit main pins"
+
+
+@dataclass(frozen=True)
 class DocumentPatternPresent(PatternPresent):
     """A recorded document fact, rather than executable Python source."""
 
@@ -684,7 +714,7 @@ class NoGodFunction(MainEvidence):
         )
 
     def describe(self) -> str:
-        return f"{self.name} in {self.path} at most {GodFunction.threshold} lines on main"
+        return f"{self.name} in {self.path} at most {GodFunction.threshold()} lines on main"
 
 
 @dataclass(frozen=True)
@@ -697,7 +727,7 @@ class NoAbsenceProbes(MainEvidence):
     def read(self, main: MainTree) -> bool:
         """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
-            ForeignAbsenceProbe.count(node)
+            ForeignAbsenceProbe.occurrences(node)
             for module in main.present_modules(self.paths)
             for node in ast.walk(module.tree)
         )

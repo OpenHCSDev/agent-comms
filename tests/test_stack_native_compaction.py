@@ -247,7 +247,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(
 
         saved = [json.loads(line) for line in session.read_text().splitlines()]
         compactions = [row for row in saved if row.get("type") == "compaction"]
-        ends = [event for event in events if isinstance(event, ae.CompactionEnd)]
+        ends = [event for event in events if isinstance(event, ae.CompactionFinish)]
         done = events[-1]
         assert isinstance(done, ae.Done)
         if case == "compacted_resume":
@@ -259,11 +259,11 @@ async def test_pi_engine_compacts_inside_a_core_turn(
             # Pi's engine throws the failed pre-prompt compaction. Core reports
             # incomplete compaction without sending the oversized original prompt.
             assert summaries and not prompts and compactions == []
-            assert len(ends) == 1 and ends[0].aborted
+            assert [type(end) for end in ends] == [ae.CompactionAbort]
             assert done.ok is False
             return
         assert done.ok is True, done
-        assert len(ends) == 1 and not ends[0].aborted
+        assert [type(end) for end in ends] == [ae.CompactionEnd]
         assert len(compactions) == 1 and SUMMARY in compactions[0]["summary"]
         assert len(summaries) >= 1
         assert "TASK_BRIEF_SENTINEL" in json.dumps(summaries[0]["messages"])

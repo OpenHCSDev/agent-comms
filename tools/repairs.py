@@ -25,7 +25,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from debt_ratchet import FunctionLocalImport, LocatedSource, compare, production_paths
+from agent_comms_project import AgentCommsProject
 from module_layers import Package, TopLevelNames
 from nominal_refactor_advisor.codemod import (
     CodemodPlanSequence,
@@ -37,6 +37,7 @@ from nominal_refactor_advisor.codemod import (
 )
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.pinned_audit import audit
 
 type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type ImportNode = ast.Import | ast.ImportFrom
@@ -61,7 +62,7 @@ class OutsidePackage(Kept):
 class Repair(DeclaredFamily, ABC):
     """One measure's repair over some files of the working tree."""
 
-    repairs: ClassVar[type[LocatedSource]]
+    repairs: ClassVar[type[audit.ratchet.LocatedSource]]
 
     def __init__(self, repo: Path, paths: Iterable[str]) -> None:
         self.repo, self.paths = repo, sorted(paths)
@@ -130,11 +131,12 @@ class ImportHoist(Repair):
     load leads back to the module, judged with every move already accepted: two local
     imports naming each other each pass alone and deadlock together."""
 
-    repairs = FunctionLocalImport
+    repairs = audit.source_measures.FunctionLocalImport
 
     def __init__(self, repo: Path, paths: Iterable[str]) -> None:
         super().__init__(repo, paths)
         self.package = Package(repo)
+        self.project = AgentCommsProject(repo)
         self.graph = self.package.load_graph()
         self.modules = {
             str(path.relative_to(repo)): module for module, path in self.package.files.items()
@@ -145,7 +147,9 @@ class ImportHoist(Repair):
 
     def file_operations(self, path: str, source: str) -> list[Operation]:
         if path not in self.modules:
-            self.left[OutsidePackage] += FunctionLocalImport.count(source.encode(), path)
+            self.left[OutsidePackage] += audit.source_measures.FunctionLocalImport.count(
+                self.project, source.encode(), path
+            )
             return []
         hoisted = HoistedFile(self, path, self.modules[path], source)
         for local in hoisted.local_imports(hoisted.tree, []):
@@ -421,13 +425,14 @@ def main() -> int:
     if args.all:
         files = {
             measure: sorted(
-                path for path in production_paths(repo, "HEAD") if path.startswith(root)
+                path for path in AgentCommsProject(repo).production_paths("HEAD")
+                if path.startswith(root)
             )
             for measure in (repair.repairs for repair in Repair.members_with(Repair))
         }
     else:
-        found = compare(
-            repo,
+        found = audit.ratchet.compare(
+            AgentCommsProject(repo),
             args.base,
             args.head,
             args.root,

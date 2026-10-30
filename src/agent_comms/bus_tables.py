@@ -243,6 +243,26 @@ class AnsweredSource(messages.BusProjectionTables):
         return tuple(MessageReference.iterate(rows))
 
     @classmethod
+    def latest_reply(
+        cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
+    ) -> tuple[messages.BusRecord, ...]:
+        """The newest reply the responders sent naming any of those originals, from one read."""
+        if not sequences:
+            return ()
+        asked = ",".join("?" for _ in sequences)
+        replying = ",".join("?" for _ in responders)
+        identity = MessageIdentitySource.declared_name
+        rows = db.execute(
+            f'SELECT answered.seq FROM "{cls.declared_name}" AS answered '
+            f'JOIN "{identity}" AS author ON author.seq=answered.seq '
+            + cls._sql(f'WHERE answered.{{original}} IN ({asked}) ')
+            + f'AND author.sender IN ({replying}) ORDER BY answered.seq DESC LIMIT 1',
+            (*sequences, *responders),
+        )
+        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in rows)
+        return tuple(header.kind.read_from(db, header.seq) for header in headers)
+
+    @classmethod
     def unanswered(
         cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
         since: float, before: float, upper: int, limit: int,
@@ -277,57 +297,3 @@ class AnsweredSource(messages.BusProjectionTables):
         ))
         headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
         return tuple(header.kind.read_from(db, header.seq) for header in headers)
-
-    @classmethod
-    def _answer_rows(
-        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
-        since: float, selection: str,
-    ) -> sqlite3.Cursor:
-        requesters, responders = scope.second_names, scope.first_names
-        eligible, eligibility = AwaitingAnswerSource.recipient_predicate(
-            "asked.seq", scope.first_names,
-        )
-        asking = ",".join("?" for _ in requesters)
-        replying = ",".join("?" for _ in responders)
-        identity = MessageIdentitySource.declared_name
-        content = messages.MessageInput.table
-        query = (
-            'WITH matches AS (SELECT reply.seq, '
-            + content._sql('reply_message.{timestamp} AS {timestamp} ')
-            + f'FROM "{identity}" AS reply '
-            f'JOIN "{content.declared_name}" AS reply_message USING(seq) '
-            f'WHERE reply.sender IN ({replying}) AND '
-            + content._sql('reply_message.{timestamp} >= ? AND EXISTS (')
-            + f'SELECT 1 FROM "{cls.declared_name}" AS answered '
-            f'WHERE answered.seq=reply.seq AND answered.original<reply.seq AND EXISTS ('
-            f'SELECT 1 FROM "{identity}" AS asked '
-            f'JOIN "{content.declared_name}" AS question ON question.seq=asked.seq '
-            + cls._sql('WHERE asked.seq=answered.{original} ')
-            + f'AND asked.sender IN ({asking}) AND '
-            + content._sql('question.{timestamp} >= ? ')
-            + f'AND ({eligible})))) ' + selection
-        )
-        return db.execute(query, (*responders, since, *requesters, since, *eligibility))
-
-    @classmethod
-    def latest_answer(
-        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
-        since: float,
-    ) -> tuple[messages.BusRecord, ...]:
-        sequences = cls._answer_rows(
-            db, scope, since,
-            'SELECT seq FROM matches ORDER BY seq DESC LIMIT 1',
-        )
-        headers = (messages.BusRow.require(db, seq=FieldCodec.decode(int, row[0])) for row in sequences)
-        return tuple(header.kind.read_from(db, header.seq) for header in headers)
-
-    @classmethod
-    def answer_timestamp(
-        cls, db: sqlite3.Connection, scope: RepliesDisplayScope,
-        since: float,
-    ) -> float:
-        row = cls._answer_rows(
-            db, scope, since,
-            messages.MessageInput.render('SELECT COALESCE(MAX({timestamp}),0.0) FROM matches'),
-        ).fetchone()
-        return FieldCodec.decode(float, row[0])

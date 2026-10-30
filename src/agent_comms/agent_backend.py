@@ -259,8 +259,9 @@ class ClearQueue(TurnInboxItem):
 class CompactionOutcome(DeclaredFamily, DeclaredReply, TurnOutcome, affix="Compaction"):
     """The result of one requested compaction."""
 
-    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
-        return event(reason=reason, aborted=True)
+    def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
+                            reason: type[CompactionReason]) -> T:
+        return abort(reason=reason)
 
 
 @dataclass(frozen=True)
@@ -271,8 +272,9 @@ class PlacedCompaction(CompactionOutcome):
     first_kept: str | None
     tokens_before: PiCount
 
-    def completion_event[T](self, event: Callable[..., T], reason: type[CompactionReason]) -> T:
-        return event(reason=reason, aborted=False, summary=self.summary)
+    def completion_event[T](self, end: Callable[..., T], abort: Callable[..., T],
+                            reason: type[CompactionReason]) -> T:
+        return end(reason=reason, summary=self.summary)
 
 
 @dataclass(frozen=True)

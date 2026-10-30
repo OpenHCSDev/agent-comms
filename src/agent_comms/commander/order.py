@@ -1142,6 +1142,9 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
+        if not source.holds(todo):
+            sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
+                     f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
             todo, source, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
@@ -1167,7 +1170,8 @@ class ExistingPullRequestSelection(PullRequestSelection):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "create or adopt a PR and record its GitHub identity on this order"
+    help = ("create a PR in the order's repository, or adopt an existing one in it or a "
+            "registered companion, and record its GitHub identity on this order")
     pid: Annotated[str, Argument(flags=("pid",))]
     title: Annotated[str, Argument(flags=("--title",))] = ""
     body_file: Annotated[str, Argument(flags=("--body-file",))] = ""
@@ -1191,7 +1195,6 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         storage = ctx.comms.registry.storage_rule
         if not storage.owns_checkout(holder, source.checkout, source.github):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
-        Repo.selected(ctx.repos, source.github.to_wire())
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 
