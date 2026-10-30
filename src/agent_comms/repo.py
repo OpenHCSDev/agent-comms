@@ -714,17 +714,20 @@ class GitHead(ABC):
 
     @classmethod
     def listed(cls, record: str) -> GitHead:
-        # Git's porcelain record is one "name value" line per attribute, decoded once here.
-        fields = dict(field.partition(" ")[::2] for field in record.split("\0"))
-        path, sha = fields["worktree"], fields[cls.reference]
-        symbolic = fields.get("branch", "")
+        # Git's porcelain record opens with "worktree PATH" and "HEAD SHA", in that order;
+        # the attribute lines after them declare the branch or the detached state.
+        worktree, head, *attributes = record.split("\0")
+        path = worktree.removeprefix("worktree ")
+        sha = head.removeprefix(f"{cls.reference} ")
+        symbolic = next((line.removeprefix("branch ") for line in attributes
+                         if line.startswith("branch ")), "")
         checkout = Checkout(Path(path).resolve())
         commit = GitCommitText.decode(sha)
         if not commit.strip("0"):
             return UnbornGitHead(checkout, symbolic)
         if symbolic:
             return AttachedGitHead(checkout, sha=commit, symbolic=symbolic)
-        if "detached" not in fields:
+        if "detached" not in attributes:
             raise ValueError(f"Git HEAD in {path} has neither a branch nor a detached declaration")
         return DetachedGitHead(checkout, commit)
 
