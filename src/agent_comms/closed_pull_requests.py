@@ -14,7 +14,7 @@ from .todos import (
     PullRequests, StoredClosedHead, StoredClosedRepository, StoredCommitPatch,
     StoredHeadDiff, StoredMainPatch,
 )
-from .work_branches import WorkBranchError, WorkBranches
+from .work_branches import CommitBase, UnservableCommitBase, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -61,10 +61,12 @@ class ClosedHeadScan:
     published: str
     new_patches: frozenset[str]
     fingerprints: dict[str, StoredCommitPatch]
+    unservable: tuple[str, ...]
     diffs: dict[tuple[str, str], StoredHeadDiff] = field(default_factory=dict)
 
     def head(self, request: PullRequestHead, closed_at: float) -> StoredClosedHead:
-        base = self.reader.commit_base(self.published, request.head)
+        base: CommitBase = (UnservableCommitBase() if request.head in self.unservable
+                            else self.reader.commit_base(self.published, request.head))
         return StoredClosedHead(request, base, closed_at, base.missing(self, request.head))
 
     def missing_after(self, base: str, head: str) -> tuple[str, ...]:
@@ -103,9 +105,12 @@ class ClosedPullRequestWatch(JoinedWatch):
         (published,) = reader.remote_heads(repo.remote, f'refs/heads/{reader.main}')
         old_tips = tuple(row.main for row in previous)
         closed = tuple(pull for change in changes for pull in change.as_closed())
-        Repo.require_commits(reader.checkout, repo.remote, published, *old_tips,
-                             *(pull.head for pull in closed),
-                             *(row.request.head for row in recorded))
+        Repo.require_commits(reader.checkout, repo.remote, published, *old_tips)
+        requested = (*(pull.head for pull in closed), *(row.request.head for row in recorded))
+        unservable = Repo.unservable_commits(reader.checkout, repo.remote, *requested)
+        # A closed head's branch may be gone: fetched or not, no ref reaches it for the graph.
+        reader.history.include(published, *old_tips,
+                               *(head for head in requested if head not in unservable))
         for old in old_tips:
             if not Repo.descends(reader.checkout, old, published):
                 raise WorkBranchError(f'{repo.github.to_wire()} main rewrote its indexed history')
@@ -117,7 +122,7 @@ class ClosedPullRequestWatch(JoinedWatch):
                                               fingerprints)
         scan = ClosedHeadScan(store, reader, repo.github, published,
                               frozenset(patch for row in main_rows for patch in row.patches),
-                              fingerprints)
+                              fingerprints, unservable)
         changed = frozenset(row.number for row in changes)
         stale = old_tips != (published,)
         heads = (*(scan.head(row.request, row.closed_at) if stale else row
