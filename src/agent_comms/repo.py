@@ -216,6 +216,18 @@ class Repo(GitLaunch, BaseModel, WireValue):
                 raise UnavailableCommitError(checkout, missing, f"remote {remote}: {error}") from error
             cls.require_local_commits(checkout, *objects)
 
+    @classmethod
+    def unservable_commits(cls, checkout: Path | str, remote: str,
+                           *objects: str) -> tuple[str, ...]:
+        """Fetch each missing object alone, so one the remote refuses cannot cost the others;
+        answer the ones still absent."""
+        for name in cls.missing_commits(checkout, *objects):
+            try:
+                cls.git(checkout, "fetch", "--quiet", "--no-tags", "--", remote, name)
+            except GitCommandError:
+                continue
+        return cls.missing_commits(checkout, *objects)
+
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Strict local ancestry; only valid local non-ancestors mean False."""
         self.require_local_commits(self.checkout, sha, revision)

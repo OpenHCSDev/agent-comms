@@ -57,13 +57,16 @@ class CommanderService:
 
     @classmethod
     def boards(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
-        """The registered lead when live and owed service: the one board the heartbeat reads.
+        """The registered lead's board, the one the heartbeat reads, while any live commander is
+        owed service: a lead's closed session must not blind the commanders still running.
 
         Command moves with the registry, never with an old request: a thread that stood down
         keeps its parked orders and requests, and gets no heartbeat or vibe check for them."""
         snapshot = registry.snapshot()
-        return tuple(
-            thread
-            for thread in snapshot.commander_project.leads(snapshot)
-            if cls.requested_by(thread, goals)
-        )
+        project = snapshot.commander_project
+        commanders = project.commanders(snapshot)
+        if not cls.live(commanders) or not any(
+                goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
+                for thread in commanders):
+            return ()
+        return project.leads(snapshot)
