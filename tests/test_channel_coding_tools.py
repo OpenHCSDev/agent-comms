@@ -212,7 +212,8 @@ def _request(socket, id, name, args):
 
 
 @pytest.mark.asyncio
-async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_path, tool_listener):
+async def test_tool_error_while_check_waits_cannot_receive_late_permission(
+        tmp_path, tool_listener, undealt_gate):
     import asyncio
 
     checking, release = asyncio.Event(), asyncio.Event()
@@ -226,7 +227,8 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
             return NoRoomNeeded()
 
     owner = Owner()
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), owner, pid=os.getpid())
+    socket = CodingToolSocket(
+        tool_listener(tmp_path, secrets.token_hex(32)), owner, undealt_gate, pid=os.getpid())
     socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
     socket.tool_started(ToolExecutionStart(
@@ -245,7 +247,8 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("refused", [False, True])
-async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog, refused, tool_listener):
+async def test_child_that_stopped_waiting_is_logged_not_raised(
+        tmp_path, caplog, refused, tool_listener, undealt_gate):
     """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
     import asyncio
     import os
@@ -264,7 +267,8 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
             return NoRoomNeeded()
 
     tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
+    socket = CodingToolSocket(
+        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid())
     socket.turn = object()
     await socket.start()
     try:
@@ -294,7 +298,8 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
 
 
 @pytest.mark.asyncio
-async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(tmp_path, tool_listener):
+async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(
+        tmp_path, tool_listener, undealt_gate):
     import asyncio
     import os
 
@@ -305,7 +310,8 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(t
             raise AssertionError("an unstarted call was checked")
 
     tmp_path.chmod(0o700)
-    socket = CodingToolSocket(tool_listener(tmp_path, secrets.token_hex(32)), Owner(), pid=os.getpid())
+    socket = CodingToolSocket(
+        tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid())
     socket.turn = object()
     call = ("never", "read", {"path": "a"})
     socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])

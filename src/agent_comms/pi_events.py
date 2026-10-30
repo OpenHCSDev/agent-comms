@@ -386,12 +386,10 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             session.watchdog.compacted(session.prompt_state.started)
         session.usage.invalidate()
         yield session.context_info()
-        yield events.CompactionEnd(
-            reason=self.reason,
-            aborted=not completed,
-            summary=next((result.display_summary for result in completed), None),
-            will_retry=self.will_retry.value_or(False),
-        )
+        will_retry = self.will_retry.value_or(False)
+        yield next((events.CompactionEnd(reason=self.reason, summary=result.display_summary,
+                                         will_retry=will_retry) for result in completed),
+                   events.CompactionAbort(reason=self.reason, will_retry=will_retry))
         for message in self.error_message.present():
             yield session.output.error(message, source=UnrecordedFailureSource())
         if self.will_retry.value_or(False):
