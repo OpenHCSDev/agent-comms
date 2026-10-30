@@ -106,15 +106,16 @@ async def _compact_started(runner, session_id, thread_name, instructions):
                 owner.thread, instructions.strip() if instructions else None,
             )
         finally:
-            completion = outcome.completion_event(events.CompactionEnd, ManualCompactionReason)
+            completion = outcome.completion_event(
+                events.CompactionEnd, events.CompactionAbort, ManualCompactionReason)
             await consumer.dispatch(completion)
-        if not completion.aborted:
-            await runner.runtime.publish_update(
-                session_id=session_id,
-                update=AgentMessageChunk(
-                    session_update="agent_message_chunk",
-                    content=TextContentBlock(type="text", text=""),
-                    field_meta=encode_updates(TranscriptChangedUpdate(None)),
-                ),
-            )
+        await completion.transcript_changed(partial(
+            runner.runtime.publish_update,
+            session_id=session_id,
+            update=AgentMessageChunk(
+                session_update="agent_message_chunk",
+                content=TextContentBlock(type="text", text=""),
+                field_meta=encode_updates(TranscriptChangedUpdate(None)),
+            ),
+        ))
         return outcome
