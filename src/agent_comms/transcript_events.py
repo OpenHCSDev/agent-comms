@@ -277,7 +277,7 @@ class IncomingTranscript(TextTranscript):
 
     @property
     def category(self) -> type[MessageCategory]:
-        return self.message.role.category
+        return self.message.category
 
     message: Annotated[Message, ActivityExclude()]
     reader: str

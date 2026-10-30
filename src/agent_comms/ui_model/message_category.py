@@ -56,6 +56,13 @@ class ToolCategory(AgentWork, MessageCategory):
     label = "Tool calls"
 
 
+class HeartbeatCategory(FromPerson, MessageCategory):
+    """The commander heartbeat board, spoken in the owner's voice: it opens a new grouping
+    like any message from a person, and is filtered apart from his own words."""
+
+    label = "Heartbeats"
+
+
 class OtherCategory(MessageCategory):
     label = "Other / notices"
 
