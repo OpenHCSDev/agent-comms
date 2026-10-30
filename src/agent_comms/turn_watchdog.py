@@ -194,8 +194,11 @@ class ProgressWatchdog(MroDispatch):
         self.launch_started_at = clock()
         self.session_load = SessionLoad.capture(session_file)
 
-    def spawned(self, reused: bool) -> None:
-        self.spawn_ms = 0 if reused else round((self.clock() - self.launch_started_at) * 1000)
+    def spawned(self) -> None:
+        self.spawn_ms = round((self.clock() - self.launch_started_at) * 1000)
+
+    def reused(self) -> None:
+        self.spawn_ms = 0
 
     def reading(self) -> None:
         self.preflight_wait.budget = self.startup.readiness_timeout(
