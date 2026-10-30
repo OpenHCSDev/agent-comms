@@ -73,13 +73,13 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
             failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
             now = time.time()
             snapshot = comms.registry.snapshot()
+            actions = CommanderHistory.read(comms, self.actors(snapshot))
             for thread in (recipient for lead in self.boards(comms.registry, comms.goals)
                            for recipient in self.recipients(snapshot, lead)):
                 for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
                 ):
-                    actions = CommanderHistory.read(comms, self.actors(comms.registry.snapshot()))
                     sections = AlarmGroup.sections((update,), update.open_pings(actions))
                     update.send(comms, now, (
                         HudUnavailableGroup.heading(),
