@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import DeclaredTag, Tag
+from .channel_targets import CommandersTag, DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -251,6 +251,15 @@ class ThreadProvenance:
     def incarnation(self) -> ThreadIncarnation:
         """The declaration's birth member, created once and shared by its readers."""
         return ThreadIncarnationRecord(self.name, self.created_at.to_wire()).incarnation()
+
+    @property
+    def acting_identity(self) -> ThreadIncarnation:
+        """Who this thread's own tool calls act as: a #commanders member holds commander
+        authority over every order on its bus, so no order outlives its creator's command."""
+        if CommandersTag.declared_name not in self.tags:
+            return self.incarnation
+        own = self.incarnation.require_recorded()
+        return own.peer_for(own)
 
 
 class ThreadCatalog(DurableFile, PatternFile):
@@ -522,6 +531,10 @@ class Thread(ThreadProvenance, CatalogSelection):
         self.role.require_executable(RelationViolationError("A human thread owns no local process"))
         if not self.same_local_process(process):
             raise RelationViolationError("live owner is not the current process incarnation")
+
+    def require_restartable(self) -> None:
+        """Idle, or wedged: its turn wrote nothing to its transcript for too long."""
+        self.turn_record.read().require_restartable(self.runtime.last_written())
 
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable(

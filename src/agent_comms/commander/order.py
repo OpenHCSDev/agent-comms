@@ -40,6 +40,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -368,8 +369,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().leads(snapshot)
-        return thread.name
+        return snapshot.commander_project.require().lead(snapshot).name
 
     @property
     def repos(self) -> tuple[Repo, ...]:
@@ -424,7 +424,8 @@ class CommanderContext(BaseModel):
                   answers: tuple[MessageReference, ...] = ()) -> Message:
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
-            target.addressed(audience.threads, body), answers=answers).message
+            target.addressed(audience.threads, body), answers=answers,
+            answerer=CommanderReceipts(self.actor_identity, (self.incarnation,))).message
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -851,7 +852,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        self.actor.commanding(ctx.comms, ctx.commander)
+        self.actor.commanding(ctx.comms)
         ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
@@ -888,7 +889,11 @@ class DirectiveVerb(CommanderVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        opened = OwedAnswer.opened(ctx.comms, self.who(ctx))
+        # A peer acting for the commander owes that commander's asks too: debts follow the
+        # live commanders, so a retired creator's asks are never orphaned.
+        owers = tuple(dict.fromkeys((self.who(ctx), ctx.commander)))
+        opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
+        owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
         with ctx.comms.bus.bus.reading() as source:
@@ -897,6 +902,11 @@ class DirectiveVerb(CommanderVerb):
                     source.message_reference(identity)
                 except RowNotFoundError:
                     problems[f'--answers {identity}'] = 'unknown message id'
+                    continue
+                if identity not in owed:
+                    problems[f'--answers {identity}'] = (
+                        f'not an open ask owed by {" or ".join(owers)}; recording it would '
+                        'answer nothing')
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
                        if rule.message.message_id in self.answers)
@@ -1276,14 +1286,6 @@ class SayVerb(OrderVerb, DirectiveVerb):
 
     def respond(self, ctx: Commander, references: tuple[MessageReference, ...]) -> None:
         ctx.say(self.units, self.body_file, references)
-
-
-@dataclass(frozen=True, kw_only=True)
-class JoinVerb(OrderVerb):
-    help = "register a commander fork before its first record"
-
-    def run(self, ctx: Commander) -> None:
-        print(f'{ctx.actor_name} registered')
 
 
 @dataclass(frozen=True, kw_only=True)

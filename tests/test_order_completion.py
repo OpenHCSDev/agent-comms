@@ -12,6 +12,7 @@ from agent_comms.commander.order import Commander, main
 from agent_comms.commander.standing import HolderGone
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.field_codec import RecordProblems
+from commander_heartbeat_fixture import capture_frame
 from agent_comms.repo import Checkout, DetachedStart
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
@@ -63,7 +64,8 @@ class TestOrderCompletion:
 
         def orders(*todos):
             unit = UnitObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
-                                   ProgressRead(), (), time.time(),
+                                   capture_frame(ctx.comms, 'lead', ProgressRead()),
+                                   (), time.time(),
                                    ctx.comms.registry.snapshot().status('worker'), False)
             return [state.orders for state in AwaitingApplicationRun.derive(unit)]
 

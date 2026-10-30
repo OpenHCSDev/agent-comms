@@ -76,6 +76,7 @@ from agent_comms.errors import (
 from agent_comms.field_codec import (
     DefaultNonNull,
     Description,
+    DisclosedRecord,
     DisclosureIdentity,
     FieldCodec,
     GitCommitText,
@@ -671,7 +672,7 @@ class MergedLink:
 
 
 @dataclass(frozen=True)
-class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
+class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -835,6 +836,18 @@ class MissingReviewMergeBlock(MergeBlock):
 
     def remedy(self) -> str:
         return 'judge HEAD'
+
+
+@dataclass(frozen=True)
+class RefusedCarryMergeBlock(MergeBlock):
+    """The forge refused the carried review status on this head; only this head pays for it."""
+    refusal: str
+
+    def what(self) -> str:
+        return f"carried review status refused: {self.refusal}"
+
+    def remedy(self) -> str:
+        return "restore the repository's write access or drop it from the commander's repos"
 
 
 @dataclass(frozen=True)
@@ -1138,7 +1151,14 @@ class PullRequests:
                 with goals.todos.snapshot() as db:
                     reviews = StoredHeadReview.latest_for_pull_request(db, current)
                 for review in reviews:
-                    if review.verdict.carry(goals, review, current, reader):
+                    try:
+                        carried = review.verdict.carry(goals, review, current, reader)
+                    except ToolRefusedError as refused:
+                        # One repository's forge refusal is that head's alarm, not every board's.
+                        self._read[repo, row.number] = replace(row, merge_blocks=(
+                            *row.merge_blocks, RefusedCarryMergeBlock(row.updated, str(refused))))
+                        break
+                    if carried:
                         self._read[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
 
@@ -1213,7 +1233,7 @@ class PullRequests:
 
 
 @dataclass(frozen=True)
-class ProgressPoint:
+class ProgressPoint(DisclosedRecord):
     """A revision and its time in the order's progress; Git rows use committer time."""
     sha: Annotated[str, DisclosureIdentity()]
     at: float
@@ -1226,14 +1246,14 @@ class ProgressPoint:
 
 
 @dataclass(frozen=True)
-class DistanceReading:
+class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
     command: str = ""
 
 
 @dataclass(frozen=True)
-class DistanceReadings:
+class DistanceReadings(DisclosedRecord):
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
@@ -1684,7 +1704,7 @@ class MeasuredProgressSource(ProgressSource):
 
 
 @dataclass(frozen=True)
-class OrderProgress(DeclaredFamily, affix="Progress"):
+class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
     Never stored: the checkout and GitHub are its owners."""
@@ -2557,7 +2577,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise TodoError("Only a pending order can be claimed by its holder.")
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (ReviewedHeadVerdict, RejectedHeadVerdict)
+        """Any order that holds a head takes a decision on it, or a reviewer's mark first."""
+        return (ReviewedHeadVerdict, RejectedHeadVerdict, UnderReviewHeadVerdict)
+
+    def under_review(self, record: OrderHeadReviewRecord) -> CheckedProblemOrder:
+        """Only a claim owes a delivery verdict; elsewhere the head record is the whole mark."""
+        return self
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -3054,7 +3079,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             context.comms.goals.change_problem(pid, OrderMessage(
                 context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
                 at=EventTime.capture(time.time()),
-            ), context.commander)
+            ), context.incarnation)
 
     def notify_replaced(
         self, context: Commander, unit: str, group: Sequence[str], holders: Sequence[str],
@@ -3169,8 +3194,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (*super().review_verdicts(), UnderReviewHeadVerdict)
+    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
+        return self.copy_as(ReviewingProblemOrder, review=record)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -4279,8 +4304,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
-        goals.todos.record_head(carried)
+        # GitHub first: Core never records a carry whose status the forge refused.
         verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        goals.todos.record_head(carried)
         return True
 
     @classmethod
@@ -4295,6 +4321,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         project = goals.registry.snapshot().commander_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
                               ).reviewed_growth(request.pr, request.head, request.base)
+        growth.require_parsed()
         self.require_growth(growth)
         return f"#{request.pr} (src {growth.total:+d})"
 
@@ -4376,8 +4403,7 @@ class UnderReviewHeadVerdict(HeadVerdict):
         return f"Under review by {reviewer} on {subject}"
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return replace(current, order=current.order.checked().copy_as(
-            ReviewingProblemOrder, review=record))
+        return replace(current, order=current.order.checked().under_review(record))
 
 
 class HeadOrderLink(HeadReviewRelation, declared_name=None):
@@ -5350,7 +5376,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
         return cls(OwnerRequestId.new(), commander.require_recorded(), text)
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
-        if self.commander != commander.require_recorded():
+        if not commander.commands(self.commander):
             raise TodoError(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
@@ -5607,11 +5633,11 @@ class Todo(TodoStoreRows, TypedTable):
             self.creator_identity)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             raise NotOrderCommander(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:

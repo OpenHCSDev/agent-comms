@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
 from subprocess import TimeoutExpired
@@ -17,7 +17,9 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.disclosure_text import AccentTone, SuccessTone, ViewHeading, WarningTone
 from agent_comms.field_codec import (
+    DisclosedRecord,
     MalformedRecord,
     ToolCallId,
 )
@@ -26,6 +28,7 @@ from agent_comms.heartbeat_subjects import HeartbeatSubject, UnitSubject
 from agent_comms.messages import Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.repo import GitCommandError
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import FamilyScan, UndatedStandingRule
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.thread_status import ThreadStatus
@@ -34,7 +37,6 @@ from agent_comms.todos import (
     MergedProgress,
     NoCommitProgress,
     OrderProgress,
-    ProgressRead,
     ProgressSource,
     Todo,
 )
@@ -46,7 +48,7 @@ if TYPE_CHECKING:
     from agent_comms.heartbeat_frame import HeartbeatFrame
 
 
-class UnitClock(DeclaredFamily, affix="Clock"):
+class UnitClock(DisclosedRecord, DeclaredFamily, affix="Clock"):
     """When a holder last acted and last committed on its pending orders."""
 
     @abstractmethod
@@ -86,11 +88,16 @@ class UnitObservation:
     comms: Comms
     thread: Thread
     todos: tuple[Todo, ...]
-    pulls: ProgressRead
+    frame: HeartbeatFrame
     questions: tuple[Message, ...]
     now: float
     presence: ThreadStatus
     working: bool
+
+    @cached_property
+    def review_timers(self) -> tuple[tuple[Todo, RecordedEventTime], ...]:
+        return tuple((todo, at) for todo, at in self.frame.review_timers
+                     if todo.held().owner_identity == self.thread.incarnation)
 
     @cached_property
     def goal(self) -> GoalSnapshot:
@@ -152,19 +159,19 @@ class UnitObservation:
     @cached_property
     def sources(self) -> tuple[ProgressSource, ...]:
         return tuple(
-            ProgressSource.of(todo, self.comms.registry, self.pulls) for todo in self.todos
+            ProgressSource.of(todo, self.comms.registry, self.frame.pulls) for todo in self.todos
         )
 
     def require_read(self) -> None:
-        for progress in self.pulls.progress(self.todos, self.comms.registry).values():
+        for progress in self.frame.pulls.progress(self.todos, self.comms.registry).values():
             progress.require_read()
         for todo in self.todos:
-            reader = self.pulls.checkout(todo.order.checked().check.directory).branches
-            for pull in self.pulls.open_for(todo):
+            reader = self.frame.pulls.checkout(todo.order.checked().check.directory).branches
+            for pull in self.frame.pulls.open_for(todo):
                 pull.require_comparison(reader)
         if self.todos:
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
-                self.pulls.checkout(path).require_read()
+                self.frame.pulls.checkout(path).require_read()
         for source in self.sources:
             source.checkout.require_read()
 
@@ -178,7 +185,58 @@ class UnitObservation:
                 for origin in self.sources}
 
 
-class NeedsCommanderAttention:
+class ExpandedHudGroup:
+    """Expanded sections consume their tables; collapsed sections do not prepare them."""
+
+    @classmethod
+    def table_lines(cls, tables: Iterable[tuple[str, ...]]) -> tuple[str, ...]:
+        return tuple(line for table in tables for line in table)
+
+
+class HudGroup(ViewHeading, affix="Group"):
+    """The declared order and headings shared by heartbeat and native table views."""
+
+    @classmethod
+    def table_lines(cls, tables: Iterable[tuple[str, ...]]) -> tuple[str, ...]:
+        return ()
+
+    @classmethod
+    def needs_hand(cls) -> bool:
+        return False
+
+class UrgentGroup(ExpandedHudGroup, HudGroup):
+    tone = WarningTone
+
+    @classmethod
+    def needs_hand(cls) -> bool:
+        return True
+
+
+class InProgressGroup(ExpandedHudGroup, HudGroup):
+    tone = SuccessTone
+
+
+class ReadyToTestGroup(ExpandedHudGroup, HudGroup):
+    tone = AccentTone
+
+
+class IdleGroup(HudGroup):
+    pass
+
+
+class ReadyForApplication:
+    """Delivered and installed states share their declared presentation capability."""
+
+    hud_group: ClassVar[type[HudGroup]] = ReadyToTestGroup
+
+
+class UrgentPresentation:
+    """A row can be urgent even when another rule already owns its request."""
+
+    hud_group: ClassVar[type[HudGroup]] = UrgentGroup
+
+
+class NeedsCommanderAttention(UrgentPresentation):
     """Urgent siblings share their ping behavior without claiming each other's state."""
 
     @classmethod
@@ -193,6 +251,7 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     presence: ThreadStatus
     source: UnitObservation = field(compare=False, repr=False)
     action: ClassVar[str]
+    hud_group: ClassVar[type[HudGroup]] = IdleGroup
     # What the owner would ask on reading this card; the action answers it.
     question: ClassVar[str]
 
@@ -230,13 +289,12 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     ) -> tuple[UnitObservation, ...]:
         snapshot, now = comms.registry.snapshot(), time.time()
         held = frame.holders
-        requests = frame.pulls
         readings = tuple(
             UnitObservation(
                 comms,
                 thread,
                 tuple(held.get(thread.incarnation, ())),
-                requests,
+                frame,
                 tuple(
                     message
                     for rule in frame.answers
@@ -461,7 +519,18 @@ class StalledOnNothing(NeedsCommanderAttention, PendingWorkState, UnitState):
         )
 
 
-class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
+class ReviewDue(UrgentPresentation, ConditionalState, UnitState):
+    """The frame's review rounds require the commander even while the unit keeps working."""
+
+    question = "its review timer is up. what did it actually do?"
+    action = "read its diff and judge the recorded work"
+
+    @classmethod
+    def matches(cls, source: UnitObservation) -> bool:
+        return bool(source.review_timers)
+
+
+class DeliveredUnclosed(ReadyForApplication, NeedsCommanderAttention, ConditionalState, UnitState):
     question = "delivered and still open. why isn't it closed?"
     action = "install the merge or close with the working application evidence"
 
@@ -475,7 +544,7 @@ class DeliveredUnclosed(NeedsCommanderAttention, ConditionalState, UnitState):
         )
 
 
-class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
+class AwaitingApplicationRun(ReadyForApplication, NeedsCommanderAttention, UnitState):
     """Installed merged orders wait on their holder's application run, so no commander verb
     disposes of the line and it locks none. The line names only those orders; while the unit
     still writes source for another, that order's state is the unit's."""
@@ -495,6 +564,7 @@ class AwaitingApplicationRun(NeedsCommanderAttention, UnitState):
 
 
 class Moving(ConditionalState, UnitState):
+    hud_group = InProgressGroup
     question = "it's moving. toward the order, or somewhere else?"
     action = "let it continue"
 

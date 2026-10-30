@@ -2,19 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import Iterable
+from contextlib import aclosing
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
 from .errors import ToolRefusedError
-from .field_codec import WireTransient, projected
+from .field_codec import WireExclude, WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .watched import FileSource, Watched
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,7 @@ class ServiceReading(ToolResult):
     def with_services(self, passes: ServicePasses, owner: RecordedThreadIncarnation) -> Self:
         return replace(self, services=passes, heartbeat=passes.heartbeat_completed_at(owner))
 
-    @projected(view='wire')
+    @projected(view=WireExclude)
     def service_status(self) -> tuple[str, ...]:
         clock = self.heartbeat.aged_line('Tristan last completed', time.time())
         failures = self.services.failure_lines()
@@ -90,7 +93,8 @@ class BoardUnavailable(ToolRefusedError):
 
 
 @dataclass(frozen=True, slots=True)
-class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier):
+class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses], DependentStateTier,
+                       Watched):
     """The connector's log reaches nobody; the commander's standing rules read this file."""
 
     filename: ClassVar[str] = "service_passes.json"
@@ -98,6 +102,35 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
 
     def empty(self) -> ServicePasses:
         return ServicePasses()
+
+    async def wait_completed(
+        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float, watch: str,
+    ) -> None:
+        """Join ordinary recorded completions, never run the watch being qualified.
+
+        Subscribe before reading, so a completion between the first read and wait
+        cannot disappear. A partial pass plus a recorded failure is not acceptance.
+        """
+        pending = commanders
+        timeout = asyncio.timeout(Coordination.watch_period)
+        try:
+            async with timeout:
+                async with aclosing(self.watch_sources(FileSource(self.path))) as changes:
+                    async for _ in changes:
+                        passes = await Coordination.run_worker(self.read)
+                        if watch in passes.failing:
+                            raise ToolRefusedError(passes.failing[watch].failure_line(watch))
+                        pending = tuple(owner for owner in commanders
+                                        if not passes.completed_since(owner, since))
+                        if not pending:
+                            return
+        except TimeoutError as error:
+            if not timeout.expired():
+                raise
+            raise ToolRefusedError(
+                f"{watch} has no ordinary completion since service restart {since}: "
+                + ", ".join(owner.name for owner in pending)
+            ) from error
 
     def failed(self, watch: str, error: BaseException) -> None:
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:

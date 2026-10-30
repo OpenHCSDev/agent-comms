@@ -389,6 +389,7 @@ class ClaudeUserHeader(WireHeader):
     origin: KindHeader = Field(default_factory=lambda: KindHeader(kind=''))
     is_compact_summary: bool = Field(default=False, alias='isCompactSummary')
     is_meta: bool = Field(default=False, alias='isMeta')
+    turn_origin: str = Field(default='', alias='turnOrigin')
 
     def record_type(self) -> str:
         if self.origin.type == TaskNotification.declared_name:
@@ -397,7 +398,7 @@ class ClaudeUserHeader(WireHeader):
             return LocalCommandOutput.declared_name
         if self.is_compact_summary:
             return CompactSummary.declared_name
-        if self.is_meta and 'origin' not in self.model_fields_set:
+        if self.is_meta and not {'origin', 'turn_origin'} & self.model_fields_set:
             return HarnessNote.declared_name
         return UserRecord.declared_name
 
@@ -1020,6 +1021,10 @@ class LastPrompt(MetadataRecord, declared_name='last-prompt'):
 
 class AiTitle(MetadataRecord, declared_name='ai-title'):
     pass
+
+
+class ToolsUsed(MetadataRecord, declared_name='tools-used'):
+    """The tools the conversation had used, recorded at a compaction; nothing here reaches the bus."""
 
 
 class PrLink(MetadataRecord, declared_name='pr-link'):
