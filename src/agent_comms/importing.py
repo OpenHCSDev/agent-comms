@@ -11,6 +11,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from io import StringIO
+from pathlib import Path
 from typing import Annotated, TYPE_CHECKING
 
 
@@ -24,8 +25,6 @@ from .turn_item import NativeItemId
 from .native_session_reopen import PiSessionId
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from .cli_bridges.history import History
     from .runtime_updates import SessionFacts
     from .transcript_events import TranscriptEvent

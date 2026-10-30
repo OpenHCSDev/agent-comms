@@ -2479,13 +2479,32 @@ class FieldCodec(MroDispatch, Sealed):
         parameters and dict as locals, keeping typing's None-to-NoneType and extras."""
         hints: dict[str, type[object]] = {}
         for base in reversed(declaration.__mro__):
-            own = types.ModuleType(base.__qualname__)
-            own.__annotations__ = annotationlib.get_annotations(
-                base, format=annotationlib.Format.FORWARDREF)
-            hints |= get_type_hints(own, globalns=vars(sys.modules[base.__module__]),
-                                    localns={param.__name__: param for param in base.__type_params__}
-                                    | dict(vars(base)), include_extras=True)
+            hints |= {
+                name: FieldCodec._declared_type(base, name)
+                for name in annotationlib.get_annotations(
+                    base, format=annotationlib.Format.FORWARDREF)
+            }
         return hints
+
+    @staticmethod
+    @cache
+    def _declared_type(declaration: type, name: str) -> type[object]:
+        """Evaluate one annotation in its declarer's namespace, including metadata lambdas."""
+        own = types.ModuleType(declaration.__qualname__)
+        own.__annotations__ = {name: annotationlib.get_annotations(
+            declaration, format=annotationlib.Format.FORWARDREF)[name]}
+        return get_type_hints(
+            own, globalns=vars(sys.modules[declaration.__module__]),
+            localns={param.__name__: param for param in declaration.__type_params__}
+            | dict(vars(declaration)), include_extras=True,
+        )[name]
+
+    @classmethod
+    def field_annotation(cls, record: type, name: str) -> type[object]:
+        """A field resolves where it was declared, without evaluating unrelated annotations."""
+        declarer = next(owner for owner in record.__mro__ if name in
+                        annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
+        return cls._declared_type(declarer, name)
 
     @overload
     @classmethod
@@ -2538,10 +2557,7 @@ class FieldCodec(MroDispatch, Sealed):
         for item in fields(record):
             if not item.compare:
                 continue
-            declarer = next(owner for owner in record.__mro__ if item.name in
-                            annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
-            annotation = annotationlib.get_annotations(declarer, eval_str=True)[item.name]
-            compile_decoder(annotation).compile_comparison(compiled)
+            compile_decoder(cls.field_annotation(record, item.name)).compile_comparison(compiled)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:

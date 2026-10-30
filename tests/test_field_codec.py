@@ -1194,6 +1194,35 @@ def test_an_annotation_lambda_sees_the_module_that_declared_it():
     assert hint.__metadata__[0]() == __import__("os").sep
 
 
+def test_every_declared_field_type_resolves() -> None:
+    """Import-visible records must be comparable from their declarations, not runtime guesses."""
+    import importlib
+    import pkgutil
+    from dataclasses import fields, is_dataclass
+
+    import agent_comms
+
+    records: set[type] = set()
+    for module_info in pkgutil.walk_packages(agent_comms.__path__, agent_comms.__name__ + "."):
+        module = importlib.import_module(module_info.name)
+        records.update(
+            value for value in vars(module).values()
+            if isinstance(value, type) and is_dataclass(value)
+            and value.__module__.startswith(agent_comms.__name__ + ".")
+        )
+    assert records, "No codec records were discovered"
+    failures: list[str] = []
+    for record in sorted(records, key=lambda item: (item.__module__, item.__qualname__)):
+        for item in fields(record):
+            if not item.compare:
+                continue
+            try:
+                FieldCodec.field_annotation(record, item.name)
+            except (NameError, TypeError) as error:
+                failures.append(f"{record.__module__}.{record.__qualname__}.{item.name}: {error}")
+    assert not failures, "Unresolved compared field annotations:\n" + "\n".join(failures)
+
+
 def test_a_declaration_evaluates_its_annotations_once():
     """Pi payloads call _types on every decode. Uncached, a real journal entry cost 2.21 ms
     instead of 0.16 ms and the resident worker burned 112% CPU (2026-10-30)."""
