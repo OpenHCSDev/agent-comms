@@ -15,12 +15,10 @@ import asyncio
 class ConfigureCliCommand(
     NameArgument, NextTurnConfiguration, CliCommand, declared_name="configure"
 ):
-    help = "Set a stopped thread's model, thinking level, or service tier for its next start"
+    help = "Set a thread's model, thinking level, or service tier for its next turn"
 
     def apply(self, ctx: Comms) -> CliResult:
         thread = ctx.registry.require(self.name)
-        ctx.registry.status(thread.name).require_inactive(
-            f"{thread.name} is running; change its settings through its session")
         asyncio.run(ConfigOptions.configured().validate(self.configured(thread)))
         updated = ctx.threads.set_thread_configuration(thread, self)
         return ThreadConfiguredResult(updated.name, updated.model, updated.thinking_level,

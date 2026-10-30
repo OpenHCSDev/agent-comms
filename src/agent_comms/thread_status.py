@@ -27,11 +27,9 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
-    from .registration import Registration
     from .registry_document import RegistryEntry, RegistrySnapshot, RosterVisibility
     from .thread_identity import GenerationCounter, OwnerIdentity
     from .threads import Thread
-    from .tool_caller import ToolCaller
     from .turn_lease import TurnCompletion, TurnLeaseFence
 
 
@@ -123,9 +121,6 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def changes_owner(self, nxt: ThreadStatus) -> bool:
         return self.starts_owner(nxt) or nxt.starts_owner(self)
 
-    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
-        return True
-
     def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
@@ -202,9 +197,6 @@ class ActiveThreadPresence(AlwaysListed, Visible, ThreadStatus, declared_name=No
 
     def withdraw_owner(self, counter: GenerationCounter, name: str) -> None:
         counter.advance(name)
-
-    def permits_reconfiguration(self, caller: ToolCaller, registry: Registration, name: str) -> bool:
-        return caller.matches_thread(registry, name)
 
     def native_owner_binding(self, snapshot: RegistrySnapshot, thread: Thread) -> ThreadOwnerBinding:
         if not thread.process_alive:

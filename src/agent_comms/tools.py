@@ -338,10 +338,6 @@ class CommsModelTool(NextTurnConfiguration, NativeOwnerCommand, ToolRequest):
         """Change this thread's model or another thread's model for future turns."""
         thread_name = self.thread.name(caller)
         original = comms.registry.require(thread_name)
-        if not caller.may_reconfigure(comms, thread_name):
-            raise RelationViolationError(
-                f"{thread_name} is running; change its settings through its own session"
-            )
         thread = comms.threads.set_thread_configuration(original, self)
         return ModelChanged(thread.name, thread.model, thread.thinking_level, thread.service_tier)
 

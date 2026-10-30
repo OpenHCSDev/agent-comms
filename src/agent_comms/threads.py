@@ -279,7 +279,7 @@ class Thread(ThreadProvenance, CatalogSelection):
         ThinkingLevelField, RegistrationPolicy(InheritApplied)
     ] = NoThinkingOverride
     service_tier: Annotated[ServiceTier, RegistrationPolicy(InheritPrevious)] = (
-        field(default=ServiceTier.PRIORITY, kw_only=True)
+        field(default=ServiceTier.STANDARD, kw_only=True)
     )
     goal: Annotated[GoalDeclaration, RegistrationPolicy(GoalDeclaration)] = (
         field(default_factory=NoGoal)
@@ -357,6 +357,10 @@ class Thread(ThreadProvenance, CatalogSelection):
     def project_path(self) -> Path:
         """The physical current project, resolved once for this immutable snapshot."""
         return self.worktree.resolved().path
+
+    @property
+    def service_tier_value(self) -> str:
+        return self.service_tier.value
 
     @property
     def home_checkouts(self) -> tuple[Path, ...]:

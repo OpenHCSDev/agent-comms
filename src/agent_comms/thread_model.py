@@ -130,3 +130,8 @@ class CatalogSelection(ABC):
     @property
     def thinking_level(self) -> type[ThinkingChoice]:
         return NoThinkingOverride
+
+    @property
+    def service_tier_value(self) -> str | None:
+        """Creation catalogs have no stored thread tier to advertise."""
+        return None
