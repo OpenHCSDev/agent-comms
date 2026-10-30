@@ -50,6 +50,8 @@ from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.transcript_events import IncomingTranscript
+from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
@@ -756,3 +758,17 @@ def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
     assert not commands("copied-fork")
     assert not commands("bound-unit")
     assert "comms" in comms.registry.require("copied-fork").tags
+
+
+def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_inbound(notification_bus):
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    user = owner(comms)
+    board = Message(sender=user.name, target="lead", body="board", type=InfoKind,
+                    role=CommanderDecisions.role, task=CommanderDecisions(lead, (), (), ()))
+    spoken = Message(sender=user.name, target="lead", body="his words", type=InfoKind,
+                     role=ConversationRole())
+    assert board.category is HeartbeatCategory
+    assert spoken.category is InboundCategory
+    assert IncomingTranscript.of(board, reader="lead").category is HeartbeatCategory
+    assert HeartbeatCategory in all_categories()

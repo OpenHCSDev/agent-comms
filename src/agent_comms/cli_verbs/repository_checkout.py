@@ -17,7 +17,7 @@ from typing import Annotated
 @dataclass(frozen=True, kw_only=True)
 class RepositoryCheckoutCliCommand(CheckoutCliCommand,
                                    declared_name=RepositoryCheckoutAllocation.verb):
-    help = "Create, repair or remove an owned problem checkout of a registered OWNER/REPO"
+    help = "Create, repair, transfer or remove an owned problem checkout of a registered OWNER/REPO"
     repository: Annotated[RepositoryName, Argument(flags=("repository",))]
 
     def destination(self, rule: StorageRule, thread: Thread) -> Path:

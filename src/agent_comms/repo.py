@@ -5,6 +5,8 @@ from __future__ import annotations
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
@@ -515,6 +517,47 @@ class Checkout(SingleFieldValue, PresentMember):
             for key, value in (line.split(" ", 1) for line in listed.splitlines())
         )
 
+    def initialized_submodules(self) -> Iterator[PinnedSubmodule]:
+        """Only existing module worktrees move; never initialize or replace their contents."""
+        for module in self.submodules():
+            if (module.path / '.git').is_file():
+                yield module
+                yield from Checkout(module.path).initialized_submodules()
+            elif (module.path / '.git').exists():
+                raise ValueError(f'Submodule {module.path} must have an absorbed Git directory')
+
+    @contextmanager
+    def relocating(self, destination: Path) -> Iterator[CheckoutTransfer]:
+        """Move this exact linked worktree, repairing Git's submodule move limitation.
+
+        Git refuses ``worktree move`` when modules are initialized. Rename retains the
+        index and all bytes; ``worktree repair`` reconnects the parent, and each module's
+        existing private Git directory gets its new worktree. Roll back before exposing
+        a failed registration; no shared config or module contents are removed.
+        """
+        source = self.resolved(strict=True).path
+        if source.parent != destination.parent or source == destination:
+            raise ValueError('Checkout relocation requires distinct siblings in the allocation root')
+        if not (source / '.git').is_file() or source.is_symlink():
+            raise ValueError(f'{source} is not an isolated linked worktree')
+        if destination.exists() or destination.is_symlink():
+            raise ValueError(f'Checkout destination {destination} is occupied')
+        common = Path(Repo.git(source, 'rev-parse', '--path-format=absolute',
+                               '--git-common-dir').strip())
+        modules = tuple(SubmoduleTransfer.capture(module, source, destination)
+                        for module in self.initialized_submodules())
+        transfer = CheckoutTransfer(source, destination,
+                                    Repo.git(source, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+                                    Repo.git(source, 'rev-parse', 'HEAD').strip())
+        with ExitStack() as rollback:
+            source.rename(destination)
+            rollback.callback(transfer.restore, common, modules)
+            Repo.git(common, 'worktree', 'repair', str(destination))
+            for module in modules:
+                module.apply(destination)
+            yield transfer
+            rollback.pop_all()
+
     def prepare(self) -> None:
         """Populate the pinned submodules, rebuilding any an interrupted clone left broken.
         A tree that pins none has nothing to prepare."""
@@ -541,6 +584,54 @@ class Checkout(SingleFieldValue, PresentMember):
             Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
         )
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+@dataclass(frozen=True)
+class SubmoduleTransfer:
+    """An initialized module's own Git directory and its original worktree setting."""
+
+    store: Path
+    relative: Path
+    original_worktree: str
+
+    @classmethod
+    def capture(cls, module: PinnedSubmodule, source: Path, destination: Path) -> Self:
+        store = module.store.resolve(strict=True)
+        if store.is_relative_to(source):
+            raise ValueError(f'Submodule Git directory {store} must be outside the moved tree')
+        relative = module.path.relative_to(source)
+        # Sibling relocation keeps .git's relative indirection at the same depth.
+        linked = (module.path / '.git').read_text().strip().removeprefix('gitdir: ')
+        if (destination / relative / linked).resolve() != store:
+            raise ValueError(f'Submodule {module.path} has an unsafe Git directory link')
+        original = Repo.git(module.path, 'config', '--local', '--get', 'core.worktree').strip()
+        return cls(store, relative, original)
+
+    def apply(self, destination: Path) -> None:
+        Repo.git(destination, '--git-dir', str(self.store),
+                 '--work-tree', str(destination / self.relative), 'config', '--local',
+                 'core.worktree', str(destination / self.relative))
+
+    def restore(self, source: Path) -> None:
+        Repo.git(source, '--git-dir', str(self.store),
+                 '--work-tree', str(source / self.relative), 'config', '--local',
+                 'core.worktree', self.original_worktree)
+
+
+@dataclass(frozen=True)
+class CheckoutTransfer:
+    """The retained Git identity and the paths of one move."""
+
+    source: Path
+    destination: Path
+    branch: str
+    head: str
+
+    def restore(self, common: Path, modules: tuple[SubmoduleTransfer, ...]) -> None:
+        self.destination.rename(self.source)
+        Repo.git(common, 'worktree', 'repair', str(self.source))
+        for module in modules:
+            module.restore(self.source)
 
 
 class LaunchCheckout(Checkout):
