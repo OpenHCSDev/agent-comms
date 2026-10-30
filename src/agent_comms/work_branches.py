@@ -25,7 +25,7 @@ from pydantic.alias_generators import to_camel
 from .code_lines import CodeLines
 from .declared_family import DeclaredFamily
 from .field_codec import GitCommitText, PathText, projected
-from .repo import GitCommandError, Repo
+from .repo import Checkout, CheckoutHistory, GitCommandError, GitReference, Repo
 from .repository_name import RepositoryName
 from .wire_models import WireModel
 
@@ -280,13 +280,13 @@ class BranchUpstream(DeclaredFamily):
     branch: str
 
     @classmethod
-    def from_git(cls, row: str) -> BranchUpstream:
-        branch, tracking, remote, reference = row.split("\0")
-        if not tracking:
+    def from_reference(cls, reference: GitReference) -> BranchUpstream:
+        branch = reference.name.removeprefix("refs/heads/")
+        if not reference.upstream:
             return NoUpstream(branch)
-        if remote == Repo.local_remote:
-            return LocalUpstream(branch, tracking)
-        return PublishedUpstream(branch, tracking, remote, reference)
+        if reference.remote == Repo.local_remote:
+            return LocalUpstream(branch, reference.upstream)
+        return PublishedUpstream(branch, reference.upstream, reference.remote, reference.remote_ref)
 
     def publication_inputs(self) -> tuple[tuple[str, str], ...]:
         """Only published upstreams supply remote/reference acquisition requirements."""
@@ -301,10 +301,9 @@ class BranchUpstream(DeclaredFamily):
     def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
         # A local, absent or deleted upstream cannot make its stale tracking ref publication.
         tracking = self.tracking_name()
-        remotes = tuple(ref for ref in reader._git(
-            "for-each-ref", "--format=%(refname)", "refs/remotes/",
-        ).splitlines() if ref != tracking)
-        count = int(reader._git("rev-list", "--count", head, "--not", *remotes))
+        remotes = tuple(ref for ref in reader.history.references("refs/remotes/")
+                        if ref != tracking)
+        count = reader.history.count(head, *remotes)
         return (UnpushedHead(head, count, tracking),) if count else ()
 
 
@@ -337,14 +336,14 @@ class PublishedUpstream(TrackedUpstream):
         return ((self.remote, self.reference),)
 
     def require_prepared(self, reader: WorkBranches) -> None:
-        Repo.require_local_commits(reader.checkout,
-                                  *reader.selected_heads(self.remote, self.reference))
+        for head in reader.selected_heads(self.remote, self.reference):
+            reader.history.commit(head)
 
     def unpushed(self, reader: WorkBranches, head: str) -> tuple[UnpushedHead, ...]:
         published = reader.selected_heads(self.remote, self.reference)
         if published:
             (remote_head,) = published
-            count = int(reader._git("rev-list", "--count", f"{remote_head}..{head}"))
+            count = reader.history.count(head, remote_head)
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(reader, head)
 
@@ -397,10 +396,14 @@ query($owner: String!, $name: String!, $after: String) {
     def _git(self, *arguments: str, input: str = "") -> str:
         return Repo.git(self.checkout, *arguments, timeout=self.timeout, input=input)
 
+    @cached_property
+    def history(self) -> CheckoutHistory:
+        return Checkout(self.checkout).read()
+
     def read_checkout(self) -> CheckoutRead:
         """Whether git can open this checkout at all; the one probe every reader asks first."""
         try:
-            self._git("--no-optional-locks", "rev-parse", "--git-dir")
+            self.history.refs
         except GitCommandError as error:
             return UnreadableCheckoutRead(self.checkout, str(error))
         return ReadableCheckoutRead(self)
@@ -429,9 +432,8 @@ query($owner: String!, $name: String!, $after: String) {
     @property
     def local_work(self) -> bool:
         """Uncommitted files or HEAD commits absent from every published remote ref."""
-        return bool(self.uncommitted()) or bool(
-            self._git("rev-list", "--max-count=1", "HEAD", "--not", "--remotes")
-        )
+        return bool(self.uncommitted()) or bool(self.history.count(
+            "HEAD", *self.history.references("refs/remotes/")))
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """One complete published-ref cut per remote for this reader, not one call per branch."""
@@ -466,21 +468,20 @@ query($owner: String!, $name: String!, $after: String) {
         with Repo.acquiring():
             self.remote_heads(Repo.remote, f"refs/heads/{base}")
             Repo.require_commits(self.checkout, Repo.remote, self._pull_request_base(base), head)
+            self.history.include(self._pull_request_base(base), head)
 
     def pull_request_base(self, base: str, head: str) -> str:
         base_head = self._pull_request_base(base)
-        Repo.require_local_commits(self.checkout, base_head, head)
+        self.history.commit(base_head)
+        self.history.commit(head)
         return base_head
 
     @cached_property
     def upstreams(self) -> dict[str, BranchUpstream]:
         return {record.branch: record for record in (
-            DetachedHead("HEAD"),
-            *(BranchUpstream.from_git(line) for line in self._git(
-                "for-each-ref",
-                "--format=%(refname:strip=2)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)",
-                "refs/heads/",
-            ).splitlines()),
+            DetachedHead(self.history.head.name),
+            *(BranchUpstream.from_reference(reference) for reference in self.history.refs.values()
+              if reference.name.startswith("refs/heads/")),
         )}
 
     def prepare_upstreams(self) -> None:
@@ -495,6 +496,7 @@ query($owner: String!, $name: String!, $after: String) {
                 heads = tuple(dict.fromkeys(
                     head for reference in sorted(refs) for head in self.remote_heads(remote, reference)))
                 Repo.require_commits(self.checkout, remote, *heads)
+                self.history.include(*heads)
 
     def pull_request_patch_id(self, base: str, head: str) -> str:
         base_head = self.pull_request_base(base, head)
@@ -521,16 +523,12 @@ query($owner: String!, $name: String!, $after: String) {
 
     def commit_base(self, main: str, head: str) -> CommitBase:
         """Git's best common ancestor; exit 1 means the histories share none."""
-        try:
-            return SharedCommitBase(self._git('merge-base', main, head).strip())
-        except GitCommandError as error:
-            if not error.unrelated_history():
-                raise
-            return UnrelatedCommitBase()
+        bases = self.history.merge_base(main, head)
+        return SharedCommitBase(bases[0]) if bases else UnrelatedCommitBase()
 
     def commits_since(self, head: str, *excluded: str) -> tuple[str, ...]:
-        return tuple(self._git('rev-list', '--no-merges', head,
-                               '--not', *excluded).splitlines())
+        return tuple(commit.sha for commit in self.history.commits((head,), *excluded)
+                     if len(commit.parents) < 2)
 
     def whole_patch_ids(self, base: str, head: str) -> frozenset[str]:
         """One stable fingerprint of the entire immutable diff, including multi-commit squash."""
@@ -564,7 +562,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     def unpushed(self, branch: str, head: str) -> tuple[UnpushedHead, ...]:
         """Capture publication at the source reader, never through another clone's refs."""
-        Repo.require_local_commits(self.checkout, head)
+        self.history.commit(head)
         return self.require_upstream(branch).unpushed(self, head)
 
     @cached_property
@@ -574,7 +572,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def origin_main(self) -> str:
-        return self._git("rev-parse", f"refs/remotes/{Repo.remote}/{self.main}").strip()
+        return self.history.resolve(f"refs/remotes/{Repo.remote}/{self.main}")
 
     def difference(self, main: str) -> BranchDifference:
         """Git owns ancestry and changed paths; pin both commits before comparing."""
@@ -593,9 +591,12 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(
                 f"HEAD reflog in {self.checkout} has no readable movement time"
             ) from unread
-        branch = self._git("rev-parse", "--abbrev-ref", "HEAD").strip()
-        base = self._git("merge-base", main, head).strip()
-        behind = int(self._git("rev-list", "--count", f"{base}..{main}"))
+        branch = self.history.refs["HEAD"].symbolic.removeprefix("refs/heads/") or "HEAD"
+        bases = self.history.merge_base(main, head)
+        if not bases:
+            raise WorkBranchError(f"Unrelated main and HEAD in {self.checkout}")
+        base = bases[0]
+        behind = self.history.count(main, base)
         files = self.changed(base, head)
         return BranchDifference(
             RepositoryName(*self.repository), branch, head, moved_at, main, behind, files,

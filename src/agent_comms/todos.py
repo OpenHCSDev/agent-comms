@@ -1247,25 +1247,6 @@ class ProgressPoint(DisclosedRecord):
 
 
 @dataclass(frozen=True)
-class LoggedCommit:
-    """One commit of a frame's history walk with the message every problem pattern greps."""
-    point: ProgressPoint
-    message: str
-
-    format: ClassVar[str] = f"{ProgressPoint.format}%x00%B%x00"
-
-    @classmethod
-    def walked(cls, output: str) -> tuple[LoggedCommit, ...]:
-        fields = output.split("\0")
-        return tuple(cls(ProgressPoint.listed(head), message)
-                     for head, message in zip(fields[0::2], fields[1::2]) if head.strip())
-
-    def matches(self, pattern: re.Pattern[str]) -> bool:
-        """Git's --grep: the pattern searched line by line, ignoring case."""
-        return bool(pattern.search(self.message))
-
-
-@dataclass(frozen=True)
 class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
@@ -1437,20 +1418,16 @@ class PresentCheckout(ProgressCheckout):
     def default_refs(self) -> tuple[str, ...]:
         return (self.default_reference,) if self.default_reference in self.origin_refs else ()
 
-    def git(self, *args: str) -> str:
-        return Repo.git(self.path, *args)
-
     @cached_property
     def head(self) -> str:
-        return self.git("rev-parse", "--verify", "HEAD^{commit}")
+        return self.branches.history.resolve("HEAD")
 
     def require_read(self) -> None:
         self.head
 
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
-        return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              f"refs/remotes/{Repo.remote}/").splitlines())
+        return self.branches.history.references(f"refs/remotes/{Repo.remote}/")
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1461,7 +1438,7 @@ class PresentCheckout(ProgressCheckout):
         if not self.origin_refs:
             return ()
         pushes = []
-        for row in self.git("reflog", "show", "--date=unix", "--grep-reflog=update by push",
+        for row in Repo.git(self.path, "reflog", "show", "--date=unix", "--grep-reflog=update by push",
                             "--format=%gD%x09%H", *self.origin_refs).splitlines():
             selector, sha = row.split("\t")
             pushes.append((sha, float(selector.rsplit("@{", 1)[1].removesuffix("}"))))
@@ -1489,26 +1466,12 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
-    @cached_property
-    def walks(self) -> dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[LoggedCommit, ...]]:
-        """This frame's history walks, one per selection of refs; every order greps them."""
-        return {}
-
-    def walk(self, refs: tuple[str, ...], excluded: tuple[str, ...]) -> tuple[LoggedCommit, ...]:
-        if (refs, excluded) not in self.walks:
-            self.walks[refs, excluded] = LoggedCommit.walked(self.git(
-                "log", f"--format={LoggedCommit.format}", *refs, "--not", *excluded))
-        return self.walks[refs, excluded]
-
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
-        if refs:
-            matcher = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
-            for commit in self.walk(refs, excluded):
-                if commit.matches(matcher):
-                    yield commit.point
-                    return
+        for commit in self.branches.history.commits(refs, *excluded, pattern=pattern):
+            yield ProgressPoint(commit.sha, commit.at)
+            return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
@@ -1532,11 +1495,14 @@ class PresentCheckout(ProgressCheckout):
             return DistanceReadings()
         readings: list[DistanceReading] = []
         for tip in self.read_commits(source.todo, refs, *self.default_refs):
-            base = self.git("merge-base", tip.sha, self.default_reference).strip()
-            commits = [ProgressPoint.listed(line) for line in reversed(self.git(
-                "log", f"--max-count={DistanceReadings.window}", "--first-parent",
-                f"--format={ProgressPoint.format}", tip.sha, "--not", base).splitlines())]
-            points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
+            bases = self.branches.history.merge_base(tip.sha, self.default_reference)
+            if not bases:
+                raise WorkBranchError(f"Unrelated progress and main in {self.path}")
+            base = bases[0]
+            commits = [ProgressPoint(commit.sha, commit.at) for commit in islice(
+                self.branches.history.commits((tip.sha,), base, first_parent=True),
+                DistanceReadings.window)]
+            points = [ProgressPoint(base, source.since), *reversed(commits)][-DistanceReadings.window:]
             readings.extend(reading for point in points for reading in self.recorded_distances(
                 source.todo.order.checked(), base, point))
         return DistanceReadings(tuple(readings))
@@ -1545,7 +1511,7 @@ class PresentCheckout(ProgressCheckout):
                            point: ProgressPoint) -> Iterator[DistanceReading]:
         """Read the check run result; without a recorded result the distance is unknown."""
         for run in order.check.recorded_among(self.stored(point.sha)):
-            touched = self.git("diff", "--name-only", base, point.sha).split()
+            touched = self.branches.changed(base, point.sha)
             yield DistanceReading(point.at, order.check.result.distance(run).plus(
                 order.untouched(touched)), order.check.command)
 
@@ -1567,6 +1533,7 @@ class CheckoutReads:
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
+        path = path.resolve()
         return self._checkouts.setdefault(path, PresentCheckout(path))
 
     def progress_checkout(self, path: Path) -> ProgressCheckout:

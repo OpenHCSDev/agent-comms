@@ -16,7 +16,7 @@ from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from subprocess import TimeoutExpired
@@ -25,8 +25,7 @@ from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
-from agent_comms.private_path import FileObservation, FileRevision
-from agent_comms.repo import GitCommandError, Repo
+from agent_comms.repo import Checkout, CheckoutHistory, GitCommandError, Repo
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -65,20 +64,23 @@ class MainTree:
     repo: Repo
     commit: str
     census: Census = field(compare=False, repr=False)
+    history: CheckoutHistory = field(compare=False, repr=False, kw_only=True)
     branch: ClassVar[str] = "main"
     source: ClassVar[str] = ".py"
     parsed: dict[str, tuple[str, MainModule]] = field(
         default_factory=dict, compare=False, repr=False, kw_only=True,
     )
 
+    def __post_init__(self) -> None:
+        self.history.include(self.commit)
+
     @classmethod
     def of(cls, repo: Repo, census: Census) -> MainTree:
-        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"{repo.remote}/{cls.branch}").strip(),
-                   census)
+        return cls.from_history(repo, census, Checkout(repo.checkout).read())
 
-    def advanced(self) -> MainTree:
-        """An explicitly selected historical tree never moves."""
-        return self
+    @classmethod
+    def from_history(cls, repo: Repo, census: Census, history: CheckoutHistory) -> MainTree:
+        return cls(repo, history.resolve(f"{repo.remote}/{cls.branch}"), census, history=history)
 
     def has(self, path: str) -> bool:
         return not self.missing((path,))[0]
@@ -154,37 +156,7 @@ class MainTree:
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
-        return self.repo.contains(sha, self.commit)
-
-
-@dataclass(frozen=True)
-class LiveMainTree(MainTree):
-    """The fetched main reference and its current immutable tree, owned by its reader."""
-
-    references: tuple[Path, Path] = field(compare=False)
-    revisions: tuple[FileObservation, ...] = field(compare=False)
-
-    @classmethod
-    def of(cls, repo: Repo, census: Census) -> LiveMainTree:
-        loose, packed = Repo.git(
-            repo.checkout, 'rev-parse', '--path-format=absolute',
-            '--git-path', f'refs/remotes/{repo.remote}/{cls.branch}', '--git-path', 'packed-refs',
-        ).splitlines()
-        references = (Path(loose), Path(packed))
-        revisions = tuple(FileRevision.capture(path) for path in references)
-        tree = MainTree.of(repo, census)
-        return cls(repo, tree.commit, census, references, revisions)
-
-    def advanced(self) -> LiveMainTree:
-        revisions = tuple(FileRevision.capture(path) for path in self.references)
-        if revisions == self.revisions:
-            return self
-        tree = MainTree.of(self.repo, self.census)
-        # Capture before reading Git: a racing reference move is seen on the next read.
-        return type(self)(
-            self.repo, tree.commit, self.census, self.references, revisions,
-            parsed=self.parsed if tree.commit == self.commit else {},
-        )
+        return self.history.contains(sha, self.commit)
 
 
 class UnreadableEvidenceError(Exception):
@@ -263,8 +235,9 @@ class PlanReading:
                 self.reads[evidence] = EvidenceFound(evidence.holds(self))
         return self.reads[evidence]
 
-    def following(self, todos: tuple[Todo, ...]) -> PlanReading:
-        main = self.main.advanced()
+    def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
+        if main == self.main:
+            main = replace(main, parsed=self.main.parsed)
         return type(self)(todos, main, {
             evidence: answer for evidence, answer in self.reads.items()
             if answer.retained(evidence, self.main, main)
@@ -283,13 +256,13 @@ class PlanReadings:
 
     census: ClassVar[Census]
 
-    def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
-        return PlanReading(todos, MainTree.of(repo, self.census))
+    def observed(self, repo: Repo, todos: tuple[Todo, ...], history: CheckoutHistory) -> PlanReading:
+        return PlanReading(todos, MainTree.from_history(repo, self.census, history))
 
     def prepare_reading(self, repo: Repo, todos: tuple[Todo, ...],
-                evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+                evidence: tuple[PhaseEvidence, ...], *, history: CheckoutHistory) -> PlanReading:
         """Capture the main cut and acquire inputs without evaluating the plan."""
-        reading = self.observed(repo, todos)
+        reading = self.observed(repo, todos, history)
         for declared in evidence:
             reading.prepare(declared)
         return reading
@@ -302,7 +275,8 @@ class PlanReadings:
 
     def read(self, repo: Repo, todos: tuple[Todo, ...],
              evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
-        return self.observe_reading(self.prepare_reading(repo, todos, evidence), evidence)
+        return self.observe_reading(self.prepare_reading(
+            repo, todos, evidence, history=Checkout(repo.checkout).read()), evidence)
 
     def retain(self, reading: PlanReading) -> None:
         """An ordinary command releases its reading when its caller does."""
@@ -317,16 +291,17 @@ class RetainedPlanReadings(PlanReadings):
         self.plans: tuple[PlanReading, ...] = ()
         self.lock = Lock()
 
-    def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
+    def observed(self, repo: Repo, todos: tuple[Todo, ...], history: CheckoutHistory) -> PlanReading:
+        current = super().observed(repo, todos, history)
         with self.lock:
             plans = self.plans
         for previous in plans:
             if previous.main.repo == repo:
-                return previous.following(todos)
-        return PlanReading(todos, LiveMainTree.of(repo, self.census))
+                return previous.following(todos, current.main)
+        return current
 
     def retain(self, reading: PlanReading) -> None:
-        retained = reading.following(reading.todos)
+        retained = reading.following(reading.todos, reading.main)
         with self.lock:
             self.plans = (*(plan for plan in self.plans
                             if plan.main.repo != retained.main.repo), retained)
@@ -378,6 +353,7 @@ class CommitMerged(MainEvidence):
     def prepare(self, reading: PlanReading) -> None:
         Repo.require_commits(reading.main.repo.checkout, reading.main.repo.remote,
                              self.sha, reading.main.commit)
+        reading.main.history.include(self.sha, reading.main.commit)
 
     def read(self, main: MainTree) -> bool:
         return main.contains(self.sha)

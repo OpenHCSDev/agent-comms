@@ -41,13 +41,14 @@ class CommanderInputs(HeldOrders):
         project = snapshot.commander_project.require()
         for repo in project.repository_names():
             pulls.carry_reviews(comms.goals, repo)
-        StandingRule.prepare_all(comms, commander, holds, pulls)
         repository = Repo.declaring(project.repos, PlanPhase.__module__)
         plan = plans.prepare_reading(
             repository,
             comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
+            history=pulls.checkout(repository.checkout).branches.history,
         )
+        StandingRule.prepare_all(comms, commander, holds, pulls)
         return cls(holds.live, holds.orphaned, pulls, plan)
 
 
