@@ -643,7 +643,8 @@ query($owner: String!, $name: String!, $after: String) {
             sorted(
                 thread.name
                 for thread in snapshot.threads.values()
-                if str(thread.worktree.path.expanduser().resolve()) == resolved
+                if not snapshot.statuses[thread.name].archived
+                and str(thread.worktree.path.expanduser().resolve()) == resolved
             )
         )
         if not threads:

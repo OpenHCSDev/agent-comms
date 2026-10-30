@@ -76,13 +76,13 @@ class Ping(DeclaredFamily, affix="Ping"):
     def alarm_kind(self) -> type[DeclaredFamily]: ...
 
     def acted(self, history: CommanderHistory) -> bool:
-        """Whether a subject has a recorded action since this line began."""
+        """Each subject owns whether its original action clears this line."""
         began = self.since.recorded_at("A line")
-        return any(history.action_at(subject).since(began) for subject in self.subjects)
+        return any(subject.disposed(history, began) for subject in self.subjects)
 
     def undisposed(self, history: CommanderHistory, cut: float) -> bool:
-        """Waiting on the commander, and not acted on since it began. Only such a line is
-        restated as waiting and locks the verbs."""
+        """Waiting on the commander past the cut, without a recorded subject disposition.
+        Only such a line is restated as waiting and locks the verbs."""
         return self.waits_on_commander(cut) and not self.acted(history)
 
     def waits_on_commander(self, cut: float) -> bool:

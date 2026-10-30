@@ -1,8 +1,8 @@
 """What one heartbeat line is about, and the recorded Core action that disposes of it.
 
-A line is disposed only by a verb Core recorded on its subject after the line began: a
-commander or fork message reaching the unit, a verdict on the exact pull request head, or an
-answer clearing the owed message. Nothing the commander says about the line counts.
+Ordinary actions dispose only of lines that began before them. Exact-head supersession
+retires that lost head itself, even when an older observation is published later. Nothing
+the commander says about a line counts unless Core recorded the relevant subject action.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from agent_comms.head_review import PullRequestHead
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from agent_comms.todos import StoredHeadReview
+from agent_comms.todos import HeadVerdict, StoredHeadReview
 
 if TYPE_CHECKING:
     from agent_comms.comms import Comms
@@ -69,6 +69,10 @@ class HeartbeatSubject(DeclaredFamily, affix="Subject"):
         """Subjects without a disposing action never invent one."""
         return UnrecordedEventTime()
 
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        """Original action evidence is shared, while each line retains its own start."""
+        return history.action_at(self).since(since)
+
 
 @dataclass(frozen=True)
 class UnitSubject(HeartbeatSubject):
@@ -85,18 +89,24 @@ class UnitSubject(HeartbeatSubject):
 class HeadSubject(HeartbeatSubject):
     request: PullRequestHead
 
+    def clears(self, verdict: HeadVerdict) -> bool:
+        return verdict.decides()
+
     def action_at(self, history: CommanderHistory) -> EventTime:
         return max((review.at for review in StoredHeadReview.head_reviews(
-                        history.comms.goals.todos, self.request) if review.verdict.decides()),
+                        history.comms.goals.todos, self.request) if self.clears(review.verdict)),
                    key=lambda at: at.latest_with(float('-inf')), default=UnrecordedEventTime())
 
 
 @dataclass(frozen=True)
 class UnlandedHeadSubject(HeadSubject):
-    """Only the forge/Git condition clears this line; reviewing it does not land it."""
+    """Exact-head supersession retires the lost work, not merely an older alarm."""
 
-    def action_at(self, history: CommanderHistory) -> EventTime:
-        return UnrecordedEventTime()
+    def clears(self, verdict: HeadVerdict) -> bool:
+        return verdict.supersedes()
+
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return history.action_at(self).occurred()
 
 
 @dataclass(frozen=True)

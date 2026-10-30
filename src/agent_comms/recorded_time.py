@@ -78,6 +78,10 @@ class EventTime(DisclosedRecord, DeclaredFamily, affix="EventTime"):
         """Undated facts sort after recorded events, without inventing a timestamp."""
         return (1, 0.0)
 
+    def occurred(self) -> bool:
+        """Whether an event was recorded, independent of any later observation's age."""
+        return False
+
     def since(self, timestamp: float) -> bool:
         return False
 
@@ -137,6 +141,9 @@ class RecordedEventTime(EventTime):
 
     def chronology(self) -> tuple[int, float]:
         return (0, self.at)
+
+    def occurred(self) -> bool:
+        return True
 
     def since(self, timestamp: float) -> bool:
         return self.at >= timestamp
