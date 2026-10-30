@@ -316,7 +316,7 @@ class OwnerReplyConnection(OwnerConnection):
                 "The owner incarnation changed while preparing the request."
             )
         reading.require_native_owner(thread)
-        connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+        connection = cls(comms, owner, socket_path(comms.root, thread.require_process().pid))
         connection.require_identity(owner)
         return connection
 

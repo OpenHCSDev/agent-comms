@@ -8,11 +8,11 @@ from dataclasses import dataclass
 
 from .comms import Comms
 from .owner_connection import (
+    AttachedResultRuntimeRequest,
+    AttachedRuntimeRequestContext,
     OwnerConnection,
     OwnerReading,
     OwnerReplyConnection,
-    ResultRuntimeRequest,
-    RuntimeRequestContext,
 )
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .tool_declaration import ToolDeclaration
@@ -41,18 +41,18 @@ class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRead
         return self.decode_reply(asyncio.run(OwnerReplyConnection.answer(comms, owner, request)))
 
     @abstractmethod
-    async def owned(self, ctx: RuntimeRequestContext) -> Result: ...
+    async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
 
     @abstractmethod
     def decode_reply(self, raw: object) -> Result: ...
 
 
 @dataclass(frozen=True, kw_only=True)
-class OwnerReadRuntimeRequest(OwnerReading[object], ResultRuntimeRequest):
+class OwnerReadRuntimeRequest(OwnerReading[object], AttachedResultRuntimeRequest):
     operation: OwnerLiveRead
 
     async def read(self, owner: OwnerConnection) -> object:
         return await owner.request(self.declared_name, operation=self.operation)
 
-    async def result(self, ctx: RuntimeRequestContext) -> ToolResult:
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> ToolResult:
         return await self.operation.owned(ctx)

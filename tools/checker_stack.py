@@ -7,7 +7,6 @@ import hashlib
 import os
 import shutil
 import sys
-import tomllib
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -57,19 +56,18 @@ class CheckerStack(Stack, StackSources):
         )
 
     @cached_property
-    def local_names(self) -> frozenset[str]:
+    def source_projects(self) -> dict[type[Side], PrivateUvProject]:
         source = self.inputs.source(CorePackage.repository)
-        return self.local_packages(
-            *(
-                tomllib.loads(
-                    (
-                        side.require_materialized(self.source_directory, source)
-                        / "stack/pyproject.toml"
-                    ).read_text()
-                )
-                for side in Side.sides()
+        return {
+            side: PrivateUvProject.read(
+                side.require_materialized(self.source_directory, source) / "stack/pyproject.toml"
             )
-        )
+            for side in Side.sides()
+        }
+
+    @cached_property
+    def local_names(self) -> frozenset[str]:
+        return self.local_packages(*self.source_projects.values())
 
     def require_uv(self) -> None:
         declared = DeclaredUv.of(self.core / "pyproject.toml", self.uv)
@@ -81,13 +79,10 @@ class CheckerStack(Stack, StackSources):
         return MaterializedClients(self.source_directory, self.inputs, self.uv, self.python)
 
     def requirements(self, side: type[Side]) -> tuple[Requirement, ...]:
-        core = side.require_materialized(
-            self.source_directory, self.inputs.source(CorePackage.repository)
-        )
         # Identity validation and runtime selection borrow the SAME backend metadata objects.
         projects = self.clients.projects(side)
         return self.active_requirements(
-            tomllib.loads((core / "stack/pyproject.toml").read_text()),
+            self.source_projects[side],
             tuple(projects.values()),
             self.clients.environment,
         )
@@ -142,7 +137,7 @@ class CheckerStack(Stack, StackSources):
 
     def private_requirements(self) -> tuple[Requirement, ...]:
         return self.active_requirements(
-            tomllib.loads((self.checkout / "stack/pyproject.toml").read_text()),
+            PrivateUvProject.read(self.checkout / "stack/pyproject.toml"),
             tuple(self.clients.projects(HeadSide).values()),
             self.clients.environment,
         )
@@ -156,7 +151,7 @@ class CheckerStack(Stack, StackSources):
         original = self.core / "stack"
         project = self.checkout / "stack"
         project.mkdir(parents=True, exist_ok=False)
-        document = PrivateUvProject.read(original / "pyproject.toml")
+        document = self.source_projects[HeadSide].model_copy(deep=True)
         projects = self.clients.projects(HeadSide)
         document.enrich(projects[CorePackage.repository])
         materialized = {

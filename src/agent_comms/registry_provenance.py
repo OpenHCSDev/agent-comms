@@ -16,7 +16,7 @@ from agent_comms.field_codec import FieldCodec, ThreadLookup
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
-from .participant_identity import FrozenRecipientIdentity
+from .audience_manifest import FrozenRecipient
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import Thread, ThreadProvenance
@@ -248,7 +248,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
     def historical_recipient(
-        self, recipient: FrozenRecipientIdentity,
+        self, recipient: FrozenRecipient,
     ) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))

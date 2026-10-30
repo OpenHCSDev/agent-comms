@@ -2,7 +2,6 @@
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS
 from .field_codec import MalformedRecord, ThreadLookup
@@ -29,19 +28,3 @@ class ParticipantIdentity(ABC):
     @property
     @abstractmethod
     def lookup(self) -> ThreadLookup: ...
-
-
-@dataclass(frozen=True, slots=True)
-class FrozenRecipientIdentity(ParticipantIdentity):
-    """Send-time participant identity, independent of bus projection writers."""
-
-    recipient_lookup: ThreadLookup
-    canonical_thread: str
-
-    def __post_init__(self) -> None:
-        self.require_text(self.recipient_lookup, "recipient_lookup")
-        self.require_canonical(self.canonical_thread, "canonical_thread")
-
-    @property
-    def lookup(self) -> ThreadLookup:
-        return self.recipient_lookup

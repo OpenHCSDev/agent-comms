@@ -14,7 +14,8 @@ import tomli_w
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import ProjectMetadata, StackSources
+from agent_comms.field_codec import FieldCodec
+from agent_comms.installer.runtime_resolution import PrivateUvProject, ProjectMetadata, StackSources
 from agent_comms.repository_name import RepositoryName
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
@@ -68,11 +69,13 @@ def test_standard_backend_metadata_preserves_identity_python_and_all_optional_ed
     environment = StackSources.marker_environment(Path(sys.executable))
     with pytest.raises(ValueError, match="selected common interpreter"):
         StackSources.marker_environment(tmp_path / "different-interpreter")
-    root = {"project": {"dependencies": ["source-package", "inactive; python_version < '1'"]},
-            "tool": {"uv": {"package": False}}}
+    root = FieldCodec.decode(PrivateUvProject, {
+        "project": {"dependencies": ["source-package", "inactive; python_version < '1'"]},
+        "tool": {"uv": {"package": False}},
+    })
     assert all(edge.name != "inactive" for edge in StackSources.active_requirements(root, (metadata,), environment))
     assert all(edge.name != "idna" for edge in StackSources.active_requirements(root, (metadata,), environment))
-    root["project"]["dependencies"] = ["source-package[syntax]"]
+    root.project.dependencies = ["source-package[syntax]"]
     assert optional in StackSources.active_requirements(root, (metadata,), environment)
     assert len(metadata.requirements) == 2  # Inactive edges were excluded from selection, never erased.
 
@@ -91,18 +94,20 @@ def test_runtime_extra_closure_keeps_bootstrap_only_changes_outside_runtime(
                                     commands=commands, output=tmp_path / "metadata")
             for source in (front, before, after))
     environment = StackSources.marker_environment(Path(sys.executable))
-    root = {"project": {"dependencies": ["front"]}, "tool": {"uv": {"package": False}}}
+    root = FieldCodec.decode(PrivateUvProject, {
+        "project": {"dependencies": ["front"]}, "tool": {"uv": {"package": False}},
+    })
     before_active = StackSources.active_requirements(root, (front_metadata, before_metadata), environment)
     after_active = StackSources.active_requirements(root, (front_metadata, after_metadata), environment)
     assert before_active == after_active == (Requirement("front"),)
-    root["project"]["dependencies"] = ["front[image]"]
+    root.project.dependencies = ["front[image]"]
     before_active = StackSources.active_requirements(root, (front_metadata, before_metadata), environment)
     after_active = StackSources.active_requirements(root, (front_metadata, after_metadata), environment)
     assert Requirement('peer[paint]; extra == "image"') in before_active
     assert any(edge.name == "idna" for edge in before_active)
     assert not any(edge.name == "packaging" for edge in before_active)
     assert before_active != after_active
-    root["project"]["dependencies"] = ["peer[checking]"]
+    root.project.dependencies = ["peer[checking]"]
     assert StackSources.active_requirements(root, (before_metadata,), environment) != StackSources.active_requirements(
         root, (after_metadata,), environment)
 

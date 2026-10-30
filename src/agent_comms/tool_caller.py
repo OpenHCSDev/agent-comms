@@ -24,6 +24,7 @@ from .turn_phase import IdlePhase
 if TYPE_CHECKING:
     from .comms import Comms
     from .head_review import HeadReviewOrder, PullRequestHead
+    from .registration import Registration
     from .threads import Thread
     from .tool_request import ToolRequest
 

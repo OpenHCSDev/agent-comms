@@ -24,7 +24,7 @@ from agent_comms.todos import (
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.installer.runtime_resolution import StackSources
+from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
@@ -416,10 +416,14 @@ def test_ci_event_refuses_unrelated_graph_and_carrier_without_materialization(
 
 def test_stack_source_identity_normalizes_package_spelling_and_refuses_duplicate_aliases() -> None:
     source = '{git = "https://github.com/example/client.git", branch = "main"}'
-    assert StackSources.declared_sources(f'[tool.uv.sources]\nSource_Client = {source}\n') == {
-        "source-client": ("https://github.com/example/client.git", "main")}
+    project = '[project]\ndependencies=[]\n[tool.uv.sources]\n'
+    assert StackSources.declared_sources(PrivateUvProject.decode(
+        project + f'Source_Client = {source}\n'
+    )) == {"source-client": ("https://github.com/example/client.git", "main")}
     with pytest.raises(ValueError, match="declares package source-client twice"):
-        StackSources.declared_sources(f'[tool.uv.sources]\nSource_Client = {source}\nsource-client = {source}\n')
+        StackSources.declared_sources(PrivateUvProject.decode(
+            project + f'Source_Client = {source}\nsource-client = {source}\n'
+        ))
 
 
 def test_selection_uses_the_project_declaration_and_unions_existing_files(tmp_path: Path):
@@ -539,15 +543,18 @@ def test_common_runtime_contract_allows_local_source_and_metadata_changes() -> N
                  'dependencies=["agent-comms", "new-client", "packaging>=25"]\n[tool.uv]\npackage=false\n'
                  '[tool.uv.sources]\nagent-comms={path="..",editable=true}\n'
                  'new-client={git="https://github.com/example/new.git",branch="main"}\n')
-    StackSources.require_compatible(baseline, candidate)
-    StackSources.require_compatible(candidate, baseline)
+    before, after = (PrivateUvProject.decode(text) for text in (baseline, candidate))
+    StackSources.require_compatible(before, after)
+    StackSources.require_compatible(after, before)
 
 
 def test_common_runtime_contract_refuses_unsupported_external_dependency_migration() -> None:
     baseline = '[project]\ndependencies=["packaging>=25"]\n[tool.uv]\npackage=false\n'
     candidate = '[project]\ndependencies=["packaging>=26"]\n[tool.uv]\npackage=false\n'
     with pytest.raises(ValueError):
-        StackSources.require_compatible(baseline, candidate)
+        StackSources.require_compatible(
+            PrivateUvProject.decode(baseline), PrivateUvProject.decode(candidate)
+        )
 
 
 def test_main_checkout_is_refused_without_changes(tmp_path: Path):

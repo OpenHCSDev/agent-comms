@@ -19,7 +19,7 @@ from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
-from .installer.runtime_resolution import StackSources
+from .installer.runtime_resolution import PrivateUvProject, StackSources
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -406,7 +406,9 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         urls: dict[RepositoryName, str] = {}
         for commit in (baseline, candidate):
             declared = StackSources.declared_sources(
-                Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml")
+                PrivateUvProject.decode(
+                    Repo.git(core.checkout, "show", f"{commit}:stack/pyproject.toml")
+                )
             )
             identities = tuple(Repo.repository_url(url) for url, branch in declared.values())
             if len(set(identities)) != len(identities):
@@ -559,8 +561,12 @@ class CombinedInput(IntegrationInput):
                 "The current carrier does not contain this exact canonical input"
             )
         StackSources.require_compatible(
-            Repo.git(core.checkout, "show", f"{source.baseline.commit}:stack/pyproject.toml"),
-            Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml"),
+            PrivateUvProject.decode(
+                Repo.git(core.checkout, "show", f"{source.baseline.commit}:stack/pyproject.toml")
+            ),
+            PrivateUvProject.decode(
+                Repo.git(core.checkout, "show", f"{carrier.head}:stack/pyproject.toml")
+            ),
         )
 
 

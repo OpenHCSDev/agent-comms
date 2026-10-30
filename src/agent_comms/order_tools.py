@@ -54,7 +54,7 @@ from .held_orders import HeldOrders
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
-from .owner_connection import RuntimeRequestContext
+from .owner_connection import AttachedRuntimeRequestContext
 from .plan_phases import OrderPhase
 from .problem_number import ProblemNumber
 from .progress_claims import ProgressClaim
@@ -556,8 +556,8 @@ class InputDeliveryRead(
         bool, *tool_field("Include earlier delivery notices; current inputs are always read")
     ] = True
 
-    async def owned(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
-        scope = await ctx.server.agent.inputs.delivery_scope(ctx.session_id)
+    async def owned(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
+        scope = await ctx.server.agent.inputs.delivery_scope(ctx.session)
         return await Coordination.run_worker(
             partial(
                 ctx.server.agent._comms.goals.input_delivery,
@@ -582,7 +582,7 @@ class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner
         "owner read with it."
     )
 
-    async def owned(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
+    async def owned(self, ctx: AttachedRuntimeRequestContext) -> GoalSnapshotReply:
         snapshot = await Coordination.run_worker(
             partial(
                 ctx.server.agent._comms.goals.goal_snapshot,
@@ -592,7 +592,7 @@ class OwnerGoalRead(OwnerLiveRead[GoalSnapshotReply], declared_name="comms_owner
         turn = await Coordination.run_worker(
             partial(
                 ctx.server.agent.turns.turn_state,
-                ctx.session_id,
+                ctx.session,
             )
         )
         return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))

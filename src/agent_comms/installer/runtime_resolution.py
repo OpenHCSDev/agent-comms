@@ -37,6 +37,7 @@ from agent_comms.installer.probes.packages import (
     InstalledPackagesProbe,
     PackagePin,
     PackageRecord,
+    PreparePackageProbe,
 )
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
@@ -267,7 +268,17 @@ class UvRecord(BaseModel):
         return self.model_dump(mode="python", by_alias=True, exclude_unset=True)
 
 
-class UvSourceOptions(UvRecord):
+class UvSourceDeclaration:
+    """Source selection shared by individual and conditional UV declarations."""
+
+    def local(self) -> bool:
+        return False
+
+    def tracked_sources(self, name: str) -> tuple[tuple[str, str], ...]:
+        return ()
+
+
+class UvSourceOptions(UvRecord, UvSourceDeclaration):
     """Only fields consumed here are modeled; UV retains every other source option."""
 
     marker: str = ""
@@ -303,6 +314,13 @@ class UvGitSource(UvSourceOptions):
 class UvTrackedSource(UvGitSource):
     branch: str
 
+    def local(self) -> bool:
+        return True
+
+    def tracked_sources(self, name: str) -> tuple[tuple[str, str], ...]:
+        GitSource.require_branches(name, (self.branch,))
+        return ((self.git, self.branch),)
+
     def materialize(
         self,
         original: Path,
@@ -324,6 +342,9 @@ class UvTrackedSource(UvGitSource):
 
 class UvLocalSource(UvSourceOptions):
     path: str
+
+    def local(self) -> bool:
+        return True
 
     def materialize(
         self,
@@ -347,7 +368,7 @@ class UvIndexSource(UvSourceOptions):
     index: str
 
 
-class UvConditionalSources(RootModel[list[UvSourceOptions]]):
+class UvConditionalSources(RootModel[list[UvSourceOptions]], UvSourceDeclaration):
     """Conditional source arrays pass through intact; an exact pin cannot replace them."""
 
     def materialize(
@@ -380,7 +401,7 @@ class UvProjectSettings(UvRecord):
         | UvGitSource
         | UvSourceOptions
         | UvConditionalSources,
-    ]
+    ] = Field(default_factory=dict)
     overrides: list[str] = Field(default_factory=list, alias="override-dependencies")
     constraints: list[str] = Field(default_factory=list, alias="constraint-dependencies")
     indexes: list[UvIndex] = Field(default_factory=list, alias="index")
@@ -414,6 +435,7 @@ class UvProjectSettings(UvRecord):
 
 class UvProjectRoot(UvRecord):
     dependencies: list[str]
+    requires_python: str = Field(default="", alias="requires-python")
 
 
 class UvProjectTools(UvRecord):
@@ -427,8 +449,12 @@ class PrivateUvProject(UvRecord):
     tool: UvProjectTools
 
     @classmethod
+    def decode(cls, text: str) -> PrivateUvProject:
+        return FieldCodec.decode(cls, tomllib.loads(text))
+
+    @classmethod
     def read(cls, path: Path) -> PrivateUvProject:
-        return FieldCodec.decode(cls, tomllib.loads(path.read_text()))
+        return cls.decode(path.read_text())
 
     def enrich(self, metadata: ProjectMetadata) -> None:
         if not any(
@@ -477,7 +503,7 @@ class StackSources:
 
     @classmethod
     def sources(cls, stack: Path) -> dict[str, tuple[str, str]]:
-        return cls.declared_sources((stack / "pyproject.toml").read_text())
+        return cls.declared_sources(PrivateUvProject.read(stack / "pyproject.toml"))
 
     @staticmethod
     def require_package(metadata: ProjectMetadata, name: str) -> None:
@@ -502,13 +528,13 @@ class StackSources:
         return FieldCodec.decode(dict[str, str], default_environment())
 
     @classmethod
-    def require_compatible(cls, baseline: str, candidate: str) -> None:
+    def require_compatible(cls, baseline: PrivateUvProject, candidate: PrivateUvProject) -> None:
         """Local-source membership may change; external runtime requirements must agree.
 
         This supported path compares the same external contract, not arbitrary requirement
         migrations. Candidate metadata/settings are copied intact by the private project writer.
         """
-        documents = tuple(tomllib.loads(text) for text in (baseline, candidate))
+        documents = (baseline, candidate)
         local_names = cls.local_packages(*documents)
         environment = cls.marker_environment(Path(sys.executable))
         contracts = tuple(
@@ -525,46 +551,35 @@ class StackSources:
             )
 
     @staticmethod
-    @boundary_decoder
-    def local_packages(*documents: dict[str, object]) -> frozenset[str]:
+    def local_packages(*documents: PrivateUvProject) -> frozenset[str]:
         """The source declarations own which distribution names are local."""
-        names: set[str] = set()
-        for document in documents:
-            match document:
-                case {"tool": {"uv": {"sources": dict() as sources}}}:
-                    for name, source in sources.items():
-                        match source:
-                            case {"git": str(), "branch": str()} | {"path": str()}:
-                                names.add(canonicalize_name(FieldCodec.decode(str, name)))
-        return frozenset(names)
+        return frozenset(
+            canonicalize_name(name)
+            for document in documents
+            for name, source in document.tool.uv.sources.items()
+            if source.local()
+        )
 
     @classmethod
     def virtual_requirements(
-        cls, document: dict[str, object], environment: dict[str, str]
+        cls, document: PrivateUvProject, environment: dict[str, str]
     ) -> tuple[Requirement, ...]:
         """Only package=false roots have a declarative (non-wheel) runtime contract."""
-        match document:
-            case {
-                "project": {"dependencies": list() as dependencies, **project},
-                "tool": {"uv": {"package": False}},
-            }:
-                python = SpecifierSet(FieldCodec.decode(str, project.get("requires-python", "")))
-                ProjectMetadata.require_python(python)
-                return tuple(
-                    requirement
-                    for requirement in map(
-                        Requirement, FieldCodec.decode(tuple[str, ...], dependencies)
-                    )
-                    if RequirementMarker.active(requirement.marker, environment, ("",))
-                )
-        raise ValueError(
-            "A virtual runtime root requires tool.uv.package=false and project dependencies"
+        if document.tool.uv.package:
+            raise ValueError(
+                "A virtual runtime root requires tool.uv.package=false and project dependencies"
+            )
+        ProjectMetadata.require_python(SpecifierSet(document.project.requires_python))
+        return tuple(
+            requirement
+            for requirement in map(Requirement, document.project.dependencies)
+            if RequirementMarker.active(requirement.marker, environment, ("",))
         )
 
     @classmethod
     def active_requirements(
         cls,
-        document: dict[str, object],
+        document: PrivateUvProject,
         projects: tuple[ProjectMetadata, ...],
         environment: dict[str, str],
     ) -> tuple[Requirement, ...]:
@@ -602,20 +617,15 @@ class StackSources:
         return tuple(sorted(active, key=str))
 
     @staticmethod
-    def declared_sources(document: str) -> dict[str, tuple[str, str]]:
-        match tomllib.loads(document):
-            case {"tool": {"uv": {"sources": dict() as sources}}}:
-                found: dict[str, tuple[str, str]] = {}
-                for name, source in sources.items():
-                    match source:
-                        case {"git": str(url), "branch": str(branch)}:
-                            GitSource.require_branches(name, (branch,))
-                            identity = canonicalize_name(FieldCodec.decode(str, name))
-                            if identity in found:
-                                raise ValueError(f"The stack declares package {identity} twice")
-                            found[identity] = (url, branch)
-                return found
-        raise ValueError("The stack declares no [tool.uv.sources] table")
+    def declared_sources(document: PrivateUvProject) -> dict[str, tuple[str, str]]:
+        found: dict[str, tuple[str, str]] = {}
+        for name, source in document.tool.uv.sources.items():
+            for location in source.tracked_sources(name):
+                identity = canonicalize_name(name)
+                if identity in found:
+                    raise ValueError(f"The stack declares package {identity} twice")
+                found[identity] = location
+        return found
 
 
 class RuntimePackage(DeclaredFamily, affix="Package"):
@@ -648,6 +658,10 @@ class CorePackage(RuntimePackage, ConsoleScriptPackage):
 class ToadPackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "batrachian-toad"
     repository = RepositoryName("OpenHCSDev", "toad")
+
+    @classmethod
+    def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
+        return (PreparePackageProbe(cls.distribution),)
 
 
 class TextualPackage(RuntimePackage):

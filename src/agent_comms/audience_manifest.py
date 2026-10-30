@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from functools import cached_property
 from typing import Final
 
-from .participant_identity import FrozenRecipientIdentity, ParticipantIdentity
+from .participant_identity import ParticipantIdentity
 
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
@@ -52,8 +52,19 @@ def _digest(domain: bytes, payload: bytes) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class FrozenRecipient(FrozenRecipientIdentity, ProjectionSource):
+class FrozenRecipient(ParticipantIdentity, ProjectionSource):
     """Stable coordination lookup paired with its send-time canonical name."""
+
+    recipient_lookup: ThreadLookup
+    canonical_thread: str
+
+    def __post_init__(self) -> None:
+        self.require_text(self.recipient_lookup, "recipient_lookup")
+        self.require_canonical(self.canonical_thread, "canonical_thread")
+
+    @property
+    def lookup(self) -> ThreadLookup:
+        return self.recipient_lookup
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:

@@ -184,7 +184,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
             LiveCursorScope(
-                session_id="canonical",
+                session_id=AcpSessionId("canonical"),
                 wire_root_id=RootId("a" * 32),
                 claimed_identity=ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),
                 owner=ProcessIdentity(1234, 1),
@@ -193,8 +193,8 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
             EmptyCursorObservation(),
         )
     )
-    (rebased,) = decode_updates(present_session(encode_updates(fact), "old-alias"))
-    assert rebased.envelope.scope == replace(fact.envelope.scope, session_id="old-alias")
+    (rebased,) = decode_updates(present_session(encode_updates(fact), AcpSessionId("old-alias")))
+    assert rebased.envelope.scope == replace(fact.envelope.scope, session_id=AcpSessionId("old-alias"))
     assert fact.envelope.scope.session_id == "canonical"
     assert rebased.envelope.revision == fact.envelope.revision
 

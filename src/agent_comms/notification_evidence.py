@@ -26,7 +26,7 @@ from .field_codec import (
     boundary_decoder,
 )
 from .message_reference import MessageReference
-from .participant_identity import FrozenRecipientIdentity
+from .audience_manifest import FrozenRecipient
 from .recorded_bus import RecordedBusIdentity
 from .thread_identity import ThreadIncarnation
 
@@ -81,13 +81,13 @@ class RecipientSelection:
         return len(self.eligible) - len(self.positions)
 
     @property
-    def recipients(self) -> tuple[FrozenRecipientIdentity, ...]:
+    def recipients(self) -> tuple[FrozenRecipient, ...]:
         return tuple(self.source.recipients[position] for position in self.positions)
 
     @property
     def entries(
         self,
-    ) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipientIdentity], ...]:
+    ) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipient], ...]:
         return tuple(
             ((recipient.recipient_lookup, self.source.message.reference), recipient)
             for recipient in self.recipients
@@ -125,7 +125,7 @@ class FirstRecipient(NullMember, RecipientCursor):
 
 @dataclass(frozen=True)
 class AfterRecipient(RecordMember, RecipientCursor):
-    recipient: FrozenRecipientIdentity
+    recipient: FrozenRecipient
 
     def positions(self, source: Delivered) -> range:
         start = bisect_right(
@@ -399,7 +399,7 @@ class NotificationReadMark:
     """
 
     source: Delivered = field(compare=False)
-    recipient: FrozenRecipientIdentity
+    recipient: FrozenRecipient
     displayed_to: tuple[ThreadIncarnation, ...]
     reference: MessageReference = field(init=False)
 

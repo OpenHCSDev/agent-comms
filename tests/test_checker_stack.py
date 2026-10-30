@@ -11,10 +11,11 @@ from packaging.requirements import Requirement
 import pytest
 import tomli_w
 
+from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import CorePackage, GitSource, ResolvedLock, StackSources
+from agent_comms.installer.runtime_resolution import CorePackage, GitSource, PrivateUvProject, ResolvedLock, StackSources
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import DraftListedPullRequest
@@ -27,15 +28,15 @@ pytest_plugins = ("test_holder_standing_rules", "integration_source_fixture")
 
 
 def test_local_package_membership_comes_from_both_source_declarations() -> None:
-    before: dict[str, object] = {"tool": {"uv": {"sources": {
+    before = FieldCodec.decode(PrivateUvProject, {"project": {"dependencies": []}, "tool": {"uv": {"sources": {
         "Agent_Comms": {"path": "..", "editable": True},
         "Source_Client": {"git": "https://github.com/example/client", "branch": "main"},
         "registry-only": {"index": "public"},
-    }}}}
-    after: dict[str, object] = {"tool": {"uv": {"sources": {
+    }}}})
+    after = FieldCodec.decode(PrivateUvProject, {"project": {"dependencies": []}, "tool": {"uv": {"sources": {
         "new-local": {"path": "../new"},
         "registry-only": {"index": "private"},
-    }}}}
+    }}}})
     assert StackSources.local_packages(before, after) == frozenset({
         "agent-comms", "source-client", "new-local",
     })

@@ -72,7 +72,6 @@ from .notification_progress import (
     WorkingTakenProgress,
 )
 from .notification_read import CapturedNotificationWindow
-from .participant_identity import FrozenRecipientIdentity
 from .private_path import FileRevision
 from .read_basis import (
     AnonymousViewer,
@@ -134,7 +133,7 @@ if TYPE_CHECKING:
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
 
-    recipient_identity: FrozenRecipientIdentity
+    recipient_identity: FrozenRecipient
     sender_lookup: ThreadLookup
     state: DeliveryProgress
     message: Message | None = None
@@ -845,18 +844,12 @@ class NoRevision(ReadState):
     __slots__ = ()
 
 
-# typing evaluates class annotations with the class namespace as globals, so a
-# lambda written inside one cannot see this module; named functions can.
 def room_ledger_paths(views: HistoryViews) -> tuple[Path, ...]:
     return RoomLedger.source_paths(views.registry.storage_rule.room_ledger.root)
 
 
 def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
     return (relationships.RelationshipStore.path_in(views.root),)
-
-
-def goal_wake_paths(views: HistoryViews) -> tuple[Path, ...]:
-    return GoalWakeFile.watched_paths_in(views.root)
 
 
 def notification_paths(views: HistoryViews) -> tuple[Path, ...]:
@@ -941,7 +934,7 @@ class WireRevision(ReadState):
     ]
     goal_execution: Annotated[
         tuple[FileRevision, ...],
-        *revision_source(goal_wake_paths, *StatusSourced.views()),
+        *revision_source(lambda views: GoalWakeFile.watched_paths_in(views.root), *StatusSourced.views()),
     ]
     relationships: Annotated[
         tuple[FileRevision, ...],
