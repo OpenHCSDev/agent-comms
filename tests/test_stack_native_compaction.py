@@ -83,7 +83,7 @@ def _is_summary(request: dict) -> bool:
 
 
 @pytest.mark.parametrize("case", [
-    "threshold", "cap_disabled", "acp_threshold", "overflow", "compacted_resume",
+    "threshold", "disabled", "acp_threshold", "overflow", "compacted_resume",
     "summary_failure", "post_compaction_tool_rounds",
 ])
 async def test_pi_engine_compacts_inside_a_core_turn(
@@ -98,14 +98,14 @@ async def test_pi_engine_compacts_inside_a_core_turn(
         (project / ".pi").mkdir(mode=0o700)
         (project / ".pi" / "settings.json").write_text(json.dumps({
             "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
-            "compaction": {"enabled": case != "cap_disabled"},
+            "compaction": {"enabled": case != "disabled"},
         }))
         session = root / "saved.jsonl"
         # Above the threshold (128000 - 16384) and below the window, except for overflow.
         _saved_history(
             session,
             project,
-            used=(1000 if case == "overflow" else 300001 if case == "cap_disabled" else 120000),
+            used=(1000 if case == "overflow" else 990000 if case == "disabled" else 120000),
         )
         if case == "compacted_resume":
             rows = [json.loads(line) for line in session.read_text().splitlines()]
@@ -180,7 +180,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(
             (agent / "models.json").write_text(json.dumps({"providers": {"openrouter": {
                 "baseUrl": f"http://127.0.0.1:{server.server_port}/v1",
                 "modelOverrides": {"z-ai/glm-5.3-flash": {
-                    "contextWindow": 272000 if case == "cap_disabled" else 128000,
+                    "contextWindow": 1000000 if case == "disabled" else 128000,
                     "maxTokens": 4096,
                 }},
             }}}))
@@ -261,6 +261,11 @@ async def test_pi_engine_compacts_inside_a_core_turn(
             assert [type(end) for end in ends] == [ae.CompactionAbort]
             assert done.ok is False
             return
+        if case == "disabled":
+            assert done.ok is True and not ends and not summaries and not compactions
+            assert len(prompts) == 1
+            assert "LEGACY_DISCARDED_HISTORY" in json.dumps(prompts[0]["messages"])
+            return
         assert done.ok is True, done
         assert [type(end) for end in ends] == [ae.CompactionEnd]
         assert len(compactions) == 1 and SUMMARY in compactions[0]["summary"]
@@ -269,25 +274,14 @@ async def test_pi_engine_compacts_inside_a_core_turn(
         assert "LEGACY_DISCARDED_HISTORY" in json.dumps(summaries[0]["messages"])
         final = json.dumps(prompts[-1]["messages"])
         assert SUMMARY in final and "LEGACY_DISCARDED_HISTORY" not in final
-        if case in {"threshold", "cap_disabled"}:
+        if case == "threshold":
             # Pi compacts before the prompt; the input is sent once, after the summary.
-            # The Core-owned budget remains effective even when this thread persisted
-            # compaction.enabled=false. Even though this completed response is also
-            # above its model's 272,000-token window, retained context uses the
-            # standard threshold reason; overflow is reserved for interrupted recovery.
             assert ends[0].reason is ThresholdCompactionReason
             assert len(prompts) == 1
             kinds = [type(event) for event in events]
             assert kinds.index(ae.CompactionEnd) < next(
                 index for index, kind in enumerate(kinds) if issubclass(kind, ae.InputStarted)
             )
-            if case == "cap_disabled":
-                final_assistant = next(
-                    row["message"] for row in reversed(saved)
-                    if row.get("type") == "message"
-                    and row.get("message", {}).get("role") == "assistant"
-                )
-                assert final_assistant["usage"]["totalTokens"] < 300000
             return
         if case == "overflow":
             # The refused request is resent once after Pi's overflow compaction; the turn succeeds.
