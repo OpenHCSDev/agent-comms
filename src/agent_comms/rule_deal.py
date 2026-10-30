@@ -509,24 +509,37 @@ class Unengaged(Owed):
 
 @dataclass(frozen=True)
 class Unread(Owed):
-    """A dealt file has not been read in full."""
+    """A dealt file has not been read in full. They open in the order dealt: the papers first,
+    the indictment last. On 2026-10-30 claude-code opened the indictment and two rules first and
+    never read either paper, because any unread dealt file opened."""
 
     remaining: tuple[Path, ...]
+    unopened: tuple[Path, ...]
+    """The dealt files no read has opened yet, in the order dealt; one in flight counts as
+    opened, so a parallel batch's first read does not pin the order to itself."""
 
     before: ClassVar[str] = "reading"
+
+    def permits_read(self, path: Path) -> bool:
+        """Any file already opened, since re-reading is how a rule gets answered, or the next
+        unopened one in the dealt order."""
+        return path not in self.unopened or path == self.unopened[0]
 
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         read = record.read_by(deal)
         remaining = tuple(source for source in record.paths if source not in read)
         if remaining:
-            yield cls(record, deal.audit, remaining)
+            taken = record.opened_by(deal, opened)
+            yield cls(record, deal.audit, remaining,
+                      tuple(source for source in record.paths if source not in taken))
 
     @property
     def reason(self) -> str:
         return (
-            "Read the rules you were dealt first, each in full with your read tool (no offset"
-            " or limit): " + ", ".join(str(source) for source in self.remaining)
+            f"Read the rules you were dealt first, in the order dealt, each in full with your"
+            f" read tool (no offset or limit). Next: {next(iter(self.unopened), self.remaining[0])}."
+            " Still unread: " + ", ".join(str(source) for source in self.remaining)
             + ". Your summary is a paraphrase of them, not a reading."
         )
 

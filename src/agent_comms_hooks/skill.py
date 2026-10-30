@@ -147,10 +147,15 @@ class FleetReader(DeckReader, audience=FleetAudience):
 
     @classmethod
     def sources(cls) -> tuple[Path, ...]:
+        """Everything leading, then the rules that close the deal."""
+        return (*cls.leading(), *(rule.path for rule in cls.rules() if rule.closes_deal))
+
+    @classmethod
+    def leading(cls) -> tuple[Path, ...]:
         """Proof first, then the rules it makes binding, then how they are said and broken."""
         return (
             *cls.proofs(),
-            *(rule.path for rule in cls.rules()),
+            *(rule.path for rule in cls.rules() if not rule.closes_deal),
             CommanderPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
         )
@@ -173,10 +178,12 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         return (cls.voice(), indictment, cls.tells(), cls.failures())
 
     @classmethod
-    def sources(cls) -> tuple[Path, ...]:
-        """The fleet's files, its own rules among them by audience, then the commander's."""
-        return (*super().sources(), CommanderPackage.indictment(), CommanderPackage.skill(),
-                Slop.catalog() / "README.md")
+    def leading(cls) -> tuple[Path, ...]:
+        """The fleet's files, its own rules among them by audience, then the commander's, and the
+        indictment after them: read once every proof and rule is understood, it is the record of
+        what the model still did anyway, never a preface to skim (Tristan, 2026-10-30)."""
+        return (*super().leading(), CommanderPackage.skill(), Slop.catalog() / "README.md",
+                CommanderPackage.indictment())
 
     def header(self, start: DeckStart) -> str:
         return start.held()
