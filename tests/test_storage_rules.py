@@ -11,6 +11,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
 from agent_comms.repo import Checkout, DetachedStart, Repo
+from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
@@ -52,6 +53,22 @@ def test_resource_checker_reads_root_override(tmp_path):
     floor = StorageRule.load(tmp_path).floor_gib
     (tmp_path / 'storage.json').write_text(json.dumps({'floor_gib': floor + 1}))
     assert checker['limits_for'](tmp_path)['/home'][1] == StorageRule.load(tmp_path).floor_gib
+
+
+@pytest.mark.parametrize("separator", ("--", "__"))
+def test_allocation_names_invert_every_declared_checkout_name(tmp_path, monkeypatch, separator):
+    """The checkout name format has one declaration: renaming its separator renames every
+    checkout and its inverse together."""
+    monkeypatch.setattr(StorageRule, "checkout_separator", separator)
+    rule = StorageRule(checkout_base=tmp_path / "wt")
+    for allocation in ("pi-unit", f"pi{separator}unit"):
+        roots = StorageRoots(tmp_path / "scratch" / allocation)
+        checkout = rule.order_checkout(roots, "P7")
+        companion = rule.repository_checkout(roots, "P7", RepositoryName("openhcsdev", "toad"))
+        assert separator in checkout.name
+        for named in (checkout, companion):
+            assert allocation in tuple(rule.allocation_names(named))
+    assert tuple(rule.allocation_names(tmp_path / f"pi-unit{separator}P7")) == ()
 
 
 def test_storage_paths_round_trip_inside_collections(tmp_path):

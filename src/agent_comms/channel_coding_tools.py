@@ -158,8 +158,8 @@ class CodingToolMode(NativeToolMode):
         declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *NativeToolDeclaration.extension_arguments(package))
-        return self.owner.thread.native_launch_arguments(
-            NativeArguments.parse(arguments), package, self.owner.comms.root,
+        return self.owner.comms.threads.native_launch_arguments(
+            self.owner.thread, NativeArguments.parse(arguments), package,
         )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:

@@ -9,17 +9,17 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 
 
-def test_thread_service_tier_round_trips_legacy_rows(*, thread_registration):
+def test_thread_service_tier_defaults_standard_and_preserves_explicit_priority(*, thread_registration):
     from agent_comms.field_codec import FieldCodec
     from agent_comms.pi_vocabulary import ServiceTier
 
     encoded = FieldCodec.encode(thread_registration.declare(Thread('legacy', frozenset(), Checkout(Path('.')))))
-    assert encoded.pop("service_tier") == "priority"
+    assert encoded.pop("service_tier") == "standard"
     restored = FieldCodec.decode(Thread, encoded)
-    assert restored.service_tier is ServiceTier.PRIORITY
-    standard = thread_registration.declare(Thread('standard', frozenset(), Checkout(Path('.')), service_tier=ServiceTier.STANDARD))
-    assert FieldCodec.decode(Thread, FieldCodec.encode(standard)).service_tier is ServiceTier.STANDARD
+    assert restored.service_tier is ServiceTier.STANDARD
+    priority = thread_registration.declare(Thread('priority', frozenset(), Checkout(Path('.')), service_tier=ServiceTier.PRIORITY))
+    assert FieldCodec.decode(Thread, FieldCodec.encode(priority)).service_tier is ServiceTier.PRIORITY
     with pytest.raises(RelationViolationError):
-        standard.require_original_model_configuration(restored)
+        priority.require_original_model_configuration(restored)
 
 
