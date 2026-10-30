@@ -57,16 +57,20 @@ class RuntimeRequestContext:
     server: RuntimeServer
     reader: asyncio.StreamReader
     client: SocketClient
-    session: AcpSessionId
     name: str
 
     async def send(self, line: OwnerLine) -> None:
         await self.client.send(line)
 
 
+@dataclass(frozen=True)
+class AttachedRuntimeRequestContext(RuntimeRequestContext):
+    session: AcpSessionId
+
+
 @dataclass(frozen=True, kw_only=True)
-class RuntimeRequest(
-    DeclaredFamily, Command[RuntimeRequestContext, Awaitable[None]], affix="RuntimeRequest"
+class RuntimeRequest[Ctx: RuntimeRequestContext](
+    DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
 ):
     family_discriminator: ClassVar[str] = "action"
     thread: str
@@ -78,28 +82,43 @@ class RuntimeRequest(
     ) -> dict[str, object]:
         return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
 
+    @abstractmethod
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> Ctx: ...
+
+
+class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
     def require_owner(self, entry: RegistryEntry) -> Thread:
         owner = entry.thread
         if not owner.process_identity.runs_here() or not entry.status.running:
             raise RelationViolationError("This process no longer owns the thread.")
         return owner
 
-    async def bind(self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient) -> RuntimeRequestContext:
+    async def bind(
+        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
+    ) -> AttachedRuntimeRequestContext:
         entry = (await Coordination.run_worker(partial(
             server.agent._comms.registry.entry, self.thread,
         ))).entry
         owner = self.require_owner(entry)
         session_id = server.agent.sessions.require_owned_session(entry)
-        return RuntimeRequestContext(server, reader, client, session_id, owner.name)
+        return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
 
 
-class ResultRuntimeRequest(RuntimeRequest):
-    async def apply(self, ctx: RuntimeRequestContext) -> None:
+class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
+    async def apply(self, ctx: Ctx) -> None:
         reply = await self.result(ctx)
         await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
 
     @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
+    async def result(self, ctx: Ctx) -> DeclaredReply: ...
+
+
+class AttachedResultRuntimeRequest(
+    ResultRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest
+):
+    pass
 
 
 class OwnerConnection:

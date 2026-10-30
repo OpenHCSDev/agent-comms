@@ -40,7 +40,9 @@ class WorkingMemoryAnnotations:
                 order_by=("id",), **key))
 
     @classmethod
-    def calibration(cls, source: ReadableStore, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
+    def calibration(
+        cls, source: ReadableStore, question: QuestionVersion, classifier: ClassifierVersion,
+    ) -> CalibrationReport:
         with cls.reading(source) as db:
             originals = SpanAnnotationsRow.select(db, order_by=("id",),
                 question=question.question, question_version=question.sha256,
@@ -58,7 +60,9 @@ class WorkingMemoryAnnotations:
         return CalibrationReport(question, classifier, tuple(cases))
 
     @classmethod
-    def for_segment(cls, source: ReadableStore, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    def for_segment(
+        cls, source: ReadableStore, segment, classifier: ClassifierVersion,
+    ) -> tuple[ModelLabel, ...]:
         """Read the complete effective answer family at its original addresses.
 
         A kind answer does not replace its obligation, scope or fulfillment
@@ -68,7 +72,9 @@ class WorkingMemoryAnnotations:
         return cls.for_segments(source, (segment,), classifier)
 
     @classmethod
-    def for_context(cls, source: ReadableStore, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    def for_context(
+        cls, source: ReadableStore, manifests, classifier: ClassifierVersion,
+    ) -> tuple[ModelLabel, ...]:
         """Acquire one context's original answers through the segment reader.
 
         Repeated observations can name the same stored answer. Keep that answer

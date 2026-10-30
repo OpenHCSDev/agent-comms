@@ -76,7 +76,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
-from .field_codec import AcpSessionId, ClaimId, FieldCodec, MalformedRecord, RootId
+from .field_codec import AcpSessionId, ClaimId, FieldCodec, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .config_options import ConfigOptions

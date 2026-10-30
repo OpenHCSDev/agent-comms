@@ -21,7 +21,6 @@ from . import agent_events as events
 from .acp_extension import LiveQueueScope, TranscriptChangedUpdate, encode_updates
 from .acp_failure import NativeTurnOutcome
 from .agent_event_updates import RoutedTurnEventConsumer, TurnEventConsumer
-from .comms import Comms
 from .context_store import UNREAD_CONTEXT, ContextPrior
 from .coordinator import Coordination
 from .diagnostics import record_request_progress, record_terminal_failure
@@ -36,8 +35,6 @@ from .turn_phase import PublishingPhase
 
 if TYPE_CHECKING:
     from .owned_turn import OwnedTurn
-    from .session_lifecycle import SessionLifecycle
-    from .turn_effects import TurnEffects
     from .turn_failure import TurnFailure
     from .turn_goal_account import TurnGoalAccount
 

@@ -5,7 +5,9 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .field_codec import InputId
@@ -13,6 +15,10 @@ from .image_input import ImageInput
 from .pi_vocabulary import ThinkingLevelField
 from .thread_model import ThreadModel
 from .turn_context import InputContributionCoordinates
+
+if TYPE_CHECKING:
+    from .backend import TurnSession
+    from .turn_inputs import InputForwarding
 
 
 class BusyInputPolicy(DeclaredFamily, affix="InputPolicy"):
@@ -65,16 +71,19 @@ class TurnInboxItem(ABC):
     def carried_inputs(self) -> tuple[InputId, ...]:
         return ()
 
-    def refuse(self, inputs, turn):
+    def refuse(self, inputs: InputForwarding, turn: TurnSession) -> None:
         inputs.refuse(turn, self.carried_inputs)
 
 
 class TurnInbox(asyncio.Queue[TurnInboxItem]):
     """The live inbox parks its head until the existing observer sees READY."""
 
+    # CPython owns these queue hooks; its public typeshed stub omits them.
     _queue: deque[TurnInboxItem]
+    _getters: deque[asyncio.Future[None]]
+    _wakeup_next: Callable[[deque[asyncio.Future[None]]], None]
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.ready = asyncio.Event()
         self.ready.set()
@@ -91,9 +100,11 @@ class TurnInbox(asyncio.Queue[TurnInboxItem]):
     @property
     def ready_inputs(self) -> tuple[InputId, ...]:
         """Runnable user inputs, excluding parked input and control operations."""
-        return tuple(
-            input_id for item in self._queue for input_id in item.carried_inputs
-        ) if self.has_ready_work else ()
+        return (
+            tuple(input_id for item in self._queue for input_id in item.carried_inputs)
+            if self.has_ready_work
+            else ()
+        )
 
     def begin(self, item: TurnInboxItem) -> None:
         self._queue.appendleft(item)

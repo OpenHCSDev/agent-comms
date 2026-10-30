@@ -23,7 +23,6 @@ from .field_codec import AcpSessionId, MalformedRecord
 
 
 class AcpRequestConsumer(MroDispatch):
-
     def __init__(self, agent, request: PromptRequest, session_id: AcpSessionId):
         self.agent, self.request, self.session_id = agent, request, session_id
         self.response = None
@@ -45,8 +44,10 @@ class AcpRequestConsumer(MroDispatch):
 
     async def forward(self, request):
         forwarded = self.request.model_copy(
-            update={"session_id": self.session_id,
-                    "field_meta": {**(self.request.field_meta or {}), **encode_request(request)}}
+            update={
+                "session_id": self.session_id,
+                "field_meta": {**(self.request.field_meta or {}), **encode_request(request)},
+            }
         )
         result = await self.agent.sessions.proxies[self.session_id].request(
             "prompt", request=forwarded
@@ -63,13 +64,12 @@ class AcpRequestConsumer(MroDispatch):
     @handles(CompactRequest)
     async def compact(self, request):
         self.agent._require_compaction_text(self.request)
-        if self.agent._prompt_text(self.request).strip() and not self.agent._prompt_text(
-            self.request
-        ).strip().startswith("/compact"):
+        if (
+            self.agent._prompt_text(self.request).strip()
+            and not self.agent._prompt_text(self.request).strip().startswith("/compact")
+        ):
             raise Refused.invalid_params({"reason": "Compaction metadata requires blank text"})
-        self.response = await self.agent._compact_request(
-            self.session_id, request.instructions
-        )
+        self.response = await self.agent._compact_request(self.session_id, request.instructions)
 
     @handles(SelectedWriteRequest)
     async def selected_write(self, request):

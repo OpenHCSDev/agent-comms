@@ -13,7 +13,8 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextManifestData
 from agent_comms.pi_payloads import NativeContextData
-from agent_comms.runtime_requests import (RuntimeRequest, ContextRecordedSegmentRuntimeRequest,
+from agent_comms.owner_connection import RuntimeRequest
+from agent_comms.runtime_requests import (ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ReportedTools

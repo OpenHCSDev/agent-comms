@@ -130,7 +130,9 @@ class TurnRunner:
         state = self.turn_state(session_id)
         return state.active.phase.busy and state.active.id == turn_id
 
-    async def transition_turn(self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase) -> None:
+    async def transition_turn(
+        self, session_id: AcpSessionId, lease: TurnLeaseFence, phase: TurnPhase,
+    ) -> None:
         states = await Coordination.run_worker(partial(
             self.comms.agents.transition_turn, lease, phase
         ))
@@ -148,13 +150,19 @@ class TurnRunner:
         await observe(await Coordination.run_worker(partial(
             self.comms.registry.require, self.sessions.require(session_id))))
 
-    async def observe_compaction(self, session_id: AcpSessionId, event: events.CompactionEvent) -> None:
+    async def observe_compaction(
+        self, session_id: AcpSessionId, event: events.CompactionEvent,
+    ) -> None:
         await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
 
-    async def compacted(self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread) -> None:
+    async def compacted(
+        self, session_id: AcpSessionId, event: events.CompactionEvent, thread: Thread,
+    ) -> None:
         await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
-            await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+            await CompactionObservation(
+                self, session_id, lease, thread.turn_record.read().phase,
+            ).dispatch(event)
 
     async def observe_context(
         self, session_id: AcpSessionId, usage: ContextUsage,
@@ -195,7 +203,9 @@ class TurnRunner:
     async def inspect_context(self, session_id: AcpSessionId, thread: Thread) -> NativeContextData:
         return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
 
-    async def inspect_context_segment(self, session_id: AcpSessionId, thread: Thread, manifest: SegmentManifest) -> str:
+    async def inspect_context_segment(
+        self, session_id: AcpSessionId, thread: Thread, manifest: SegmentManifest,
+    ) -> str:
         request = AgentCommsInspectContextSegment.for_manifest(manifest)
         context = await self.inspect_native_request(session_id, thread, request)
         return context.recorded_public_text(manifest)
@@ -203,7 +213,8 @@ class TurnRunner:
     async def inspect_native_request(
         self, session_id: AcpSessionId, thread: Thread, request: NativeQuery,
     ) -> NativeContextData:
-        context = (await self.backend_for(session_id, thread).inspect(thread, request)).require_context()
+        response = await self.backend_for(session_id, thread).inspect(thread, request)
+        context = response.require_context()
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(
@@ -422,7 +433,9 @@ class TurnRunner:
                 )
                 try:
                     result = await execution.run(
-                        on_compaction=AcpEventConsumer(self.effects, session_id, self.runtime).dispatch,
+                        on_compaction=AcpEventConsumer(
+                            self.effects, session_id, self.runtime,
+                        ).dispatch,
                         pi_session=self.backend_for(session_id, owner),
                         following=following,
                     )
