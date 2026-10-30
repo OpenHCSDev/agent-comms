@@ -341,6 +341,9 @@ class OrderEditsRead(OrderEditRead[tuple[EditCall, ...]]):
 class OrderEditCountRead(OrderEditRead[int]):
     """Load counts the edits each order owns; ownership reads each edit's path."""
 
+    def read(self) -> int:
+        return self.progress.unjudged(super().read)
+
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))
 
