@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -16,6 +17,7 @@ from pydantic import BaseModel, Field
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
 from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
 
@@ -153,10 +155,26 @@ class ResolvedLock(BaseModel):
 
 @dataclass(frozen=True)
 class UnbuiltRuntime:
+    """A prefix with no recorded resolution: unsynced, or synced and not yet completed."""
+
     prefix: Path
 
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
+
+    def prepare(self, stack: RuntimeStack) -> None:
+        stack.sync()
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        """Link the native package, record the resolution and prove the client imports; a
+        failure leaves no prefix, so the next build syncs it afresh."""
+        try:
+            stack.install_native()
+            RuntimeResolution.capture(stack, core).save(self.prefix)
+            stack.imports()
+        except BaseException:
+            shutil.rmtree(self.prefix)
+            raise
 
 
 class RuntimeResolution(BaseModel):
@@ -173,10 +191,22 @@ class RuntimeResolution(BaseModel):
 
     @classmethod
     def installed(cls) -> RuntimeResolution | UnbuiltRuntime:
-        prefix = LaunchRuntime.installed().prefix
+        return cls.recorded(LaunchRuntime.installed().prefix)
+
+    @classmethod
+    def recorded(cls, prefix: Path) -> RuntimeResolution | UnbuiltRuntime:
         if not (prefix / cls.record_path().name).is_file():
             return UnbuiltRuntime(prefix)
         return cls.at(prefix)
+
+    def prepare(self, stack: RuntimeStack) -> None:
+        """A recorded runtime is already synced; ``complete`` checks it still matches."""
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        if not self.matches(stack.lock, stack, core):
+            raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+        stack.stage_native()
+        stack.prepare_runtime()
 
     @classmethod
     def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:

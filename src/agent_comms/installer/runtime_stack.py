@@ -97,7 +97,11 @@ class RuntimeStack(Extendable):
 
     @staticmethod
     def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetRuntime:
-        """Resolve current mains once, then build or reuse their immutable installation."""
+        """Resolve current mains once, then sync or reuse their immutable installation.
+
+        Only uv runs here: a probe encodes the operation family, which only the built
+        runtime's own packages can import, so ``complete`` finishes the runtime from inside it.
+        """
         with BuildPhase().running(commands.clock):
             source = RuntimeStack(checkout.path, commands, home, runtime=LaunchRuntime.running())
             source.require_uv()
@@ -109,25 +113,28 @@ class RuntimeStack(Extendable):
             built = source.extended(
                 TargetRuntime, runtime=LaunchRuntime.at_prefix(prefix),
                 program=TargetProgram(checkout.path / STEPS.parent))
-            if prefix.exists():
-                if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
-                    raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
-                built.stage_native()
-                built.prepare_runtime()
-                return built
-            prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            prefix.mkdir(mode=0o700)
-            try:
-                commands.run(source.uv, "sync", "--project", "stack", "--locked",
-                             "--no-editable", cwd=checkout.path,
-                             env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
-                built.install_native()
-                RuntimeResolution.capture(built, core).save(prefix)
-                built.imports()
-            except BaseException:
-                shutil.rmtree(prefix)
-                raise
+            RuntimeResolution.recorded(prefix).prepare(built)
             return built
+
+    def sync(self) -> None:
+        """Install the lock's packages into this runtime's prefix; a failed sync leaves none."""
+        prefix = self.runtime.prefix
+        prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        prefix.mkdir(mode=0o700, exist_ok=True)
+        try:
+            self.commands.run(self.uv, "sync", "--project", "stack", "--locked",
+                              "--no-editable", cwd=self.checkout,
+                              env={**self.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
+        except BaseException:
+            shutil.rmtree(prefix)
+            raise
+
+    def complete(self) -> None:
+        """Finish the synced runtime from inside it: its native package, recorded resolution
+        and import check, or the check that a recorded one still matches its inputs."""
+        with BuildPhase().running(self.commands.clock):
+            core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
+            RuntimeResolution.recorded(self.runtime.prefix).complete(self, core)
 
     def test(self, *pytest_arguments: str) -> None:
         """Run checkout tests against this runtime's installed packages, never its source."""
