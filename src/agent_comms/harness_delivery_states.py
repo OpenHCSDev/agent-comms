@@ -129,7 +129,7 @@ class WakeOnlyMonitor(PendingMonitor):
         return cls()
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[str, ...]:
+                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         # Retire only the wake's transport reservation, never original-body proof.
         await bridge.part_observed(delivery.message_id, notification.number)
         return ()
