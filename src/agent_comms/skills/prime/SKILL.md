@@ -14,7 +14,7 @@ Tristan calls /prime when a session has drifted back to its own frame. It is a f
    - `no-papers`: the rules without the papers, for when the papers are still in context.
    - `no-indictment`: the papers and rules without the indictment.
    - `light`: the rules alone. Use it mid-context so the window doesn't fill.
-2. The gate now refuses every tool except reading the dealt files and writing the audit. Read each printed file in full, in the printed order, one per call. After each rule file, answer it in the audit (whole greentext lines verbatim, what they did, why it holds, what you broke) before the next file opens.
+2. The gate now refuses every tool except reading the dealt files and writing the audit. Read each printed file in full, in the printed order, and answer each rule file in the audit (whole greentext lines verbatim, what they did, why it holds, what you broke). How many read rules may stand unanswered before nothing new opens is the gate's window, `Unengaged.batch` in `agent_comms/rule_deal.py`; its refusal names the number when you reach it. A paper carries no rule, so its parts open together.
 3. Answer every quoted prompt of Tristan's in the audit's `owner_words`, then do what he asked.
 
 To prime the fleet: `agent-comms-prime --variant light --to UNIT [UNIT...]` deals each named native (Pi) thread through Core's gate. A Claude session is refused there; tell that session to run /prime itself.
