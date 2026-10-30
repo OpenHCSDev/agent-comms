@@ -79,6 +79,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
+from agent_comms.native_arguments import GivenArguments, GivenBinary
 service = wire(Path(os.environ['AGENT_COMMS_ROOT']))
 name, project, session = sys.argv[1:4]
 service.registry.declare(Thread(name, frozenset(), project,
@@ -90,8 +91,9 @@ service.goals.update_goal(name, BlockedGoalAction(block_reason='Await original i
 arguments = ('--provider','response-local','--model','fixture','--thinking','off',
              '--offline','--no-extensions','--no-skills','--no-context-files',
              '--no-prompt-templates','--no-tools')
-result = service.owners.start(name,
-    agent_bin=str(Path(sys.executable).with_name('pi-comms-native')), agent_args=arguments)
+(result,) = service.owners.start_many((name,),
+    agent_bin=GivenBinary(str(Path(sys.executable).with_name('pi-comms-native'))),
+    agent_args=GivenArguments(arguments))
 print(json.dumps(FieldCodec.encode(result)), flush=True)
 ''', name, str(native.project), str(native.session), str(native_runtime_package.path)), timeout=20,
             cwd=native.project, env=environment)

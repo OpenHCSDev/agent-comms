@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import NoProcess, ProcessIdentity, SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
@@ -101,7 +102,7 @@ def test_concurrent_starters_reserve_one_current_owner(tmp_path):
     with ExitStack() as children, ThreadPoolExecutor(max_workers=2) as workers:
         processes = tuple(children.enter_context(SpawnedProcess.launch(
             (sys.executable, "-c", "import sys; sys.stdin.buffer.read()"),
-            stdin=subprocess.PIPE,
+            stdio=DetachedChildStdio(stdin=subprocess.PIPE),
         ).process) for _ in range(2))
         attempts = tuple(workers.submit(reserve, ProcessIdentity.capture(child.pid))
                          for child in processes)
