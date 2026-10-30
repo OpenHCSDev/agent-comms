@@ -72,6 +72,7 @@ def test_retired_commander_requests_follow_peer_authority(
     outsider_context = Commander.on_root(outsider.name, (repository,), comms.root)
     with pytest.raises(TodoError, match="belongs to another commander"):
         request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
+    peer_context = Commander.on_root(peer.name, (repository,), comms.root)
     request_main(
         ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
     )
