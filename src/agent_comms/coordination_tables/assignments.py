@@ -157,24 +157,24 @@ class WakeAssignment(
         str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")
     ] = POLICY_VERSION
 
-    @projected(view="snapshot", name="disposition")
+    @projected(view=SnapshotExclude, name="disposition")
     def snapshot_disposition(self):
         return type(self.lifecycle)
 
-    @projected(view="snapshot", name="wake_mode")
+    @projected(view=SnapshotExclude, name="wake_mode")
     def snapshot_wake_mode(self):
         return type(self.lifecycle.mode)
 
-    @projected(view="snapshot", name="triage_verdict")
+    @projected(view=SnapshotExclude, name="triage_verdict")
     def snapshot_triage_verdict(self):
         verdict = self.lifecycle.verdict
         return verdict
 
-    @projected(view="snapshot", name="execution_id")
+    @projected(view=SnapshotExclude, name="execution_id")
     def snapshot_execution_id(self):
         return self.lifecycle.execution_id
 
-    @projected(view="snapshot", name="exact_target")
+    @projected(view=SnapshotExclude, name="exact_target")
     def snapshot_exact_target(self):
         return self.lifecycle.exact_target
 

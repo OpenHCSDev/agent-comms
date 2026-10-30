@@ -58,6 +58,7 @@ def test_delivery_uses_declared_overview_and_preserves_typed_rows():
     ({'type': 'user', 'promptId': 'turn', 'isCompactSummary': True}, 'compact-summary'),
     ({'type': 'user', 'promptId': 'turn', 'isMeta': True}, 'harness-note'),
     ({'type': 'user', 'promptId': 'turn', 'isMeta': True, 'origin': {'kind': 'peer'}}, 'user'),
+    ({'type': 'user', 'promptId': 'turn', 'isMeta': True, 'turnOrigin': 'scheduled'}, 'user'),
     ({'type': 'user', 'origin': {'kind': 'task-notification'}, 'isCompactSummary': True}, 'task-user'),
     ({'type': 'assistant', 'origin': 'not a user header'}, 'assistant'),
 ))

@@ -29,6 +29,7 @@ from .declared_family import (
 )
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
+    DisclosureIdentity,
     FieldCodec,
     TurnId,
     SingleFieldValue,
@@ -177,7 +178,7 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     value_flag: ClassVar[str] = "--thread-incarnation"
     hands_out_released_work: ClassVar[bool] = False
     """Whether work this actor released goes to an idle unit without a commander turn."""
-    name: str
+    name: Annotated[str, DisclosureIdentity()]
 
     @property
     @abstractmethod
@@ -295,7 +296,7 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     still require ``current`` / ``resolved`` to prove the original alias lineage.
     """
 
-    name: str = field(compare=False)
+    name: Annotated[str, DisclosureIdentity()] = field(compare=False)
     created_at: float
 
     def __eq__(self, other: object) -> bool:
