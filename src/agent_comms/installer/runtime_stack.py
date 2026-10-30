@@ -26,7 +26,7 @@ from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
+from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimePackage, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_build_inputs import NativeBuildInputs
 from agent_comms.native_package import NativePackageStore, pinned_package_for
@@ -187,6 +187,9 @@ class RuntimeStack(Extendable):
     def prepare_runtime(self) -> None:
         self.probe(PrepareProducerDigestsProbe())
         self.probe(PrepareNativeProbe())
+        for package in RuntimePackage.members_with(RuntimePackage):
+            for preparation in package.preparations():
+                self.probe(preparation)
 
     def environment(self, *paths: Path) -> dict:
         """Use the artifact's packages; ``paths`` are searched first, in order (the target
