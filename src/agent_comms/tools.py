@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
 
@@ -142,7 +144,7 @@ class OwnGoalPublication(ToolResult):
 
     __slots__ = ()
 
-    @projected(view="wire", name="agentCommsKind")
+    @projected(view=WireExclude, name="agentCommsKind")
     def publication_kind(self) -> object:
         return FieldCodec.encode(PublishedGoalToolDetails)
 

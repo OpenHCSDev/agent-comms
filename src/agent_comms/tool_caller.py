@@ -219,7 +219,7 @@ class ActsForCommander(ThreadCaller):
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
         own = comms.registry.require(self.name).incarnation
-        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+        return own.require_recorded().acting_for(self.commander(comms).acting_identity)
 
 
 @dataclass(frozen=True)
@@ -261,11 +261,10 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     def commanding(self, comms: Comms, commander: str) -> None:
         comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
 
-    def join(self, comms: Comms) -> None:
-        """The SubagentStart hook declares the fork under the registered lead, in its own
-        process, before the fork's first call."""
-        snapshot = comms.registry.snapshot()
-        self.commanding(comms, snapshot.commander_project.require().lead(snapshot).name)
+    def join(self, comms: Comms, parent: str) -> None:
+        """The SubagentStart hook declares the fork under the session that spawned it, in its
+        own process, before the fork's first call; the child inherits that parent's tags."""
+        self.commanding(comms, parent)
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)

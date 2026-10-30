@@ -20,7 +20,8 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     source = tmp_path / "native.jsonl"
     source.write_bytes(b"first reply\n")
     indexed = FileRevision.capture(source)
-    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0)
+    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0,
+                       complete=indexed.size)
 
     with source.open("ab") as stream:
         stream.write(b"another reply\n")
@@ -34,6 +35,27 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     truncated = FileRevision.capture(source)
     assert not index.continues(truncated)
     assert index.counts(truncated, 0)  # Empty and fully read, independently of the old index.
+
+
+def test_an_appended_source_keeps_its_stored_replies_while_the_delta_prepares(tmp_path):
+    """An agent appending to its transcript must not flip its sidebar row to indexing and
+    back on every write: the indexed replies all remain, so they still answer."""
+    source = tmp_path / "native.jsonl"
+    source.write_bytes(b"first reply\n")
+    indexed = FileRevision.capture(source)
+    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0,
+                       complete=indexed.size)
+    with source.open("ab") as stream:
+        stream.write(b"another reply\n")
+    growing = FileRevision.capture(source)
+    assert not index.counts(growing, 0)  # The delta still needs preparing...
+    assert index.presents(growing, 0)  # ...while the stored replies answer meanwhile.
+
+    replaced = tmp_path / "replacement.jsonl"
+    replaced.write_bytes(b"first reply\nanother reply\nthird\n")
+    os.replace(replaced, source)
+    assert not index.presents(FileRevision.capture(source), 0)  # A new file has no replies yet.
+    assert not ReplyIndex(source=str(source)).presents(FileRevision.capture(source), 0)
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):

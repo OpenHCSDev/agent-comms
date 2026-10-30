@@ -48,6 +48,14 @@ class CommanderService:
         return tuple(dict.fromkeys((lead, *cls.live(snapshot.commander_project.commanders(snapshot)))))
 
     @classmethod
+    def served(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
+        """Every commander a pass sends a packet to: each board's recipients, once."""
+        snapshot = registry.snapshot()
+        return tuple(dict.fromkeys(
+            recipient for lead in cls.boards(registry, goals)
+            for recipient in cls.recipients(snapshot, lead)))
+
+    @classmethod
     def boards(cls, registry: Registration, goals: Goals) -> tuple[Thread, ...]:
         """The registered lead when live and owed service: the one board the heartbeat reads.
 
