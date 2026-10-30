@@ -554,14 +554,25 @@ def answer_rules(comms: Comms, name: str) -> None:
     answer_deal(deal)
 
 
+def engaged(rule: str, source: Path) -> dict[str, str]:
+    """An audit entry answering one rule file with a line it really holds."""
+    line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.strip())
+    return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
+
+
 def answer_deal(deal: PiRedeal) -> None:
-    """Read every file of the current deal in full and write the audit answering it."""
-    for source in deal.current().sources():
+    """Read every file of the current deal in full, answering each rule as it is read, and write
+    the audit answering the deal."""
+    record = deal.current()
+    answered = []
+    for source in record.dealt:
         deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
-    due = deal.current().due
+        if source.stem in record.due.rules:
+            answered.append(engaged(source.stem, source))
+        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     deal.audit.write_text(json.dumps({
-        "rules": [{"rule": rule} for rule in sorted(due.rules)],
-        "owner_words": [{"words": words, "doing": "testing"} for words in due.owner_words],
+        "rules": answered,
+        "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
     }))
 
 

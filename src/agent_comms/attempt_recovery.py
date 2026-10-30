@@ -120,7 +120,7 @@ class VerifiedOwnerLoss(ABC):
         identity = store.participants.get(owner.incarnation.lookup).owner_identity
         release = cls._released(releases, boundary, identity.owner_lookup)
         release = release.require_owner_loss(boundary.registry, identity)
-        release.require_retired_for(boundary.registry, owner)
+        release.require_retired_for(boundary.registry)
         proof = ReleasedOwnerLoss(release, store, boundary)
         with proof.observed():
             yield proof
@@ -405,7 +405,8 @@ class RecoveryMonitorCapability:
         if not path.exists():
             return  # Goal claims can exist without a selected native execution.
         with Coordination(str(path)) as store:
-            with (store.session.capture(lifecycle.bus) as boundary,
+            with (store.session.owner_recovery(
+                      lifecycle.bus, frozenset(owner.name for owner in owners)) as boundary,
                   lifecycle.releases.reading() as releases):
                 for owner in owners:
                     cls.recover_released_triage(store, owner, boundary, releases)

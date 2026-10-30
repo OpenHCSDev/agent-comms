@@ -140,6 +140,25 @@ class RegistryCut(RegistrySelection):
 
 
 @dataclass(frozen=True, slots=True)
+class RegistryEntriesCut(RegistryCut):
+    """A complete cut whose decisions read only these threads' entries.
+
+    Other threads' writes (every live owner's heartbeat) leave such a decision
+    intact, so they never stale it; any change to one of these entries does.
+    """
+
+    names: frozenset[str]
+
+    @contextmanager
+    def current(self) -> Iterator[None]:
+        with self.store.guarded_read():
+            for name in self.names:
+                if self.store.entry_unlocked(name) != self.snapshot.entry(name):
+                    raise StaleFence(f"registry entry {name!r} changed after this decision read it")
+            yield
+
+
+@dataclass(frozen=True, slots=True)
 class RegistryPairCut[Peer](RegistryCut):
     peer: Peer
 
@@ -382,6 +401,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryCut(self, revision, self._decode_snapshot(source), privacy)
 
+    def entries_cut(self, names: frozenset[str]) -> RegistryEntriesCut:
+        cut = self.snapshot_with_authority()
+        return RegistryEntriesCut(self, cut.revision, cut.snapshot, cut.privacy, names)
+
     def current_snapshot(self) -> AbstractContextManager[RegistryCut]:
         """Decode outside the guard, then retain a current cut for a bounded write.
 
@@ -446,6 +469,10 @@ class RegistryStore(RegistryLocking, RegistryFile, CarriedDocument[RegistryDocum
             source = self._capture_unlocked()
             revision = source.revision, FileRevision.capture(self.guard_path)
         return RegistryEntryRevision(self, revision, self._decode_revision(source).document.entry(name))
+
+    def entry_unlocked(self, name: str) -> RegistryEntry:
+        """This thread's current entry; the caller holds the registry guard."""
+        return self._decode_revision(self._capture_unlocked()).document.entry(name)
 
     def current_entry(self, name: str) -> AbstractContextManager[RegistryEntryRevision]:
         """Retain one current participant without materializing unrelated declarations."""
