@@ -233,3 +233,24 @@ def test_turn_read_still_rejects_abandoned_post_replacement_guard(tmp_path):
         # Deliberately abandon the real write before committing its authority.
     with pytest.raises(RelationViolationError, match='pending, not committed'):
         leased.turn_record.read()
+
+
+def test_private_guard_check_survives_coordination_writes(tmp_path, monkeypatch):
+    from agent_comms import private_registry_guard
+    from agent_comms.coordination_database import CoordinationStore
+
+    registry = registered(tmp_path)
+    registry.store.prepare_native_root()
+    registry.store.private_guard_unlocked()
+    hashed = []
+    real = private_registry_guard.registry_digest
+    monkeypatch.setattr(private_registry_guard, 'registry_digest',
+                        lambda path: hashed.append(path) or real(path))
+    coordinator = CoordinationStore.path_in(registry.store.path.parent)
+    stat = coordinator.stat()
+    os.utime(coordinator, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+    registry.store.private_guard_unlocked()
+    assert hashed == [], 'a coordination write re-hashed the registry'
+    os.utime(registry.store.path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+    registry.store.private_guard_unlocked()
+    assert hashed == [registry.store.path], 'a registry change must re-verify its guard'
