@@ -450,25 +450,48 @@ class BusCapability(TypedRow, ProjectionSource):
         *, after: int = 0,
     ) -> Iterator[BusCapability]:
         """Records after one sequence, using the same joined cursor for full and tail replay."""
-        tables = TypedTable.members_with(CapabilityRow)
-        offsets = dict(zip(tables, accumulate(
-            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
         predicate, parameters = ("", ()) if kinds is None else (
             f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
+        return (record for _, record in BusCapability.joined(
+            db, f"{header}>?" + predicate + f" ORDER BY {header}", (after, *parameters)))
+
+    @staticmethod
+    def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusCapability, ...]:
+        """Exactly these records, in the given order, from one joined read; a sequence with no
+        stored row is refused, as a single lookup refuses it."""
+        if not sequences:
+            return ()
+        header = BusRow.qualified("seq")
+        found = {row.seq: record for row, record in BusCapability.joined(
+            db, f"{header} IN ({','.join('?' for _ in sequences)})", sequences)}
+        if missing := [seq for seq in sequences if seq not in found]:
+            raise RelationViolationError(f"Unknown bus sequences: {missing}")
+        return tuple(found[seq] for seq in sequences)
+
+    @staticmethod
+    def joined(
+        db: sqlite3.Connection, where: str, parameters: tuple[object, ...],
+    ) -> Iterator[tuple[BusRow, BusCapability]]:
+        """Each selected header with the record its capability rows assemble, decoded once."""
+        tables = TypedTable.members_with(CapabilityRow)
+        offsets = dict(zip(tables, accumulate(
+            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        header = BusRow.qualified("seq")
         with closing(db.execute(
             f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
             f'FROM "{BusRow.declared_name}" '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
-            + f" WHERE {header}>?" + predicate + f" ORDER BY {header}",
-            (after, *parameters),
+            + f" WHERE {where}",
+            parameters,
         )) as cursor:
             for stored in cursor:
-                kind = BusRow.decode_at(stored, 0).kind
-                yield kind.assembled(table.decode_at(stored, offsets[table]) for table in kind.tables())
+                row = BusRow.decode_at(stored, 0)
+                yield row, row.kind.assembled(
+                    table.decode_at(stored, offsets[table]) for table in row.kind.tables())
 
     def projections(self) -> Iterator[TypedTable]:
         return iter(())
