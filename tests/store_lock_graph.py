@@ -6,7 +6,7 @@ import ast
 from dataclasses import dataclass
 from pathlib import Path
 
-from agent_comms.pinned_audit import ParsedModule
+from nominal_refactor_advisor.audit.findings import ParsedModule
 from agent_comms.store_files import RankedStoreLock, StoreGuard, StoreLockOwner
 
 

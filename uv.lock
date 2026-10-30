@@ -21,6 +21,7 @@ dependencies = [
     { name = "agent-client-protocol" },
     { name = "aiohttp" },
     { name = "metaclass-registry" },
+    { name = "nominal-refactor-advisor" },
     { name = "packaging" },
     { name = "pydantic" },
 ]
@@ -29,7 +30,6 @@ dependencies = [
 dev = [
     { name = "black" },
     { name = "mypy" },
-    { name = "nominal-refactor-advisor" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -46,7 +46,7 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?rev=main" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
-    { name = "nominal-refactor-advisor", marker = "extra == 'dev'", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main" },
+    { name = "nominal-refactor-advisor", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=feat%2Fabsorb-refactor-audit" },
     { name = "packaging", specifier = ">=24" },
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
@@ -510,7 +510,7 @@ wheels = [
 [[package]]
 name = "nominal-refactor-advisor"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=main#52e366c19c8625fec3f019dec17860d7b0e267eb" }
+source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor?rev=feat%2Fabsorb-refactor-audit#c17cb4ab3c369104ca896b9c9fe766627b0bbc65" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "tree-sitter" },

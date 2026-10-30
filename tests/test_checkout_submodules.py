@@ -43,7 +43,7 @@ def git(path: Path, *args: str) -> str:
 
 @pytest.fixture
 def repository(tmp_path, monkeypatch):
-    """A repository pinning one submodule from a local source, as ours pins refactor-audit."""
+    """A repository pinning one submodule from a local source."""
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "protocol.file.allow")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "always")

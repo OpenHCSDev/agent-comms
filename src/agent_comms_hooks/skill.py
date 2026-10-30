@@ -3,7 +3,7 @@ once, and deal the reminder deck.
 
 Every session bound to a bus is dealt the fleet's sources: the voice, the recorded failures and
 the fleet rules. The session the registry names commander is also dealt the indictment, the
-commander skill, the commander's own rules and the refactor-audit catalog's index; a rung file
+commander skill, the commander's own rules and NRA's pattern catalog index; a rung file
 is read when an order or roast cites its pattern ID. Claude Code caps injected hook text at
 10,000 characters and the sources are far longer, so they go into parts beside the transcript
 and the hook injects the order to read each part, once; the read gate refuses every other tool

@@ -1,6 +1,6 @@
 """Report the stored form of each versioned record declared in the named modules.
 
-The debt ratchet runs this once per revision with that revision's source first on sys.path,
+The NRA gate runs this once per revision with that revision's source first on sys.path,
 so each side's stored form comes from its own FieldCodec declarations and no revision's
 code is imported into another's process. A record's stored form is FieldCodec's record
 schema: each key on disk and its representation's wire spelling. Its version is the
@@ -16,7 +16,7 @@ import json
 from collections.abc import Iterator
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pinned_audit import audit
+from nominal_refactor_advisor import audit
 
 
 def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
