@@ -261,11 +261,9 @@ class ClientTypeErrors(audit.checkers.SideCounts):
     @staticmethod
     def cut(repo: AgentCommsProject, base: str, head: str,
             side: type[audit.ratchet.Side]) -> tuple[StackClient, ...]:
-        """The clients of the materialized cut that selects the same revision as this compared
-        side. The audit and head_review each declare the base/head pair; until they are one
-        family the cut is chosen by the revision its own ref selects, never by its name."""
-        return tuple(client for cut in CutSide.sides() if cut.ref(base, head) == side.ref(base, head)
-                     for client in repo.clients.at(repo.path, base, head, cut))
+        """The clients of the materialized cut that this compared side measures, selected by
+        the side each cut declares, so equal base and head revisions still keep two cuts."""
+        return repo.clients.at(repo.path, base, head, CutSide.materializing(side))
 
     @staticmethod
     def selected(client: StackClient) -> list[str]:

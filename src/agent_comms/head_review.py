@@ -18,6 +18,7 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import StackSources
+from .pinned_audit import audit
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .work_branches import WorkBranches
@@ -504,16 +505,20 @@ class CombinedInput(IntegrationInput):
 
 
 class Side(DeclaredFamily, affix="Side"):
-    """One compared source cut; selection and materialized path belong to this member."""
+    """One compared source cut; selection and materialized path belong to this member. The
+    revision it holds is the audit side it materializes, which owns the base/head choice."""
 
-    @staticmethod
-    @abstractmethod
-    def ref(base: str, head: str) -> str:
-        """This side's revision of the compared pair."""
+    measures: ClassVar[type[audit.ratchet.Side]]
 
     @classmethod
     def sides(cls) -> tuple[type[Side], ...]:
         return cls.members_with(cls)
+
+    @classmethod
+    def materializing(cls, measured: type[audit.ratchet.Side]) -> type[Side]:
+        """The one cut holding the revision an audit side measures."""
+        cut, = (side for side in cls.sides() if side.measures is measured)
+        return cut
 
     @classmethod
     def checkout(cls, directory: Path, repository: RepositoryName) -> Path:
@@ -535,9 +540,7 @@ class Side(DeclaredFamily, affix="Side"):
 
 
 class BaseSide(Side):
-    @staticmethod
-    def ref(base: str, head: str) -> str:
-        return base
+    measures = audit.ratchet.BaseSide
 
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
@@ -546,9 +549,7 @@ class BaseSide(Side):
 
 
 class HeadSide(Side):
-    @staticmethod
-    def ref(base: str, head: str) -> str:
-        return head
+    measures = audit.ratchet.HeadSide
 
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
