@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
+from .channel_targets import DeclaredTag
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
@@ -109,9 +110,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
                      for candidate in thread.work_state.candidates(executor))
 
     @classmethod
-    def turn_owners(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when it works its own turns: the heartbeat reads it as a unit, and as a
-        commander it receives its own board."""
+    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
+        """The thread when its commander's heartbeat reads it as a unit."""
         return (thread,)
 
     @classmethod
@@ -222,13 +222,13 @@ class SubagentExecution(ExternalThreadExecution):
         return ()
 
     @classmethod
-    def turn_owners(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A child acts inside its parent's turn, so the parent's own card and board cover it."""
+    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A child acts inside its parent's turn, so the parent's own card covers it."""
         return ()
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return replace(child, tags=parent.tags)
+        return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

@@ -681,8 +681,7 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     """#commanders declares who commands: one board read, one packet per live member under its
-    own incarnation. A thread outside the channel, and a fork that inherited the tag but works
-    inside its parent's turn, get none."""
+    own incarnation. A thread outside the channel, and a fork of a commander, get none."""
     comms = notification_bus
     live = ProcessIdentity.capture(os.getpid())
     for name, tags in (("worker", {"comms", CommandersTag.declared_name}), ("outsider", {"comms"})):
@@ -690,7 +689,7 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
                                         process_identity=live))
     fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
     comms.registry.register(replace(fork, process_identity=live))
-    assert CommandersTag.declared_name in comms.registry.require("worker-fork").tags
+    assert CommandersTag.declared_name not in comms.registry.require("worker-fork").tags
     failing = ServicePassFailing("following-rule", time.time(), "independent source")
     beat(comms, (failing,))
     lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
@@ -704,19 +703,27 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
         comms.registry.require("lead").incarnation, worker}
 
 
-def test_every_tagged_commander_commands_its_bound_session(notification_bus, tmp_path):
-    """The hook's role answer reads the same derivation: a tagged peer commands like the
-    registered lead; an untagged worker and a fork carrying its parent's tag do not."""
+def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
+    """The hook's role answer reads the one derivation: a thread registered with the tag
+    commands, fork or not; a fork or bound unit of a commander does not inherit the role."""
     comms = notification_bus
+    tag = CommandersTag.declared_name
     for name in ("lead", "worker"):
         thread = comms.registry.require(name)
-        comms.registry.register(replace(thread, tags=thread.tags | {CommandersTag.declared_name}))
-    comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
+        comms.registry.register(replace(thread, tags=thread.tags | {tag}))
+    declared = comms.registry.register_child("declared-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(declared, tags=declared.tags | {tag}))
+    comms.registry.register_child("copied-fork", "worker", CommanderForkExecution, comms.goals)
+    worker = comms.registry.require("worker")
+    comms.registry.register_commanded_unit(
+        "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))
 
     def commands(name):
         return RecordedWatch(WatchClaim(name, home=tmp_path),
                              WatchRecord(name, str(comms.root), (), tmp_path)).commands()
 
-    assert commands("lead") and commands("worker")
+    assert commands("lead") and commands("worker") and commands("declared-fork")
     assert not commands("outsider")
-    assert not commands("worker-fork")
+    assert not commands("copied-fork")
+    assert not commands("bound-unit")
+    assert "comms" in comms.registry.require("copied-fork").tags

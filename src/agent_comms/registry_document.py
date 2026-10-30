@@ -549,12 +549,9 @@ class HistoricalRootPurpose(RootPurpose):
 class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
+    @abstractmethod
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """Every commander of this bus, the registered lead first: #commanders declares the rest.
-        A member that works inside its parent's turn is covered by that parent, never counted."""
-        return tuple(dict.fromkeys((*self.leads(snapshot), *(
-            owner for member in ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
-            for owner in member.execution.turn_owners(member)))))
+        """Every commander of this bus."""
 
     @abstractmethod
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -589,6 +586,10 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 
 class NoCommanderProject(CommanderProject):
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """A bus with no commander project has no commanders, tagged or not."""
+        return ()
+
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
@@ -611,6 +612,12 @@ class NoCommanderProject(CommanderProject):
 class RegisteredCommanderProject(CommanderProject):
     commander: ThreadIncarnation
     repos: tuple[Repo, ...]
+
+    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        """The registered lead first, then every thread declared in #commanders."""
+        return tuple(dict.fromkeys((
+            *self.leads(snapshot),
+            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name])))
 
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())
