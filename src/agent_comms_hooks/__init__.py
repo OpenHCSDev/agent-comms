@@ -30,14 +30,14 @@ class HookRecord:
 
     @classmethod
     def decode(cls, record: Mapping[str, object], **context: object) -> Self:
-        """A field Claude Code may omit declares its default; a required field it omits is a
-        missing argument, refused by the constructor."""
+        """Declared fields decode regardless of constructor position. Supplied resident
+        context wins over foreign input; omitted required fields fail at construction."""
         hints = get_type_hints(cls)
         return cls(
             **{
                 declared.name: HookRecord.field(hints[declared.name], record[declared.name])
                 for declared in fields(cls)
-                if declared.init and not declared.kw_only and declared.name in record
+                if declared.init and declared.name in record and declared.name not in context
             },
             **context,
         )
