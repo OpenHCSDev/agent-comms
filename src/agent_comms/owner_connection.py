@@ -58,11 +58,6 @@ class RuntimeRequestContext:
     session: AcpSessionId
     name: str
 
-    @property
-    def session_id(self) -> str:
-        """The ACP transport's text representation of the original session."""
-        return str(self.session)
-
     async def send(self, line: OwnerLine) -> None:
         await self.client.send(line)
 

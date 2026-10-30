@@ -15,7 +15,7 @@ from .coordination_errors import Refused
 from acp.schema import AgentMessageChunk, PromptResponse, TextContentBlock
 
 from . import agent_events as events
-from .field_codec import TurnId
+from .field_codec import AcpSessionId, TurnId
 from .acp_extension import CompactionCommittedUpdate, TranscriptChangedUpdate, encode_updates
 from .agent_backend import (
     CompactionOutcome,
@@ -68,7 +68,7 @@ class CompactionReply(MroDispatch):
 
 
 async def compact_context(
-    runner: TurnRunner, session_id: str, instructions: str | None = None
+    runner: TurnRunner, session_id: AcpSessionId, instructions: str | None = None
 ) -> CompactionOutcome:
     """Run the backend's own compaction now; called from a UI /compact only."""
     if instructions is not None and not isinstance(instructions, str):

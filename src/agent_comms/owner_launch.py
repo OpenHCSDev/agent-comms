@@ -141,7 +141,7 @@ class ReadOwnerLaunchRuntimeRequest(ResultRuntimeRequest):
         return super().require_owner(entry)
 
     async def result(self, ctx: RuntimeRequestContext) -> RetainedOwnerLaunch:
-        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        state = ctx.server.agent.inputs.state(ctx.session).owned()
         if state.owner != self.owner:
             raise RelationViolationError("Launch request names another original session")
         return state.configuration.launch
@@ -180,7 +180,7 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
         return entry.thread
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
-        state = ctx.server.agent.inputs.state(ctx.session_id).owned()
+        state = ctx.server.agent.inputs.state(ctx.session).owned()
         return await self.retire(ctx.server.agent.sessions, state)
 
     async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:

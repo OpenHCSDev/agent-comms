@@ -29,7 +29,7 @@ from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
-from .field_codec import GoalId, TurnId
+from .field_codec import AcpSessionId, GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -120,7 +120,7 @@ class OwnedTurn:
     def __init__(
         self,
         runner: TurnRunner,
-        session_id: str,
+        session_id: AcpSessionId,
         thread_name: str,
         task: str,
         *,

@@ -14,7 +14,7 @@ from types import MappingProxyType, SimpleNamespace
 import pytest
 
 import agent_comms.agent_backend as ab
-from agent_comms.field_codec import InputId
+from agent_comms.field_codec import AcpSessionId, InputId
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
@@ -276,7 +276,7 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
                 name, frozenset(), Checkout(comms.root.parent), model=DeclaredModel('p/m'),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
-            await agent.sessions.bind_owned(thread, name)
+            await agent.sessions.bind_owned(thread, AcpSessionId(name))
         session = agent.inputs.state("session").owned()
         other = agent.inputs.state("other").owned()
         assert agent.inputs.state("attachment").executors() == ()

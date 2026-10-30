@@ -91,7 +91,7 @@ class SessionLifecycle:
         self.runtime, self.runtime_enabled, self.effects = runtime, runtime_enabled, effects
         self.published: dict[AcpSessionId, PublishedSession] = {}
         self.client: SdkSessionConnection | None = None
-        self.proxies: dict[str, RuntimeProxy | IncompatibleOwner] = {}
+        self.proxies: dict[AcpSessionId, RuntimeProxy | IncompatibleOwner] = {}
         self._attachment_lock = asyncio.Lock()
         self._identity_lock = asyncio.Lock()
         self.transcript = TranscriptReplay(comms)
@@ -132,19 +132,19 @@ class SessionLifecycle:
     def session_capabilities(self) -> SessionCapabilities:
         return SessionCapabilities()
 
-    async def close_session(self, session_id: str) -> CloseSessionResponse:
+    async def close_session(self, session_id: AcpSessionId) -> CloseSessionResponse:
         # An executing owner is not an attachment. Its turn/input retirement
         # remains with shutdown, rather than treating tab close as owner stop.
         raise Refused.method_not_found("session/close")
 
-    def require(self, session_id: str) -> str:
+    def require(self, session_id: AcpSessionId) -> str:
         if session_id not in self.published:
             raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
-        return self.published[AcpSessionId(session_id)].name
+        return self.published[session_id].name
 
-    def binds(self, session_id: str, name: object) -> bool:
+    def binds(self, session_id: AcpSessionId, name: object) -> bool:
         """Whether this session is published as the named thread."""
-        return session_id in self.published and self.published[AcpSessionId(session_id)].name == name
+        return session_id in self.published and self.published[session_id].name == name
 
     def require_owned_session(self, entry: RegistryEntry) -> AcpSessionId:
         """Resolve an original loaded resource; registration grants no attachment."""
@@ -188,7 +188,7 @@ class SessionLifecycle:
         """An owning ACP lifecycle acquires its calling process after publication."""
         return self.comms.owners.acquire_thread(thread.name)
 
-    def validated_thread(self, cwd: Checkout, session_id: str) -> Thread:
+    def validated_thread(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
         thread = self.comms.registry.require(session_id)
         thread.execution.require_native()
         if not thread.contains_worktree(cwd, self.comms.registry.storage_rule):
@@ -197,11 +197,11 @@ class SessionLifecycle:
             )
         return thread
 
-    async def bind_owned(self, thread: Thread, session_id: str) -> None:
+    async def bind_owned(self, thread: Thread, session_id: AcpSessionId) -> None:
         owner = (await Coordination.run_worker(partial(
             self.comms.registry.entry, thread.name,
         ))).entry.owner_identity
-        await self.bind_owner(thread, AcpSessionId(session_id), self.effects.inputs.configuration, owner)
+        await self.bind_owner(thread, session_id, self.effects.inputs.configuration, owner)
 
     async def bind_owner(
         self, thread: Thread, session_id: AcpSessionId,
@@ -220,19 +220,20 @@ class SessionLifecycle:
         self.reject_foreign_mcp(request)
         await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
-        await self.bind_owned(thread, thread.name)
-        self.effects.inputs.ensure_live_drain(thread.name)
+        session_id = AcpSessionId(thread.name)
+        await self.bind_owned(thread, session_id)
+        self.effects.inputs.ensure_live_drain(session_id)
         response = NewSessionResponse(
-            session_id=thread.name,
-            field_meta=await self.metadata(thread.name, session_id=thread.name),
+            session_id=session_id,
+            field_meta=await self.metadata(thread.name, session_id=session_id),
         )
-        self.config.start_menu(thread.name, self.runtime)
+        self.config.start_menu(session_id, self.runtime)
         return response
 
     async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
         self.reject_foreign_mcp(request)
-        session_id = request.session_id
-        thread = await self._acquire_loaded(FieldCodec.decode(Checkout, request.cwd), request.session_id)
+        session_id = FieldCodec.decode(AcpSessionId, request.session_id)
+        thread = await self._acquire_loaded(FieldCodec.decode(Checkout, request.cwd), session_id)
         if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
@@ -265,7 +266,7 @@ class SessionLifecycle:
 
     async def run_startup_input(self, state: OwnerSession, key: InputKey) -> None:
         """Consume only the explicitly authorized first input; never scan or replay."""
-        session_id = str(state.identifier)
+        session_id = state.identifier
         async with state.turn_lock:
             async with state.own_turn_task():
                 def capture() -> str:
@@ -303,7 +304,7 @@ class SessionLifecycle:
             else:
                 state.retired.set_result(None)
 
-    async def _acquire_loaded(self, cwd: Checkout, session_id: str) -> Thread:
+    async def _acquire_loaded(self, cwd: Checkout, session_id: AcpSessionId) -> Thread:
         await Coordination.run_worker(self.comms.owners.require_private_launch)
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
@@ -317,12 +318,12 @@ class SessionLifecycle:
             ))
         return thread
 
-    async def _bind_loaded(self, thread: Thread, session_id: str) -> None:
+    async def _bind_loaded(self, thread: Thread, session_id: AcpSessionId) -> None:
         await self.bind_owned(thread, session_id)
         await self.effects.inputs.emit_input_delivery_changed(session_id)
 
     async def attach_owner(
-        self, thread: Thread, session_id: str,
+        self, thread: Thread, session_id: AcpSessionId,
         subscription: type[SubscribeRuntimeRequest] = SubscribeRuntimeRequest,
     ) -> LoadSessionResponse:
         async with self._attachment_lock:
@@ -356,7 +357,7 @@ class SessionLifecycle:
                 field_meta={**metadata, **ExistingSessionLoadPlan(binding).metadata()},
             )
 
-    async def sync_identity(self, session_id: str) -> str:
+    async def sync_identity(self, session_id: AcpSessionId) -> str:
         """Publish each observed identity generation once across concurrent consumers."""
         async with self._identity_lock:
             cached_name = self.require(session_id)
@@ -372,14 +373,14 @@ class SessionLifecycle:
             ):
                 await self.effects.turns.close_idle_backend(session_id, thread)
             current = PublishedSession.of(thread)
-            if self.published[AcpSessionId(session_id)] != current:
+            if self.published[session_id] != current:
                 await self.publish_metadata(session_id, title=thread.title)
-                self.published[AcpSessionId(session_id)] = current
+                self.published[session_id] = current
             return name
 
     @boundary_decoder
     async def publish_metadata(
-        self, session_id: str, *, title: ThreadText = NoThreadText(),
+        self, session_id: AcpSessionId, *, title: ThreadText = NoThreadText(),
     ) -> None:
         """Encode the thread's title once for the ACP metadata boundary."""
         await self.runtime.publish_update(
@@ -392,7 +393,7 @@ class SessionLifecycle:
         )
 
     async def observe_native_configuration(
-        self, session_id: str, thread_name: str, event: events.NativeMetadataObservation
+        self, session_id: AcpSessionId, thread_name: str, event: events.NativeMetadataObservation
     ) -> None:
         """Initialize only unset configuration from its actual native producer."""
         await Coordination.run_worker(partial(
@@ -407,7 +408,7 @@ class SessionLifecycle:
         snapshot = GoalChangedUpdate.from_snapshot(self.comms.goals.goal_snapshot(thread_name))
         return self.comms.configuration.answer(thread_name), snapshot
 
-    async def metadata(self, thread_name: str, *, session_id: str | None = None) -> dict[str, JsonValue]:
+    async def metadata(self, thread_name: str, *, session_id: AcpSessionId | None = None) -> dict[str, JsonValue]:
         configuration = await Coordination.run_worker(partial(
             self.configuration_updates, thread_name,
         ))
@@ -417,7 +418,7 @@ class SessionLifecycle:
             *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
         )
 
-    async def retire_proxy(self, session_id: str) -> None:
+    async def retire_proxy(self, session_id: AcpSessionId) -> None:
         """Keep the proxy registered until its reader is closed and awaited."""
         proxy = self.proxies.get(session_id)
         if proxy is not None:
@@ -475,7 +476,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
             self.effects.use_unstable_protocol
         ) else super().session_capabilities()
 
-    async def close_session(self, session_id: str) -> CloseSessionResponse:
+    async def close_session(self, session_id: AcpSessionId) -> CloseSessionResponse:
         if not self.effects.use_unstable_protocol:
             raise Refused.method_not_found("session/close")
         async with self._attachment_lock:
@@ -491,22 +492,23 @@ class AttachedSessionLifecycle(SessionLifecycle):
     async def new_session(self, request: NewSessionRequest) -> NewSessionResponse:
         self.reject_foreign_mcp(request)
         thread = await Coordination.run_worker(partial(self.declare_thread, request.cwd))
+        session_id = AcpSessionId(thread.name)
         loaded = await self._attach_requested_session(
             thread,
-            thread.name,
+            session_id,
             (request.field_meta or {}).get("agentCommsLoad"),
             FreshSubscribeRuntimeRequest,
         )
         return NewSessionResponse(
-            session_id=thread.name,
+            session_id=session_id,
             field_meta=loaded.field_meta,
         )
 
     async def load_session(self, request: LoadSessionRequest) -> LoadSessionResponse:
         self.reject_foreign_mcp(request)
-        session_id = request.session_id
+        session_id = FieldCodec.decode(AcpSessionId, request.session_id)
         thread = await Coordination.run_worker(
-            partial(self.validated_thread, FieldCodec.decode(Checkout, request.cwd), request.session_id)
+            partial(self.validated_thread, FieldCodec.decode(Checkout, request.cwd), session_id)
         )
         return await self._attach_requested_session(
             thread,
@@ -516,7 +518,7 @@ class AttachedSessionLifecycle(SessionLifecycle):
         )
 
     async def _attach_requested_session(
-        self, thread: Thread, session_id: str, load_metadata: object,
+        self, thread: Thread, session_id: AcpSessionId, load_metadata: object,
         subscription: type[SubscribeRuntimeRequest],
     ) -> LoadSessionResponse:
         try:

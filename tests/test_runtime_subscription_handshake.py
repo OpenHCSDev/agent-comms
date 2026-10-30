@@ -16,7 +16,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import AcpSessionId, MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.runtime import RuntimeProxy, socket_path
@@ -37,7 +37,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     session_file.chmod(0o600)
     thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(session_file), comms.root))
     comms.registry.declare(thread)
-    await owner.sessions.bind_owned(thread, thread.name)
+    await owner.sessions.bind_owned(thread, AcpSessionId(thread.name))
     database = comms.root / "coordination.sqlite3"
     CoordinationStore(database).close()
     proxy = RuntimeProxy(client, thread.name, socket_path(comms.root, os.getpid()))

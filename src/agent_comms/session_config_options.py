@@ -19,7 +19,7 @@ from .child_process import join_retirement
 from .config_options import (CatalogConfigOption,
                              ConfigOptions, InvalidConfigChoice)
 from .coordinator import Coordination
-from .field_codec import FieldCodec
+from .field_codec import AcpSessionId, FieldCodec
 from .native_failures import NativePiUnavailable
 from .threads import ChosenModel, NextTurnConfiguration
 from .thread_model import CatalogSelection
@@ -48,13 +48,13 @@ class SessionConfigOptions:
     ):
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
-        self.publications: dict[str, ConfigOptionUpdate] = {}
-        self._publication_sessions: set[str] = set()
+        self.publications: dict[AcpSessionId, ConfigOptionUpdate] = {}
+        self._publication_sessions: set[AcpSessionId] = set()
         self._tasks: set[asyncio.Task[None]] = set()
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
-        self.settings_in_use: dict[str, UseSettings] = {}
+        self.settings_in_use: dict[AcpSessionId, UseSettings] = {}
 
     async def describe(self, option: CatalogConfigOption, thread: CatalogSelection) -> SessionConfigOptionSelect:
         choices = await option.display_choices(thread)
@@ -79,7 +79,7 @@ class SessionConfigOptions:
                 for member in CatalogConfigOption.members_with(CatalogConfigOption)]
 
     async def _publish(
-        self, session_id: str,
+        self, session_id: AcpSessionId,
         options: list[SessionConfigOptionSelect | SessionConfigOptionBoolean],
     ) -> None:
         """Publish within the configuration owner's acquisition lifetime."""
@@ -94,7 +94,7 @@ class SessionConfigOptions:
             self.publications[session_id] = update
 
     async def set_option(
-        self, config_id: str, session_id: str, value: str | bool
+        self, config_id: str, session_id: AcpSessionId, value: str | bool
     ) -> SetSessionConfigOptionResponse:
         try:
             member = CatalogConfigOption.member_named(config_id)
@@ -145,10 +145,10 @@ class SessionConfigOptions:
     def stored_settings(thread: Thread) -> UseSettings:
         return UseSettings(thread.model, thread.thinking_level)
 
-    def turn_started(self, session_id: str, thread: Thread) -> None:
+    def turn_started(self, session_id: AcpSessionId, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
 
-    async def use_stored_settings(self, session_id: str, name: str) -> None:
+    async def use_stored_settings(self, session_id: AcpSessionId, name: str) -> None:
         """A running turn switches at its next model call, whichever process stored the change."""
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         settings = self.stored_settings(thread)
@@ -159,13 +159,13 @@ class SessionConfigOptions:
             self.settings_in_use[session_id] = settings
             turn.send(settings)
 
-    async def apply_stored_settings(self, session_id: str) -> None:
+    async def apply_stored_settings(self, session_id: AcpSessionId) -> None:
         """Apply execution state without discovering presentation catalogs."""
         name = await self.sessions.sync_identity(session_id)
-        await self.effects.turns.goals.sync_goal_execution(session_id, name)
+        await self.effects.turns.goals.sync_goal_execution(session_id)
         await self.use_stored_settings(session_id, name)
 
-    def start_menu(self, session_id: str, client: SessionUpdateSink) -> asyncio.Task[None]:
+    def start_menu(self, session_id: AcpSessionId, client: SessionUpdateSink) -> asyncio.Task[None]:
         """Retain initial publication until it finishes or its consumer retires."""
         self._publication_sessions.add(session_id)
         task = self.runtime.background(self.send_menu(client, session_id))
@@ -175,7 +175,7 @@ class SessionConfigOptions:
 
     @asynccontextmanager
     async def observe_configuration(
-        self, session_id: str, client: SessionUpdateSink,
+        self, session_id: AcpSessionId, client: SessionUpdateSink,
     ) -> AsyncIterator[None]:
         """An attached socket owns its initial catalog wait through disconnect."""
         task = self.start_menu(session_id, client)
@@ -190,7 +190,7 @@ class SessionConfigOptions:
             task.cancel()
         await join_retirement(asyncio.gather(*pending, return_exceptions=True))
 
-    async def send_menu(self, client: SessionUpdateSink, session_id: str) -> None:
+    async def send_menu(self, client: SessionUpdateSink, session_id: AcpSessionId) -> None:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
             update = ConfigOptionUpdate(
@@ -200,7 +200,7 @@ class SessionConfigOptions:
                 self.publications[session_id] = update
 
     async def options_for_session(
-        self, session_id: str,
+        self, session_id: AcpSessionId,
     ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         name = self.sessions.require(session_id)
         return await self.options(
@@ -208,7 +208,7 @@ class SessionConfigOptions:
             await Coordination.run_worker(partial(self.comms.threads.running_selection, name)),
         )
 
-    def stop_observing_configuration(self, session_id: str) -> None:
+    def stop_observing_configuration(self, session_id: AcpSessionId) -> None:
         self._publication_sessions.discard(session_id)
         self.publications.pop(session_id, None)
 
@@ -224,7 +224,7 @@ class SessionConfigOptions:
         self._publication_sessions.clear()
 
     async def publish_configuration(
-        self, session_id: str,
+        self, session_id: AcpSessionId,
     ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:

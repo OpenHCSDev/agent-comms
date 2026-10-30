@@ -28,6 +28,7 @@ from .acp_extension import (
 )
 
 from .agent_event_updates import AcpEventConsumer
+from .acp_request_consumer import AcpRequestConsumer
 from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
 from .command import Command
 from .context_store import ContextManifestReference
@@ -170,13 +171,13 @@ class SubscribeRuntimeRequest(RuntimeRequest):
     @asynccontextmanager
     async def observing(self, ctx: RuntimeRequestContext) -> AsyncIterator[None]:
         agent = ctx.server.agent
-        ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
-        await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
+        ctx.server.clients.setdefault(ctx.session, set()).add(ctx.client)
+        await agent.emit_session_identity(ctx.session, ctx.name, client=ctx.client)
         async with agent.sessions.transcript.subscribe(self.thread, client=ctx.client):
             await agent.turns.publish_turn_state(
-                AcpEventConsumer(agent, ctx.session_id, ctx.client)
+                AcpEventConsumer(agent, ctx.session, ctx.client)
             )
-            await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
+            await agent.inputs.emit_input_delivery_changed(ctx.session, client=ctx.client)
             yield
 
     async def ready(self, ctx: RuntimeRequestContext) -> None:
@@ -196,7 +197,7 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         agent = ctx.server.agent
         await ctx.send(OwnerAnnouncement())
         async with self.subscribed(ctx):
-            async with agent.sessions.config.observe_configuration(ctx.session_id, ctx.client):
+            async with agent.sessions.config.observe_configuration(ctx.session, ctx.client):
                 while line := await ctx.reader.readline():
                     ClientLine.read(line).answer(ctx.client)
 
@@ -229,16 +230,15 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
         controller = next(
             (
                 subscriber
-                for subscriber in ctx.server.clients.get(ctx.session_id, ())
+                for subscriber in ctx.server.clients.get(ctx.session, ())
                 if subscriber.token == self.controller_token and not subscriber.writer.is_closing()
             ),
             None,
         )
         token = ctx.server.controller.set(controller)
         try:
-            result = await ctx.server.agent.receive_prompt(
-                self.request.model_copy(update={"session_id": ctx.session_id})
-            )
+            with ctx.server.agent.refusals():
+                result = await AcpRequestConsumer(ctx.server.agent, self.request, ctx.session).run()
         finally:
             ctx.server.controller.reset(token)
         return PromptReply(result)
@@ -247,7 +247,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class CancelRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> CancelReply:
-        await ctx.server.agent.turns.cancel(ctx.session_id)
+        await ctx.server.agent.turns.cancel(ctx.session)
         return CancelReply()
 
 
@@ -258,7 +258,7 @@ class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
 
     async def result(self, ctx: RuntimeRequestContext) -> ConfigOptionReply:
         result = await ctx.server.agent.sessions.config.set_option(
-            self.config_id, ctx.session_id, self.value
+            self.config_id, ctx.session, self.value
         )
         return ConfigOptionReply(result)
 
@@ -268,7 +268,7 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
     async def result(self, ctx: RuntimeRequestContext) -> CompactionOutcome:
-        return await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
+        return await compact_context(ctx.server.agent.turns, ctx.session, self.instructions)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -279,7 +279,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
         return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
-            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id),
+            scope=await ctx.server.agent.inputs.delivery_scope(ctx.session),
 
         ))
 
@@ -288,9 +288,9 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
-            ctx.name, scope=await ctx.server.agent.inputs.delivery_scope(ctx.session_id)
+            ctx.name, scope=await ctx.server.agent.inputs.delivery_scope(ctx.session)
         ))
-        await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
+        await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session)
         return result
 
 
@@ -315,7 +315,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
         ))
         turn = await Coordination.run_worker(partial(
-            ctx.server.agent.turns.turn_state, ctx.session_id,
+            ctx.server.agent.turns.turn_state, ctx.session,
         ))
         return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
 
@@ -347,7 +347,7 @@ class EditGoalRuntimeRequest(
 ):
     async def change(self, ctx: RuntimeRequestContext) -> None:
         await ctx.server.agent.turns.goals.edit_goal(
-            ctx.session_id, self.goal_id, self.expected_revision, self.text
+            ctx.session, self.goal_id, self.expected_revision, self.text
         )
 
 
@@ -357,7 +357,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 
     async def change(self, ctx: RuntimeRequestContext) -> None:
         await ctx.server.agent.turns.goals.update_goal(
-            ctx.session_id, self.status, self.goal_id, self.expected_revision
+            ctx.session, self.status, self.goal_id, self.expected_revision
         )
 
 
@@ -365,7 +365,7 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.retry_goal(
-            ctx.session_id, self.goal_id, self.expected_revision
+            ctx.session, self.goal_id, self.expected_revision
         )
         return GoalReply(goal)
 
@@ -373,7 +373,7 @@ class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
     async def result(self, ctx: RuntimeRequestContext) -> GoalReply:
-        goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
+        goal = await ctx.server.agent.turns.goals.set_goal(ctx.session, self.text)
         return GoalReply(goal)
 
 
@@ -382,7 +382,7 @@ class ContextRuntimeRequest(ResultRuntimeRequest):
     async def inspect(self, ctx):
         agent = ctx.server.agent
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
-        context = await agent.turns.inspect_context(ctx.session_id, owner)
+        context = await agent.turns.inspect_context(ctx.session, owner)
         return context.require_session_file(owner.runtime.path)
 
     async def result(self, ctx):
@@ -476,7 +476,7 @@ class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
         owner = await Coordination.run_worker(partial(agent._comms.registry.require, ctx.name))
 
         async def read_reference(original):
-            return await agent.turns.inspect_context_segment(ctx.session_id, owner, original)
+            return await agent.turns.inspect_context_segment(ctx.session, owner, original)
 
         text = await segment.public_text(read_reference)
         return ContextSourceText(segment.public_description(), text)

@@ -14,7 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import AcpSessionId, TurnId
 from agent_comms.goal_actions import EditGoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
 from agent_comms.goal_presentation import StandbyExecution
@@ -65,10 +65,10 @@ async def publication(tmp_path):
     client = GoalLog()
     agent.on_connect(client)
     thread = agent.sessions.declare_thread(str(tmp_path))
-    await agent.sessions.bind_owned(thread, thread.name)
+    await agent.sessions.bind_owned(thread, AcpSessionId(thread.name))
     comms.goals.update_goal(thread.name, SetGoalAction(text="Keep this objective"))
     try:
-        yield comms, agent, thread.name, client
+        yield comms, agent, agent.inputs.state(thread.name).owned().identifier, client
     finally:
         await agent.shutdown()
 
@@ -88,14 +88,14 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
     output.enter(ToolRunningPhase("delegated work"))
     comms.goals.update_goal(session, StandbyGoalAction(wait_for=(child.name,)))
     scheduler = agent.turns.goals
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     first = client.published[-1][1]
     assert isinstance(first.execution, StandbyExecution)
     assert first.execution.inactive_wait_for == ()
     before = {path: path.read_bytes() for path in projection_files(comms)}
     output.enter(IdlePhase())
     assert {path: path.read_bytes() for path in before} == before
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     second = client.published[-1][1]
     assert second.goal == first.goal
     assert isinstance(second.execution, StandbyExecution)
@@ -103,7 +103,7 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
     assert second.execution.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
     assert len(client.published) == 2
     reads = comms.registry.store.cache.read_counts().requests
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     assert len(client.published) == 2
     assert comms.registry.store.cache.read_counts().requests > reads
 
@@ -111,7 +111,7 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
 async def test_registry_routing_uses_only_the_shared_document_and_published_goal(publication):
     comms, agent, session, client = publication
     scheduler = agent.turns.goals
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     document = comms.registry.store.read()
     original = scheduler.publication(session).snapshot
     reads = comms.registry.store.cache.read_counts().requests
@@ -159,7 +159,7 @@ async def test_external_mid_turn_goal_reaches_actual_consumer_without_inbox_wake
 async def test_attempt_signal_refreshes_complete_projection_but_does_not_publish_an_identical_one(publication):
     comms, agent, session, client = publication
     scheduler = agent.turns.goals
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     store = comms.goals.open_goal_store()
     document = comms.registry.store.read()
     before = scheduler.publication(session).snapshot
@@ -173,7 +173,7 @@ async def test_attempt_signal_refreshes_complete_projection_but_does_not_publish
 async def test_failed_goal_read_keeps_cause_and_never_creates_input_diagnostic(publication, caplog):
     comms, agent, session, client = publication
     scheduler = agent.turns.goals
-    await scheduler.sync_goal_execution(session, session)
+    await scheduler.sync_goal_execution(session)
     before = scheduler.publication(session).snapshot
     diagnostics = tuple((comms.root / "diagnostics").glob("drain-*.json"))
     store = comms.goals.open_goal_store()
@@ -182,7 +182,7 @@ async def test_failed_goal_read_keeps_cause_and_never_creates_input_diagnostic(p
     with sqlite3.connect(path) as db:
         db.execute(f'DROP TABLE "{Generation.declared_name}"')
     with pytest.raises(StorageUncertainError):
-        await scheduler.sync_goal_execution(session, session)
+        await scheduler.sync_goal_execution(session)
     await scheduler.observe_root(document, (session,), frozenset(store.source_paths(path.parent)))
     assert any(record.exc_info and isinstance(record.exc_info[1], StorageUncertainError)
                for record in caplog.records)

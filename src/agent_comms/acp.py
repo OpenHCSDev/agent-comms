@@ -20,7 +20,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import sys
 import time
 from collections.abc import AsyncIterator, Iterator, Sequence
@@ -60,8 +59,6 @@ from . import (
     manual_compaction_bridge,
 )
 from .acp_extension import (
-    CompactRequest,
-    decode_request,
     encode_updates,
 )
 from .acp_failure import NativeTurnError
@@ -79,7 +76,7 @@ from .coordination_cohort import next_sealed_assignment
 from .coordination_database import CoordinationStore
 from .cursor_owner import CursorOwner
 from .cursor_publication import CursorPublication
-from .field_codec import ClaimId, FieldCodec, MalformedRecord, RootId
+from .field_codec import AcpSessionId, ClaimId, FieldCodec, MalformedRecord, RootId
 from .image_inputs import prompt_images
 from .input_drain import InputDrain
 from .config_options import ConfigOptions
@@ -117,17 +114,17 @@ from .turn_runner import RELAY_PREFIX
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
     """The SDK connection and controller publish one Core acceptance answer."""
 
-    async def publish_update(self, *, session_id: str, update: BaseModel) -> bool:
+    async def publish_update(self, *, session_id: AcpSessionId, update: BaseModel) -> bool:
         await self.session_update(session_id=session_id, update=update)
         return True
 
 
-    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: str) -> None:
+    def require_current(self, authority: AcpSelectedWriteAuthority, session_id: AcpSessionId) -> None:
         if self is not authority.agent.sessions.client:
             raise IdentityConflict("Selected write ACP controller changed")
 
     async def request_ui_permission(
-        self, runner: TurnRunner, session_id: str,
+        self, runner: TurnRunner, session_id: AcpSessionId,
         request: tuple[ToolCallUpdate, list[PermissionOption]],
     ) -> dict[str, object] | None:
         tool_call, options = request
@@ -143,7 +140,7 @@ class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
             )
         return None
 
-    def departed(self, runtime: RuntimeServer, session_id: str) -> bool:
+    def departed(self, runtime: RuntimeServer, session_id: AcpSessionId) -> bool:
         return False
 
 
@@ -198,7 +195,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         # remains attached. Never restore this binding after a process crash.
         self._selected_write_controllers: dict[tuple[str, int], tuple[ClaimId, Controller]] = {}
 
-    def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
+    def _create_runtime_proxy(self, thread: Thread, session_id: AcpSessionId) -> RuntimeProxy:
         return RuntimeProxy(
             self, session_id, socket_path(self._comms.root, thread.require_process().pid),
         )
@@ -287,19 +284,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return await self.receive_prompt(request)
 
     async def receive_prompt(self, request: PromptRequest) -> PromptResponse:
-        try:
-            command = decode_request(request.field_meta)
-        except MalformedRecord as error:
-            raise RequestError.invalid_params({"reason": str(error)}) from error
-        # Literal /compact is the external ACP text command; ours uses a record.
-        text = self._prompt_text(request).strip()
-        if re.match(r"^/compact(?:\s|$)", text):
-            self._require_compaction_text(request)
-            command = CompactRequest(text[len("/compact") :].strip())
         with self.refusals():
-            return await AcpRequestConsumer(self, request).run(command)
+            session_id = FieldCodec.decode(AcpSessionId, request.session_id)
+            return await AcpRequestConsumer(self, request, session_id).run()
 
-    async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
+    async def _compact_request(self, session_id: AcpSessionId, instructions: str | None) -> PromptResponse:
         # The owner process's bridge alone owns the turn lock.
         if session_id in self.sessions.proxies:
             outcome = FieldCodec.decode(
@@ -314,7 +303,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
         return manual_compaction_bridge.CompactionReply().reply(outcome)
 
-    async def _selected_write_request(self, session_id: str, request) -> PromptResponse:
+    async def _selected_write_request(self, session_id: AcpSessionId, request) -> PromptResponse:
         owner = self.sessions.require(session_id)
         controller = self._runtime.controller.get()
         attached = controller.attached(self.sessions.client) if controller is not None else None
@@ -341,9 +330,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return PromptResponse(stop_reason="end_turn", field_meta=encode_updates(acknowledgement))
 
     async def _prompt_request(
-        self, request: PromptRequest, command: acp_extension.PromptRequest
+        self, ingress: AcpRequestConsumer, command: acp_extension.PromptRequest
     ) -> PromptResponse:
-        session_id = request.session_id
+        session_id = ingress.session_id
+        request = ingress.request
         text = self._prompt_text(request)
         display_text = command.user_text or text
         try:
@@ -378,7 +368,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
             try:
                 return await self.turns.prompt_owned(
-                    request,
+                    session_id,
+                    text=text,
                     images=images,
                     display_text=display_text,
                     input_id=command.input_id,
@@ -400,7 +391,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             )
 
     async def emit_session_identity(
-        self, session_id: str, name: str, client: SessionUpdateSink,
+        self, session_id: AcpSessionId, name: str, client: SessionUpdateSink,
     ) -> None:
         """Let a subscriber identify its owner before potentially long replay."""
         await client.publish_update(
@@ -420,24 +411,24 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     async def cancel(self, session_id: str, **kwargs: JsonValue) -> None:
         with self.refusals():
-            return await self.turns.cancel(session_id, **kwargs)
+            return await self.turns.cancel(FieldCodec.decode(AcpSessionId, session_id), **kwargs)
 
     async def close_session(self, session_id: str, **kwargs: JsonValue):
         with self.refusals():
-            return await self.sessions.close_session(session_id)
+            return await self.sessions.close_session(FieldCodec.decode(AcpSessionId, session_id))
 
     async def set_config_option(
         self, config_id: str, session_id: str, value: str | bool, **kwargs: JsonValue
     ) -> SetSessionConfigOptionResponse:
         with self.refusals():
-            return await self.sessions.config.set_option(config_id, session_id, value)
+            return await self.sessions.config.set_option(config_id, FieldCodec.decode(AcpSessionId, session_id), value)
 
     async def authenticate(self, method_id: str, **kwargs: JsonValue) -> None:
         raise RequestError.auth_required({"reason": "agent-comms requires no authentication"})
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    async def _drain_private_nk(self, session_id: str, wire_root_id: RootId) -> int:
+    async def _drain_private_nk(self, session_id: AcpSessionId, wire_root_id: RootId) -> int:
         """Run a selected private wake for this ACP session.
 
         This explicitly configured path reuses the reviewed one-shot native

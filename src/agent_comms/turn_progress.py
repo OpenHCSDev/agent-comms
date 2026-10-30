@@ -27,6 +27,7 @@ from .coordinator import Coordination
 from .diagnostics import record_request_progress, record_terminal_failure
 from .publication_measurements import PublicationMeasurements
 from .messages import AlertKind, NoticeRole
+from .field_codec import AcpSessionId
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
@@ -43,14 +44,11 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class TurnEventPublication(MroDispatch):
-    comms: Comms
-    sessions: SessionLifecycle
-    effects: TurnEffects
-    sync_goal_execution: Callable[[str, str], Awaitable[None]]
-    session_id: str
+    sync_goal_execution: Callable[[AcpSessionId], Awaitable[None]]
+    session_id: AcpSessionId
     @handles(events.InputStarted, events.Done)
     async def sync_goals(self, event: events.InputStarted) -> None:
-        await self.sync_goal_execution(self.session_id, self.sessions.require(self.session_id))
+        await self.sync_goal_execution(self.session_id)
 
 
 
@@ -64,11 +62,11 @@ class TurnProgress(events.AgentEventConsumer):
         inputs,
         effects,
         runtime,
-        session_id,
+        session_id: AcpSessionId,
         turn: OwnedTurn,
         finish_event,
         goals: TurnGoalAccount,
-        sync_goals,
+        sync_goals: Callable[[AcpSessionId], Awaitable[None]],
     ):
         self._comms = comms
         self.sessions, self.inputs, self.effects = sessions, inputs, effects
@@ -86,9 +84,6 @@ class TurnProgress(events.AgentEventConsumer):
             if route else TurnEventConsumer(effects, session_id, runtime, self.turn_lease.turn_id)
         )
         self.publication = TurnEventPublication(
-            comms=comms,
-            sessions=sessions,
-            effects=effects,
             sync_goal_execution=sync_goals,
             session_id=session_id,
         )

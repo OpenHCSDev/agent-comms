@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .field_codec import InputId
+from .field_codec import AcpSessionId, InputId
 from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
@@ -26,7 +26,7 @@ class FollowingInputs:
     """A selected turn run outside an owner process: nothing can follow its first input."""
 
     @staticmethod
-    async def ready(inputs: InputDrain, session_id: str, after_seq: int = 0) -> None:
+    async def ready(inputs: InputDrain, session_id: AcpSessionId, after_seq: int = 0) -> None:
         """Take accepted work when a running turn opens or frees following capacity."""
         async with inputs.state(session_id).lock:
             inputs.state(session_id).forget_observation()
@@ -53,7 +53,7 @@ class OwnerFollowingInputs(FollowingInputs):
     """The owner's inbox for one selected turn, read by that turn once its first input is in."""
 
     inputs: InputDrain
-    session_id: str
+    session_id: AcpSessionId
     owner: Thread
     inbox: TurnInbox
     scope: LiveQueueScope = field(init=False)

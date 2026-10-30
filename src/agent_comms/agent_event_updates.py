@@ -95,7 +95,7 @@ class AcpToolAction(MroDispatch):
 @dataclass(eq=False, repr=False)
 class AcpEventConsumer(MroDispatch):
     agent: TurnEffects
-    session_id: str
+    session_id: AcpSessionId
     client: SessionUpdateSink
 
     @handles(TranscriptUpdate)

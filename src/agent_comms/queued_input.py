@@ -34,7 +34,7 @@ from .coordination_session import (
 )
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import InputId, GoalId, RootId
+from .field_codec import AcpSessionId, InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
@@ -174,7 +174,7 @@ class QueuedInput:
     @classmethod
     @asynccontextmanager
     async def reserve(
-        cls, inputs: InputDrain, session_id: str, name: str, *, text: str, prompt: str,
+        cls, inputs: InputDrain, session_id: AcpSessionId, name: str, *, text: str, prompt: str,
         echo: bool, images: tuple[ImageInput, ...], controller: Controller | None,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
@@ -199,7 +199,7 @@ class QueuedInput:
                 yield InputReservation(item, row, rollback)
 
     def place(
-        self, inputs: InputDrain, session_id: str,
+        self, inputs: InputDrain, session_id: AcpSessionId,
         inbox: TurnInbox, content: InputContent,
     ) -> None:
         """The accepted input owns transfer into this turn's existing native queue."""
@@ -211,7 +211,7 @@ class QueuedInput:
             input_id=self.input_id, content=content, when_busy=source.when_busy,
         ))
 
-    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+    async def dispatch(self, turns: TurnRunner, session_id: AcpSessionId, name: str) -> None:
         """Transfer this live acceptance under current authority; never recover disk work."""
         inputs = turns.inputs
         try:
@@ -242,10 +242,10 @@ class QueuedInput:
             acceptance=AcceptedTurn(self.input_id),
         )
 
-    def is_live(self, inputs: InputDrain, session_id: str) -> bool:
+    def is_live(self, inputs: InputDrain, session_id: AcpSessionId) -> bool:
         return inputs.state(session_id).following.get(self.input_id) == self.source()
 
-    def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
+    def require_live_source(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         if not self.is_live(inputs, session_id):
             raise RelationViolationError("Accepted input source changed")
 
@@ -389,7 +389,7 @@ class DeliveredInput(QueuedInput):
 
     @staticmethod
     async def _restore_unplaced(
-        inputs: InputDrain, session_id: str,
+        inputs: InputDrain, session_id: AcpSessionId,
         reserved: list[tuple[DeliveredInput, InputContent]],
     ) -> None:
         # Capture the loop-owned transfer before the first await; a turn may
@@ -461,7 +461,7 @@ class DeliveredInput(QueuedInput):
 
     @classmethod
     async def deliver_pending(
-        cls, inputs: InputDrain, session_id: str, owner: Thread, bus: MessageBus,
+        cls, inputs: InputDrain, session_id: AcpSessionId, owner: Thread, bus: MessageBus,
         root_id: RootId, after_seq: int,
     ) -> None:
         """Hand this owner's pending bus messages to its running turn.
@@ -504,7 +504,7 @@ class DeliveredInput(QueuedInput):
                     except InputHandoffRefused:
                         break
 
-    async def dispatch(self, turns: TurnRunner, session_id: str, name: str) -> None:
+    async def dispatch(self, turns: TurnRunner, session_id: AcpSessionId, name: str) -> None:
         raise InputHandoffRefused("A bus message its turn never took wakes its owner instead")
 
     def after_clear(self) -> DeliveredInput:
@@ -542,7 +542,7 @@ class InitialInput(QueuedInput):
 
     @classmethod
     async def run(
-        cls, inputs: InputDrain, session_id: str, thread_name: str, task: str, *,
+        cls, inputs: InputDrain, session_id: AcpSessionId, thread_name: str, task: str, *,
         images: tuple[ImageInput, ...] = (), display_text: str | None = None,
         input_id: InputId,
         origin: InputOrigin = UnattributedInputOrigin(),
@@ -566,7 +566,7 @@ class InitialInput(QueuedInput):
             await inputs.emit_queue_state(session_id)
             await item.dispatch(inputs.effects.turns, session_id, thread_name)
 
-    async def finish(self, inputs: InputDrain, session_id: str) -> None:
+    async def finish(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         """Retire only this captured original after its dispatch resources join."""
         queued = inputs.state(session_id).queued
         if queued.get(self.input_id) is self:
@@ -580,7 +580,7 @@ class InitialInput(QueuedInput):
                 queued.pop(self.input_id)
             await inputs.emit_queue_state(session_id)
 
-    def is_live(self, inputs: InputDrain, session_id: str) -> bool:
+    def is_live(self, inputs: InputDrain, session_id: AcpSessionId) -> bool:
         return inputs.state(session_id).queued.get(self.input_id) is self
 
     def after_clear(self) -> InitialInput:

@@ -21,7 +21,7 @@ from agent_comms.agent_backend import (
 from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.native_child import PiSessionChild
@@ -98,9 +98,10 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             return comms.threads.attach_session(owned, str(session), process=owned.process_identity)
 
         thread = await Coordination.run_worker(acquire)
-        await agent.sessions.bind_owned(thread, thread.name)
-        agent.inputs.ensure_live_drain(thread.name)
-        return thread.name
+        identifier = AcpSessionId(thread.name)
+        await agent.sessions.bind_owned(thread, identifier)
+        agent.inputs.ensure_live_drain(identifier)
+        return identifier
 
     async def bind_saved_owner(self, agent, *, project, session):
         """Acquire the restored SDK source's original attested native child."""
