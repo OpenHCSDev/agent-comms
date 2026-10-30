@@ -21,6 +21,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
+from itertools import islice
 from math import ceil
 from pathlib import Path
 from statistics import median
@@ -3060,7 +3061,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         measured = MeasuredReview.read(context.comms.goals.todos)
         review_at = measured.review_at(self)
         message = self.message(context, document, unit, group, replacing, reassign)
-        request_id = request.for_order(context.comms.goals.todos, context.incarnation)
+        request_id = request.for_order(context.comms.goals.todos, context.actor_identity)
         target.record(context, self, unit, group, traced, request_id, review_at)
         self.publish(context, unit, group, message, answers)
         self.notify_replaced(context, unit, group, holders, listed, reassign)
@@ -3927,7 +3928,7 @@ class AssignTodo(TodoOperation):
             db, current.id, IncomingWork(
                 self.actor, self.group | {current.id}, frozenset({self.order.id})),
             RegistryStore.at(store.root).snapshot(), store.prepared_edits())
-        OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
+        OwnerRequest.require(db, id=self.request).require_open(self.actor)
 
     def apply(self, current: Todo) -> Todo:
         self.review_at.require_recorded("A review time")
@@ -5977,11 +5978,13 @@ class OwnerRequestStore(DurableStore):
         self, commander: ThreadIncarnation, *, limit: int = -1, descending: bool = True,
     ) -> tuple[OwnerRequest, ...]:
         with self.snapshot() as db:
-            return tuple(OwnerRequest.select(
-                db, where="commander_created_at=?",
-                parameters=(commander.require_recorded().created_at,), state=OpenRequestState(),
-                order_by=("created_at", "id"), descending=descending, limit=limit,
-            ))
+            requests = (
+                request for request in OwnerRequest.stream(
+                    db, state=OpenRequestState(),
+                    order_by=("created_at", "id"), descending=descending,
+                ) if commander.commands(request.commander)
+            )
+            return tuple(islice(requests, None if limit < 0 else limit))
 
     def record_directive(self, request: OwnerRequestId, directive: RequestDirective) -> None:
         with self.writing() as db:
@@ -6328,7 +6331,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
                 RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
-            OwnerRequest.require(db, id=request).require_open(identity)
+            OwnerRequest.require(db, id=request).require_open(creator.acting_identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)

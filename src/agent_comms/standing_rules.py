@@ -740,7 +740,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         cut = comms.registry.store.snapshot_with_authority()
         snapshot = cut.snapshot
         thread = snapshot.require(commander)
-        requests = comms.goals.todos.open_requests(thread.incarnation)
+        requests = comms.goals.todos.open_requests(thread.acting_identity)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
