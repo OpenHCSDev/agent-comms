@@ -310,9 +310,9 @@ class UnboundPrime(Exception):
     """/prime asked of a session no bus thread holds: no gate holds a deal for it, so it is
     refused out loud instead of printing nothing."""
 
-    def __init__(self, session_id: str) -> None:
-        super().__init__(f"session {session_id} is bound to no bus thread, so there is no gate "
-                         "to deal it; bind it to the bus first")
+    def __init__(self, start: DeckStart) -> None:
+        super().__init__(f"session {start.session_id} is bound to no bus thread, so there is no "
+                         "gate to deal it; bind it to the bus first")
 
 
 @dataclass(frozen=True)
@@ -344,7 +344,7 @@ class DeckStart(DealtDeck):
             commander=lambda record: self.dealt(prime.commander()))
 
     def refuse_unbound(self) -> tuple[str, ...]:
-        raise UnboundPrime(self.session_id)
+        raise UnboundPrime(self)
 
     def dealt(self, reader: DeckReader) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path."""
