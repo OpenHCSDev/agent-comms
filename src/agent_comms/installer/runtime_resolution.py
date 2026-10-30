@@ -16,7 +16,10 @@ from pydantic import BaseModel, Field
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.probes.packages import ArchivePin, GitPin, PackagePin, PackageRecord
-from agent_comms.installer.probes.packages import DistributionVersionsProbe, InstalledPackagesProbe
+from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.probes.packages import (
+    DistributionVersionsProbe, InstalledPackagesProbe, PreparePackageProbe,
+)
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repository_name import RepositoryName
@@ -32,6 +35,11 @@ class RuntimePackage(DeclaredFamily, affix="Package"):
     @classmethod
     def commit(cls, resolution: RuntimeResolution) -> str:
         return resolution.packages[cls.distribution].source.revision()
+
+    @classmethod
+    def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
+        """Only packages declaring requirements add target-runtime operations."""
+        return ()
 
 
 class ConsoleScriptPackage:
@@ -50,6 +58,10 @@ class CorePackage(RuntimePackage, ConsoleScriptPackage):
 class ToadPackage(RuntimePackage, ConsoleScriptPackage):
     distribution = "batrachian-toad"
     repository = RepositoryName("OpenHCSDev", "toad")
+
+    @classmethod
+    def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
+        return (PreparePackageProbe(cls.distribution),)
 
 
 class TextualPackage(RuntimePackage):
