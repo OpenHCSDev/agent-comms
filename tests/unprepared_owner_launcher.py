@@ -18,7 +18,7 @@ from agent_comms.threads import Thread
 def main(root: Path, name: str) -> None:
     comms = wire(root)
     comms.registry.declare(Thread(name, frozenset(), Checkout(root)))
-    print(comms.owners.start(name).pid)
+    print(comms.owners.start_many((name,))[0].pid)
 
 
 if __name__ == "__main__":
