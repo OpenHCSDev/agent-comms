@@ -554,6 +554,34 @@ def test_a_read_rule_is_answered_before_the_next_unread_file_opens(capsys, dealt
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # the rest stay unread
 
 
+def test_a_parallel_batch_opens_one_unanswered_rule_and_refuses_the_next(capsys, dealt_session):
+    """A batch's reads are each judged before any one completes: the first rule opens, the
+    second waits for its answer instead of slipping through before the first is recorded."""
+    transcript, start = dealt_session
+    for paper in CommanderPackage.paper():
+        read_whole(transcript, paper.resolve())
+    rules = CommanderReader.rules()
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+    # The rule whose read is in flight stays open; answering it opens the next.
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+
+
+def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session):
+    transcript, start = dealt_session
+    rules = CommanderReader.rules()
+    for rule in rules[:2]:
+        read_whole(transcript, rule.path.resolve())
+    wrong = [{**engaged(rule.name, rule.path), "quote": "no rule file holds this line"}
+             for rule in rules[:2]]
+    start.audit.write_text(json.dumps({"rules": wrong, "owner_words": []}))
+    gated(transcript, "Read", {"file_path": str(rules[2].path)}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert all(f"entry for {rule.path.stem}" in reason for rule in rules[:2])
+
+
 @pytest.mark.parametrize("change, says", [
     ({"quote": "no rule file holds this line"}, "not verbatim"),
     ({"quote": "   "}, "blank"),
