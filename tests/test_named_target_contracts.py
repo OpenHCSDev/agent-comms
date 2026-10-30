@@ -9,6 +9,7 @@ from agent_comms.errors import HumanSendRefusedError, UnregisteredThreadError
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.historical_views import ConversationObservation, DMDisplayHistory
 from agent_comms.message_page import ConversationMessagePageRequest
+from agent_comms.messages import Message
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import BirthlessIncarnation
@@ -82,7 +83,7 @@ def test_retained_dm_target_follows_rename_through_send_page_and_revision(tmp_pa
     assert [(row.canonical_thread, row.recipient_lookup) for row in delivery.recipients] == [
         ("renamed", target.incarnation.require_recorded().lookup)]
     page = comms.views.dm_display_page(target, worktree=worktree)
-    assert page.messages == (original, sent)
+    assert page.messages == (Message.from_message(original), Message.from_message(sent))
     assert page.selection.basis.peer_identity == target.incarnation
     generic_page = comms.views.history_page(target, viewer=NamedViewer(sent.sender))
     assert generic_page.messages == page.messages

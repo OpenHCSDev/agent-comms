@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import DeclaredTag, Tag
+from .channel_targets import DeclaredTag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -48,7 +48,6 @@ from .pi_vocabulary import (
 )
 from .registration_inheritance import (
     InheritApplied,
-    InheritEmpty,
     InheritPrevious,
 )
 from .repo import Checkout
@@ -68,6 +67,7 @@ from .thread_identity import (
     TurnIdentity,
     UnobservedTools,
 )
+from .thread_membership import ThreadMembership
 from .thread_model import (
     CatalogSelection,
     DeclaredModel,
@@ -191,18 +191,6 @@ class NextTurnConfiguration:
     def configured(self, thread: Thread) -> Thread:
         thought = replace(thread, thinking_level=self.thinking_level.applied(thread.thinking_level))
         return self.service_tier.configured(self.model.configured(thought))
-
-
-@dataclass(frozen=True, kw_only=True)
-class ThreadMembership(ThreadBirthRecord):
-    """The original thread identity and its declared channel tags."""
-
-    tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        for tag in self.tags:
-            Tag.validate(tag)
 
 
 @dataclass(frozen=True, kw_only=True)

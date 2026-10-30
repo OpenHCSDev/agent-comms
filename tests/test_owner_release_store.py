@@ -13,14 +13,19 @@ def test_release_survives_metadata_changes_and_reads_only_its_row(tmp_path):
     comms = wire(tmp_path)
     originals = [comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
                  for name in ('worker', 'other')]
-    generation = comms.registry.snapshot().claim_generation('worker')
+    before = comms.registry.snapshot()
+    selected = tuple((thread, before.claim_generation(thread.name)) for thread in originals)
+    generation = before.claim_generation('worker')
+    # This store contract needs a stopped cut, not physical process retirement.
+    # NoProcess stop correctly produces no release; record the explicit fixture here.
     for thread in originals:
-        comms.owners.stop(thread.name)
+        comms.registry.unregister(thread.name)
     snapshot = comms.registry.snapshot()
+    releases = comms.owners.releases
+    releases.record(snapshot, selected)
     current = snapshot.threads['worker']
     comms.registry.register(replace(current, title=GivenThreadText('changed title'), task=GivenThreadText('changed task')),
                             status=snapshot.statuses['worker'])
-    releases = comms.owners.releases
     # An invalid unrelated row must not even be decoded by this lookup.
     with releases.writing() as db:
         OwnerReleaseEvidence.update(db, where='name=?', parameters=('other',), after=0)

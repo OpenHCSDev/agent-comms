@@ -205,6 +205,57 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
         comms.registry.require_lookup(missing)
 
 
+@pytest.mark.parametrize("change", ("add", "delete", "rebirth"))
+@pytest.mark.parametrize("new_first", (False, True))
+def test_lookup_membership_stays_with_empty_and_unprimed_cuts(
+    comms, declare_reference, change, new_first,
+):
+    original = declare_reference()
+    template = comms.registry.snapshot()
+    rows = ThreadRows.from_wire(
+        {} if change == "add" else {original.name: FieldCodec.encode_fields(original)}
+    )
+    before = replace(template, threads=rows)
+    # Even an obtained empty view must remain empty after the shared rows change.
+    empty_view = before.lookup_names if change == "add" else None
+    if change == "delete":
+        del rows[original.name]
+        expected_after = ()
+    else:
+        replacement = original
+        if change == "rebirth":
+            comms.threads.delete(original.name)
+            replacement = declare_reference(original.name)
+            assert replacement.incarnation != original.incarnation
+        rows[replacement.name] = replacement
+        expected_after = (replacement,)
+    after = replace(template, threads=rows)
+    expected_before = () if change == "add" else (original,)
+    cuts = ((before, expected_before), (after, expected_after))
+    candidates = {original.incarnation.lookup, ThreadLookup.mint()}
+    candidates.update(thread.incarnation.lookup for thread in expected_after)
+    for snapshot, expected in reversed(cuts) if new_first else cuts:
+        lookup = snapshot.lookup_names
+        names = {thread.incarnation.lookup: thread.name for thread in expected}
+        assert tuple(lookup) == tuple(names)
+        assert tuple(lookup.keys()) == tuple(names)
+        assert len(lookup) == len(snapshot.threads) == len(names)
+        assert dict(lookup) == names
+        for key in candidates:
+            assert (key in lookup) == (key in names)
+            assert lookup.get(key) == names.get(key)
+            if key in names:
+                assert lookup[key] == names[key]
+                assert snapshot.born(key) is snapshot.threads[names[key]]
+            else:
+                with pytest.raises(KeyError):
+                    lookup[key]
+                with pytest.raises(UnregisteredThreadError):
+                    snapshot.born(key)
+    if empty_view is not None:
+        assert not empty_view and not tuple(empty_view)
+
+
 @pytest.mark.parametrize("decoded", (False, True))
 def test_current_reference_acquires_only_captured_incarnations(comms, declare_reference, decoded):
     original = declare_reference(status=RunningThreadStatus())

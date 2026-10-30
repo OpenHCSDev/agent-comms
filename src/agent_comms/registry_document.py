@@ -72,7 +72,8 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
-from .threads import GoalOwner, Thread, ThreadMembership, ThreadWorkState
+from .thread_membership import ThreadMembership
+from .threads import GoalOwner, Thread, ThreadWorkState
 from .turn_lease import (
     FinishedTurn, FinishedTurnFence, NoFinishedTurn, StoredTurnRecord, TurnCompletion, TurnLeaseFence,
     TurnRecord,

@@ -12,7 +12,7 @@ import re
 import sqlite3
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
 from contextlib import closing
 from dataclasses import Field, dataclass, field, fields, make_dataclass, replace
 from functools import cache
@@ -45,6 +45,7 @@ from .field_codec import (
     FieldCodec,
     InlineRecord,
     MessageId,
+    MalformedRecord,
     NullMember,
     PublicationExclude,
     ThreadLookup,
@@ -439,16 +440,17 @@ class BusCapability(TypedRow, ProjectionSource):
     def selected(
         cls, db: sqlite3.Connection, positions: str, parameters: tuple[object, ...],
         *, descending: bool = False,
-    ) -> Iterator[Self]:
+    ) -> Generator[Self]:
         """One cursor reads only the capability tables this value inherits."""
         tables = cls.tables()
+        joined: tuple[type[BusTables], ...] = (BusRow, *tables)
         offsets = dict(zip(tables, accumulate(
             (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
         header = BusRow.qualified("seq")
         order = "DESC" if descending else "ASC"
         with closing(db.execute(
             f"WITH selected AS ({positions}) "
-            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
+            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in joined)} "
             f'FROM "{BusRow.declared_name}" JOIN selected USING(seq) '
             + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
                        for table in tables)
@@ -456,10 +458,13 @@ class BusCapability(TypedRow, ProjectionSource):
         )) as cursor:
             for stored in cursor:
                 original = BusRow.decode_at(stored, 0)
-                for table in tables:
-                    if stored[offsets[table]] is None:
-                        raise RelationViolationError(f"Bus row {original.seq} lacks {table.declared_name}")
-                yield cls.assembled(table.decode_at(stored, offsets[table]) for table in tables)
+                try:
+                    value = cls.assembled(table.decode_at(stored, offsets[table]) for table in tables)
+                except MalformedRecord as error:
+                    raise RelationViolationError(
+                        f"Bus row {original.seq} has malformed required {cls.__name__} capability: {error}"
+                    ) from error
+                yield value
 
     @classmethod
     def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:

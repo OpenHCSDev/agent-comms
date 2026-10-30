@@ -19,7 +19,8 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
-from .threads import Thread, ThreadMembership, ThreadProvenance
+from .thread_membership import ThreadMembership
+from .threads import Thread, ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient

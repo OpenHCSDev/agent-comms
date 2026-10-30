@@ -32,12 +32,12 @@ def test_activity_family_tracks_original_roles_targets_and_member_scope(bus):
     scopes = (
         (ChannelDisplayScope("#team", frozenset({"#team"})), ChannelActivity(30.0, 0.0)),
         (AllChannelDisplayScope("#any"), ChannelActivity(30.0, 20.0)),
-        (NamedActivityDisplayScope("#member", names=frozenset({"mentioned"})),
+        (NamedActivityDisplayScope("#member", participants=frozenset({"mentioned"})),
          ChannelActivity(20.0, 20.0)),
-        (NamedActivityDisplayScope("#member", names=frozenset({"worker"})),
+        (NamedActivityDisplayScope("#member", participants=frozenset({"worker"})),
          ChannelActivity(20.0, 20.0)),
         (NamedActivityDisplayScope("#member", frozenset({"#team"}),
-                                  names=frozenset({"human"})),
+                                  participants=frozenset({"human"})),
          ChannelActivity(30.0, 20.0)),
     )
     with bus.reading() as captured, captured.observing() as db:

@@ -6,6 +6,7 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 """
 
 from __future__ import annotations
+
 from agent_comms.repo import Checkout
 
 from .bus_tables import AwaitingAnswerSource
@@ -35,6 +36,7 @@ from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_membership import ThreadMembership
 
 
 class DisplayViewer(SubclassUnion, affix="Viewer"):
@@ -311,7 +313,6 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot, UserThreadLookup
     from .registry_provenance import RegistryProvenance
-    from .threads import ThreadMembership
     from .threads import Thread
 
 
@@ -1182,14 +1183,14 @@ class ParticipantActivityDisplayScope(AllTargetsDisplayScope, declared_name=None
 class NamedActivityDisplayScope(ParticipantActivityDisplayScope):
     """An explicitly selected set, used by root checks rather than channel tags."""
 
-    names: frozenset[str] = frozenset()
+    participants: frozenset[str] = frozenset()
 
     @property
     def participant_query(self) -> tuple[str, tuple[object, ...]]:
-        return "SELECT value FROM json_each(?)", (json.dumps(sorted(self.names)),)
+        return "SELECT value FROM json_each(?)", (json.dumps(sorted(self.participants)),)
 
     def includes_participant(self, name: str) -> bool:
-        return name in self.names
+        return name in self.participants
 
 
 @dataclass(frozen=True, slots=True)

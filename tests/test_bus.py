@@ -55,7 +55,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import FieldCodec, GitCommitText, MessageId, MessageIdText, TimestampText
+from agent_comms.field_codec import FieldCodec, GitCommitText, MalformedRecord, MessageId, MessageIdText, TimestampText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (
@@ -731,6 +731,16 @@ def test_a_late_constraint_refusal_rolls_back_the_commander_position(tmp_path, b
     with closing(sqlite3.connect(bus.path)) as db:
         assert CommanderUpdatePosition.count(db) == 0
         assert all(table.count(db) == 0 for table in TypedTable.members_with(BusTables))
+
+
+def test_required_capability_corruption_is_not_hidden_by_the_join(bus):
+    with bus.writing() as db:
+        # A retained header without its required capability rows is corruption,
+        # not an empty page or an absent optional field.
+        BusRow(1, PublicRecord, 1.0).insert(db)
+        with pytest.raises(RelationViolationError, match="malformed required Message capability") as refused:
+            Message.read_from(db, 1)
+        assert isinstance(refused.value.__cause__, MalformedRecord)
 
 
 def test_bulk_history_keeps_one_snapshot_across_pages(bus):

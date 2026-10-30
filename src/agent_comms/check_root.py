@@ -94,7 +94,7 @@ class CheckRoot:
         targets = frozenset(
             target for name in names for target in catalog.targets_for(snapshot.require(name).tags)
         )
-        scope = NamedActivityDisplayScope("#check", targets, names=selected | aliases)
+        scope = NamedActivityDisplayScope("#check", targets, participants=selected | aliases)
         with self.source.bus.bus.reading() as source:
             messages = scope.history(source, limit=self.max_records)
         copied.registry.store.prepare_native_root()
