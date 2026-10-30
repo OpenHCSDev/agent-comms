@@ -31,6 +31,7 @@ from .field_codec import (
     WireRequired,
     WireValue,
 )
+from .audience_manifest import FrozenRecipient
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
@@ -80,7 +81,6 @@ from .turn_lease import (
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
-    from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
     from .rule_deal import DealtSources, RuleDeal
 

@@ -32,11 +32,11 @@ from .activity import (
     NoDrainDiagnostic,
     ObservedActivity,
 )
-from .audience_manifest import FrozenRecipient
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import ThreadLookup, TurnId
+from .audience_manifest import FrozenRecipient
 from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation
@@ -169,7 +169,9 @@ class AgentActivity:
         return ActivityCapture(observed, events.expires_at)
 
     def observe_recipients(
-        self, recipients: Iterable[tuple[Delivered, FrozenRecipient]], *,
+        self,
+        recipients: Iterable[tuple[Delivered, FrozenRecipient]],
+        *,
         snapshot: RegistrySnapshot,
     ) -> Mapping[ThreadLookup, RecipientActivity]:
         """Acquire one bounded window's recipients from the original sends."""

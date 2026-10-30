@@ -30,58 +30,63 @@ import json
 import os
 import re
 import time
-from typing import Annotated, ClassVar
 from abc import abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from functools import cached_property
 from pathlib import Path
+from typing import Annotated, ClassVar
 
-
-from agent_comms.comms import Comms
 from agent_comms.change_report import FileLine
-from agent_comms.field_codec import (
-    Argument, BoundedText, FieldCodec, MalformedRecord, MessageId, RecordProblems,
-)
+from agent_comms.commander import order
+from agent_comms.commander.order import CommanderVerb
+from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
+from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import PullRequestHead
-from agent_comms.recorded_time import EventTime
 from agent_comms.errors import TodoError
+from agent_comms.field_codec import (
+    Argument,
+    BoundedText,
+    FieldCodec,
+    MalformedRecord,
+    MessageId,
+    RecordProblems,
+)
+from agent_comms.head_review import HeadReviewOrder, PromotedHeadReview, PullRequestHead
+from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
+from agent_comms.recorded_time import EventTime
+from agent_comms.slop import Derivation, Slop
+from agent_comms.standing_rules import HeadReviewRule, StandingRule
 from agent_comms.todos import (
     AcceptedVerdict,
     BluntText,
     DirectiveText,
     DroppedVerdict,
     EditSendBackVerdict,
-    PeerAcceptedVerdict,
-    RewrittenVerdict,
-    GrownHeadVerdict,
     GrowthReason,
-    ReviewedHeadVerdict,
-    RejectedHeadVerdict,
+    HeadReviewed,
     HeadVerdict,
-    OrderHeadReview,
     JudgedCall,
     LinkedHeadReview,
+    OrderHeadReview,
     OrderLink,
     OrderQuote,
+    PeerAcceptedVerdict,
+    QualifiedHeadVerdict,
+    RejectedHeadVerdict,
+    ReviewedHeadVerdict,
+    RewrittenVerdict,
     SendBackVerdict,
     StrikeReason,
-    SupersededVerdict,
     SupersededHeadVerdict,
+    SupersededVerdict,
     Todo,
     ToolCallVerdict,
     UnderReviewHeadVerdict,
     UnquotedHeadReview,
     VerdictReason,
 )
-from agent_comms.slop import Derivation, Slop
-from agent_comms.order_tools import CommsHeadVerdictTool, CommsUnjudgedTool, CommsVerdictsTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tool_declaration import EditCall, ReplacementEdit
-from agent_comms.commander import order
-from agent_comms.commander.order import CommanderVerb
-from agent_comms.standing_rules import HeadReviewRule, StandingRule
-from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 
 EDIT_LINE = "required with edit IDs: an exact diff line each edit contains; repeat for each"
 BRANCH = re.compile(r"\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b")
@@ -311,8 +316,7 @@ class PullRequestReview(ReviewSubject):
         options.check_edits([])
         linked = OrderHeadReview.for_request(ctx.todos(), self.request, options.order_link,
                                             options.problem)
-        reviewed = ctx.call(CommsHeadVerdictTool(request=self.request,
-                                               operation=options.head_operation(), order=linked))
+        reviewed = options.review_head(ctx, self.request, linked)
         print(f'PR #{self.request.pr} head {self.request.head}: {options.declared_name}')
         for line in reviewed.merge.lines(self.request):
             print(line)
@@ -380,8 +384,6 @@ class FixText(WordedText):
 class ReasonedVerb(JudgeVerb, declared_name=None):
     """A verb whose verdict records why: what the edit serves, violates or was replaced by."""
     why: Annotated[str, ReasonText]
-
-
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -471,6 +473,15 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
     def head_evidence(self) -> tuple[FileLine, ...]:
         return ()
 
+    def review_head(
+        self, ctx: order.CommanderContext, request: PullRequestHead, linked: HeadReviewOrder
+    ) -> HeadReviewed:
+        return CommsHeadVerdictTool(
+            request=request,
+            operation=self.head_operation(),
+            order=linked,
+        ).apply(ctx.comms, ctx.actor.as_thread(ctx.commander))
+
     @abstractmethod
     def head_operation(self) -> HeadVerdict: ...
 
@@ -491,13 +502,16 @@ class QuotingVerb(HeadVerdictVerb, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class OkVerb(ReasonedVerb, QuotingVerb):
-    verdict = ReviewedHeadVerdict
-    help = "the edit or exact PR head is accepted"
+    verdict: ClassVar[type[ReviewedHeadVerdict]] = ReviewedHeadVerdict
+    help = "the edit or exact source PR head is accepted, without enqueueing it"
 
     def head_operation(self) -> HeadVerdict:
         reason = VerdictReason(self.why)
-        return (GrownHeadVerdict(reason, GrowthReason.every(self.growth)) if self.growth
-                else self.verdict(reason))
+        return (
+            self.verdict.grown(reason, GrowthReason.every(self.growth))
+            if self.growth
+            else self.verdict(reason)
+        )
     growth: Annotated[
         tuple[str, ...],
         Argument(flags=(GrowthReason.option,), options={
@@ -543,18 +557,15 @@ class OkVerb(ReasonedVerb, QuotingVerb):
                         edit.id, 'send this edit back with judge back'))
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
-@dataclass(frozen=True, kw_only=True)
-class ReviewingVerb(HeadVerdictVerb):
-    help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
-    verdict = UnderReviewHeadVerdict
 
-    def head_operation(self) -> HeadVerdict:
-        return self.verdict()
+@dataclass(frozen=True, kw_only=True)
+class HeadOnlyVerb(HeadVerdictVerb, declared_name=None):
+    """Shared argument refusal for verdicts that only select an exact PR head."""
 
     def edit_problems(self) -> dict[str, str]:
         return super().edit_problems() | MalformedRecord(
-            'judge reviewing takes --pr and --head, never edit ids.').located(
-                'ids', 'supply --pr and --head instead of edit IDs')
+            f"judge {self.declared_name} takes --pr and --head, never edit ids."
+        ).located("ids", "supply --pr and --head instead of edit IDs")
 
     def operation(self, ctx: order.Commander, todo: Todo, edit: Edit) -> ToolCallVerdict:
         """Unreachable: selecting edits is refused among this verb's argument problems."""
@@ -562,6 +573,41 @@ class ReviewingVerb(HeadVerdictVerb):
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class PromoteVerb(OkVerb, HeadOnlyVerb):
+    help = (
+        "explicitly review and enqueue this captured combined carrier, never an individual source"
+    )
+
+    def review_head(
+        self, ctx: order.CommanderContext, request: PullRequestHead, linked: HeadReviewOrder
+    ) -> HeadReviewed:
+        permission = PromotedHeadReview()
+        permission.require_sources(ctx.comms.goals, request, ctx.actor_identity)
+        reviewed = super().review_head(ctx, request, linked)
+        return replace(reviewed, merge=permission.enqueue(reviewed.record, ctx.repos))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ReviewingVerb(HeadOnlyVerb):
+    help = "a fork is reading this exact PR head; its delivery is not owed until ok or back"
+    verdict = UnderReviewHeadVerdict
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict()
+
+
+@dataclass(frozen=True, kw_only=True)
+class QualifyVerb(ReasonedVerb, QuotingVerb, HeadOnlyVerb):
+    """Record a reasoned source decision using the existing head-only review boundary."""
+
+    help = "the exact PR head's source stage is qualified, without permission to merge"
+    verdict = QualifiedHeadVerdict
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict(VerdictReason(self.why))
 
 
 @dataclass(frozen=True, kw_only=True)

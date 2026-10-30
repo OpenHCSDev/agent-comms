@@ -7,8 +7,8 @@ audit package itself never imports agent-comms."""
 
 from __future__ import annotations
 
+import argparse
 import ast
-import atexit
 import dataclasses
 import inspect
 import json
@@ -26,7 +26,7 @@ from pathlib import Path
 from subprocess import CompletedProcess
 
 import stored_formats
-from module_layers import PACKAGE, StackClient
+from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClient
 from nominal_refactor_advisor import audit
 
 import agent_comms
@@ -42,8 +42,10 @@ from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import boundary_decoder
+from agent_comms.head_review import Side as CutSide
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
+from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
@@ -87,6 +89,24 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
     """agent-comms' own facts, read from the modules that declare them."""
 
     reader: StoredFormatReader = RevisionReader()
+    clients: ClientSources = ClientSources()
+    """Where the compared revisions' stack clients come from: the head's declared stack,
+    cloned once, unless CI already materialized each side's exact cut."""
+
+    @classmethod
+    def from_arguments(cls, root: Path) -> tuple[AgentCommsProject, list[str]]:
+        """This checkout measured with the clients its command line names, and the arguments
+        left for the audit's own command line. --ci-inputs names the integration entrypoint's
+        already-materialized exact source input."""
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument(
+            "--ci-inputs", dest="clients", default=ClientSources(),
+            type=lambda directory: MaterializedClients.read(
+                Path(directory).resolve(), uv=StackSources.frontend(),
+                python=Path(sys.executable)),
+            help="use the integration entrypoint's already-materialized exact source input")
+        known, rest = parser.parse_known_args()
+        return cls(root, clients=known.clients), rest
 
     probe = (
         "import importlib.util, os, sys; sys.path[:0] = sys.argv[2].split(os.pathsep); "
@@ -216,7 +236,7 @@ class ClientFileCount(audit.gate.FileCount):
                 "that client file uses; run mypy on it to see which")
 
 
-class ClientTypeErrors(audit.checkers.SideCounts):
+class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
     """Mypy errors in each stack client file that imports agent_comms, checked against each
     revision's package. Both sides read the same client commit, so the client's own errors cancel
     and an error the head adds is a name or signature the client uses that the change took away:
@@ -224,18 +244,11 @@ class ClientTypeErrors(audit.checkers.SideCounts):
     only the running app found it."""
 
     @staticmethod
-    @cache
-    def clients(repo: audit.project.Project, head: str) -> tuple[StackClient, ...]:
-        """The head's stack clients, cloned once per run and read by both sides; a revision
-        declaring no stack has none."""
-        stack = "stack/pyproject.toml"
-        if not repo.tracks(head, stack):
-            return ()
-        into = Path(tempfile.mkdtemp(prefix="gate-clients-"))
-        atexit.register(shutil.rmtree, into, True)
-        (into / "stack").mkdir()
-        (into / stack).write_bytes(repo.blob(head, stack))
-        return StackClient.fetched(into / "stack", into)
+    def cut(repo: AgentCommsProject, base: str, head: str,
+            side: type[audit.gate.Side]) -> tuple[StackClient, ...]:
+        """The clients of the materialized cut that this compared side measures, selected by
+        the side each cut declares, so equal base and head revisions still keep two cuts."""
+        return tuple(repo.clients.at(repo.path, base, head, CutSide.materializing(side)))
 
     @staticmethod
     def selected(client: StackClient) -> list[str]:
@@ -267,15 +280,17 @@ class ClientTypeErrors(audit.checkers.SideCounts):
                            if site.path in selected)
 
     @classmethod
-    def parts(cls, repo: audit.project.Project, base: str, head: str, changed: set[str],
+    def parts(cls, repo: AgentCommsProject, base: str, head: str, changed: set[str],
               root: str) -> tuple[Callable[[], object], ...]:
-        # Only a change to the package the clients import can change what they see.
-        if not any(path.startswith(f"src/{PACKAGE}/") for path in changed):
+        # Only a change to the package the clients import can change what they see, unless the
+        # clients are materialized per side: a companion can change while Core does not.
+        if not (repo.clients.requires_clients()
+                or any(path.startswith(f"src/{PACKAGE}/") for path in changed)):
             return ()
         return tuple(partial(cls.findings, repo, side.ref(base, head), client, side)
-                     for client in cls.clients(repo, head)
-                     if cls.selected(client)
-                     for side in audit.gate.Side.sides())
+                     for side in audit.gate.Side.sides()
+                     for client in cls.cut(repo, base, head, side)
+                     if cls.selected(client))
 
     @classmethod
     def measured(

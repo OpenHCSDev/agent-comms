@@ -16,13 +16,12 @@ from .bus_tables import (
 from .class_fact import ClassFact
 import hashlib
 import math
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 from typing import Final
 
-from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
+from .participant_identity import ParticipantIdentity
 
 from .channel_targets import exact_stored_target
 from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
@@ -36,18 +35,6 @@ MAX_AUDIENCE_BYTES: Final = 1024 * 1024
 MAX_WIRE_SEQ: Final = (1 << 63) - 1
 _ENVELOPE_DOMAIN: Final = b"agent-comms:wire-envelope:v1\0"
 _AUDIENCE_DOMAIN: Final = b"agent-comms:audience:v1\0"
-_NAME: Final = re.compile(r"[a-zA-Z0-9_-]+\Z")
-
-
-def _bounded_text(value: str, field: str, *, thread_name: bool = False) -> None:
-    if not isinstance(value, str) or not value or len(value) > MAX_IDENTIFIER_CHARS:
-        raise MalformedRecord(f"{field} must be a bounded nonempty string")
-    if thread_name and _NAME.fullmatch(value) is None:
-        raise MalformedRecord(f"{field} must be a canonical thread name")
-    if not thread_name and not value.strip():
-        raise MalformedRecord(f"{field} must not be whitespace")
-
-
 def _canonical_json(value: object, *, limit: int) -> bytes:
     try:
         encoded = FieldCodec.compact(
@@ -65,20 +52,23 @@ def _digest(domain: bytes, payload: bytes) -> str:
 
 
 @dataclass(frozen=True, slots=True)
-class FrozenRecipient(ProjectionSource):
+class FrozenRecipient(ParticipantIdentity, ProjectionSource):
     """Stable coordination lookup paired with its send-time canonical name."""
-
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (ReceivedSource, AwaitingAnswerSource)
-
 
     recipient_lookup: ThreadLookup
     canonical_thread: str
 
     def __post_init__(self) -> None:
-        _bounded_text(self.recipient_lookup, "recipient_lookup")
-        _bounded_text(self.canonical_thread, "canonical_thread", thread_name=True)
+        self.require_text(self.recipient_lookup, "recipient_lookup")
+        self.require_canonical(self.canonical_thread, "canonical_thread")
+
+    @property
+    def lookup(self) -> ThreadLookup:
+        return self.recipient_lookup
+
+    @ClassFact
+    def writes(cls) -> tuple[type[ProducedRow], ...]:
+        return (ReceivedSource, AwaitingAnswerSource)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -108,8 +98,8 @@ class AudiencedMessage(CarriesEnvelope, Message, Audience):
         if type(self.seq) is not int or not 0 < self.seq <= MAX_WIRE_SEQ:
             raise MalformedRecord("wire_seq must be a positive SQLite-range integer")
         for name in ("target", "source_revision"):
-            _bounded_text(getattr(self, name), name)
-        _bounded_text(self.sender, "sender_name", thread_name=True)
+            ParticipantIdentity.require_text(getattr(self, name), name)
+        ParticipantIdentity.require_canonical(self.sender, "sender_name")
         if not exact_stored_target(self.target):
             raise MalformedRecord("aggregate views are not exact stored targets")
         if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
@@ -179,7 +169,7 @@ def freeze_audience(
         raise TypeError("externally_captured_recipients must be a bounded sequence")
     if len(externally_captured_recipients) > MAX_RECIPIENTS:
         raise MalformedRecord("too many frozen recipients")
-    _bounded_text(sender_name, "sender_name", thread_name=True)
+    ParticipantIdentity.require_canonical(sender_name, "sender_name")
     if prepared_message.sender != sender_name:
         raise MalformedRecord(
             "sender_name must be the externally captured canonical message sender"

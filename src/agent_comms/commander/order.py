@@ -76,7 +76,8 @@ from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, Reques
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
-from agent_comms.presentation import AllOutcomes, MessageNotification
+from agent_comms.notification_evidence import AllOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
@@ -1165,11 +1166,11 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
-        if not source.holds(todo):
+        if source.github != todo.repo:
             sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
                      f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
-            todo, source.checkout, title, Path(body_file).read_text(),
+            todo, source, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
 
 

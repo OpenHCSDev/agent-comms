@@ -9,19 +9,17 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
+from .audience_manifest import FrozenRecipient
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
 from .threads import Thread, ThreadProvenance
-
-if TYPE_CHECKING:
-    from .audience_manifest import FrozenRecipient
 
 Member = TypeVar("Member", bound=ThreadProvenance, covariant=True)
 
@@ -57,6 +55,10 @@ class RecipientSelection(ABC):
     @abstractmethod
     def read_effect(self, reads, message, snapshot, *, document=None): ...
 
+    def input_owners(self) -> tuple[Thread, ...]:
+        """The live thread whose stored inputs this recipient's deliveries are keyed by."""
+        return ()
+
 
 @dataclass(frozen=True, slots=True)
 class KnownRecipient(RecipientSelection):
@@ -77,6 +79,9 @@ class RegisteredRecipient(KnownRecipient):
 
     def activity(self, observations, snapshot):
         return self.thread.execution.observe_recipient(observations, snapshot, self.thread)
+
+    def input_owners(self) -> tuple[Thread, ...]:
+        return (self.thread,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -242,7 +247,9 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
         return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
-    def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
+    def historical_recipient(
+        self, recipient: FrozenRecipient,
+    ) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""
         thread = self.threads.get(self.canonical_name(recipient.canonical_thread))
         if thread is not None and thread.incarnation.selects_lookup(recipient.recipient_lookup):

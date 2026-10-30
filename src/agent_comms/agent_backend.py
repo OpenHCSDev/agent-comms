@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import AcpSessionId, InputId
+from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
 from .pi_commands import NativeQuery
 from .pi_payloads import PiResponseData
@@ -173,6 +174,19 @@ class InputStartListener(ABC):
     @abstractmethod
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
 
+    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+        """An unowned input has no durable ordinary disposition to acknowledge."""
+        return None
+
+    async def following_context_committed(
+        self,
+        public_id: InputId,
+        sent_text: str,
+        context: NativeContextProof,
+    ) -> None:
+        """An unowned following input has no durable ordinary disposition."""
+        return None
+
 
 class NoInputStartListener(InputStartListener):
     started_events = ()
@@ -185,8 +199,6 @@ class NoInputStartListener(InputStartListener):
 
 
 NO_INPUT_START_LISTENER = NoInputStartListener()
-
-
 
 
 class RunsTurns(ABC):
@@ -347,4 +359,3 @@ class NewThreadBackend(ThreadServingBackend, declared_name=None):
                 f"exactly one backend must serve new threads, found "
                 f"{[member.__name__ for member in members]}")
         return members[0]
-

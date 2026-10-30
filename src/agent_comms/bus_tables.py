@@ -6,6 +6,7 @@ import json
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass
+from itertools import batched
 from typing import TYPE_CHECKING, Annotated
 
 from agent_comms import messages
@@ -20,7 +21,6 @@ from agent_comms.typed_table import (
     RowNotFoundError,
     TableReference,
     TypedRow,
-    TypedTable,
 )
 
 if TYPE_CHECKING:
@@ -198,6 +198,40 @@ class AnsweredSource(messages.BusProjectionTables):
     )]
     seq: Annotated[int, Column(primary_key=True)]
     indexes = (Index(("original",)), Index(("seq", "original")))
+
+    @classmethod
+    def first_for_recipients(
+        cls,
+        db: sqlite3.Connection,
+        keys: tuple[tuple[ThreadLookup, MessageReference], ...],
+    ) -> tuple[AnsweredSource, ...]:
+        """At most one reply per selected (original, frozen author), before body decoding."""
+        selected = []
+        for batch in batched(
+            tuple(dict.fromkeys(keys)),
+            db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // 2,
+            strict=False,
+        ):
+            values = ",".join("(?,?)" for _ in batch)
+            selected.extend(
+                cls.read(
+                    db.execute(
+                        f"WITH selected(lookup,original) AS (VALUES {values}) "
+                        f"SELECT answer.original,answer.seq FROM selected "
+                        f"JOIN {cls.declared_name} answer ON answer.original=selected.original "
+                        f"AND answer.seq=(SELECT candidate.seq FROM {cls.declared_name} candidate "
+                        f"CROSS JOIN {SentSource.declared_name} author "
+                        "ON author.lookup=selected.lookup AND author.seq=candidate.seq "
+                        "WHERE candidate.original=selected.original ORDER BY candidate.seq LIMIT 1)",
+                        tuple(
+                            value
+                            for lookup, reference in batch
+                            for value in (lookup, reference.seq)
+                        ),
+                    )
+                )
+            )
+        return tuple(selected)
 
     @classmethod
     def unanswered_references(
