@@ -70,7 +70,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, NoParent
-from .threads import GoalOwner, Thread, ThreadWorkState
+from .threads import GoalOwner, Thread, ThreadMembership, ThreadWorkState
 from .turn_lease import (
     FinishedTurn, FinishedTurnFence, NoFinishedTurn, StoredTurnRecord, TurnCompletion, TurnLeaseFence,
     TurnRecord,
@@ -109,6 +109,9 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def incarnation(self, name: str) -> ThreadIncarnation:
         """This captured row owns identity without acquiring its full declaration."""
         return self.threads.incarnation(self.require_canonical(name))
+
+    def membership(self, name: str) -> ThreadMembership:
+        return self.threads.membership(self.require_canonical(name))
 
     def active_candidates(self) -> Iterator[Thread]:
         return (self.threads[name] for name, status in self.statuses.items()
@@ -337,6 +340,14 @@ class ThreadRow(ThreadBirthRecord, DeclaredWireType):
         return type(self).from_wire, (self.to_wire(),)
 
     @cached_property
+    def membership(self) -> ThreadMembership:
+        captured = {entry.name: entry.current(self)
+                    for entry in FieldCodec.field_plans(ThreadBirthRecord) if entry.records}
+        return FieldCodec.project_record(
+            ThreadMembership, dict(self.raw), source=Thread, decoded_fields=captured,
+        )
+
+    @cached_property
     def goal_owner(self) -> GoalOwner:
         captured = {entry.name: entry.current(self)
                     for entry in FieldCodec.field_plans(ThreadBirthRecord) if entry.records}
@@ -393,13 +404,17 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
         )
 
     def captured(self, name: str) -> ThreadRow:
+        raw = self._raw[name]
         if name not in self._captured:
-            self._captured[name] = ThreadRow.from_wire(self._raw[name])
+            self._captured[name] = ThreadRow.from_wire(raw)
         return self._captured[name]
 
     def determining(self, name: str) -> GoalOwner:
         """Only a goal/role question acquires the declared goal-owner projection."""
         return self._decoded[name] if name in self._decoded else self.captured(name).goal_owner
+
+    def membership(self, name: str) -> ThreadMembership:
+        return self._decoded[name] if name in self._decoded else self.captured(name).membership
 
     def birth_record(self, name: str) -> ThreadBirthRecord:
         return self._decoded[name] if name in self._decoded else self.captured(name)
@@ -445,11 +460,16 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __setitem__(self, name: str, thread: Thread) -> None:
         if thread.name != name:
             raise MalformedRecord("thread name differs from its declaration")
-        if not self._lookup_names or self._lookup_names.get(
-            thread.incarnation.require_recorded().lookup
-        ) != name:
+        if self._lookup_names:
+            lookup = thread.incarnation.require_recorded().lookup
+            if self._lookup_names.get(lookup) != name:
+                names = self._lookup_names.copy()
+                if name in self:
+                    names.pop(self.incarnation(name).require_recorded().lookup)
+                names[lookup] = name
+                self._lookup_names = names
+        else:
             self._lookup_names = {}
-        self._captured = self._captured.copy()
         self._captured.pop(name, None)
         self._decoded[name] = self._binding(thread)
         self._raw.pop(name, None)
@@ -457,8 +477,12 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
     def __delitem__(self, name: str) -> None:
         if name not in self:
             raise KeyError(name)
-        self._lookup_names = {}
-        self._captured = self._captured.copy()
+        if self._lookup_names:
+            names = self._lookup_names.copy()
+            names.pop(self.incarnation(name).require_recorded().lookup)
+            self._lookup_names = names
+        else:
+            self._lookup_names = {}
         self._captured.pop(name, None)
         self._raw.pop(name, None)
         self._decoded.pop(name, None)

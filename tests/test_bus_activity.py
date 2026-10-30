@@ -8,7 +8,7 @@ from agent_comms.bus import PublicRecord
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.read_basis import (
-    AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope,
+    AllChannelDisplayScope, ChannelDisplayScope, NamedActivityDisplayScope,
 )
 from agent_comms.thread_identity import UserThreadRole
 
@@ -32,12 +32,12 @@ def test_activity_family_tracks_original_roles_targets_and_member_scope(bus):
     scopes = (
         (ChannelDisplayScope("#team", frozenset({"#team"})), ChannelActivity(30.0, 0.0)),
         (AllChannelDisplayScope("#any"), ChannelActivity(30.0, 20.0)),
-        (MemberActivityDisplayScope("#member", participant_names=frozenset({"mentioned"})),
+        (NamedActivityDisplayScope("#member", names=frozenset({"mentioned"})),
          ChannelActivity(20.0, 20.0)),
-        (MemberActivityDisplayScope("#member", participant_names=frozenset({"worker"})),
+        (NamedActivityDisplayScope("#member", names=frozenset({"worker"})),
          ChannelActivity(20.0, 20.0)),
-        (MemberActivityDisplayScope("#member", frozenset({"#team"}),
-                                   participant_names=frozenset({"human"})),
+        (NamedActivityDisplayScope("#member", frozenset({"#team"}),
+                                  names=frozenset({"human"})),
          ChannelActivity(30.0, 20.0)),
     )
     with bus.reading() as captured, captured.observing() as db:

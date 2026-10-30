@@ -24,7 +24,7 @@ from .launch_root import LaunchRoot
 from .launch_runtime import ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .native_session_files import CheckSession
-from .read_basis import MemberActivityDisplayScope
+from .read_basis import NamedActivityDisplayScope
 from .registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
 from .thread_storage import StorageRoots
@@ -94,7 +94,7 @@ class CheckRoot:
         targets = frozenset(
             target for name in names for target in catalog.targets_for(snapshot.require(name).tags)
         )
-        scope = MemberActivityDisplayScope("#check", targets, participant_names=selected | aliases)
+        scope = NamedActivityDisplayScope("#check", targets, names=selected | aliases)
         with self.source.bus.bus.reading() as source:
             messages = scope.history(source, limit=self.max_records)
         copied.registry.store.prepare_native_root()

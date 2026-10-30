@@ -427,14 +427,39 @@ class BusCapability(TypedRow, ProjectionSource):
 
     @classmethod
     def read_from(cls, db: sqlite3.Connection, seq: int) -> Self:
-        """Reconstruct this declared value from its own capability tables."""
-        rows = []
-        for table in cls.tables():
-            stored = table.select(db, seq=seq)
-            if not stored:
-                raise RelationViolationError(f"Bus row {seq} lacks {table.declared_name}")
-            rows.append(stored[0])
-        return cls.assembled(rows)
+        """Reconstruct one declared value through the shared joined acquisition."""
+        with closing(cls.selected(
+            db, f'SELECT seq FROM "{BusRow.declared_name}" WHERE seq=?', (seq,),
+        )) as values:
+            for value in values:
+                return value
+        raise RelationViolationError(f"Bus row {seq} lacks {cls.__name__}")
+
+    @classmethod
+    def selected(
+        cls, db: sqlite3.Connection, positions: str, parameters: tuple[object, ...],
+        *, descending: bool = False,
+    ) -> Iterator[Self]:
+        """One cursor reads only the capability tables this value inherits."""
+        tables = cls.tables()
+        offsets = dict(zip(tables, accumulate(
+            (len(BusRow.columns()), *(len(table.columns()) for table in tables)))))
+        header = BusRow.qualified("seq")
+        order = "DESC" if descending else "ASC"
+        with closing(db.execute(
+            f"WITH selected AS ({positions}) "
+            f"SELECT {', '.join(row.qualified(*row.column_projection()) for row in (BusRow, *tables))} "
+            f'FROM "{BusRow.declared_name}" JOIN selected USING(seq) '
+            + " ".join(f'LEFT JOIN "{table.declared_name}" ON {table.qualified("seq")} = {header}'
+                       for table in tables)
+            + f" ORDER BY {header} {order}", parameters,
+        )) as cursor:
+            for stored in cursor:
+                original = BusRow.decode_at(stored, 0)
+                for table in tables:
+                    if stored[offsets[table]] is None:
+                        raise RelationViolationError(f"Bus row {original.seq} lacks {table.declared_name}")
+                yield cls.assembled(table.decode_at(stored, offsets[table]) for table in tables)
 
     @classmethod
     def assembled(cls, rows: Iterable[CapabilityRow]) -> Self:

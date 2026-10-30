@@ -9,6 +9,7 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, replace
 from functools import cached_property, partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from agent_comms.field_codec import FieldCodec, ThreadLookup
@@ -18,7 +19,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .messages import PublicSender
 from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation
-from .threads import Thread, ThreadProvenance
+from .threads import Thread, ThreadMembership, ThreadProvenance
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -178,6 +179,9 @@ class RegistryNames(Generic[Member]):
     def require(self, name: str) -> Member:
         return self.threads[self.require_canonical(name)]
 
+    def membership(self, name: str) -> ThreadMembership:
+        return self.require(name)
+
 
 @dataclass(frozen=True, slots=True)
 class SenderBindings:
@@ -202,6 +206,45 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         names = set(self.threads)
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
+
+    @cached_property
+    def memberships(self) -> Mapping[str, ThreadMembership]:
+        """One immutable tag/identity relation from this namespace, including retained aliases."""
+        canonical = {name: self.membership(name) for name in self.threads}
+        return MappingProxyType({
+            **canonical,
+            **{alias: canonical[owner] for alias, owner in self.aliases.items()},
+        })
+
+    @cached_property
+    def membership_json(self) -> str:
+        return FieldCodec.compact(FieldCodec.encode(
+            dict(self.memberships), dict[str, ThreadMembership],
+        ))
+
+    def tagged_names(self, tags: frozenset[str]) -> tuple[str, tuple[object, ...]]:
+        """A relational tag predicate, not an expanded channel-member name list."""
+        key = FieldCodec.field_plan(ThreadMembership, "tags").key
+        return (
+            "SELECT member.key FROM json_each(?) AS member "
+            "WHERE NOT EXISTS (SELECT 1 FROM json_each(?) AS wanted "
+            "WHERE NOT EXISTS (SELECT 1 FROM json_each(member.value, ?) AS owned "
+            "WHERE owned.value = wanted.value))",
+            (self.membership_json, json.dumps(sorted(tags)), f"$.{key}"),
+        )
+
+    def same_tag_membership(self, earlier: Mapping[str, ThreadMembership],
+                            tags: frozenset[str]) -> bool:
+        """Only a matching name or its actual birth changing invalidates that channel."""
+        current = self.memberships
+        for name in current.keys() | earlier.keys():
+            before = name in earlier and tags <= earlier[name].tags
+            after = name in current and tags <= current[name].tags
+            if before != after:
+                return False
+            if before and earlier[name].incarnation != current[name].incarnation:
+                return False
+        return True
 
     def bound_to(self, root: Path) -> RegistryProvenance:
         """Recorded transcripts resolve under the root this namespace was captured from."""

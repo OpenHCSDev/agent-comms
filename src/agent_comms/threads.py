@@ -194,10 +194,21 @@ class NextTurnConfiguration:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadProvenance(ThreadBirthRecord):
-    """Recorded thread identity, without permission to own a process or start a turn."""
+class ThreadMembership(ThreadBirthRecord):
+    """The original thread identity and its declared channel tags."""
 
     tags: Annotated[frozenset[str], RegistrationPolicy(InheritEmpty)] = field(kw_only=False)
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        for tag in self.tags:
+            Tag.validate(tag)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadProvenance(ThreadMembership):
+    """Recorded thread identity, without permission to own a process or start a turn."""
+
     worktree: Checkout = field(kw_only=False)
     session_file: Annotated[SessionFile, RegistrationPolicy(InheritApplied)] = field(
         default_factory=NoSessionFile
@@ -222,11 +233,6 @@ class ThreadProvenance(ThreadBirthRecord):
     @property
     def display_title(self) -> str:
         return self.title.otherwise(self.name)
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        for tag in self.tags:
-            Tag.validate(tag)
 
     @staticmethod
     def capture(thread: ThreadProvenance) -> ThreadProvenance:
