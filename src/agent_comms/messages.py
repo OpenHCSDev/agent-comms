@@ -455,26 +455,26 @@ class BusCapability(TypedRow, ProjectionSource):
             f' AND {BusRow.qualified("kind")} IN ({", ".join("?" for _ in kinds)})',
             tuple(BusRow._fields_named(("kind",))[0].encode(kind) for kind in kinds),
         )
-        return (record for _, record in BusCapability.joined(
+        return (record for _, record in BusCapability.stored_records(
             db, f"{header}>?" + predicate + f" ORDER BY {header}", (after, *parameters)))
 
     @staticmethod
-    def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusCapability, ...]:
+    def at_sequences(db: sqlite3.Connection, sequences: tuple[int, ...]) -> tuple[BusRecord, ...]:
         """Exactly these records, in the given order, from one joined read; a sequence with no
         stored row is refused, as a single lookup refuses it."""
         if not sequences:
             return ()
         header = BusRow.qualified("seq")
-        found = {row.seq: record for row, record in BusCapability.joined(
+        found = {row.seq: record for row, record in BusCapability.stored_records(
             db, f"{header} IN ({','.join('?' for _ in sequences)})", sequences)}
         if missing := [seq for seq in sequences if seq not in found]:
             raise RelationViolationError(f"Unknown bus sequences: {missing}")
         return tuple(found[seq] for seq in sequences)
 
     @staticmethod
-    def joined(
+    def stored_records(
         db: sqlite3.Connection, where: str, parameters: tuple[object, ...],
-    ) -> Iterator[tuple[BusRow, BusCapability]]:
+    ) -> Iterator[tuple[BusRow, BusRecord]]:
         """Each selected header with the record its capability rows assemble, decoded once."""
         tables = TypedTable.members_with(CapabilityRow)
         offsets = dict(zip(tables, accumulate(
