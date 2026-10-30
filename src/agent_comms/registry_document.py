@@ -400,28 +400,32 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
 
+    def birth(self, name: str) -> CreationTime:
+        """One row's creation time, read alone: a stored row is never decoded for it."""
+        if name in self._decoded:
+            return self._decoded[name].created_at
+        try:
+            return CreationTime.from_wire(self._raw[name].get("created_at"))
+        except ValueError as error:
+            raise InvalidRegistryDocument(error) from error
+
+    def births(self) -> set[float]:
+        return {self.birth(name) for name in self}
+
     def lookup_names(self) -> dict[ThreadLookup, str]:
-        """Each row's creation lookup, read from its birth alone like the distinctness check:
-        resolving one owner never decodes the other threads."""
+        """Each row's creation lookup, read from its birth alone: resolving one owner never
+        decodes the other threads."""
         return {
-            (self._decoded[name].incarnation if name in self._decoded
-             else ThreadIncarnationRecord(name, CreationTime.from_wire(
-                 self._raw[name].get("created_at")).to_wire()).incarnation()
-             ).require_recorded().lookup: name
+            ThreadIncarnationRecord(name, self.birth(name).to_wire()).incarnation()
+            .require_recorded().lookup: name
             for name in self
         }
 
     def require_distinct_births(self) -> None:
-        """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
-        a stored row's birth is read alone, without decoding the rest of its thread."""
+        """Rows decode late, so a read of one thread never sees two sharing a creation lookup."""
         births: set[float] = set()
         for name in self:
-            try:
-                birth = (self._decoded[name].created_at if name in self._decoded
-                         else CreationTime.from_wire(self._raw[name].get("created_at")))
-            except ValueError as error:
-                raise InvalidRegistryDocument(error) from error
-            births.add(birth.distinct_from(births))
+            births.add(self.birth(name).distinct_from(births))
 
     @classmethod
     def from_wire(cls, raw: object) -> Self:
@@ -836,8 +840,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
                 previous_status=self.status(thread.name),
             )
             return change.restarted() if new_owner else change
-        used = {existing.created_at for existing in self.threads.values()}
-        thread = replace(thread, created_at=thread.created_at.distinct_from(used))
+        thread = replace(thread, created_at=thread.created_at.distinct_from(self.threads.births()))
 
         change = InitialRegistration(thread=thread, status=status)
         return change.restarted() if new_owner else change
