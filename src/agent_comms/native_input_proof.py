@@ -30,8 +30,8 @@ from .locked_store import DurableFile, PatternFile, SQLiteFile
 from .native_failures import NativePiUnavailable
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
-from .turn_item import FreshNativeId
 from .private_path import FileIdentity, PrivateFileRole
+from .turn_item import FreshNativeId
 from .typed_table import (
     Column,
     DurableTables,
@@ -44,6 +44,7 @@ from .typed_table import (
     TypedTable,
     WithoutRowid,
 )
+
 
 @dataclass(frozen=True, slots=True)
 class NativeInputCommit:
@@ -72,9 +73,9 @@ class NativeInputLocation(NativeInputCommit):
         nullable=True,
         storage=IntegerStorage,
     )
-    session_entry_start: Annotated[
-        int, WireName("sessionEntryStart"), position_column
-    ] = field(kw_only=True)
+    session_entry_start: Annotated[int, WireName("sessionEntryStart"), position_column] = field(
+        kw_only=True
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -131,7 +132,6 @@ class NativeContextJournal(
         OR committed_at_ms != NEW.committed_at_ms)) OR NEW.session_id
         != (SELECT session_id FROM native_context_journal ORDER BY session_id LIMIT 1)"""
 
-
     schema: Literal[2]
     type: Literal["context_committed"]
 
@@ -165,10 +165,17 @@ class NativeContextJournal(
         """
         with ExitStack() as ownership:
             try:
-                held = ownership.enter_context(closing(
-                    os.fdopen(PrivateFileRole.read(
-                        path, NativePiUnavailable("Native proof indexed evidence is unavailable")), "rb")
-                ))
+                held = ownership.enter_context(
+                    closing(
+                        os.fdopen(
+                            PrivateFileRole.read(
+                                path,
+                                NativePiUnavailable("Native proof indexed evidence is unavailable"),
+                            ),
+                            "rb",
+                        )
+                    )
+                )
                 before = os.fstat(held.fileno())
                 db = ownership.enter_context(closing(SQLiteFile.recovering_snapshot(path)))
                 if cls.schema_differs(db):
@@ -188,25 +195,32 @@ class NativeContextJournal(
 
     @classmethod
     def for_input(
-        cls, db: sqlite3.Connection, input_id: InputId,
+        cls,
+        db: sqlite3.Connection,
+        input_id: InputId,
         generations: range = NativeContextRecord.interval(),
     ) -> NativeContextJournal:
         """Require the latest input proof in this indexed generation interval."""
         if generations.step != 1:
             raise ValueError("Context proof generations require a contiguous interval")
-        rows = cls.read(db.execute(
-            f"SELECT {cls._column_list(tuple(cls.column_projection()))} FROM {cls.declared_name} "
-            "WHERE input_id=? AND request_generation>=? AND request_generation<? "
-            "ORDER BY request_generation DESC LIMIT 1",
-            (input_id, generations.start, generations.stop),
-        ))
+        rows = cls.read(
+            db.execute(
+                f"SELECT {cls._column_list(tuple(cls.column_projection()))} "
+                f"FROM {cls.declared_name} "
+                "WHERE input_id=? AND request_generation>=? AND request_generation<? "
+                "ORDER BY request_generation DESC LIMIT 1",
+                (input_id, generations.start, generations.stop),
+            )
+        )
         try:
             return next(iter(rows))
         except StopIteration as missing:
             raise NativePiUnavailable("The input has no assembled-context proof") from missing
 
     def corroborate(
-        self, session_file: Path, location: NativeInputLocation,
+        self,
+        session_file: Path,
+        location: NativeInputLocation,
     ) -> NativeContextProof:
         if self.input_commit != location.input_commit:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
@@ -240,7 +254,9 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
         before this check; this comparison grants no native or replay authority.
         """
         if (self.input_commit, self.session_file, self.session_entry_start) != (
-            context.input_commit, context.session_file, context.session_entry_start
+            context.input_commit,
+            context.session_file,
+            context.session_entry_start,
         ):
             raise IdentityConflict("Native context acknowledgement belongs to another entry")
         if context.request_generation < self.request_generation:

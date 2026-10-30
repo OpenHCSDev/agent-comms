@@ -1,4 +1,5 @@
 """Read operations share their declaration; callers supply the read authority."""
+
 from __future__ import annotations
 
 import asyncio
@@ -6,11 +7,15 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from .comms import Comms
+from .notification_evidence import OutcomeViewer
 from .owner_connection import (
-    OwnerConnection, OwnerReading, OwnerReplyConnection, ResultRuntimeRequest, RuntimeRequestContext,
+    OwnerConnection,
+    OwnerReading,
+    OwnerReplyConnection,
+    ResultRuntimeRequest,
+    RuntimeRequestContext,
 )
 from .read_basis import DisplayCut, NoDisplaySelection, ReadAuthority
-from .notification_evidence import OutcomeViewer
 from .registration import Registration
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool

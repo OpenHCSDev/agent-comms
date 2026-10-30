@@ -41,11 +41,11 @@ from agent_comms import (
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.head_review import Side as CutSide
 from agent_comms.field_codec import boundary_decoder
-from agent_comms.installer.runtime_resolution import StackSources
+from agent_comms.head_review import Side as CutSide
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
+from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
