@@ -482,18 +482,21 @@ class OwnersStopped:
         for outcome in stack.owners(root, StopCliCommand, running):
             outcome.require_success(UpgradeRefused)
 
-    def given_back_on(self, stack: Stack, root: Path) -> None:
-        """Every exit starts the stopped owners on ``stack`` again. When the install itself
-        is failing, a refused restart carries that failure instead of replacing it."""
-        def start_again(_type: object, failure: BaseException | None, _trace: object) -> bool:
+    @contextmanager
+    def given_back_on(self, stack: Stack, root: Path) -> Iterator[None]:
+        """Every exit starts the stopped owners on ``stack`` again, unless a published
+        runtime took them over (``give_back.pop_all``). When the install itself is failing,
+        a refused restart carries that failure instead of replacing it."""
+        self.give_back.callback(self.start_on, stack, root)
+        try:
+            yield
+        except BaseException as failure:
             try:
-                self.start_on(stack, root)
+                self.give_back.close()
             except UpgradeRefused as restart:
-                if failure is None:
-                    raise
                 raise OwnersNotRestarted(failure, restart) from failure
-            return False
-        self.give_back.push(start_again)
+            raise
+        self.give_back.close()
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
         self.started = stack.owners(root, StartCliCommand, self.stopped)
@@ -969,8 +972,7 @@ class StopsOwners:
     def owners_stopped(cls, root: Path, installed: Stack,
                        staged: TargetStack) -> Iterator[OwnersStopped]:
         owners = OwnersStopped()
-        with owners.give_back:
-            owners.given_back_on(installed, root)
+        with owners.given_back_on(installed, root):
             owners.stop(installed, root)
             yield owners
 
@@ -996,8 +998,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
             RootRuntimeStore.at(root).adopt(installed.runtime)
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         owners = HeldOwnersStopped()
-        with owners.give_back:
-            owners.given_back_on(installed, root)
+        with owners.given_back_on(installed, root):
             with owners.hold:
                 with BeginMaintenancePhase().running(clock):
                     held = maintenance.begin(MaintenanceOperator.current())
