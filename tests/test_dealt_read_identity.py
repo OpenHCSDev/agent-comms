@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from agent_comms.context_reading import ContextUsage
-from agent_comms.rule_deal import DealRecord, DealtRead, DealtSource, Open, ReadSpan, Unread
+from agent_comms.rule_deal import DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, Unread
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms_hooks.skill import FleetReader
@@ -38,7 +38,7 @@ def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
     deal.deal(FleetReader, ())
-    assert deal.audit.exists() and deal.current().read_by(deal) == ()
+    assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
 
 
 def test_a_changed_file_is_owed_again_and_only_that_file(commander_bus):
@@ -51,7 +51,7 @@ def test_a_changed_file_is_owed_again_and_only_that_file(commander_bus):
     stale = DealtRead(DealtSource.of(changed), "0" * 64)
     with deal.dealt_read.open("a", encoding="utf-8") as log:
         log.write(json.dumps(FieldCodec.encode(stale)) + "\n")
-    assert next(Unread.owed_by(deal, record)).remaining == (changed,)
+    assert next(Unread.owed_by(deal, record, OpenedReads())).remaining == (changed,)
 
 
 def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus):
@@ -66,4 +66,4 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus
     assert isinstance(deal.state(), Open) and deal.current().dealt == dealt
     assert deal.audit.exists()
     deal.observe_context(ContextUsage(70, 100))
-    assert not isinstance(deal.state(), Open) and deal.audit.exists()
+    assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
