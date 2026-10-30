@@ -15,7 +15,7 @@ class SingleArgument(argparse.Action):
 
     def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
                  values: object, option_string: str | None = None) -> None:
-        if getattr(namespace, self.dest) != self.default:
+        if self.dest in vars(namespace):
             parser.error(f'{option_string} must be supplied only once')
         setattr(namespace, self.dest, values)
 

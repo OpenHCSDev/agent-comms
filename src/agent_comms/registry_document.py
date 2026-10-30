@@ -665,6 +665,10 @@ class RegisteredCommanderProject(CommanderProject):
             if not selection.reviewers:
                 raise ValueError('Empty reviewer selections are removed, not retained.')
 
+    def require_commander(self, snapshot: RegistrySnapshot, actor: ThreadIncarnation) -> None:
+        if not any(thread.incarnation == actor for thread in self.commanders(snapshot)):
+            raise RelationViolationError(f"{actor.name} is not a current commander of this project.")
+
     def require_review_repository(self, repository: RepositoryName) -> None:
         if repository not in self.repository_names():
             raise RelationViolationError(f'Repository {repository.to_wire()} is not registered in this project.')

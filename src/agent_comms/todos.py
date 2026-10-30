@@ -12,6 +12,8 @@ import calendar
 import json
 import re
 import shlex
+
+from agent_comms.tool_caller import ThreadCaller
 import sqlite3
 import subprocess
 import sys
@@ -186,7 +188,6 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
     from agent_comms.registry_document import CommanderProject, RegistrySnapshot
-    from agent_comms.tool_caller import ThreadCaller
 
 
 @dataclass(frozen=True)
@@ -2791,7 +2792,6 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                   for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
 
     def instructions(self, todo):
-        from agent_comms.tool_caller import ThreadCaller
         callers = tuple(ThreadCaller(assignment.owner) for assignment in todo.current_holder.current_assignments())
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
             f"Order: {self.id}", *self.scope.instructions(todo.id, callers),
@@ -3004,7 +3004,6 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
     def message(self, context: CommanderContext, document: OrderFile, unit: str, group: Sequence[str],
                 replacing: bool, reassign: Reassignment) -> str:
         """Render owned fields; never parse this message back into an order."""
-        from agent_comms.tool_caller import ThreadCaller
         instructions = '\n'.join((document.prose, *(slop.render() for slop in document.slop),
             f'Problems: {", ".join(group)}', *self.work_instructions()))
         replacement = '\nThis replaces my earlier order on it; drop that one.' if replacing else ''

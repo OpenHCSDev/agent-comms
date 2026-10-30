@@ -1,5 +1,7 @@
 """Native commander publication uses its explicit actor, never the configured founder."""
 
+from dataclasses import replace
+
 import pytest
 
 from agent_comms.commander.order import Commander, SayVerb
@@ -7,14 +9,17 @@ from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import QuestionKind
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from cli_command import commander
 
 pytest_plugins = ('test_commander_forks',)
 
 
+@pytest.mark.parametrize('execution', [ExternalThreadExecution, NativeThreadExecution])
 @pytest.mark.parametrize('actor,target', [('lead', 'worker'), ('worker', 'lead'), ('worker', '#comms')])
-def test_native_commander_posts_as_its_actual_actor(fork_bus, tmp_path, actor, target):
+def test_native_commander_posts_as_its_actual_actor(fork_bus, tmp_path, actor, target, execution):
     comms, _, _ = fork_bus
+    comms.registry.update_thread(actor, lambda thread: replace(thread, execution=execution))
     body = tmp_path / 'message.txt'
     body.write_text('The explicit author owns this publication')
     result = commander('--root', str(comms.root), 'order', 'say', target, str(body),
@@ -64,6 +69,24 @@ def test_an_outgoing_question_is_not_the_authors_incoming_debt(fork_bus, tmp_pat
     assert post.answers == ()
     assert any(rule.message.reference == outgoing.reference
                for rule in OwedAnswer.opened(comms, 'lead'))
+
+
+def test_renamed_caller_publishes_its_current_name_without_becoming_the_founder(fork_bus, tmp_path):
+    comms, _, _ = fork_bus
+    original = comms.registry.require('retained').incarnation
+    comms.registry.rename('retained', 'renamed-author')
+    renamed = comms.registry.require('renamed-author').incarnation
+    assert renamed == original.renamed('renamed-author')
+    body = tmp_path / 'renamed-author.txt'
+    body.write_text('The retained alias identifies the same author, not the fleet founder')
+    result = commander('--root', str(comms.root), 'order', 'say', '#comms', str(body),
+                       caller=ThreadCaller('retained'))
+    assert result.returncode == 0, result.stderr
+    message = comms.bus.bus.lookup(comms.bus.bus.revision())
+    assert message.sender == 'renamed-author'
+    assert message.sender != 'lead'
+    assert message.message_id in result.stdout
+    assert comms.registry.require('renamed-author').incarnation == renamed
 
 
 def test_threadless_operator_read_publishes_nothing(fork_bus):

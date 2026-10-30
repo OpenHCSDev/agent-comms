@@ -7,7 +7,6 @@ import shlex
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .bus_publication import AgentOrigin
-from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
@@ -16,13 +15,13 @@ from .launch_runtime import CallingThreadUnavailable
 from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
+from .registry_document import RegistrySnapshot
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .registration import Registration
-    from .registry_document import RegistrySnapshot
     from .head_review import HeadReviewOrder, PullRequestHead
     from .threads import Thread
     from .tool_request import ToolRequest
@@ -256,9 +255,8 @@ class CommanderPeerCaller(ThreadCaller):
     registered commander's."""
 
     def commanding(self, comms: Comms, commander: ToolCaller) -> None:
-        if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
-            raise ToolRefusedError(
-                f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
+        snapshot = comms.registry.snapshot()
+        snapshot.commander_project.require().require_commander(snapshot, self.identity_in(snapshot))
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return CommanderPeerAuthority(self.name, commander)
@@ -282,8 +280,9 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: ToolCaller) -> None:
-        parent = comms.registry.require(commander.own_thread())
-        parent.require_commander()
+        snapshot = comms.registry.snapshot()
+        parent = snapshot.require(commander.own_thread())
+        snapshot.commander_project.require().require_commander(snapshot, parent.incarnation)
         comms.registry.register_child(self.name, parent.name, CommanderForkExecution, comms.goals)
 
     def commander(self, comms: Comms) -> Thread:
