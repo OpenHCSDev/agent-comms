@@ -59,7 +59,7 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
-from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread, ThreadCatalog
 from .native_session_reopen import PiSessionId
 from .tool_result import ToolResult
 
@@ -431,7 +431,13 @@ class ThreadManagement:
             thread.execution.require_native()
             return configuration.configured(thread)
 
-        return self.registry.update_thread(original.name, configure)
+        updated = self.registry.update_thread(original.name, configure)
+        # Every configuration producer, including standalone Pi's external caller,
+        # publishes through the same carrier. Keep the acquired declaration current
+        # through this dependent write so an older change cannot restore an old tier.
+        with self.registry.store.current_entry(updated.name) as current:
+            ThreadCatalog.publish(current.entry.thread, self.root)
+        return updated
 
     def initialize_native_configuration(
         self, name: str, *, model: ThreadModel, thinking_level: type[ThinkingChoice],

@@ -44,7 +44,7 @@ class TestToolCatalog:
                 comms.registry.require(thread.name),
                 NextTurnConfiguration(service_tier=ChosenServiceTier(tier)),
             )
-            assert ThreadCatalog.publish(thread, comms.root) == Path(path)
+            assert thread.catalog_path(comms.root) == Path(path)
             updated = json.loads(Path(path).read_text())
             assert updated == {**payload, "service_tier": tier.value}
             revision = Path(path).stat()
