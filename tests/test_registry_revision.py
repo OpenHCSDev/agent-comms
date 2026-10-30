@@ -34,6 +34,26 @@ def test_dependent_selection_refuses_changed_authority_without_repeating_its_eff
         assert current.matches_current()
 
 
+def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
+    # A start that clears its own triage input fences on its own entry: heartbeats of
+    # every other live owner used to stale the whole-registry cut before it could write.
+    from agent_comms.coordination_errors import StaleFence
+
+    registry = Registration(tmp_path / "registry.json")
+    registry.register(Thread("worker", frozenset(), Checkout(tmp_path)))
+    registry.register(Thread("neighbour", frozenset(), Checkout(tmp_path)))
+    cut = registry.store.snapshot_with_authority()
+    registry.unregister("neighbour")
+    with pytest.raises(StaleFence):
+        with cut.current():
+            pass
+    with cut.entry_current("worker"):
+        pass
+    registry.unregister("worker")
+    with pytest.raises(StaleFence):
+        with cut.entry_current("worker"):
+            pass
+
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
     from agent_comms.errors import RelationViolationError
     from agent_comms.field_codec import FieldCodec
