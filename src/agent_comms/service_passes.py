@@ -134,11 +134,16 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
     async def wait_completed(
         self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
         watch: type[CompletedWatch],
-    ) -> None:
-        """Join ordinary recorded completions, never run the watch being qualified.
+    ) -> tuple[RecordedThreadIncarnation, ...]:
+        """Join the first ordinary recorded completion, never run the watch being qualified,
+        and return the commanders it has not reached yet.
 
-        Subscribe before reading, so a completion between the first read and wait
-        cannot disappear. A partial pass plus a recorded failure is not acceptance.
+        One completed pass after ``since`` is the service running on the new runtime. Which
+        commanders a pass reaches is each commander's own state (a session whose bridge is down
+        gets no delivery), so the rest are reported, never awaited: waiting on them held the
+        2026-10-30 installs 518 s and 376 s on claude-nra's absent bridge. Subscribe before
+        reading, so a completion between the first read and wait cannot disappear. A recorded
+        failure is not acceptance.
         """
         pending = commanders
         timeout = asyncio.timeout(watch.completion_ceiling())
@@ -152,13 +157,13 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
                             raise ToolRefusedError(passes.failing[name].failure_line(name))
                         pending = tuple(owner for owner in commanders
                                         if not passes.completed_since(owner, since))
-                        if not pending:
-                            return
+                        if len(pending) < len(commanders):
+                            return pending
         except TimeoutError as error:
             if not timeout.expired():
                 raise
             raise ToolRefusedError(
-                f"{name} has no ordinary completion since service restart {since}: "
+                f"{name} has no ordinary completion since service restart {since} for any of: "
                 + ", ".join(owner.name for owner in pending)
             ) from error
 
