@@ -26,6 +26,10 @@ class NativeTurnIdText(NominalSpelling[NativeTurnId]):
 class FreshNativeId(NominalText):
     """An opaque harness key Core may mint, with the harness's free text spelling."""
 
+    def require_present(self) -> Self:
+        """A present entry ID answers itself; NoEntryId owns the refusal."""
+        return self
+
     @classmethod
     def fresh(cls) -> Self:
         return cls(Id128.mint())

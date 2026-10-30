@@ -26,6 +26,7 @@ from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
 from .native_entries import (
+    MessageEntry,
     NativeEntry,
     NoEntryId,
     RecordedEntry,
@@ -334,7 +335,7 @@ class NativeTranscript(TranscriptSource):
                      for identity in record.annotation_id.present())
 
     def require_publication_context(
-        self, user: NativeEntry, *, session_entry_start: int, files: NativeSessionFiles,
+        self, user: MessageEntry, *, session_entry_start: int, files: NativeSessionFiles,
     ) -> NativeContextProof:
         """Corroborate the existing native producer's context, without replay.
 
@@ -348,11 +349,12 @@ class NativeTranscript(TranscriptSource):
             header = SessionEntry.read(stream.readline())
         with NativeContextJournal.open_evidence(files.input_proof) as db:
             try:
-                proof = NativeContextJournal.for_input(db, user.input_id)
+                proof = NativeContextJournal.for_input(db, user.require_input_id())
             except NativePiUnavailable as missing:
                 raise MalformedRecord("Native publication has no committed context inclusion") from missing
             return proof.corroborate(self.path.absolute(), NativeInputLocation(
-                user.input_id, header.id, user.id, session_entry_start=session_entry_start,
+                user.require_input_id(), header.id, user.id.require_present(),
+                session_entry_start=session_entry_start,
             ))
 
     def inputs_for(self, records) -> tuple:
