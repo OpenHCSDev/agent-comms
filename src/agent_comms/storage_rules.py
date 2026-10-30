@@ -420,10 +420,12 @@ class StorageRule(RoomAllocation, DurableFile):
             self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
         if source == repository.checkout.resolve():
             self.deny(f'{source} is the registered repository checkout, not an isolated allocation')
+        if not (self.owns_present_checkout(owner, source) or owner.ran_in(Checkout(source))):
+            self.deny(f'{source} is not a current or historical checkout of {owner.name}')
         owners = tuple(thread for thread in threads
-                       if (self.owns_present_checkout(thread, source)
-                           or Checkout(source) in thread.earlier_projects))
-        if tuple(thread.incarnation for thread in owners) != (owner.incarnation,):
+                       if thread.incarnation != owner.incarnation
+                       and self.owns_present_checkout(thread, source))
+        if owners:
             self.deny(f'{source} has foreign or ambiguous checkout owners: '
                       + ', '.join(thread.name for thread in owners))
         if Repo.of(source).github != repository.github:

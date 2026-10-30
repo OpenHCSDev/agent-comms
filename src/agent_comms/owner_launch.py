@@ -180,8 +180,8 @@ class StopOwnerRuntimeRequest(ResultRuntimeRequest):
         return entry.thread
 
     async def result(self, ctx: RuntimeRequestContext) -> OwnerRetiredReply:
-        state = ctx.server.agent.inputs.state(ctx.session).owned()
-        return await self.retire(ctx.server.agent.sessions, state)
+        return await ctx.server.agent.inputs.state(ctx.session).retire_for_stop(
+            ctx.server.agent.sessions, self)
 
     async def retire(self, sessions: SessionLifecycle, state: OwnerSession) -> OwnerRetiredReply:
         if state.owner.incarnation != self.owner.incarnation or state.owner.generation >= self.owner.generation:

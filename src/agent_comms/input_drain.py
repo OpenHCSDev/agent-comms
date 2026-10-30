@@ -62,6 +62,7 @@ from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
 from .runtime import RuntimeServer
 from .schedule_rules import ProjectResumeCheck, WakeOutcome, WakeScheduleCheck
+from .owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
 from .session_lifecycle import SessionLifecycle
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .threads import Thread
@@ -576,6 +577,14 @@ class DrainedSession:
     def owned(self) -> OwnerSession:
         raise RelationViolationError("This session has not acquired local execution")
 
+    async def retire_for_stop(
+        self, sessions: SessionLifecycle, request: StopOwnerRuntimeRequest,
+    ) -> OwnerRetiredReply:
+        """This host holds no session for the fenced owner: nothing is left to join, so
+        completing it releases the row's binding to this host."""
+        await sessions.complete_unheld(request.owner, request.claim)
+        return OwnerRetiredReply(request.owner)
+
     def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
         return ingress
 
@@ -703,6 +712,11 @@ class OwnerSession(DrainedSession):
 
     def owned(self) -> OwnerSession:
         return self
+
+    async def retire_for_stop(
+        self, sessions: SessionLifecycle, request: StopOwnerRuntimeRequest,
+    ) -> OwnerRetiredReply:
+        return await request.retire(sessions, self)
 
     def configuration_for(self, ingress: ConfigOptions) -> ConfigOptions:
         return self.configuration

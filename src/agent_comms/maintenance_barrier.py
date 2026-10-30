@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self
 
 from .child_process import ProcessIdentity
+from .coordination_errors import DrainUnavailable
 from .private_path import FileObservation, FileRevision, PrivateFileRole
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ToolRefusedError
@@ -44,8 +45,10 @@ from .store_files import (
 )
 
 
-class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
-    """The bus is in maintenance: its readers close and wait for READY."""
+class MaintenanceHeldError(RelationViolationError, ToolRefusedError, DrainUnavailable):
+    """The bus is in maintenance: its readers close and wait for READY. A drain that meets
+    the hold is unavailable until maintenance ends, never stopped: an install must not fail
+    every unit whose inbox drains during its window."""
 
 
 class MaintenanceNotHeldError(RelationViolationError):
