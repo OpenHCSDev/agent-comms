@@ -785,10 +785,11 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def _open_reader(
-        cls, path: Path, contention: StoreContention
+        cls, path: Path, contention: StoreContention, *, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         return cls._configure_reader(
-            contention.reader(path.resolve().as_uri() + "?mode=ro")
+            contention.reader(path.resolve().as_uri() + "?mode=ro",
+                              check_same_thread=check_same_thread)
         )
 
     @classmethod
@@ -802,10 +803,12 @@ class SQLiteStorage(RootFile, SqliteStore):
 
     @classmethod
     def read_snapshot(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        *, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open and acquire one consistent read-only snapshot with SQLite's busy handler."""
-        return cls._acquire_snapshot(cls._open_reader(path, contention))
+        return cls._acquire_snapshot(cls._open_reader(
+            path, contention, check_same_thread=check_same_thread))
 
     @classmethod
     def recovering_snapshot(cls, path: Path) -> sqlite3.Connection:
@@ -816,12 +819,14 @@ class SQLiteStorage(RootFile, SqliteStore):
     @classmethod
     @contextmanager
     def opened_reader(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
+        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+        *, check_same_thread: bool = True,
     ) -> Iterator[sqlite3.Connection]:
         """Read existing committed data without initializing storage or permitting writes."""
         with CoordinationReadUnavailable.checking():
             try:
-                with closing(cls.read_snapshot(path, contention)) as db:
+                with closing(cls.read_snapshot(path, contention,
+                                               check_same_thread=check_same_thread)) as db:
                     try:
                         yield db
                     finally:

@@ -8,7 +8,8 @@ from .activity_clocks import ChannelActivity
 import logging
 import time
 from abc import abstractmethod
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated
@@ -249,6 +250,22 @@ class HistoryViews:
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree)
         return DMDisplayHistory(viewer.name, peer, worktree).page(self.presentation, bounds)
+
+    @contextmanager
+    def dm_display_reading(
+        self, peer: ThreadTarget, *, worktree: Checkout,
+    ) -> Iterator[Callable[[PageBounds], MessagePage]]:
+        viewer = self.messaging.user_identity(worktree)
+        with DMDisplayHistory(viewer.name, peer, worktree).reading(self.presentation) as pages:
+            yield pages
+
+    @contextmanager
+    def channel_display_reading(
+        self, target: str, *, viewer: DisplayViewer = AnonymousViewer(),
+    ) -> Iterator[Callable[[PageBounds], MessagePage]]:
+        channel = self.bus.require_channel(target)
+        with ChannelDisplayHistory(channel, viewer).reading(self.presentation) as pages:
+            yield pages
 
     def display_viewer(self, worktree: Checkout) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""

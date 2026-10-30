@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import CommandersTag, DeclaredTag, Tag
+from .channel_targets import CommandersTag, DeclaredTag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -60,8 +60,8 @@ from .thread_identity import (
     AgentThreadRole,
     ObservedTurn,
     OfferedTools,
-    ThreadIncarnation,
     ThreadBirthRecord,
+    ThreadIncarnation,
     ThreadRole,
     TurnFence,
     TurnIdentity,

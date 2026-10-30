@@ -508,7 +508,9 @@ class StoredBusReader(BusReader):
 
     @contextmanager
     def observing(self) -> Iterator[sqlite3.Connection]:
-        with SQLiteFile.opened_reader(self.path) as db:
+        # A captured display cut moves between the preparation owner's workers.
+        # Its presentation serializes page use and retirement; it remains read-only.
+        with SQLiteFile.opened_reader(self.path, check_same_thread=False) as db:
             yield db
 
 

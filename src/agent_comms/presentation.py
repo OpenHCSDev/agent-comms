@@ -5,10 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
+from threading import RLock
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from . import relationships
@@ -529,10 +530,26 @@ class BusPresentation:
         self._display_unread = DisplayUnread()
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+    def snapshot(self, viewer: DisplayViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
         """Borrow the bus-owned source cut without preparing a second store."""
         with self.bus.snapshot(viewer) as selected:
             yield selected
+
+    @contextmanager
+    def reading(self, viewer: DisplayViewer) -> Iterator[CapturedBusPresentation]:
+        """One page-source lifetime owns the SQLite cut and its selection/read document.
+
+        The preparation owner may move a read between workers. A captured presentation
+        serializes page use and retirement, without keeping any store exclusion held.
+        """
+        with ExitStack() as lifetime:
+            basis, source = lifetime.enter_context(self.snapshot(viewer))
+            captured = CapturedBusPresentation(self, basis, source)
+            try:
+                yield captured
+            finally:
+                with captured.use:
+                    lifetime.close()
 
     def roster(
         self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
@@ -562,7 +579,7 @@ class BusPresentation:
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
         channel = CommandTarget.named(target).require_channel()
-        with self.bus.snapshot(viewer) as (basis, source):
+        with self.snapshot(viewer) as (basis, source):
             return basis.viewer.read_page(basis.scope(channel.name), bounds, basis, source)
 
     def mark_channel_read(
@@ -590,6 +607,32 @@ class BusPresentation:
         counted = self._display_unread.advanced(source, selection)
         self._display_unread = counted
         return activity, counted.counts
+
+
+class CapturedBusPresentation(BusPresentation):
+    """The existing display API borrowing one original cut, never a second store.
+
+    Its caller closes the reading when the conversation source is replaced or retired.
+    Read acknowledgements still go through the live ledger and identity validation.
+    """
+
+    def __init__(self, original: BusPresentation, basis: CapturedSelection, source: BusSnapshot):
+        super().__init__(original.bus, original.registry, original.catalog,
+                         original.agents, original.goals)
+        self.basis, self.source = basis, source
+        self.use = RLock()
+
+    @contextmanager
+    def snapshot(self, viewer: DisplayViewer) -> Iterator[tuple[CapturedSelection, BusSnapshot]]:
+        with self.use:
+            if viewer.resolve(self.basis.registry) != self.basis.viewer:
+                raise ValueError("A captured display cut belongs to its original viewer")
+            yield self.basis, self.source
+
+    @contextmanager
+    def reading(self, viewer: DisplayViewer) -> Iterator[CapturedBusPresentation]:
+        with self.snapshot(viewer):
+            yield self
 
 
 @dataclass(frozen=True, slots=True)

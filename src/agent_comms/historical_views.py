@@ -76,12 +76,23 @@ class HistoryView(ABC):
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         """Bind the query to the bus owner's snapshot and read that exact source."""
-        with presentation.bus.snapshot() as (basis, source):
+        with presentation.snapshot(self.viewer) as (basis, source):
             request = self.page_request(self.capture(basis.registry), bounds)
             return request.read_opened(source)
 
+    @contextmanager
+    def reading(self, presentation: BusPresentation) -> Iterator[Callable[[PageBounds], MessagePage]]:
+        """Borrow one cut for the first tail, subsequent pages and scroll-back.
+
+        The caller retains this lifetime only while its conversation revision is
+        unchanged, and retires it off the UI thread when that source is replaced.
+        """
+        with presentation.reading(self.viewer) as captured:
+            yield partial(self.page, captured)
+
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        return presentation.bus.history.integrated_page(self, presentation, bounds)
+        with presentation.reading(self.viewer) as captured:
+            return captured.bus.history.integrated_page(self, captured, bounds)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
@@ -238,19 +249,16 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
 
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
         bus = presentation.bus
-        snapshot = presentation.registry.snapshot()
-        peer = self.second.selected_name(snapshot)
-        missing = peer not in snapshot.threads
-        if missing and bus.history.threads(peer):
-            return MessagePage((), False, False, NoDisplaySelection())
-        return DMDisplayBasis.fetch_page(
-            bus,
-            presentation.registry,
-            bus.bus.path.parent,
-            snapshot.require(self.first),
-            self.second,
-            worktree=self.worktree, bounds=bounds,
-        )
+        with presentation.snapshot(self.viewer) as (basis, source):
+            snapshot = basis.registry
+            peer = self.second.selected_name(snapshot)
+            missing = peer not in snapshot.threads
+            if missing and bus.history.threads(peer):
+                return MessagePage((), False, False, NoDisplaySelection())
+            return DMDisplayBasis.fetch_captured(
+                bus, presentation.registry, bus.bus.path.parent,
+                self.second, basis, source, worktree=self.worktree, bounds=bounds,
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -536,15 +544,14 @@ class HistoryArchive(SingleFileStore, CarriedDocument[tuple[HistorySource, ...]]
             snapshot = source.provenance
             current = replace(bounds, traversal=traversal.for_source(index == start))
             request = view.page_request(view.capture(snapshot), current)
-            current_snapshot = presentation.registry.snapshot()
-            document = presentation.bus.reads.read()
-            opened = Bus(Bus.path_in(Path(source.root)))
-            raw = request.read_opened(opened)
-            projected = replace(raw, messages=tuple(
-                HistoricalMessage.project(message, source, index, snapshot)
-                for message in raw.messages))
-            page = replace(projected, selection=view.viewer.historical_selection(
-                projected, presentation, source, opened, document, current_snapshot))
+            with presentation.snapshot(view.viewer) as (basis, _):
+                opened = Bus(Bus.path_in(Path(source.root)))
+                raw = request.read_opened(opened)
+                projected = replace(raw, messages=tuple(
+                    HistoricalMessage.project(message, source, index, snapshot)
+                    for message in raw.messages))
+                page = replace(projected, selection=view.viewer.historical_selection(
+                    projected, presentation, source, opened, basis.document, basis.registry))
             if page.messages:
                 return replace(
                     page,
