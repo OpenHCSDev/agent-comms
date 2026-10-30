@@ -17,7 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
 from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import EarlierItems
-from agent_comms.harness_delivery_states import Outcome, DeliveredOutcome
+from agent_comms.harness_delivery_states import AcceptedOutcome, Outcome
 from .history import CodexHistory, HarnessAddress, OnlineHistory
 from .shared import SessionBinding, IncomingFrame, TranscriptBridge, Options, run_bridge
 from agent_comms.runtime_updates import (
@@ -133,7 +133,7 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
                 continue
             if retries:
                 self.log(f'Codex is back; sent {message.message_id} after {retries} refused attempts')
-            return DeliveredOutcome
+            return AcceptedOutcome
 
     async def show_sent(self, result: SendResult) -> None:
         async with CodexConnection.open(self.socket) as codex:

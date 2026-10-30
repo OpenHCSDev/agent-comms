@@ -18,6 +18,8 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from .coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .coordination_tables.responses import ResponseObligation
+from .class_fact import ClassFact
+from .turn_item import FreshNativeId
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec,
@@ -35,7 +37,6 @@ from .native_input_record import (
     NativeColumn,
     NativeInputContext,
     NativeInputExecution,
-    NativeInputLocation,
     NativeInputPosition,
     NativeInputRecord,
     NativeStageStorage,
@@ -46,7 +47,7 @@ from .native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativePosition,
 )
-from .native_pi import NativeContextRecord
+from .native_input_proof import NativeContextRecord, NativeInputLocation
 from .native_session_reopen import (
     NativeSessionIdentity,
     NoPiSessionId,
@@ -61,7 +62,6 @@ from .selected_triage import (
 from .tool_denial import SelectedToolDenied
 from .typed_table import (
     Column,
-    FinalizedColumn,
     FrozenColumn,
     IntegerStorage,
     MonotoneColumns,
@@ -78,7 +78,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
+    from .native_input_proof import NativeContextProof
     from .native_session_reopen import NativeSessionIdentity
 
 
@@ -100,7 +100,6 @@ class PublishedReplyRevision(TypedRow):
 @dataclass(frozen=True)
 class NativeRuntimeInput(
     WriteOnceColumns,
-    FinalizedColumn,
     RequiredUpdateColumns,
     NoDelete,
     NativeInputRecord,
@@ -135,8 +134,14 @@ class NativeRuntimeInput(
             "member.ordinal,n.input_id LIMIT 1) AS context_committed_at_ms FROM w"
         )
 
-    write_once_columns = ('sent_owner_claimed_generation', 'session_id', 'session_file')
-    finalized_column = 'session_entry_id'
+    @ClassFact
+    @staticmethod
+    def write_once_columns(cls: type[NativeRuntimeInput]) -> tuple[str, ...]:
+        # The declared context group is immutable, not the later triage verdict.
+        return ('sent_owner_claimed_generation', 'session_id', 'session_file', 'verdict',
+                *(plan.name for plan in FieldCodec.field_plans(cls)
+                  if NativeContext.single(plan.annotation)))
+
     required_update_columns = ('sent_owner_claimed_generation',)
 
     @classmethod
@@ -151,6 +156,10 @@ class NativeRuntimeInput(
         # acquisition phases of this ORIGINAL row, never two source selectors.
         self.session_id.selected_session(self)
         self.reference
+
+    @property
+    def reference_session_id(self) -> PiSessionId:
+        return self.session_id.require_recorded_session()
 
     @property
     def selected_session(self) -> NativeSessionIdentity | NoSessionRetention:
@@ -321,35 +330,38 @@ class NativeRuntimeInput(
         "stage='triage' OR verdict IS NULL",
     )
 
-    def require_unproven(self, token_digest: str) -> None:
-        """Only the original reserved capability can acquire its first proof."""
-        if self.owner_token_digest != token_digest or self.reference.recorded:
-            raise StaleFence("native proof belongs to a different or already settled dispatch")
+    def require_dispatch(self, token_digest: str) -> None:
+        """Only the original dispatch may acknowledge context or settle its result."""
+        if self.owner_token_digest != token_digest:
+            raise StaleFence("native proof belongs to a different dispatch")
 
-    def commit_context(
-        self,
-        db: sqlite3.Connection,
-        context: NativeContextProof,
-        *,
-        verdict: TriageDecisionRecord = AbsentTriageDecisionRecord(),
-    ) -> None:
-        """Commit the context acknowledgement once against the original selected session."""
+    def commit_context(self, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """Retain the first corroborated context, independently of terminal settlement."""
         if context.input_id != self.input_id:
             raise StaleFence("native context belongs to another reserved input")
         self.require_session_identity().require_context(context)
+        self.reference.acknowledge_context(self, db, context)
+
+    def write_context(self, db: sqlite3.Connection, context: NativeContextProof) -> None:
+        """The unrecorded reference alone takes this first-write path."""
         updated = self.update(
             db,
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
-            session_entry_id=TextNativeColumn(context.session_entry_id),
-            session_entry_start=RecordedNativePosition(context.session_entry_start),
-            request_generation=NumberNativeColumn(context.request_generation),
-            llm_context_digest=TextNativeColumn(context.llm_context_digest),
-            committed_at_ms=NumberNativeColumn(context.committed_at_ms),
-            verdict=verdict,
+            **self.context_columns(context),
         )
         if updated.rowcount != 1:
             raise StaleFence("native proof was previously committed")
+
+    def settle_verdict(self, db: sqlite3.Connection, verdict: TriageDecisionRecord) -> None:
+        """The decision follows context entry; neither transition overwrites the other."""
+        current = type(self).require(db, input_id=self.input_id)
+        current.reference.require_recorded()
+        current.verdict.require_undecided()
+        updated = self.update(db, where="input_id=? AND verdict IS NULL",
+                              parameters=(self.input_id,), verdict=verdict)
+        if updated.rowcount != 1:
+            raise StaleFence("native triage verdict was previously settled")
 
 class SelectedSlotState(DeclaredFamily, affix="Slot"):
     """Consumption is irreversible; only a matching live terminal can acknowledge it."""

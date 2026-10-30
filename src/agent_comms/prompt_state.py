@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING, Never
 from . import turn_failure as failures
 from .agent_backend import TurnInboxItem
 from .native_pi import NativePiInputNotSent
+from .native_input_proof import NativeInputCommit
 
 if TYPE_CHECKING:
     from .backend import NativeSession
-    from .pi_events import AgentSettled, InputCommitted, MessageStart, Response
+    from .pi_events import AgentSettled, MessageStart, Response
 
 
 class PromptState:
@@ -28,7 +29,7 @@ class PromptState:
     def acknowledge(self, response: Response) -> PromptState:
         return self
 
-    def start(self, event: MessageStart | InputCommitted) -> PromptState:
+    def start(self, event: MessageStart | NativeInputCommit) -> PromptState:
         return self
 
     def settle(self, event: AgentSettled) -> PromptState:
@@ -93,7 +94,7 @@ class AcknowledgedPrompt(PromptState):
 
 @dataclass(frozen=True)
 class StartedPrompt(AcknowledgedPrompt):
-    input_start: MessageStart | InputCommitted
+    input_start: MessageStart | NativeInputCommit
     started = True
     awaiting_start = False
 

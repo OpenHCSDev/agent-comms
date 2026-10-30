@@ -15,8 +15,8 @@ from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClai
 from agent_comms.field_codec import ClaimId, GoalId, InputId, TurnId
 from agent_comms.installer.backup import bus_files
 from agent_comms.locked_store import DeclaredFile, DurableFile, LiveFilesRequest, RootFile, RuntimeFile, SQLiteFile
-from agent_comms.native_pi import NativeContextJournal
-from agent_comms.native_session_files import NativeInputProof
+from agent_comms.native_input_proof import NativeContextJournal
+from agent_comms.native_input_proof import NativeInputProof
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.threads import Thread

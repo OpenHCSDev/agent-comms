@@ -16,21 +16,23 @@ import asyncio
 import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Collection, Iterable, Iterator, Mapping
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from itertools import product
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
+from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
 from .activity_clocks import ActivityClocks, ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember, PathText, SingleFieldValue, SubclassUnion
+from .field_codec import FieldCodec, NullMember, RecordMember, PathText, SingleFieldValue, SubclassUnion, ThreadLookup
 from .mentions import ThreadMention
+from .launch_runtime import CallingThreadUnavailable
 from .message_reference import MessageReference
+from .notification_evidence import AllOutcomes, DisplayOutcomes, OutcomeViewer
 from .private_path import FileObservation, MissingFile
 from .projection_source import ProducedRow, ProjectionSource
 from .recorded_bus import RecordedBus, RecordedBusIdentity
@@ -137,24 +139,67 @@ class NamedViewer(SingleFieldValue, DisplayViewer):
             replace(scope, displayed=result.displayed)))
 
 
+class ReadAuthority(ABC):
+    """Whose read this is; distinct from the SQL reader that acquires its rows."""
+
+    @abstractmethod
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer: ...
+
+    def subject(self, named: str) -> str:
+        return named or self.own_thread()
+
+    def own_thread(self) -> str:
+        return self.refuse_thread()
+
+    def refuse_thread(self) -> NoReturn:
+        raise CallingThreadUnavailable("This tool requires a thread caller.")
+
+
+class OperatorOutcomes:
+    """An unscoped operator reader sees every recipient outcome."""
+
+    __slots__ = ()
+
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
+        return AllOutcomes()
+
+
+class DisplayCut(OperatorOutcomes, ABC):
+    """The selected display cut, including the absence of a painted display."""
+
+    __slots__ = ()
+
+    @property
+    @abstractmethod
+    def notification_identity(self) -> DisplayCut: ...
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
-class DisplayIdentity:
+class DisplayIdentity(DisplayCut):
     """The scope observation compared between pages, independent of paint evidence."""
 
     viewer: ThreadIncarnation
     history_revision: FileObservation
+    bus_identity: RecordedBusIdentity
+
+    @property
+    def notification_identity(self) -> DisplayIdentity:
+        """The captured viewer/source cut, without an unrelated channel/DM payload."""
+        return DisplayIdentity(viewer=self.viewer, history_revision=self.history_revision,
+                               bus_identity=self.bus_identity)
+
+    def outcome_viewer(self, registry: Registration) -> OutcomeViewer:
+        return DisplayOutcomes(self.viewer, self.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayIdentity(DisplayIdentity):
-    bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
 
 @dataclass(frozen=True, slots=True)
 class DMDisplayIdentity(DisplayIdentity):
     root_identity: tuple[int, int]
-    bus_identity: RecordedBusIdentity
     project_path: Annotated[Path, PathText]
     requested_peer: str
     peer: ThreadIncarnation
@@ -170,7 +215,11 @@ class SelectedDisplay(ABC):
 
     @property
     @abstractmethod
-    def identity(self) -> DisplayIdentity | NoDisplaySelection: ...
+    def identity(self) -> DisplayCut: ...
+
+    @property
+    def notification_identity(self) -> DisplayCut:
+        return self.identity.notification_identity
 
     @abstractmethod
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None: ...
@@ -187,11 +236,15 @@ class SelectedDisplay(ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class NoDisplaySelection(SelectedDisplay):
+class NoDisplaySelection(SelectedDisplay, DisplayCut):
     has_evidence: ClassVar[bool] = False
 
     @property
     def identity(self):
+        return self
+
+    @property
+    def notification_identity(self) -> NoDisplaySelection:
         return self
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
@@ -248,7 +301,8 @@ class HistoricalSelection(SelectedDisplay):
     @property
     def identity(self):
         return DisplayIdentity(viewer=self.displayed.displayed.viewer_identity,
-                               history_revision=self.history_revision)
+                               history_revision=self.history_revision,
+                               bus_identity=self.displayed.displayed.bus_identity)
 
     def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
         self.displayed.acknowledge(views.bus.history, views.registry)
@@ -1016,11 +1070,6 @@ class DMDisplayScope(MessageDisplayScope):
 class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
     """Peer requests, direct or channel-addressed, and every reply by the first participant."""
 
-    @ClassFact
-    def writes(cls) -> tuple[type[ProducedRow], ...]:
-        return (AwaitingAnswerSource,)
-
-
     @property
     def condition(self) -> tuple[str, tuple]:
         names = tuple(self.first_names | self.second_names)
@@ -1028,9 +1077,9 @@ class RepliesDisplayScope(AnyTargetDisplayScope, DMDisplayScope):
         return f"{{sender}} IN ({marks})", names
 
     def includes(self, message: Message) -> bool:
-        return (message.sender in self.first_names or super().includes(message)
-                or (message.sender in self.second_names
-                    and bool(message.response_eligibility(tuple(self.first_names)).required_responders)))
+        return (message.sender in self.first_names
+                or (message.sender in self.second_names and any(
+                    message.awaits_answer_from(ThreadTarget(name)) for name in self.first_names)))
 
 
 @dataclass(frozen=True, slots=True)

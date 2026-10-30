@@ -8,8 +8,8 @@ import os
 import socket
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, IO, cast
-from abc import abstractmethod
+from typing import TYPE_CHECKING, Annotated, ClassVar, IO, Self, cast
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -24,12 +24,12 @@ from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .jsonl_stream import JsonlStreamReader
 from .owner_protocol import OwnerLine, OwnerResult
 from .private_path import PrivateSocketRole
+from .thread_identity import OwnerIdentity, ThreadIncarnation
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .child_process import ProcessIdentity
     from .registry_document import RegistryEntry
-    from .thread_identity import OwnerIdentity
     from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
 
@@ -163,6 +163,11 @@ class OwnerConnection:
         self._identity = comms.registry.entry(session_id).entry.thread.incarnation
         self._root_identity = comms.root.stat()
 
+    def require_identity(self, owner: ThreadIncarnation) -> None:
+        """The incarnation this connection captured is the one the caller holds."""
+        if self._identity != owner:
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+
     def _owner_entry(self) -> RegistryEntry:
         if self._closed:
             raise ConnectionError("Owner attachment was closed before request dispatch")
@@ -264,3 +269,51 @@ class OwnerConnection:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
+
+class OwnerReading[Result](ABC):
+    """One exchange with exactly one live native owner incarnation over its socket."""
+
+    def require_native_owner(self, owner: Thread) -> None:
+        """Only a native owner serves a runtime socket; an external bridge with a live PID
+        has none, so it is refused here instead of waited on before dispatch."""
+        owner.execution.require_native()
+
+    @abstractmethod
+    async def read(self, owner: OwnerConnection) -> Result: ...
+
+
+class OwnerReplyConnection(OwnerConnection):
+    """Bound only the live owner's response after a request has been dispatched."""
+
+    REPLY_TIMEOUT: ClassVar[float] = 3
+
+    @classmethod
+    def held(cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading) -> Self:
+        """A connection to exactly this registered native owner incarnation.
+
+        The selected registration must be the held incarnation before its process is
+        asked for; the connection's own capture is then checked again, since the
+        registry may change between the two reads.
+        """
+        thread = comms.registry.require(owner.name)
+        if thread.incarnation != owner:
+            raise OwnerIdentityChangedError("The owner incarnation changed while preparing the request.")
+        reading.require_native_owner(thread)
+        connection = cls(comms, thread.name, socket_path(comms.root, thread.require_process().pid))
+        connection.require_identity(owner)
+        return connection
+
+    @classmethod
+    async def answer[Result](
+        cls, comms: Comms, owner: ThreadIncarnation, reading: OwnerReading[Result],
+    ) -> Result:
+        """One reading from the held owner; the connection closes whatever the outcome."""
+        connection = await asyncio.to_thread(cls.held, comms, owner, reading)
+        try:
+            return await reading.read(connection)
+        finally:
+            await connection.close()
+
+    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
+        async with asyncio.timeout(self.REPLY_TIMEOUT):
+            return await super()._read_response(reader)

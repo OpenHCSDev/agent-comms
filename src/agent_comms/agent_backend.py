@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from .declared_family import DeclaredFamily
 from .field_codec import InputId
 from .image_input import ImageInput
+from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
 from .session_revision import NoSessionObservation, SessionObservation
@@ -314,6 +315,15 @@ class InputStartListener(ABC):
 
     @abstractmethod
     def following(self, public_id: InputId, native_id: InputId, text: str) -> bool: ...
+
+
+    async def original_context_committed(self, sent_text: str, context: NativeContextProof) -> None:
+        """An unowned input has no durable ordinary disposition to acknowledge."""
+
+    async def following_context_committed(
+        self, public_id: InputId, sent_text: str, context: NativeContextProof,
+    ) -> None:
+        """An unowned following input has no durable ordinary disposition."""
 
 
 class NoInputStartListener(InputStartListener):

@@ -2309,6 +2309,7 @@ class SpawnedProcess(SynchronousProcess):
     def run(
         cls, command: tuple[str, ...], *, timeout: float,
         cwd: str | Path, env: dict[str, str],
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> subprocess.CompletedProcess[bytes]:
         """A one-shot interpreter exchange, including forced descendant retirement.
 
@@ -2318,7 +2319,7 @@ class SpawnedProcess(SynchronousProcess):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         deadline = time.monotonic() + timeout
-        with cls.launch(command, cwd=cwd, env=env, stdio=DetachedChildStdio(
+        with cls.launch(command, cwd=cwd, env=env, runtime=runtime, stdio=DetachedChildStdio(
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))

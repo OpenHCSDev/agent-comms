@@ -36,6 +36,7 @@ from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOr
 from .lifecycle_capability import Unresolved
 from .locked_store import DocumentChange
 from .message_reference import MessageReference
+from .native_input_proof import NativeContextProof
 from .messages import MessageInput
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
@@ -451,6 +452,30 @@ class InputDispositions(DurableStore):
         return self._transition(
             key, lambda row: row.started(turn_id=turn_id, native_id=native_id, text=text)
         )
+
+    def context_committed(
+        self, keys: tuple[InputKey, ...], *, lease: TurnLeaseFence,
+        sent_text: str, context: NativeContextProof, snapshot: RegistrySnapshot,
+    ) -> InputDocument:
+        """A corroborated input proves only its exact original key batch, atomically.
+
+        The live caller holds its registry lease and native evidence scope. Missing,
+        unstarted or differently bound members refuse the complete batch before writes.
+        """
+        if not keys:
+            raise RelationViolationError("Context acknowledgement has no original input keys")
+        def acknowledge(document: InputDocument) -> DocumentChange[InputDocument, InputDocument]:
+            owner = snapshot.require(lease.identity.incarnation.name)
+            if (owner.require_turn_lease() != lease
+                    or snapshot.claim_generation(owner.name) != lease.claimed_generation):
+                raise RelationViolationError("Context acknowledgement lost its original live turn lease")
+            document.originals(keys)
+            return DocumentChange.to(document.transition(
+                keys, lambda row: row.context_committed(
+                    lease, sent_text, context, snapshot=snapshot,
+                ),
+            ))
+        return self._update(*_members("key", keys), acknowledge)
 
     def settle_unbound(self, keys: tuple[InputKey, ...]) -> InputDocument:
         """Publish one complete retirement and return that exact document cut."""

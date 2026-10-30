@@ -30,6 +30,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.locked_store import DurableFile, SQLiteFile
 
 from .field_codec import FieldCodec
+from .image_input import ImageInput
 
 if TYPE_CHECKING:
     from .agent_backend import StreamingInputPolicy
@@ -505,13 +506,16 @@ class PrivateSnapshotFile(DurableFile, ReconciledFile, DurableTables):
                 connection.close()
 
 
-def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
+def encode_request(
+    text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None,
+    images: tuple[ImageInput, ...] = (),
+) -> str:
     """JSON-encode like the pinned native ``_claimNativeInput`` request."""
     return FieldCodec.compact(
         {
             "kind": "prompt",
             "text": text,
-            "images": None,
+            "images": FieldCodec.encode(images) if images else None,
             "streamingBehavior": FieldCodec.encode(streaming_behavior),
             "expandPromptTemplates": True,
             "source": "rpc",
@@ -519,8 +523,13 @@ def encode_request(text: str, *, streaming_behavior: type[StreamingInputPolicy] 
     )
 
 
-def native_request_digest(text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None) -> str:
+def native_request_digest(
+    text: str, *, streaming_behavior: type[StreamingInputPolicy] | None = None,
+    images: tuple[ImageInput, ...] = (),
+) -> str:
     """sha256 over the pinned native request envelope, not the bare text."""
     return hashlib.sha256(
-        ("pi-input-request-v1\n" + encode_request(text, streaming_behavior=streaming_behavior)).encode("utf-8")
+        ("pi-input-request-v1\n" + encode_request(
+            text, streaming_behavior=streaming_behavior, images=images,
+        )).encode("utf-8")
     ).hexdigest()

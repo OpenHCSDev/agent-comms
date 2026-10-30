@@ -25,7 +25,7 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
@@ -421,16 +421,6 @@ class RuntimeConnection(OwnerConnection):
         return RuntimeRequest.member_named(action).proxy_payload(
             self.session_id, self.controller_token, parameters,
         )
-
-
-class OwnerReplyConnection(RuntimeConnection):
-    """Bound only the live owner's response after a request has been dispatched."""
-
-    REPLY_TIMEOUT: ClassVar[float] = 3
-
-    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
-        async with asyncio.timeout(self.REPLY_TIMEOUT):
-            return await super()._read_response(reader)
 
 
 @dataclass(frozen=True)

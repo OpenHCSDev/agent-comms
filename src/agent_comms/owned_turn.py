@@ -29,7 +29,7 @@ from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
-from .field_codec import GoalId, TurnId
+from .field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -62,6 +62,7 @@ from .turn_input_source import (
 )
 from .turn_phase import CancellingPhase, PromptAcceptancePhase
 from .turn_progress import TurnProgress
+from .cursor_publication import CursorDelivery
 from .turn_terminal import EndedWithoutResult, TurnTerminal
 
 if TYPE_CHECKING:
@@ -86,6 +87,7 @@ class TurnDelivery:
     finish_event: asyncio.Event
     send_boundary: SendBoundary
     input_start: InputStartListener
+    cursor_delivery: CursorDelivery
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode
@@ -135,7 +137,7 @@ class OwnedTurn:
         dependency: InputDependency = NoInputDependency(),
     ) -> None:
         self.runner = runner
-        self.session_id = session_id
+        self.session_id = FieldCodec.decode(AcpSessionId, session_id)
         self.thread_name = thread_name
         self.task = task
         self.origins = origins
@@ -384,6 +386,7 @@ class OwnedTurn:
             finish_event=self.finish_event,
             send_boundary=sender,
             input_start=sender,
+            cursor_delivery=self.runner.inputs.effects.cursors.delivery(self.session_id),
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request

@@ -20,7 +20,16 @@ from agent_comms.acp_extension import (
     decode_updates,
     encode_updates,
 )
-from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.errors import RelationViolationError
+from agent_comms.field_codec import FieldCodec
+from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.input_key import BusInputKey
+from agent_comms.bus_read import OwnerReadRuntimeRequest
+from agent_comms.order_tools import InputDeliveryRead
+from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection, RuntimeRequest
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.field_codec import RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
@@ -32,42 +41,16 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.native_arguments import GivenBinary
 from delivery_owner_fixture import canonical_agent
+from owner_socket_fixture import declare_owner, silent_socket
+from stored_inputs import stored_inputs
 from agent_comms.threads import Thread
-
-
-@pytest.fixture
-def runtime_processes():
-    import sys
-
-    children = []
-    try:
-        for _ in range(2):
-            children.append(
-                SpawnedProcess.launch((sys.executable, "-c", "import time; time.sleep(60)"))
-            )
-        yield tuple(child.identity for child in children)
-    finally:
-        for child in children:
-            child.stop_sync()
 
 
 async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_replayed(comms):
     process = ProcessIdentity.capture(os.getpid())
-    comms.registry.declare(Thread(
-        "reply-loss", frozenset(), Checkout(comms.root.parent), process_identity=process,
-    ))
-    path = socket_path(comms.root, process.pid)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    received = []
-
-    async def disconnect_after_request(reader, writer):
-        received.append(json.loads(await reader.readline()))
-        writer.close()
-        await writer.wait_closed()
-
-    with PrivateSocketRole.address(path) as address:
-        server = await asyncio.start_unix_server(disconnect_after_request, path=address)
-        connection = RuntimeConnection(comms, "reply-loss", path)
+    declare_owner(comms, "reply-loss", process)
+    async with silent_socket(comms, process) as received:
+        connection = RuntimeConnection(comms, "reply-loss", socket_path(comms.root, process.pid))
         try:
             with pytest.raises(OwnerReplyLostError) as lost:
                 await connection.request("cancel")
@@ -76,9 +59,113 @@ async def test_dispatched_request_without_a_reply_remains_unknown_and_is_not_rep
             assert [request["action"] for request in received] == ["cancel"]
         finally:
             await connection.close()
-            server.close()
-            await server.wait_closed()
-            path.unlink(missing_ok=True)
+
+
+def recorded_input(comms) -> InputDocument:
+    """One durable input of the read's subject; a refused or lost read leaves it unchanged."""
+    ledger = InputDispositions(comms.root)
+    ledger.record(BusInputKey(5), seq=5, owner="held", claim_scope=1, target="held", text="Kept")
+    return stored_inputs(ledger.root)
+
+
+async def mcp_input_delivery(comms, include_history: bool = True):
+    async with asyncio.timeout(30):
+        return await asyncio.to_thread(
+            InputDeliveryRead.invoke, comms, {"thread": "held", "include_history": include_history},
+            caller=ToolCaller.from_actor(None),
+        )
+
+
+@pytest.mark.parametrize("include_history", [False, True])
+async def test_an_input_delivery_read_without_a_reply_is_lost_after_one_dispatch(comms, include_history):
+    """The owner received exactly the declared operation once, then hung up: the caller
+    gets the original reply loss, and no durable input moved. The peer runs no domain body."""
+    process = ProcessIdentity.capture(os.getpid())
+    declare_owner(comms, "held", process)
+    before = recorded_input(comms)
+    async with silent_socket(comms, process) as received:
+        with pytest.raises(OwnerReplyLostError):
+            await mcp_input_delivery(comms, include_history)
+    assert [FieldCodec.decode(RuntimeRequest, request) for request in received] == [
+        OwnerReadRuntimeRequest(
+            thread="held", operation=InputDeliveryRead(thread="held", include_history=include_history),
+        ),
+    ]
+    assert stored_inputs(comms.root) == before
+
+
+async def test_a_held_owner_read_refuses_a_replaced_root_before_dispatch(comms):
+    process = ProcessIdentity.capture(os.getpid())
+    owner = declare_owner(comms, "held", process)
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
+    async with silent_socket(comms, process) as received:
+        connection = OwnerReplyConnection.held(comms, owner.incarnation, reading)
+        moved = comms.root.with_name(comms.root.name + "-replaced")
+        comms.root.rename(moved)
+        comms.root.mkdir()
+        try:
+            with pytest.raises(OwnerIdentityChangedError):
+                async with asyncio.timeout(30):
+                    await reading.read(connection)
+        finally:
+            comms.root.rmdir()
+            moved.rename(comms.root)
+            await connection.close()
+    assert received == []
+
+
+async def test_a_same_name_recreation_refuses_the_held_read_and_the_old_witness(comms):
+    process = ProcessIdentity.capture(os.getpid())
+    old = declare_owner(comms, "held", process)
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
+    async with silent_socket(comms, process) as received:
+        connection = OwnerReplyConnection.held(comms, old.incarnation, reading)
+        try:
+            comms.registry.unregister("held")
+            comms.registry.begin_delete("held")
+            with comms.registry.store.editing() as edit:
+                edit.document.remove_originals((old,))
+                edit.commit()
+            new = declare_owner(comms, "held", process)
+            assert new.name == old.name and new.incarnation != old.incarnation
+            assert comms.registry.require("held").incarnation == new.incarnation
+            with pytest.raises(OwnerIdentityChangedError):
+                async with asyncio.timeout(30):
+                    await reading.read(connection)
+            with pytest.raises(OwnerIdentityChangedError):
+                OwnerReplyConnection.held(comms, old.incarnation, reading)
+        finally:
+            await connection.close()
+    assert received == []
+
+
+async def test_a_held_owner_read_refuses_after_its_process_dies(comms, runtime_processes):
+    child = runtime_processes[0]
+    owner = declare_owner(comms, "held", child.identity)
+    reading = OwnerReadRuntimeRequest(thread="held", operation=InputDeliveryRead(thread="held"))
+    before = recorded_input(comms)
+    async with silent_socket(comms, child.identity) as received:
+        connection = OwnerReplyConnection.held(comms, owner.incarnation, reading)
+        try:
+            child.stop_sync()
+            assert not child.identity.alive()
+            with pytest.raises(ConnectionError):
+                async with asyncio.timeout(30):
+                    await reading.read(connection)
+        finally:
+            await connection.close()
+    assert received == []
+    assert stored_inputs(comms.root) == before
+
+
+async def test_an_external_owner_refuses_the_input_delivery_read_before_any_socket_wait(
+    comms, runtime_processes,
+):
+    declare_owner(comms, "held", runtime_processes[0].identity, ExternalThreadExecution)
+    before = recorded_input(comms)
+    with pytest.raises(RelationViolationError):
+        await mcp_input_delivery(comms)
+    assert stored_inputs(comms.root) == before
 
 
 def test_owner_cursor_scope_rebases_only_attachment_session_alias():
@@ -185,7 +272,7 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
     tmp_path, runtime_processes
 ):
     comms = wire(tmp_path / "wire")
-    old, new = runtime_processes
+    old, new = (child.identity for child in runtime_processes)
     old_pid, new_pid = old.pid, new.pid
     comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), process_identity=old))
     client = canonical_agent(comms)

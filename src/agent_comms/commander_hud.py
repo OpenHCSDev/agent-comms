@@ -182,7 +182,7 @@ class CommanderOrderDetail(DisclosedRecord):
 
 
 @dataclass(frozen=True)
-class CommanderUnitDetail(DisclosedRecord):
+class CommanderUnitDetail(ToolResult, DisclosedRecord):
     """A lazy disclosure; activity uses the existing bounded turn wire projection."""
 
     unit: Annotated[CommanderUnit, DisclosureIdentity()]

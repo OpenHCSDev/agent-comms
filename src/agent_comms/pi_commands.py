@@ -29,6 +29,8 @@ from .field_codec import (
 )
 from .image_input import ImageInput
 from .native_failures import NativePiUnavailable
+from .native_input_proof import NativeContextProof, NativeInputCommit
+from .native_entries import NativeEvidenceScope
 from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
@@ -210,6 +212,15 @@ class Prompt(PiCommand):
         WireName("streamingBehavior"),
     ] = None
 
+    async def input_committed(self, session: TurnSession, event: NativeInputCommit) -> None:
+        await session.original_committed(event)
+
+    async def context_committed(
+        self, session: TurnSession, context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
+        await session.original_context_committed(context, source_reads)
+
     @classmethod
     def response_type(cls) -> type[PiCommand]:
         return Prompt
@@ -238,6 +249,15 @@ class FollowingPrompt(Prompt, declared_name=None):
     """A following input shares Pi's prompt wire shape, not the original input's effects."""
 
     input: Annotated[InputRequest, WireTransient()]
+
+    async def input_committed(self, session: TurnSession, event: NativeInputCommit) -> None:
+        """This accepted following input cannot restart the original prompt or inbox."""
+
+    async def context_committed(
+        self, session: TurnSession, context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
+        await session.input_start.following_context_committed(self.input.input_id, self.message, context)
 
     def accepted(self, response: Response, session: TurnSession) -> Iterable[events.AgentEvent]:
         # PendingRequest already records this acknowledgement.
