@@ -13,7 +13,7 @@ from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.standing_rules import OwedAnswer, StandingRule
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.turn_digests import EditWorkplaces
+from agent_comms.storage_rules import EditWorkplaces
 from agent_comms.todos import (
     ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
 )
@@ -76,5 +76,5 @@ class HeartbeatFrame(CommanderInputs):
             OwedAnswer.read_scan(comms, commander, inputs),
             closed,
             reviews,
-            EditWorkplaces.capture(comms, snapshot, inputs.live, plan.todos, inputs.pulls),
+            EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),
         )

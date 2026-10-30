@@ -26,12 +26,13 @@ def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, en
 
 
 @pytest.mark.parametrize("request_first", [False, True])
-async def test_refused_arguments_complete_without_an_owner_callback(tmp_path, request_first, tool_listener):
+async def test_refused_arguments_complete_without_an_owner_callback(
+        tmp_path, request_first, tool_listener, undealt_gate):
     class Owner:
         async def allow(self, round_number, call):
             raise AssertionError("invalid arguments must never acquire authority")
 
-    socket = CodingToolSocket(tool_listener(tmp_path, "a" * 64), Owner(), pid=os.getpid())
+    socket = CodingToolSocket(tool_listener(tmp_path, "a" * 64), Owner(), undealt_gate, pid=os.getpid())
     socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
     args = {"command": False}
     raw = (json.dumps({"token": socket.listener.token, "call_id": "bad", "name": "bash",
