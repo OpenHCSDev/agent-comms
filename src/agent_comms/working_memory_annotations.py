@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from pathlib import Path
-
-from .coordination_database import CoordinationStore
+from .coordination_database import CoordinationStore, ReadableStore
 from .errors import RelationViolationError
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from .working_memory_labels import CalibrationReport, ClassifierVersion, HumanLabel, ModelLabel, QuestionVersion
@@ -27,23 +25,23 @@ class WorkingMemoryAnnotations:
 
     @staticmethod
     @contextmanager
-    def reading(path):
-        """Borrow one original committed snapshot; readers never install a store."""
-        schema = CoordinationStore.schema_at(Path(path))
-        with CoordinationStore.opened_reader(Path(path)) as db:
+    def reading(source: ReadableStore):
+        """Borrow the caller's retained coordinator reader; never install a store."""
+        schema = CoordinationStore.schema_at(source.path)
+        with source.reader_snapshot() as db:
             schema.require_schema(db)
             yield db
 
     @classmethod
-    def labels(cls, path, span, question, classifier):
+    def labels(cls, source: ReadableStore, span, question, classifier):
         key = cls.address(span, question, classifier)
-        with cls.reading(path) as db:
+        with cls.reading(source) as db:
             return tuple(SpanAnnotationsRow.select(db,
                 order_by=("id",), **key))
 
     @classmethod
-    def calibration(cls, path, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
-        with cls.reading(path) as db:
+    def calibration(cls, source: ReadableStore, question: QuestionVersion, classifier: ClassifierVersion) -> CalibrationReport:
+        with cls.reading(source) as db:
             originals = SpanAnnotationsRow.select(db, order_by=("id",),
                 question=question.question, question_version=question.sha256,
                 classifier=classifier.classifier, classifier_pin=classifier.pin, label_kind=ModelLabel)
@@ -60,32 +58,32 @@ class WorkingMemoryAnnotations:
         return CalibrationReport(question, classifier, tuple(cases))
 
     @classmethod
-    def for_segment(cls, path, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    def for_segment(cls, source: ReadableStore, segment, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
         """Read the complete effective answer family at its original addresses.
 
         A kind answer does not replace its obligation, scope or fulfillment
         evidence. Different question versions remain different recorded facts;
         reading a segment never substitutes today's question definition.
         """
-        return cls.for_segments(path, (segment,), classifier)
+        return cls.for_segments(source, (segment,), classifier)
 
     @classmethod
-    def for_context(cls, path, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
+    def for_context(cls, source: ReadableStore, manifests, classifier: ClassifierVersion) -> tuple[ModelLabel, ...]:
         """Acquire one context's original answers through the segment reader.
 
         Repeated observations can name the same stored answer. Keep that answer
         once; matching text in another source does not supply its provenance.
         """
-        return cls.for_segments(path, tuple(segment for manifest in manifests
+        return cls.for_segments(source, tuple(segment for manifest in manifests
             for root in manifest.segments for segment in root.original_values()), classifier)
 
     @classmethod
-    def for_segments(cls, path, segments, classifier) -> tuple[ModelLabel, ...]:
+    def for_segments(cls, source: ReadableStore, segments, classifier) -> tuple[ModelLabel, ...]:
         """One acquisition serves context and selected-segment readers alike."""
         originals = {}
         for segment in segments:
             originals.setdefault(segment.sha256, []).append(segment)
-        with cls.reading(path) as db:
+        with cls.reading(source) as db:
             rows = SpanAnnotationsRow.for_digests(db, tuple(originals), classifier)
         grouped = {}
         for row in rows:

@@ -763,18 +763,21 @@ class SQLiteReadConnection:
     def borrowed(self) -> tuple[sqlite3.Connection, ...]:
         return ()
 
-    def acquire(self, source: SQLiteReader, revision: FileObservation) -> OpenSQLiteReadConnection:
-        return OpenSQLiteReadConnection(source, revision)
+    def acquire(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> OpenSQLiteReadConnection:
+        return OpenSQLiteReadConnection(source, revision, contention)
 
 
 class OpenSQLiteReadConnection(SQLiteReadConnection):
-    def __init__(self, source: SQLiteReader, revision: FileObservation) -> None:
+    def __init__(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> None:
         self.pid = os.getpid()
         self.identity = revision.file_identity()
         # Queries remain thread-local. Finalization may run in the store owner's
         # retirement thread, so closing the handle is not thread-affine.
-        self.db = source._open_reader(source.path, DEFAULT_STORE_CONTENTION,
-                                      check_same_thread=False)
+        self.db = source._open_reader(source.path, contention, check_same_thread=False)
         self.retire = finalize(self, self.db.close)
         if FileRevision.capture(source.path).file_identity() != self.identity:
             self.retire()
@@ -783,11 +786,13 @@ class OpenSQLiteReadConnection(SQLiteReadConnection):
     def borrowed(self) -> tuple[sqlite3.Connection, ...]:
         return (self.db,) if self.pid == os.getpid() and self.db.in_transaction else ()
 
-    def acquire(self, source: SQLiteReader, revision: FileObservation) -> OpenSQLiteReadConnection:
+    def acquire(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> OpenSQLiteReadConnection:
         if self.pid == os.getpid() and self.identity == revision.file_identity():
             return self
         self.retire()
-        return super().acquire(source, revision)
+        return super().acquire(source, revision, contention)
 
 
 class SQLiteReaders(local):
@@ -877,28 +882,6 @@ class SQLiteStorage(RootFile, SqliteStore):
         return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
 
     @classmethod
-    @contextmanager
-    def opened_reader(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION
-    ) -> Iterator[sqlite3.Connection]:
-        """Read existing committed data without initializing storage or permitting writes."""
-        with CoordinationReadUnavailable.checking():
-            try:
-                with closing(cls.read_snapshot(path, contention)) as db:
-                    try:
-                        yield db
-                    finally:
-                        if db.in_transaction:
-                            db.execute("ROLLBACK")
-            except sqlite3.OperationalError as error:
-                error.add_note(
-                    f"SQLite observation store: {path}; "
-                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
-                )
-                raise
-
-
-    @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:
         return (path, cls.wal_path(path),
                 *(path.with_name(path.name + suffix) for suffix in cls.transient_suffixes))
@@ -978,18 +961,21 @@ class SQLiteReader(SQLiteStorage):
         return SQLiteReaders()
 
     @contextmanager
-    def reader_snapshot(self) -> Iterator[sqlite3.Connection]:
+    def reader_snapshot(
+        self, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
         for borrowed in self.readers.connection.borrowed():
             yield borrowed
             return
         self.require_path()
         revision = FileRevision.capture(self.path)
         revision.require(FileNotFoundError(self.path))
-        held = self.readers.connection.acquire(self, revision)
+        held = self.readers.connection.acquire(self, revision, contention)
         self.readers.connection = held
         db = held.db
         with CoordinationReadUnavailable.checking():
             try:
+                contention.configure(db)
                 self.begin_snapshot(db)
                 yield db
             except sqlite3.OperationalError as error:

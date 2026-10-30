@@ -1265,25 +1265,30 @@ def test_public_read_exception_releases_transaction_and_mutators_reuse_it(db_pat
         assert db.participants.get(RECIPIENT_LOOKUP).lookup == RECIPIENT_LOOKUP
 
 
-def test_observation_closes_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
-    from agent_comms.coordination_database import CoordinationStore
+def test_observation_rolls_back_failed_reads_and_preserves_schema_disposition(db_path: Path) -> None:
+    from agent_comms.coordination_database import ReadableStore
 
     with store(db_path) as writer:
         writer.participants.register(SENDER_LOOKUP, committed=True)
+    source = ReadableStore(db_path)
     for statement in (
         "UPDATE participants SET committed=0",
         "SELECT * FROM nonexistent_original_table",
     ):
         with pytest.raises(sqlite3.OperationalError):
-            with CoordinationStore.opened_reader(db_path) as reader:
+            with source.reader_snapshot() as reader:
                 reader.execute(statement)
-        with pytest.raises(sqlite3.ProgrammingError):
-            reader.execute("SELECT 1")
+        assert not reader.in_transaction
+        with source.reader_snapshot() as following:
+            assert following is reader
+            assert following.execute("SELECT 1").fetchone()[0] == 1
     with pytest.raises(RuntimeError):
-        with CoordinationStore.opened_reader(db_path) as reader:
+        with source.reader_snapshot() as reader:
             raise RuntimeError("consumer failed")
-    with pytest.raises(sqlite3.ProgrammingError):
-        reader.execute("SELECT 1")
+    assert not reader.in_transaction
+    with source.reader_snapshot() as following:
+        assert following is reader
+        assert following.execute("SELECT 1").fetchone()[0] == 1
     with store(db_path) as writer:
         assert writer.participants.get(SENDER_LOOKUP).committed
 

@@ -489,7 +489,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
     async def result(self, ctx):
         segment = await self.selected_segment(ctx)
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
-            CoordinationStore.path_in(ctx.server.agent._comms.root),
+            ctx.server.agent._comms.registry.store.coordinator_reader,
             segment, self.classifier))
         return AnnotationsReply(labels)
 

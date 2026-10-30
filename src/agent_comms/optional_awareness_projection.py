@@ -17,10 +17,8 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.executions import ExecutionRecord
@@ -198,8 +196,8 @@ class OptionalAwarenessProjection:
         if page.has_more:
             raise ProjectionUnavailableError("binding candidate decisions exceed the row budget")
 
-        path = CoordinationStore.path_in(self.index.root)
-        with CoordinationStore.opened_reader(path) as db:
+        path = self.registry.store.coordinator_reader.path
+        with self.registry.store.coordinator_reader.reader_snapshot() as db:
             self._verify_schema_and_owner(db, initial, assignment, owner, privacy)
             decisions = self._selected_decisions(db, root_id, lookup, page.through_seq)
             candidates = tuple(
@@ -227,7 +225,7 @@ class OptionalAwarenessProjection:
         # Do not hold the SQL read lock while consulting the registry. A newer
         # SQL generation or owner turn omits awareness rather than borrowing
         # a stale result; the native sender checks permission again before writing.
-        self._verify_live_inclusion(path, lookup, owner)
+        self._verify_live_inclusion(lookup, owner)
         instruction = InstructionFile.read("selected-awareness.md")
         content_instruction = InstructionFile.read("selected-awareness-content.md")
         # This digest names the captured typed SQL projection, not the whole file
@@ -260,9 +258,7 @@ class OptionalAwarenessProjection:
         result.require_resource_budget(self.max_text_bytes)
         return result
 
-    def _verify_live_inclusion(
-        self, path: os.PathLike[str], lookup: ThreadLookup, owner: Thread
-    ) -> None:
+    def _verify_live_inclusion(self, lookup: ThreadLookup, owner: Thread) -> None:
         registry = self.registry
         snapshot = registry.store.snapshot_now()
         RegistryOwner(
@@ -271,7 +267,7 @@ class OptionalAwarenessProjection:
         ).require_snapshot(snapshot, "current registry owner turn changed")
         # A new read transaction, not the earlier candidate/decision snapshot,
         # observes a supported SQL generation advance during the optional read.
-        with CoordinationStore.opened_reader(Path(path), StoreBusy()) as db:
+        with registry.store.coordinator_reader.reader_snapshot(StoreBusy()) as db:
             rows = _ParticipantOwner.read(
                 db.execute(
                     "SELECT g.generation,p.committed FROM owner_generations g "

@@ -8,7 +8,9 @@ from contextlib import closing
 
 import pytest
 
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.locked_store import FileStore, SQLiteReader, SQLiteStorage
+from agent_comms.store_files import StoreBusy, StoreWait
 
 
 class ReaderFile(FileStore, SQLiteReader):
@@ -62,6 +64,29 @@ def test_same_thread_reuses_handle_and_only_outer_scope_ends_the_cut(tmp_path):
             outer.execute("INSERT INTO value VALUES (2)")
     with store.reader_snapshot() as later:
         assert later is outer and value(later) == 1
+
+
+def test_retained_handle_uses_each_outer_reads_contention_and_fresh_cut(tmp_path):
+    store = database(tmp_path / "read.sqlite3", 1)
+    with store.reader_snapshot(StoreWait()) as first:
+        assert first.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
+        assert value(first) == 1
+    with closing(SQLiteStorage.writer(store.path)) as writer:
+        writer.execute("UPDATE value SET number=2")
+        writer.commit()
+    with store.reader_snapshot(StoreBusy()) as fresh:
+        assert fresh is first and value(fresh) == 2
+        assert fresh.execute("PRAGMA busy_timeout").fetchone()[0] == 0
+    with closing(SQLiteStorage.writer(store.path, isolation_level=None)) as writer:
+        writer.execute("BEGIN EXCLUSIVE")
+        with pytest.raises(CoordinationReadUnavailable):
+            with store.reader_snapshot(StoreBusy()):
+                pytest.fail("An optional read must refuse the held writer")
+        assert not first.in_transaction
+        writer.execute("ROLLBACK")
+    with store.reader_snapshot(StoreWait()) as restored:
+        assert restored is first and value(restored) == 2
+        assert restored.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
 
 
 def test_threads_and_store_instances_do_not_share_physical_handles(tmp_path):
