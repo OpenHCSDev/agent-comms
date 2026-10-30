@@ -4,7 +4,9 @@
 from agent_comms.repo import Checkout
 import json
 import os
+from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -17,9 +19,9 @@ from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
-from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource, HistoryView
+from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
-from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.message_page import MessagePage, MessagePageRequest, PageBounds
 from agent_comms.messages import Message
 from agent_comms.page_traversal import HistoryCursor
 from agent_comms.read_basis import (
@@ -105,13 +107,14 @@ def setup(root, count=5):
     return comms
 
 
-def collect(comms, view: HistoryView):
-    page = view.page(comms.views.presentation, PageBounds(limit=3))
+def collect(read: Callable[[PageBounds], MessagePage]):
+    """Every message one page reader yields, paging backward three at a time."""
+    page = read(PageBounds(limit=3))
     result = list(page.messages)
     for _ in range(40):
         if not page.has_older:
             return result
-        page = view.page(comms.views.presentation, PageBounds(page.oldest_cursor.older(), 3))
+        page = read(PageBounds(page.oldest_cursor.older(), 3))
         result[0:0] = page.messages
     raise AssertionError("paging did not terminate")
 
@@ -142,7 +145,7 @@ def migrated(tmp_path):
 def test_all_history_backward_and_forward(migrated, view_factory, expected):
     old, prior, live, source = migrated
     view = view_factory(live)
-    rows = collect(live, view)
+    rows = collect(partial(view.page, live.views.presentation))
     assert len(rows) == expected
     assert len({row.view_key for row in rows}) == expected
     assert len({row.seq for row in rows}) < expected
@@ -160,9 +163,9 @@ def test_all_history_backward_and_forward(migrated, view_factory, expected):
 
 def test_original_identity_and_no_delivery_authority(migrated):
     old, prior, live, source = migrated
-    rows = collect(live, live.views.channel_display_view(
+    rows = collect(partial(live.views.channel_display_view(
         "#team", viewer=live.views.display_viewer(Checkout(live.root)),
-    ))
+    ).page, live.views.presentation))
     historical = [m for m in rows if isinstance(m, HistoricalMessage) and m.source == source]
     original = list(old.views.history_page(CommandTarget.named("#team")).messages)
     assert [m.to_wire() for m in historical] == [Message.from_message(m).to_wire() for m in original]
@@ -355,10 +358,10 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
 def test_normal_comms_api_contains_history_and_execution_stays_live(migrated):
     _, _, live, _ = migrated
     viewer = NamedViewer(live.messaging.user_identity(Checkout(live.root)).name)
-    assert len(collect(live, "history_page", CommandTarget.named("#team"))) == 9
-    assert len(collect(live, "history_page", CommandTarget.named("alice"), viewer=viewer)) == 9
-    assert len(collect(live, "history_page", CommandTarget.named("#any"))) == 18
-    for message in collect(live, "history_page", CommandTarget.named("#any")):
+    assert len(collect(partial(live.views.history_page, CommandTarget.named("#team")))) == 9
+    assert len(collect(partial(live.views.history_page, CommandTarget.named("alice"), viewer=viewer))) == 9
+    assert len(collect(partial(live.views.history_page, CommandTarget.named("#any")))) == 18
+    for message in collect(partial(live.views.history_page, CommandTarget.named("#any"))):
         if isinstance(message, HistoricalMessage):
             assert not message.role.response_policy(message).starts_turn
             assert not message.role.response_policy(message).starts_turn_for(message, "bob")
