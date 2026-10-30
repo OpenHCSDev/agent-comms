@@ -373,6 +373,16 @@ class Thread(ThreadProvenance, CatalogSelection):
         selected = worktree.resolved()
         return selected == self.worktree.resolved() or selected in self.earlier_projects
 
+    def relocated_checkout(self, source: Checkout, destination: Checkout) -> Thread:
+        """Replace only references to a physically relocated checkout; keep turn/history facts."""
+        original = source.resolved()
+        return replace(
+            self,
+            worktree=destination if self.worktree.resolved() == original else self.worktree,
+            earlier_projects=tuple(destination if project.resolved() == original else project
+                                   for project in self.earlier_projects),
+        )
+
     def moved_to_project(self, project: Checkout) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
         earlier = self.worktree.resolved()

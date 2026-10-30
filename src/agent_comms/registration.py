@@ -29,7 +29,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, SubagentRole
-from .repo import Checkout
+from .repo import Checkout, CheckoutTransfer, Repo
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -97,6 +97,48 @@ class Registration:
                     changed, edit.document.status(current.name), new_owner=False,
                 )).thread
             return current
+
+    def transfer_checkout(
+        self, original: Thread, source: Checkout, destination: Path, repository: Repo,
+        require_target: Callable[[], None],
+    ) -> CheckoutTransfer:
+        """Move a stopped caller's tree and publish its changed paths in one owner boundary."""
+        with self.store.editing() as edit:
+            current = edit.document.require(original.name)
+            if current != original:
+                raise RelationViolationError('Caller changed before checkout transfer')
+            edit.document.status(current.name).require_stopped()
+            require_target()
+            if repository not in edit.document.commander_project.require().repos:
+                raise RelationViolationError('Registered repository changed before checkout transfer')
+            rule = self.storage_rule
+            if not rule.owns_checkout(current, destination, repository.github):
+                raise RelationViolationError('Target is not the caller\'s declared checkout')
+            if not source.path.exists() and destination.exists():
+                # No move to replay. Only recognize the caller's current physical allocation,
+                # never an occupied destination while the original tree still exists.
+                rule.require_completed_transfer(
+                    current, source.path, destination, edit.document.threads.values(), repository)
+                return CheckoutTransfer(source.path, destination,
+                    Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
+                    Repo.git(destination, 'rev-parse', 'HEAD').strip())
+            # A child working in its parent's tree is part of that allocation: it stops and
+            # moves with the parent instead of counting as a foreign owner.
+            sharing = tuple(child for child in edit.document.threads.children(current.name)
+                            if child.worktree.resolved() == source.resolved())
+            for child in sharing:
+                edit.document.status(child.name).require_stopped()
+            rule.require_transfer_source(
+                current, source.path,
+                (thread for thread in edit.document.threads.values() if thread not in sharing),
+                repository)
+            with source.relocating(destination) as transfer:
+                require_target()
+                for moved in (current, *sharing):
+                    self._commit_registration(edit, edit.document.prepare_registration(
+                        moved.relocated_checkout(source, Checkout(destination)),
+                        edit.document.status(moved.name), new_owner=False))
+                return transfer
 
     def replace_original(self, original: Thread, replacement: Thread) -> Thread:
         """Publish a prepared declaration only against its complete original value."""

@@ -583,6 +583,10 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     origin_label: ClassVar[str]
 
     @classmethod
+    def allows_automatic_reply(cls) -> bool:
+        return False
+
+    @classmethod
     def acp_thread[T](cls, thread: T) -> tuple[T, ...]:
         """Only the declared ACP role contributes to project session discovery."""
         return ()
@@ -709,6 +713,10 @@ class AcpThreadRole(AgentThreadRole):
 
 class UserThreadRole(ThreadRole):
     origin_label = "human"
+
+    @classmethod
+    def allows_automatic_reply(cls) -> bool:
+        return True
 
     @classmethod
     def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
