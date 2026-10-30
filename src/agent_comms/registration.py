@@ -122,12 +122,22 @@ class Registration:
                 return CheckoutTransfer(source.path, destination,
                     Repo.git(destination, 'rev-parse', '--abbrev-ref', 'HEAD').strip(),
                     Repo.git(destination, 'rev-parse', 'HEAD').strip())
-            rule.require_transfer_source(current, source.path, edit.document.threads.values(), repository)
+            # A child working in its parent's tree is part of that allocation: it stops and
+            # moves with the parent instead of counting as a foreign owner.
+            sharing = tuple(child for child in edit.document.threads.children(current.name)
+                            if child.worktree.resolved() == source.resolved())
+            for child in sharing:
+                edit.document.status(child.name).require_stopped()
+            rule.require_transfer_source(
+                current, source.path,
+                (thread for thread in edit.document.threads.values() if thread not in sharing),
+                repository)
             with source.relocating(destination) as transfer:
                 require_target()
-                changed = current.relocated_checkout(source, Checkout(destination))
-                self._commit_registration(edit, edit.document.prepare_registration(
-                    changed, edit.document.status(current.name), new_owner=False))
+                for moved in (current, *sharing):
+                    self._commit_registration(edit, edit.document.prepare_registration(
+                        moved.relocated_checkout(source, Checkout(destination)),
+                        edit.document.status(moved.name), new_owner=False))
                 return transfer
 
     def replace_original(self, original: Thread, replacement: Thread) -> Thread:

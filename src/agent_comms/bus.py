@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_publication import Delivered, KeyedPublication
+from agent_comms.channel_targets import NamedTarget
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     AnsweredSource,
@@ -53,7 +54,7 @@ from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
 from agent_comms.read_basis import (
-    DisplayUnreadSelection, MessageDisplayScope, ReadCursor, RepliesDisplayScope, UnreadQuery,
+    DisplayUnreadSelection, ReadCursor, RepliesDisplayScope, UnreadQuery,
 )
 from agent_comms.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
@@ -63,8 +64,6 @@ from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 class ClaimRecord(PublicRecord, ClaimMessage):
@@ -166,6 +165,12 @@ class BusReader(RouteCounts, ABC):
     @abstractmethod
     def observing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one read snapshot through the reader's declared lifetime."""
+
+    def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
+                  snapshot: RegistrySnapshot) -> tuple[MessageReference, ...]:
+        """Select answer links on this reader's own connection."""
+        with self.observing() as connection:
+            return MessageIdentitySource.answering(connection, references, route, snapshot)
 
     @contextmanager
     def reading(self) -> Iterator[BusSnapshot]:
@@ -479,27 +484,6 @@ class BusReader(RouteCounts, ABC):
                      *query.parameters, query.viewer_names),
                 ).fetchone()[0])
         return counts
-
-    def delivered_unanswered(
-        self, recipient: RecordedThreadIncarnation, scope: MessageDisplayScope,
-        seen: ReadCursor, snapshot: RegistryProvenance,
-    ) -> tuple[MessageReference, ...]:
-        """Unanswered originals in this recipient's recorded delivered cursor."""
-        bindings = ReadCursor.sql_bindings(snapshot, {"viewer": seen.counted(scope, snapshot)})
-        predicate, parameters = scope.index_predicate
-        received, recipients = ReceivedSource.query(recipient.lookup)
-        with self.observing() as db:
-            rows = db.execute(
-                f'WITH {ReadCursor.sql("?")}, requests AS ('
-                f'SELECT \'viewer\' AS actor,* FROM "{Addressed.table.declared_name}" '
-                f'JOIN "{MessageInput.table.declared_name}" USING(seq) '
-                f'WHERE seq > 0 AND ({predicate}) AND seq IN ({received})), '
-                f'{ReadCursor.joined_sql} '
-                f'SELECT DISTINCT seq FROM cursors WHERE {ReadCursor.read_sql}',
-                (*bindings.values(), *parameters, *recipients),
-            )
-            sequences = tuple(FieldCodec.decode(int, row[0]) for row in rows)
-            return self.unanswered_references(sequences, snapshot.names_for(recipient.name))
 
     def selected_sequences(
         self, predicate: str, parameters: tuple[object, ...], through: int,

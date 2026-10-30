@@ -58,7 +58,12 @@ class DeckReader(DealtSources):
 
     def __init_subclass__(cls, audience: type[RuleAudience], **options: object) -> None:
         super().__init_subclass__(**options)
-        cls.audiences = (*cls.audiences, audience)
+        cls.audiences = tuple(dict.fromkeys((*cls.audiences, audience)))
+
+    @classmethod
+    def proofs(cls) -> tuple[Path, ...]:
+        """The papers every rule is a consequence of, read before any rule."""
+        return CommanderPackage.paper()
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -142,7 +147,7 @@ class FleetReader(DeckReader, audience=FleetAudience):
     def sources(cls) -> tuple[Path, ...]:
         """Proof first, then the rules it makes binding, then how they are said and broken."""
         return (
-            *CommanderPackage.paper(),
+            *cls.proofs(),
             *(rule.path for rule in cls.rules()),
             CommanderPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
@@ -179,6 +184,23 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
     def board(self, session: str) -> tuple[str, ...]:
         return WatchClaim(session).state().board()
+
+
+class RulesOnly(DeckReader, audience=FleetAudience):
+    """A refresh dealt before any compaction: the papers are still in the context word for word,
+    so it deals the rules, the voice and the failures again, never the papers a second time."""
+
+    @classmethod
+    def proofs(cls) -> tuple[Path, ...]:
+        return ()
+
+
+class FleetRulesReader(RulesOnly, FleetReader, audience=FleetAudience):
+    """A fleet session's refresh."""
+
+
+class CommanderRulesReader(RulesOnly, CommanderReader, audience=CommanderAudience):
+    """The commander's refresh."""
 
 
 @dataclass(frozen=True)

@@ -398,7 +398,6 @@ class ReadCursor:
         FROM json_each({parameter}))"""
 
     unread_sql = "seq > high_water AND seq NOT IN (SELECT value FROM json_each(exceptions))"
-    read_sql = f"NOT ({unread_sql})"
 
     def unread_rule(self) -> str:
         """Which joined request rows this cursor still counts; a human read is the whole rule."""
