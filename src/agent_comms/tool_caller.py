@@ -149,7 +149,7 @@ class ThreadCaller(ToolCaller):
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).incarnation
+        return comms.registry.require(self.name).acting_identity
 
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
@@ -249,6 +249,10 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
     def commander(self, comms: Comms) -> Thread:
         return comms.registry.require(self.authority)
 
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return own.peer_for(self.commander(comms).incarnation)
+
 
 @dataclass(frozen=True)
 class CommanderForkCaller(ActsForCommander, SubagentCaller):
@@ -256,6 +260,12 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
 
     def commanding(self, comms: Comms, commander: str) -> None:
         comms.registry.register_child(self.name, commander, CommanderForkExecution, comms.goals)
+
+    def join(self, comms: Comms) -> None:
+        """The SubagentStart hook declares the fork under the registered lead, in its own
+        process, before the fork's first call."""
+        snapshot = comms.registry.snapshot()
+        self.commanding(comms, snapshot.commander_project.require().lead(snapshot).name)
 
     def commander(self, comms: Comms) -> Thread:
         fork = comms.registry.require(self.name)
