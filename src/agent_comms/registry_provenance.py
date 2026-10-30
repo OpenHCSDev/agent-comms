@@ -36,6 +36,10 @@ class DeletedThread:
 
     name: str
 
+    def answering_thread(self, reader: Thread) -> Thread:
+        """No transcript survives deletion, so what it owed falls to whoever reads the debt."""
+        return reader
+
     @property
     def incarnation(self) -> ThreadIncarnation:
         return ThreadIncarnation.deleted(self.name)

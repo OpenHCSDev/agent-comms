@@ -14,6 +14,8 @@ from agent_comms.commander.standing import RequestStalled
 from agent_comms.commander.request import main as request_main
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
+from agent_comms.standing_rules import DirectiveUnacted
+from agent_comms.connector_caller import DirectorCaller
 from agent_comms.connector_caller import CALLER
 from agent_comms.errors import RelationViolationError, ToolRefusedError
 from agent_comms.goals import OrderCheck
@@ -82,6 +84,27 @@ def test_retired_commander_requests_follow_peer_authority(
         rule.request.id for rule in RequestStalled.violations(comms, peer.name)
     }
     assert store.owner_request(first.id).commander == author.incarnation
+
+
+def test_a_directive_the_commander_answered_is_owed_by_no_peer(comms: Comms) -> None:
+    """The gate and --answers both read this debt, so it cannot depend on who reads it."""
+    checkout = Checkout(Path.cwd())
+    commanders = frozenset({CommandersTag.declared_name})
+    for name, tags in (("author", commanders), ("peer", commanders), ("claude-code", frozenset())):
+        comms.registry.declare(Thread(name, tags, checkout), StoppedThreadStatus())
+    author = comms.registry.require("author")
+    store = comms.goals.todos
+    request = store.add_request(author.acting_identity, "One request.")
+    ConnectorSendTool(target="author", request=request.id, body="Do the one request.").apply(
+        comms, DirectorCaller("claude-code"))
+    directive, = store.owner_request(request.id).directives
+    with comms.bus.bus.reading() as source:
+        original = directive.original(source)
+    owed = {rule.message.reference for rule in DirectiveUnacted.opened(comms, "peer")}
+    assert owed == {original.reference}
+    comms.messaging.send("author", "claude-code", "Done.", answers=(original.reference,))
+    assert DirectiveUnacted.opened(comms, "author") == ()
+    assert DirectiveUnacted.opened(comms, "peer") == ()
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:
