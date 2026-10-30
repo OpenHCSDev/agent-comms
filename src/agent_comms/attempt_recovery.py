@@ -98,7 +98,7 @@ class VerifiedOwnerLoss(ABC):
         releases: Callable[[str], OwnerRelease], boundary: NativeCapture, lookup: ThreadLookup,
     ) -> OwnerRelease:
         try:
-            return releases(boundary.registry.by_lookup[lookup].name)
+            return releases(boundary.registry.born(lookup).name)
         except (OSError, RelationViolationError, MalformedRecord) as error:
             raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
 

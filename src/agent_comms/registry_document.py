@@ -26,6 +26,7 @@ from .field_codec import (
     MalformedRecord,
     FieldPlan,
     SlicePolicy,
+    ThreadLookup,
     WireOmitDefault,
     WireRequired,
     WireValue,
@@ -57,6 +58,7 @@ from .thread_identity import (
     OwnerIdentity,
     RecordedThreadIncarnation,
     ThreadIncarnation,
+    ThreadIncarnationRecord,
     ThreadAuthority,
     TurnIdentity,
 )
@@ -397,6 +399,17 @@ class ThreadRows(ExternalJsonShape, WireValue, MutableMapping[str, Thread]):
             if not isinstance(name, str) or not isinstance(row, dict) or row.get("name") != name:
                 raise MalformedRecord("thread name differs from its declaration")
         return dict(raw)
+
+    def lookup_names(self) -> dict[ThreadLookup, str]:
+        """Each row's creation lookup, read from its birth alone like the distinctness check:
+        resolving one owner never decodes the other threads."""
+        return {
+            (self._decoded[name].incarnation if name in self._decoded
+             else ThreadIncarnationRecord(name, CreationTime.from_wire(
+                 self._raw[name].get("created_at")).to_wire()).incarnation()
+             ).require_recorded().lookup: name
+            for name in self
+        }
 
     def require_distinct_births(self) -> None:
         """Rows decode late, so a read of one thread never sees two sharing a creation lookup;
@@ -1103,9 +1116,16 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         self.threads.require_distinct_births()
 
     @cached_property
-    def by_lookup(self) -> Mapping[str, Thread]:
-        return MappingProxyType({thread.incarnation.require_recorded().lookup: thread
-                                 for thread in self.threads.values()})
+    def lookup_names(self) -> Mapping[ThreadLookup, str]:
+        return MappingProxyType(self.threads.lookup_names())
+
+    def born(self, lookup: ThreadLookup) -> Thread:
+        """The one thread a creation lookup names; only its row decodes."""
+        try:
+            name = self.lookup_names[lookup]
+        except KeyError as error:
+            raise UnregisteredThreadError(f"Thread lookup {lookup!r} is not registered.") from error
+        return self.threads[name]
 
     def owner_generation(self, name: str) -> int:
         return self.owner_generations[self.canonical_name(name)]
@@ -1190,8 +1210,8 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     ) -> RegisteredRecipient | RetiredRecipient:
         """A missing live thread was retired only if the original send names it."""
         lookup = recipient.recipient_lookup
-        if lookup in self.by_lookup:
-            thread = self.by_lookup[lookup]
+        if lookup in self.lookup_names:
+            thread = self.born(lookup)
             if thread.name != self.canonical_name(recipient.canonical_thread):
                 raise RelationViolationError("Frozen recipient name does not match its lookup.")
             return RegisteredRecipient(thread)

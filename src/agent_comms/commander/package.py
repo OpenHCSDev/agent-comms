@@ -20,6 +20,13 @@ class CommanderPackage:
         return rules
 
     @classmethod
+    def paper(cls) -> tuple[Path, ...]:
+        """Paper1 in reading order: the proof every rule is a consequence of, split into parts
+        that each fit one default read. Its figures sit in `paper/figures`; the supplement in
+        `paper/supplement` is optional and never dealt."""
+        return tuple(sorted(Path(str(files(__package__) / "paper")).glob("*.md")))
+
+    @classmethod
     def skill(cls) -> Path:
         return Path(str(files("agent_comms.skills") / "comms-commander/SKILL.md"))
 
