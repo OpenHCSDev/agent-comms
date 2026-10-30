@@ -10,6 +10,7 @@ import json
 import math
 import os
 import re
+import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
@@ -33,6 +34,7 @@ from typing import (
     cast,
     get_args,
     get_origin,
+    get_type_hints,
     overload,
 )
 from uuid import uuid4
@@ -2448,16 +2450,21 @@ class FieldCodec(MroDispatch, Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
-    @cache
-    def _types(declaration: type) -> dict[str, object]:
-        """Every field annotation a declaration has, each evaluated in the module that wrote it:
-        get_type_hints swaps a class's dict in as the eval globals, so a lambda in an annotation
-        could not see its own module (WireRevision.goal_execution, 2026-10-30)."""
-        return {
-            name: type(None) if hint is None else hint
-            for base in reversed(declaration.__mro__)
-            for name, hint in inspect.get_annotations(base, eval_str=True).items()
-        }
+    def _types(declaration: type) -> dict[str, type[object]]:
+        """Every field annotation a declaration has, each evaluated in the module that wrote it.
+        get_type_hints on a class swaps the class dict in as the eval globals, so a lambda in an
+        annotation could not see its own module (WireRevision.goal_execution, 2026-10-30); each
+        base's own annotations are evaluated here with its module as globals and its type
+        parameters and dict as locals, keeping typing's None-to-NoneType and extras."""
+        hints: dict[str, type[object]] = {}
+        for base in reversed(declaration.__mro__):
+            own = types.ModuleType(base.__qualname__)
+            own.__annotations__ = annotationlib.get_annotations(
+                base, format=annotationlib.Format.FORWARDREF)
+            hints |= get_type_hints(own, globalns=vars(sys.modules[base.__module__]),
+                                    localns={param.__name__: param for param in base.__type_params__}
+                                    | dict(vars(base)), include_extras=True)
+        return hints
 
     @overload
     @classmethod
