@@ -45,14 +45,14 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.todos import ProgressRead, ReviewedHeadVerdict
-from agent_comms_hooks.board import SessionBoard, UnexpectedBoardReply
+from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard, UnexpectedBoardReply
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
-from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -212,9 +212,19 @@ def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
 
 
 def test_board_read_failure_is_a_typed_hook_failure(tmp_path):
-    with pytest.raises(UnexpectedBoardReply) as caught:
+    with pytest.raises(AbsentSessionSocket) as caught:
         SessionBoard.asked(tmp_path / "missing.socket")
     assert caught.value.__cause__ is not None
+
+
+def test_a_held_claims_absent_socket_is_one_board_line_not_a_traceback(tmp_path, monkeypatch):
+    """2026-10-30: during an install every Read hook printed a traceback to the owner and
+    dropped its deck slice, while LiveWatch already declared that gap an install's swap."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    (line,) = LiveWatch(WatchClaim("swapping"), record).board()
+    assert line.startswith("BOARD:") and "swapping the session bridge" in line
 
 
 def test_board_start_line_disappears_when_its_phase_order_is_sent(notification_bus, tmp_path, monkeypatch):
