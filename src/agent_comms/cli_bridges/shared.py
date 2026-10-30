@@ -44,7 +44,7 @@ from agent_comms.cli_arguments import CliArguments
 from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
 from agent_comms.harness_delivery_states import (
     DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
-    Outcome, PendingMonitor, ReceivingMonitor, UnconfirmedOutcome,
+    Outcome, ReceivingMonitor, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
@@ -1134,7 +1134,11 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         """A transport may prepare its harness after the operation bound its reader."""
 
     async def deliver_board(self, update: CommanderUpdate, message: messages.Message) -> type[Outcome]:
-        """A harness with no tool-call route takes a heartbeat packet like any message."""
+        """Every transport honors the packet's wake decision; passive display is not input."""
+        return await update.wake(self, message)
+
+    async def wake(self, message: messages.Message) -> type[Outcome]:
+        """The packet already owns its HUD text; every harness receives that original message."""
         return await self.deliver(message)
 
     async def accept(self, message: messages.Message) -> None:
@@ -1548,14 +1552,7 @@ class TranscriptConfirmsDelivery:
     """Delivery is confirmed only by observing it in the bridge's own transcript subscription."""
 
 
-@dataclass(frozen=True)
 class MonitorIncomingFrame(IncomingFrame):
-    reception: type[PendingMonitor] = ReceivingMonitor
-
-    @property
-    def body(self) -> str:
-        return self.reception.displayed_body(self.message.body)
-
     @property
     @abstractmethod
     def parts(self) -> tuple[str, ...]: ...
@@ -1677,17 +1674,12 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:
         return MonitorAttachment(peer, MonitorProbe(session=self.binding.thread, token=token))
 
-    async def deliver(
-        self, message: messages.Message, *, reception: type[PendingMonitor] = ReceivingMonitor,
-    ) -> type[Outcome]:
-        return await self.reader.deliver(self, message, reception)
+    async def deliver(self, message: messages.Message) -> type[Outcome]:
+        return await self.reader.deliver(self, message)
 
-    async def deliver_to(
-        self, attachment: MonitorAttachment, message: messages.Message,
-        reception: type[PendingMonitor],
-    ) -> type[Outcome]:
-        frame = self.incoming_frame(message, reception=reception)
-        receiving = partial(replace, monitor=reception.for_parts(len(frame.parts)))
+    async def deliver_to(self, attachment: MonitorAttachment, message: messages.Message) -> type[Outcome]:
+        frame = self.incoming_frame(message)
+        receiving = partial(replace, monitor=ReceivingMonitor(len(frame.parts)))
         attempt = self.attempt(message, UnconfirmedOutcome)
         await self.coordinator_write(partial(attempt.apply, receiving))
         await frame.emit_to(attachment, self.window_bytes, self.exports)

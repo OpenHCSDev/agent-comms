@@ -16,7 +16,7 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.commander_heartbeat import CommanderHeartbeat
-from commander_heartbeat_fixture import ObservedHeartbeat, observe_commander
+from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_commander
 from agent_comms.comms import wire
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.launch_runtime import LaunchRoot
@@ -178,8 +178,8 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus, installed_runtime):
                 broken.source.require_read()
             assert broken.reason == str(source_failure.value)
             assert tuple(card for card in frame.states if card.unit.name != 'worker') == healthy
-            expected = CommanderHud.of(comms, lead.name, frame.frame, frame.states)
             asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
+            expected = current_hud(comms, lead.name, frame.frame, frame.states)
             assert CommanderFrame.read_all(comms.root) == (expected,)
         print(broken.line())
 

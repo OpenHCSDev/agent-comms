@@ -8,6 +8,8 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import subprocess
 from abc import abstractmethod
 from collections.abc import Mapping
@@ -112,7 +114,7 @@ class WorkBranch:
     links: tuple[BranchLink, ...]
     checkouts: tuple[BranchCheckout, ...]
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def linked(self) -> bool:
         return bool(self.links)
 
@@ -685,7 +687,8 @@ query($owner: String!, $name: String!, $after: String) {
             sorted(
                 thread.name
                 for thread in snapshot.threads.values()
-                if str(thread.worktree.path.expanduser().resolve()) == resolved
+                if not snapshot.statuses[thread.name].archived
+                and str(thread.worktree.path.expanduser().resolve()) == resolved
             )
         )
         if not threads:

@@ -22,9 +22,8 @@ from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
 from .head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, IntegrationSource, LocalIntegrationSource, MergedIntegrationSource, MergeHeadReview, OrdinaryInput, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource, Side, SourceCheckout, UnpromotedHeadReview
-from .installer.runtime_resolution import StackSources
 from .launch_runtime import CheckoutSource, RestoredRuntime
-from .repo import Checkout, DetachedStart, GitCommandError, Repo
+from .repo import DetachedStart, GitCommandError, Repo
 from .systemd_unit import AgentsSlice
 from .repository_name import RepositoryName
 from .test_lease import LeaseStart, TestLease

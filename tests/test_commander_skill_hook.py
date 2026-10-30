@@ -262,8 +262,8 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
                      subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
                       subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
-    brief = lead_hud(comms).brief()
-    CommanderDecisions(lead, (first, second), (first, second), ()).send(comms, began + 90, brief)
+    hud = lead_hud(comms).hud_text(began + 90)
+    CommanderDecisions(lead, (first, second), (first, second), ()).send(comms, began + 90, hud)
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
@@ -278,13 +278,13 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             "BOARD: 2 unchanged (oldest: Read worker P1, seen 1 min)",
         )
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
-        CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, began + 92, brief)
+        CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, began + 92, hud)
         assert tool_call(hook, server, comms, db, began + 92) == (
             "BOARD: Read worker P1 (seen for 0 min)",
             "BOARD: 1 unchanged (oldest: Review worker P2, seen 1 min)",
         )
         # A fresh packet does not reset delivery, and the answer window rings only once.
-        CommanderDecisions(lead, (changed, second), (), ()).send(comms, began + 93, brief)
+        CommanderDecisions(lead, (changed, second), (), ()).send(comms, began + 93, hud)
         alarm = began + AwaitingCommander.seconds
         assert tool_call(hook, server, comms, db, alarm + 1) == (
             "BOARD: Review worker P2 (seen for 5 min)",
@@ -294,7 +294,7 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             "BOARD: 2 unchanged (oldest: Review worker P2, seen 5 min)",
         )
         assert DeliveredBoardContent.count(db) == 2
-        CommanderDecisions(lead, (), (), ()).send(comms, alarm + 3, brief)
+        CommanderDecisions(lead, (), (), ()).send(comms, alarm + 3, hud)
         assert tool_call(hook, server, comms, db, alarm + 3) == ()
         assert DeliveredBoardContent.count(db) == 0
 

@@ -18,7 +18,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.harness_delivery_states import Outcome, PendingMonitor
+from agent_comms.harness_delivery_states import Outcome
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, PathText
@@ -124,11 +124,9 @@ class ReaderState:
             await bridge.reader_changed.wait_for(lambda: bridge.reader is not self)
         return await bridge.reader.prepare_delivery(bridge)
 
-    async def deliver(
-        self, bridge: LineMonitorBridge, message: Message, reception: type[PendingMonitor],
-    ) -> type[Outcome]:
+    async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:
         reader = await self.prepare_delivery(bridge)
-        return await reader.deliver(bridge, message, reception)
+        return await reader.deliver(bridge, message)
 
     async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
         """Only an unproven attachment consumes a probe."""
@@ -217,10 +215,8 @@ class AttachedReader(UnreadyReader):
     async def part_observed(self, message_id: MessageId, number: int) -> None:
         await self.attachment.observed(message_id, number)
 
-    async def deliver(
-        self, bridge: LineMonitorBridge, message: Message, reception: type[PendingMonitor],
-    ) -> type[Outcome]:
-        return await bridge.deliver_to(self.attachment, message, reception)
+    async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:
+        return await bridge.deliver_to(self.attachment, message)
 
 
 @dataclass(frozen=True)

@@ -7,10 +7,9 @@ attempts can declare these families without importing the bridge transport.
 from __future__ import annotations
 
 import sqlite3
-from abc import abstractmethod
 from dataclasses import dataclass, replace
 from functools import partial
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from .message_reference import MessageReference
 from .declared_family import DeclaredFamily
@@ -99,49 +98,9 @@ class UnrecordedMonitor(MonitorEvidence):
     pass
 
 
-class PendingMonitor(MonitorEvidence, declared_name=None):
-    """The emission owns whether its later observation can prove the original body."""
-
-    @classmethod
-    def displayed_body(cls, body: str) -> str:
-        return body
-
-    @classmethod
-    @abstractmethod
-    def for_parts(cls, total: int) -> PendingMonitor: ...
-
-
 @dataclass(frozen=True)
-class WakeOnlyMonitor(PendingMonitor):
-    """A board wake is not the original packet, even if its bytes happen to match."""
-
-    board_wake: ClassVar[str] = (
-        "Tristan: your board changed. New and changed lines print once as BOARD: on your next "
-        "tool call; later calls print one unchanged count."
-    )
-
-    @classmethod
-    def displayed_body(cls, body: str) -> str:
-        return cls.board_wake
-
-    @classmethod
-    def for_parts(cls, total: int) -> WakeOnlyMonitor:
-        return cls()
-
-    async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
-                      notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:
-        # Retire only the wake's transport reservation, never original-body proof.
-        await bridge.part_observed(delivery.message_id, notification.number)
-        return ()
-
-
-@dataclass(frozen=True)
-class ReceivingMonitor(PendingMonitor):
+class ReceivingMonitor(MonitorEvidence):
     total: int
-
-    @classmethod
-    def for_parts(cls, total: int) -> ReceivingMonitor:
-        return cls(total)
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
                       notification: MonitorPart, record: ObservedMonitor) -> tuple[MessageReference, ...]:

@@ -5,11 +5,9 @@ import asyncio
 from contextlib import aclosing
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator, BinaryIO
+from typing import AsyncIterator, BinaryIO
 
 from agent_comms.bus import Bus
-from agent_comms.harness_delivery_states import Outcome, WakeOnlyMonitor
-from agent_comms.messages import Message
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource
@@ -21,17 +19,14 @@ from .claude_protocol import ClaudeMonitorFrame
 from .claude_transcript import ClaudeJsonLines, RunningClaude
 from .shared import Enrol, LineMonitorBridge, Options, Watch, run_bridge
 
-if TYPE_CHECKING:
-    from agent_comms.task_attachments.commander_pings import CommanderUpdate
-
-
 class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
-    """Follow this Claude session's file without submitting an input.
+    """Follow the Claude session and deliver the original waking HUD through its native frame.
 
-    Heartbeat packets reach the session through the board its tool-call hook prints, which
-    this bridge derives from Core whenever the hook asks, not through the Monitor: the harness
-    frames Monitor events as routine background, so a line said once there scrolls away. The
-    Monitor only gets a wake line, since an idle session runs no tool calls."""
+    Packet-owned wake behavior is shared with every bridge; tool-call board reads still derive
+    their current undisposed requests from Core rather than keeping another copy here.
+    The native frame receives the original message: rewriting its body changes the identity
+    the delivery attempt was stored under.
+    """
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
@@ -46,13 +41,6 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         state = WatchClaim(self.address.thread).state()
         await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
         await super().watch_operation(operation)
-
-    async def deliver_board(self, update: CommanderUpdate, message: Message) -> type[Outcome]:
-        """The packet is on the bus, which is the board; only the session needs waking."""
-        return await update.wake(self, message)
-
-    async def wake(self, message: Message) -> type[Outcome]:
-        return await self.deliver(message, reception=WakeOnlyMonitor)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""

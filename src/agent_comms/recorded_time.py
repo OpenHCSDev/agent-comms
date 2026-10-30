@@ -9,7 +9,7 @@ from math import isfinite
 from typing import ClassVar, Never
 
 from .declared_family import DeclaredFamily
-from .field_codec import AcceptsNull, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+from .field_codec import AcceptsNull, DisclosedRecord, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
 
 class Timestamped:
     """A recorded Unix-seconds clock owns its integer-millisecond projection."""
@@ -79,7 +79,7 @@ class GeneratedTimestamp(NullableEventSeconds):
         raise TypeError("A generated timestamp is read from its event, never written")
 
 
-class EventTime(DeclaredFamily, affix="EventTime"):
+class EventTime(DisclosedRecord, DeclaredFamily, affix="EventTime"):
     @classmethod
     def capture(cls, timestamp: float) -> EventTime:
         """Capture a recorded Unix-seconds fact, never the read time."""
@@ -89,6 +89,10 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """Undated facts sort after recorded events, without inventing a timestamp."""
         return (1, 0.0)
 
+    def occurred(self) -> bool:
+        """Whether an event was recorded, independent of any later observation's age."""
+        return False
+
     def since(self, timestamp: float) -> bool:
         return False
 
@@ -97,6 +101,12 @@ class EventTime(DeclaredFamily, affix="EventTime"):
 
     def clock(self) -> str:
         return "-"
+
+    def stamp(self) -> str:
+        return "-"
+
+    def age(self, now: float) -> str:
+        return "unrecorded"
 
     def aged_line(self, label: str, now: float) -> tuple[str, ...]:
         """An undated observation cannot invent an age."""
@@ -143,6 +153,9 @@ class RecordedEventTime(EventTime):
     def chronology(self) -> tuple[int, float]:
         return (0, self.at)
 
+    def occurred(self) -> bool:
+        return True
+
     def since(self, timestamp: float) -> bool:
         return self.at >= timestamp
 
@@ -152,8 +165,21 @@ class RecordedEventTime(EventTime):
     def clock(self) -> str:
         return time.strftime("%H:%M:%S", time.localtime(self.at))
 
+    def stamp(self) -> str:
+        """A stable dated fact, unlike paint-time elapsed wording."""
+        return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(self.at))
+
+    def age(self, now: float) -> str:
+        minutes, seconds = divmod(max(0, int(now - self.at)), 60)
+        hours, minutes = divmod(minutes, 60)
+        days, hours = divmod(hours, 24)
+        parts = (f"{amount}{unit}" for amount, unit in (
+            (days, "d"), (hours, "h"), (minutes, "m"), (seconds, "s"),
+        ) if amount)
+        return f"{''.join(parts) or '0s'} ago"
+
     def aged_line(self, label: str, now: float) -> tuple[str, ...]:
-        return (f"{label} {self.clock()} ({max(0, int(now - self.at))} s ago)",)
+        return (f"{label} {self.clock()} ({self.age(now)})",)
 
     def to_number(self, units_per_second: int) -> float:
         return self.at * units_per_second
