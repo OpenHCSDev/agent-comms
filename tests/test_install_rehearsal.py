@@ -30,13 +30,13 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.native import PrepareProducerDigestsProbe
 from agent_comms.installer.practice import TestHome
+from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.installer.upgrade import (
     CarriedRehearsal,
     CarriedRun,
     CreatedRun,
     InstalledUpgrade,
     RehearsedUpgrade,
-    Stack,
     UncopiedRehearsal,
     Upgrade,
 )
@@ -86,7 +86,8 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
     environment = {**os.environ, "HOME": str(home), "UV_CACHE_DIR": caches.stdout.strip(),
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
-    outgoing = Stack.build(shared_clone(tmp_path_factory.mktemp("installed-source") / "checkout"), InstallCommands(), home)
+    outgoing = RuntimeStack.build(shared_clone(tmp_path_factory.mktemp("installed-source") / "checkout"), InstallCommands(), home)
+    outgoing.complete()
     assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)

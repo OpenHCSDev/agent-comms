@@ -272,6 +272,32 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     assert not any(f"statuses/{four.head}" in call[1] for call in github.calls())
 
 
+def test_refused_carry_records_nothing_and_alarms_only_its_head(head_bus, reviewed_source):
+    """An archived repository answers 403 to the carried status: Core keeps no carry the
+    forge lacks, the frame survives, and the refusal is that head's merge block."""
+    comms, github, request = head_bus
+    source = reviewed_source
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
+    moved = opened(github, source, request.pr, merged)
+    github.refuse_status(request.repo, "gh: Repository was archived so is read-only. (HTTP 403)")
+
+    pulls = ProgressRead()
+    pulls.carry_reviews(comms.goals, request.repo)
+    row = pulls.open(request.repo)[0]
+    assert not row.has_head_review
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
+    assert ("carried review status refused: gh: Repository was archived so is read-only. "
+            "(HTTP 403)") in [block.what() for block in row.merge_blocks]
+
+
 def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus):
     """An overdue source review must not prevent an independent recovery order."""
     comms, _, request = head_bus

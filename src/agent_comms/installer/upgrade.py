@@ -20,16 +20,13 @@ start and result through the bus's ordinary publisher.
 """
 from __future__ import annotations
 
-import hashlib
-import os
-import shutil
 import sys
 import tempfile
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager
-from dataclasses import dataclass, field, fields, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, TextIO
@@ -51,7 +48,6 @@ from agent_comms.cli_verbs.start import StartCliCommand
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.cli_result import CliResult
-from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import PathText
@@ -66,16 +62,14 @@ from agent_comms.installer.backup import (
     bus_files,
     settle_bus_files,
 )
-from agent_comms.installer.carry import STEPS, CarryChain
+from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.installer.interpreter_operation import (
     AbortMaintenancePhase,
     AfterMigrationFileScanPhase,
     BackupRetirePhase,
     BeforeMigrationFileScanPhase,
     BeginMaintenancePhase,
-    BuildPhase,
     ClearMaintenancePhase,
     ConfirmBridgePhase,
     CopyPhase,
@@ -83,14 +77,12 @@ from agent_comms.installer.interpreter_operation import (
     GitPhase,
     InstallClock,
     InstallRunPhase,
-    InstalledProgram,
     LiveCheckoutPreparePhase,
     LivePhase,
     OutgoingRuntimeMaintenancePhase,
     PhaseTiming,
     PracticePhase,
     PreparePhase,
-    ProbeProgram,
     ProcessScanPhase,
     ReadBackVerifyPhase,
     ReleaseBridgePhase,
@@ -98,7 +90,6 @@ from agent_comms.installer.interpreter_operation import (
     RestoreSpaceBackupPhase,
     RetargetMaintenancePhase,
     RouteAndRuntimePublicationPhase,
-    RuntimeProbe,
     RuntimePublicationPhase,
     StartingReportPublicationPhase,
     StartServicesPhase,
@@ -112,7 +103,6 @@ from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
     RehearsalHome,
-    RuntimeHome,
 )
 from agent_comms.installer.probes.carry import (
     Carried,
@@ -131,8 +121,6 @@ from agent_comms.installer.probes.commands import (
     CliUndecodableError,
 )
 from agent_comms.installer.probes.harnesses import InstallResult
-from agent_comms.installer.probes.imports import ClientImportsProbe
-from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
 from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
@@ -142,10 +130,12 @@ from agent_comms.installer.reporting import (
     RuntimeWriter,
     UnpostedWriter,
 )
-from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
+from agent_comms.installer.runtime_resolution import RuntimeResolution
+from agent_comms.installer.runtime_stack import Extendable, RuntimeStack, TargetRuntime
 from agent_comms.installer.runtime_wire import CrossesRuntimes
+from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.refusals import RuntimeWireChanged
-from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
+from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
     BusFile, DeclaredFile, FilesRequest, LiveFilesRequest, RootFile, UndeclaredFile,
 )
@@ -154,22 +144,15 @@ from agent_comms.maintenance_barrier import (
     MaintenanceOperator,
     MaintenanceState,
 )
-from agent_comms.native_build_inputs import NativeBuildInputs
-from agent_comms.native_package import (
-    NativePackageStore,
-    pinned_package_for,
-)
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, DetachedStart, Repo, ScratchCheckout
+from agent_comms.repo import Checkout, Repo
 from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
-
-HOME = Path.home()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -215,7 +198,6 @@ class RehearsalFiles:
             raise UpgradeRefused(f"Live carries changed files absent from rehearsal: {outside}")
 
 
-
 def carried(
     files: FilesRequest,
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]],
@@ -241,14 +223,6 @@ def carried(
         names=tuple(sorted(changed)),
         restore_bytes=sum(file.size for key in physical & before.keys()
                           for file in before[key].values()))
-
-
-@dataclass(frozen=True)
-class Extendable:
-    """A record a subclass extends with facts of its own; the shared ones carry over."""
-
-    def extended[Record](self, kind: type[Record], **facts: object) -> Record:
-        return kind(**({each.name: getattr(self, each.name) for each in fields(self)} | facts))
 
 
 @dataclass(frozen=True)
@@ -551,47 +525,8 @@ class HeldOwnersStopped(OwnersStopped):
 
 
 @dataclass(frozen=True)
-class Stack(Extendable):
-    """One built installation and the source checkout containing its install tools."""
-
-    checkout: Path
-    commands: InstallCommands
-    home: Path = HOME
-    runtime: LaunchRuntime = field(default_factory=LaunchRuntime.installed)
-    program: ProbeProgram = InstalledProgram()
-    """How this runtime's worker reaches the operation family: the outgoing runtime answers
-    from its own installed installer; a runtime built from the target declares it too,
-    with the tree's carry steps beside it."""
-
-    @property
-    def python(self) -> Path:
-        return self.runtime.interpreter
-
-    @property
-    def lock(self) -> Path:
-        return self.checkout / "stack/uv.lock"
-
-    @property
-    def uv(self) -> Path:
-        """The uv the installer runs, kept in the installer's own state."""
-        return RuntimeHome.uv_path(self.home)
-
-    def require_uv(self) -> None:
-        """The installer runs only the uv its checkout declares; a different one installs the
-        declared uv in its own place before any lock is written."""
-        if not os.access(self.uv, os.X_OK):
-            raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
-        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
-        if declared.accepts(self.commands.run(self.uv, "--version")):
-            return
-        with tempfile.TemporaryDirectory(dir=self.uv.parent, prefix=".uv-") as staging:
-            self.commands.run(self.uv, "pip", "install", "--quiet", "--target", staging,
-                              "--python", self.python, str(declared.requirement))
-            fetched = Path(staging) / "bin/uv"
-            reported = self.commands.run(fetched, "--version")
-            if not declared.accepts(reported):
-                raise UpgradeRefused(f"Fetched {reported.strip()}; {declared.requirement} declared")
-            os.replace(fetched, self.uv)
+class Stack(RuntimeStack):
+    """A built installation the install operates through: its bus CLI, services and owners."""
 
     def require_runtime_wire(self) -> None:
         """Compare the target's wire with the source stamped into this installed wheel.
@@ -612,99 +547,6 @@ class Stack(Extendable):
         if drift:
             raise RuntimeWireChanged(commit, drift)
 
-    def resolve(self) -> None:
-        """Refresh every package the lock records as tracking a branch, transitive ones
-        included, while retaining the committed release and revision pins."""
-        upgrades = tuple(argument for name in ResolvedLock.read(self.lock).tracked()
-                         for argument in ("--upgrade-package", name))
-        self.commands.run(self.uv, "lock", "--project", "stack", *upgrades,
-                          cwd=self.checkout)
-
-    @staticmethod
-    def build(checkout: Checkout, commands: InstallCommands, home: Path = HOME) -> TargetStack:
-        """Resolve current mains once, then build or reuse their immutable installation."""
-        with BuildPhase().running(commands.clock):
-            source = Stack(checkout.path, commands, home, runtime=LaunchRuntime.running())
-            source.require_uv()
-            source.resolve()
-            core = commands.git(checkout.path, "rev-parse", "HEAD").strip()
-            resolution = hashlib.sha256(source.lock.read_bytes()).hexdigest()[:16]
-            runtimes = home / ".local/share/agent-comms/runtimes"
-            prefix = runtimes / f"core-{core[:9]}-lock-{resolution}"
-            built = source.extended(
-                TargetStack, runtime=LaunchRuntime.at_prefix(prefix),
-                program=TargetProgram(checkout.path / STEPS.parent))
-            if prefix.exists():
-                if not RuntimeResolution.at(prefix).matches(source.lock, built, core):
-                    raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
-                built.stage_native()
-                built.prepare_runtime()
-                return built
-            prefix.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-            prefix.mkdir(mode=0o700)
-            try:
-                commands.run(source.uv, "sync", "--project", "stack", "--locked",
-                             "--no-editable", cwd=checkout.path,
-                             env={**built.environment(), "UV_PROJECT_ENVIRONMENT": str(prefix)})
-                built.install_native()
-                RuntimeResolution.capture(built, core).save(prefix)
-                built.imports()
-            except BaseException:
-                shutil.rmtree(prefix)
-                raise
-            return built
-
-    def test(self, *pytest_arguments: str) -> None:
-        """Run checkout tests against this runtime's installed packages, never its source."""
-        self.commands.run(self.uv, "pip", "install", "--python", self.python,
-                          "-r", "pyproject.toml", "--extra", "dev", cwd=self.checkout,
-                          env=self.environment())
-        core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
-        scratch = StorageRule().scratch_base
-        scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(dir=scratch, prefix=f"tests-{core[:12]}-") as temporary:
-            print(self.commands.run(
-                self.python, "-m", "pytest", "-q", "-s",
-                "-o", "pythonpath=. tools", "-o", "faulthandler_timeout=60",
-                "--basetemp", Path(temporary) / "pytest", "-p", "no:cacheprovider",
-                *pytest_arguments, cwd=self.checkout, env=self.environment()), end="")
-
-    def probe[Answer](self, probe: RuntimeProbe[Answer]) -> Answer:
-        """Every call into this runtime during an install goes to its one worker, which
-        imports the runtime once."""
-        return self.commands.probe(probe, self.python, cwd=self.home,
-                                   env=self.environment(*self.program.import_roots()),
-                                   program=self.program)
-
-    def imports(self) -> None:
-        self.probe(ClientImportsProbe())
-
-    def stage_native(self) -> tuple[Path, Path]:
-        """Prepare a missing artifact once; the checkout holds only its store link."""
-        manifest = self.checkout / "stack/pi-native.sha256"
-        try:
-            NativeBuildInputs(self.checkout).require_pinned(manifest)
-        except ValueError as error:
-            raise UpgradeRefused(str(error)) from None
-        store = NativePackageStore.at_home(self.home)
-        native = store.package_for(manifest)
-        if not native.is_dir():
-            self.commands.run(self.checkout / "stack/native/prepare-pi-native", "--python",
-                              self.python, cwd=self.checkout,
-                              env=self.environment(self.checkout / "src"))
-        store.link(manifest, manifest.parent)
-        return native, pinned_package_for(manifest).relative_to(manifest.parent)
-
-    def install_native(self) -> None:
-        """Interpreters bind the store artifact; disposable trees contain only links."""
-        self.stage_native()
-        NativePackageStore.at_home(self.home).link(
-            self.checkout / "stack/pi-native.sha256", self.runtime.package_root / "_native")
-        self.prepare_runtime()
-
-    def prepare_runtime(self) -> None:
-        self.probe(PrepareProducerDigestsProbe())
-        self.probe(PrepareNativeProbe())
 
     def publish(self, root: Path) -> None:
         """The selected interpreter owns console metadata and harness declarations, and
@@ -713,14 +555,6 @@ class Stack(Extendable):
             self.probe(PublicationProbe())
             RootRuntime.publish(root, self.runtime)
 
-    def environment(self, *paths: Path) -> dict:
-        """Use the artifact's packages; ``paths`` are searched first, in order (the target
-        tree's carry steps, or its source for a native build)."""
-        environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
-        configuration = RestartEnvironment.inherit(environment)
-        for path in reversed(paths):
-            configuration = configuration.with_import_root(path)
-        return configuration.apply_runtime(environment)
 
     def cli[Answer: CliResult](self, root: Path, command: type[CliCommand[Answer]],
                                *arguments: str) -> Answer:
@@ -810,10 +644,8 @@ class Stack(Extendable):
 
 
 @dataclass(frozen=True)
-class TargetStack(Stack):
+class TargetStack(TargetRuntime, Stack):
     """The built target owns carry declarations and the locks its worker borrows."""
-
-    program: TargetProgram = field(kw_only=True)
 
     @contextmanager
     def borrowing(self, stores: tuple[type[ExternalStore], ...],
@@ -834,45 +666,6 @@ class TargetStack(Stack):
         if not steps:
             return ()
         return self.probe(CarryProbe(operation, steps, self.program.inherited_locks))
-
-
-@dataclass(frozen=True)
-class TargetTree(AbstractContextManager):
-    """The temporary worktree of the target revision the install runs from."""
-
-    repo: Path
-    scratch: Path
-    revision: str
-
-    @property
-    def path(self) -> Path:
-        return self.scratch / f"tree-{self.revision[:12]}"
-
-    @property
-    def steps_package(self) -> Path:
-        """Where the tree's carry steps import from; they ship in no runtime."""
-        return self.path / STEPS.parent
-
-    def source_paths(self) -> tuple[Path, Path]:
-        """What the installer imports from when an older runtime runs it: the tree's
-        ``src``, then its carry steps' package."""
-        return self.path / "src", self.steps_package
-
-    def add(self) -> None:
-        ScratchCheckout.add(self.repo, self.path, DetachedStart(self.revision))
-
-    def close(self) -> None:
-        """Retire the tree; a failed add left nothing to retire."""
-        if self.path.is_dir():
-            ScratchCheckout(self.path).retire()
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(self, *exception: object) -> None:
-        self.close()
-        if self.scratch.exists():
-            shutil.rmtree(self.scratch)
 
 
 @dataclass(frozen=True)
@@ -937,7 +730,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
-    tree = TargetTree(checkout, scratch, target)
+    tree = TargetTree(scratch, target, repo=checkout)
     bridges = report.bridges
     with (
         InstallRunPhase().running(commands.clock),
@@ -972,6 +765,7 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
                              program=TargetProgram(tree.steps_package))
         if not runtime.runs_this_process:
             raise UpgradeRefused("The prepared install must run in its built target runtime")
+        staged.complete()
         with StartingReportPublicationPhase().running(commands.clock):
             driver = member.driver(mode, report, root, installed, staged, target)
         with mode.owners_stopped(member, root, driver, staged, bridges) as report.owners:

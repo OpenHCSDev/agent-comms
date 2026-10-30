@@ -24,6 +24,10 @@ class UnstartedRuntime(RuntimeLocation):
     def require_forkable(self):
         raise ValueError("Canonical saved session required")
 
+    def last_written(self) -> float:
+        """No saved session exists to have grown."""
+        return 0.0
+
     async def compact(self, operation):
         return FailedCompaction("This thread has no saved session to compact.")
 

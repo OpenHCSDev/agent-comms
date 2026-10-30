@@ -127,8 +127,12 @@ class InstallDue(UndatedStandingRule, FamilyScan):
 
     @staticmethod
     def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+        """The configured repositories the installed build carries and that still have their
+        checkout: a repository retired between installs (refactor-audit after the NRA
+        migration) leaves the build at the next install and never needs a second list."""
         return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
-                     if any(repo.github == record.repository for record in installed.commits))
+                     if repo.checked_out
+                     and any(repo.github == record.repository for record in installed.commits))
 
     @classmethod
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
@@ -594,9 +598,10 @@ class RetainedHolderWheelSpin(CoreActsStandingRule, UnownedWheelSpin):
         return (*super().comparison_values(), self.previous.owner_identity)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        actor = comms.registry.require(commander).incarnation
         comms.goals.change_problem(self.todo.id, RestoreHolderTodo(
-            self.todo.revision, comms.registry.require(commander).incarnation, self.previous,
-        ), commander)
+            self.todo.revision, actor, self.previous,
+        ), actor)
 
     def line(self) -> str:
         return (f"KEEP Core restored {self.previous.owner} as {self.todo.id}'s holder. why would you"
