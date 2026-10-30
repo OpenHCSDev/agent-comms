@@ -49,7 +49,9 @@ from agent_comms.todos import (
     ProgressSource,
     StoredHeadReview,
 )
-from agent_comms.work_branches import BranchDifference, SourceGrowth, WorkBranchError
+from agent_comms.work_branches import (
+    BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
+)
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
@@ -598,6 +600,33 @@ class BranchGrowth(HeldBranchRule):
             f" src by {self.growth.total} code lines, limit {self.growth.limit}. is all of it"
             " necessary, or is it slop? -> the verdict states why the growth is necessary, or the"
             " slop is deleted"
+        )
+
+
+@dataclass(frozen=True)
+class UnparsedBranch(HeldBranchRule):
+    """A held branch pushed src that Python cannot parse; its growth cannot be counted."""
+
+    problem: str
+    holder: ThreadIncarnation
+    repository: RepositoryName
+    branch: str
+    unparsed: tuple[UnparsedSource, ...] = field(compare=False)
+
+    @classmethod
+    def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
+        return tuple(
+            cls(problem=held.problem, holder=held.holder,
+                repository=held.difference.repository,
+                branch=held.difference.branch, unparsed=held.difference.growth.unparsed)
+            for held in branches if held.difference.growth.unparsed
+        )
+
+    def line(self) -> str:
+        return (
+            f"UNPARSED {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem})"
+            f" pushed src that does not parse: {', '.join(u.listing() for u in self.unparsed)}."
+            " conflict markers pushed? -> fix the file and push"
         )
 
 

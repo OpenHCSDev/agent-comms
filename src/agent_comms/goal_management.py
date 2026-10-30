@@ -94,16 +94,16 @@ class Goals(GoalWaitRecovery):
     def todos(self) -> TodoStore:
         return TodoStore(self.root)
 
-    def change_problem(self, problem, operation, commander):
-        actor = self.registry.require(commander).incarnation
+    def change_problem(self, problem, operation, actor: ThreadIncarnation):
+        """The caller's resolved identity carries its authority; a name lookup would drop it."""
         current = self.todos.get(problem)
         current.require_commander(actor)
         return operation.prepare(self, current).record(self, problem)
 
-    def judge_calls(self, verdicts: Sequence[JudgedCall], commander: str) -> tuple[Todo, ...]:
+    def judge_calls(self, verdicts: Sequence[JudgedCall],
+                    actor: ThreadIncarnation) -> tuple[Todo, ...]:
         """Check every verdict on its order's state as the earlier ones leave it, list every
         refusal together, and write only when none is refused."""
-        actor = self.registry.require(commander).incarnation
         staged, ready = TodoBatch(), TodoBatch()
         for call in verdicts:
             call.operation.staged(staged, call)
