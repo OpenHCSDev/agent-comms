@@ -9,13 +9,14 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
+from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
-from agent_comms.work_branches import CommitBase, UnpushedHead, WorkBranches
+from agent_comms.work_branches import CommitBase, WorkBranches
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence

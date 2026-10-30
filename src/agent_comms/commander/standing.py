@@ -62,7 +62,7 @@ from agent_comms.todos import (
     RestoreHolderTodo,
     Todo,
 )
-from agent_comms.turn_digests import OrderEditCountRead, TurnDigestRead, TurnsSince
+from agent_comms.turn_digests import TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
 from agent_comms_hooks.watch import DeafWatch
@@ -787,13 +787,12 @@ class Unjudged(ReasonedStandingRule, UndatedStandingRule):
             " reviewed head (one verdict judges every edit before it); fork judges for the rest")
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
+    def reason(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> str | None:
         """The total, then each order's edits made since its last head verdict."""
-        counts = tuple((read, read.read())
-                       for read in OrderEditCountRead.for_commander(comms, commander))
-        total = sum(count for _, count in counts)
+        counts = frame.edit_counts(comms)
+        total = sum(counts.values())
         if total <= cls.limit:
             return None
-        named = ", ".join(f"{read.thread.name} {read.todo.id} {count}"
-                          for read, count in counts if count)
+        named = ", ".join(f"{hold.holder.name} {hold.todo.id} {count}"
+                          for hold in frame.live for count in (counts[hold.todo.id],) if count)
         return f"{total} edits since each order's last head verdict: {named}"

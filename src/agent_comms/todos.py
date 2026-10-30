@@ -16,7 +16,7 @@ import subprocess
 import sys
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
@@ -133,7 +133,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
@@ -1018,10 +1018,11 @@ class PullRequestUpdatePage:
     page_info: PageInfo
 
 
-class PullRequests:
-    """Forge facts and checkout-local worktrees, cached within one board read."""
+class PullRequests(RepositoryReads):
+    """Forge facts and repository reads shared within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
+        super().__init__()
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
@@ -1126,7 +1127,7 @@ class PullRequests:
         """One canonical local checkout's retained listing, not its forge namesake's."""
         checkout = Checkout(repository.checkout).resolved().path
         if checkout not in self._worktrees:
-            self._worktrees[checkout] = WorkBranches(checkout).worktrees()
+            self._worktrees[checkout] = WorkBranches(checkout, reads=self).worktrees()
         return self._worktrees[checkout]
 
     def working_on(self, goals: Goals, repo: RepositoryName,
@@ -1135,7 +1136,7 @@ class PullRequests:
         when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
         repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
-        reader = WorkBranches(repository.checkout)
+        reader = WorkBranches(repository.checkout, reads=self)
         return tuple(dict.fromkeys(
             snapshot.require(name).incarnation
             for checkout in reader.checkouts(snapshot, row.branch, self.worktrees(repository))
@@ -1145,7 +1146,7 @@ class PullRequests:
         """Advance the frame's forge facts only after the existing verdict posts its carry."""
         project = goals.registry.snapshot().commander_project.require()
         repository = Repo.selected(project.repos, repo.to_wire())
-        reader = WorkBranches(repository.checkout)
+        reader = WorkBranches(repository.checkout, reads=self)
         for row in self.open(repo):
             if not row.has_head_review:
                 current = ReadPullRequestHead(repo, row.number, row.head, base=row.base)
@@ -1244,25 +1245,6 @@ class ProgressPoint(DisclosedRecord):
     def listed(cls, line: str) -> ProgressPoint:
         sha, at = line.split()
         return cls(sha, float(at))
-
-
-@dataclass(frozen=True)
-class LoggedCommit:
-    """One commit of a frame's history walk with the message every problem pattern greps."""
-    point: ProgressPoint
-    message: str
-
-    format: ClassVar[str] = f"{ProgressPoint.format}%x00%B%x00"
-
-    @classmethod
-    def walked(cls, output: str) -> tuple[LoggedCommit, ...]:
-        fields = output.split("\0")
-        return tuple(cls(ProgressPoint.listed(head), message)
-                     for head, message in zip(fields[0::2], fields[1::2]) if head.strip())
-
-    def matches(self, pattern: re.Pattern[str]) -> bool:
-        """Git's --grep: the pattern searched line by line, ignoring case."""
-        return bool(pattern.search(self.message))
 
 
 @dataclass(frozen=True)
@@ -1372,6 +1354,14 @@ class ProgressCheckout(DeclaredFamily, affix="Checkout"):
     def require_read(self) -> None:
         """A retired checkout needs no local read; present and unread ones decide."""
 
+    def remote_refs(self) -> tuple[str, ...]:
+        """Every published remote reference this history holds; a retired checkout has none."""
+        return ()
+
+    def unpublished_commits(self, todo: Todo, refs: tuple[str, ...]) -> tuple[ProgressPoint, ...]:
+        """Problem commits no remote reference reaches."""
+        return self.read_commits(todo, refs, *self.remote_refs())
+
     def read_commits(self, todo: Todo, refs: tuple[str, ...],
                      *excluded: str) -> tuple[ProgressPoint, ...]:
         """Consume this capture's selected refs inside its checkout failure boundary."""
@@ -1430,27 +1420,29 @@ class UnreadCheckout(ProgressCheckout):
         raise WorkBranchError(self.reason)
 
 
+@dataclass(frozen=True)
 class PresentCheckout(ProgressCheckout):
+    reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
+                                   kw_only=True)
     default_reference: ClassVar[str] = f"refs/remotes/{Repo.remote}/HEAD"
 
     @property
     def default_refs(self) -> tuple[str, ...]:
         return (self.default_reference,) if self.default_reference in self.origin_refs else ()
 
-    def git(self, *args: str) -> str:
-        return Repo.git(self.path, *args)
-
     @cached_property
     def head(self) -> str:
-        return self.git("rev-parse", "--verify", "HEAD^{commit}")
+        return self.branches.head.revision()
 
     def require_read(self) -> None:
         self.head
 
+    def remote_refs(self) -> tuple[str, ...]:
+        return self.branches.history.references("refs/remotes/")
+
     @cached_property
     def origin_refs(self) -> tuple[str, ...]:
-        return tuple(self.git("for-each-ref", "--format=%(refname)",
-                              f"refs/remotes/{Repo.remote}/").splitlines())
+        return self.branches.history.references(f"refs/remotes/{Repo.remote}/")
 
     @cached_property
     def origin_pushes(self) -> tuple[tuple[str, float], ...]:
@@ -1461,7 +1453,7 @@ class PresentCheckout(ProgressCheckout):
         if not self.origin_refs:
             return ()
         pushes = []
-        for row in self.git("reflog", "show", "--date=unix", "--grep-reflog=update by push",
+        for row in Repo.git(self.path, "reflog", "show", "--date=unix", "--grep-reflog=update by push",
                             "--format=%gD%x09%H", *self.origin_refs).splitlines():
             selector, sha = row.split("\t")
             pushes.append((sha, float(selector.rsplit("@{", 1)[1].removesuffix("}"))))
@@ -1470,7 +1462,7 @@ class PresentCheckout(ProgressCheckout):
     @cached_property
     def branches(self) -> WorkBranches:
         """One Git branch reader for this checkout during the progress frame."""
-        return WorkBranches(self.path)
+        return WorkBranches(self.path, reads=self.reads)
 
     @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
@@ -1489,26 +1481,12 @@ class PresentCheckout(ProgressCheckout):
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
-    @cached_property
-    def walks(self) -> dict[tuple[tuple[str, ...], tuple[str, ...]], tuple[LoggedCommit, ...]]:
-        """This frame's history walks, one per selection of refs; every order greps them."""
-        return {}
-
-    def walk(self, refs: tuple[str, ...], excluded: tuple[str, ...]) -> tuple[LoggedCommit, ...]:
-        if (refs, excluded) not in self.walks:
-            self.walks[refs, excluded] = LoggedCommit.walked(self.git(
-                "log", f"--format={LoggedCommit.format}", *refs, "--not", *excluded))
-        return self.walks[refs, excluded]
-
     def commits(self, pattern: str, refs: tuple[str, ...],
                 *excluded: str) -> Iterator[ProgressPoint]:
         """Newest problem commit across owned branches and retained origin references."""
-        if refs:
-            matcher = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
-            for commit in self.walk(refs, excluded):
-                if commit.matches(matcher):
-                    yield commit.point
-                    return
+        for commit in self.branches.history.commits(refs, *excluded, pattern=pattern):
+            yield ProgressPoint(commit.sha, commit.at)
+            return
 
     def checked_commits(self, order: CheckedProblemOrder, refs: tuple[str, ...],
                         *excluded: str) -> Iterator[ProgressPoint]:
@@ -1532,11 +1510,14 @@ class PresentCheckout(ProgressCheckout):
             return DistanceReadings()
         readings: list[DistanceReading] = []
         for tip in self.read_commits(source.todo, refs, *self.default_refs):
-            base = self.git("merge-base", tip.sha, self.default_reference).strip()
-            commits = [ProgressPoint.listed(line) for line in reversed(self.git(
-                "log", f"--max-count={DistanceReadings.window}", "--first-parent",
-                f"--format={ProgressPoint.format}", tip.sha, "--not", base).splitlines())]
-            points = [ProgressPoint(base, source.since), *commits][-DistanceReadings.window:]
+            bases = self.branches.history.merge_base(tip.sha, self.default_reference)
+            if not bases:
+                raise WorkBranchError(f"Unrelated progress and main in {self.path}")
+            base = bases[0]
+            commits = [ProgressPoint(commit.sha, commit.at) for commit in islice(
+                self.branches.history.commits((tip.sha,), base, first_parent=True),
+                DistanceReadings.window)]
+            points = [ProgressPoint(base, source.since), *reversed(commits)][-DistanceReadings.window:]
             readings.extend(reading for point in points for reading in self.recorded_distances(
                 source.todo.order.checked(), base, point))
         return DistanceReadings(tuple(readings))
@@ -1545,7 +1526,7 @@ class PresentCheckout(ProgressCheckout):
                            point: ProgressPoint) -> Iterator[DistanceReading]:
         """Read the check run result; without a recorded result the distance is unknown."""
         for run in order.check.recorded_among(self.stored(point.sha)):
-            touched = self.git("diff", "--name-only", base, point.sha).split()
+            touched = self.branches.changed(base, point.sha)
             yield DistanceReading(point.at, order.check.result.distance(run).plus(
                 order.untouched(touched)), order.check.command)
 
@@ -1555,11 +1536,11 @@ class PresentCheckout(ProgressCheckout):
         return ((sha, at) for sha, at in self.origin_pushes if sha in published)
 
 
-class CheckoutReads:
-    """Share checkout readers within one frame; each capture selects its refs once,
-    while retained commit points and push reflogs belong to that frame alone."""
+class CheckoutReads(RepositoryReads):
+    """Share repository histories and distinct worktree readers within one frame."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._checkouts: dict[Path, PresentCheckout] = {}
         self._branch_mains: dict[RepositoryName, str] = {}
         self._branch_facts: dict[Path, BranchDifference] = {}
@@ -1567,7 +1548,8 @@ class CheckoutReads:
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
-        return self._checkouts.setdefault(path, PresentCheckout(path))
+        path = path.resolve()
+        return self._checkouts.setdefault(path, PresentCheckout(path, reads=self))
 
     def progress_checkout(self, path: Path) -> ProgressCheckout:
         """The checkout at path, or a retired one that holds no history: this read alone
@@ -1620,8 +1602,7 @@ class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
-        CheckoutReads.__init__(self)
-        PullRequests.__init__(self, todos)
+        super().__init__(todos)
         self._progress: dict[str, OrderProgress] = {}
 
     def unread(self, todos: Iterable[Todo], error: Exception) -> None:
@@ -1731,7 +1712,7 @@ class MeasuredProgressSource(ProgressSource):
                   worktrees: tuple[PresentCheckout, ...], refs: tuple[str, ...]) -> Self:
         source = super().from_refs(todo, pulls, checkout, worktrees, refs)
         return replace(source,
-                       unpublished_commits=checkout.read_commits(todo, refs, "--remotes"),
+                       unpublished_commits=checkout.unpublished_commits(todo, refs),
                        recorded_readings=checkout.readings(source, refs))
 
 
@@ -2792,7 +2773,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """Undelivered orders provide no observed delivery duration."""
         return iter(())
 
-    def untouched(self, touched: Sequence[str]) -> int:
+    def untouched(self, touched: Collection[str]) -> int:
         """The numbered edits naming a file:line where ``touched`` changed none of those files."""
         def changed(name: str) -> bool:
             return any(path.endswith(name.lstrip("/")) or name.endswith("/" + path)
@@ -5948,7 +5929,9 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
 class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
 
-    def phases_checked(self, commanders: frozenset[ThreadIncarnation]) -> dict[type[OrderPhase], float]:
+    def phases_checked(
+        self, commanders: frozenset[ThreadIncarnation],
+    ) -> dict[type[OrderPhase], float]:
         """The latest checked declaration per phase, including declarations retained by folds.
 
         Decode the recursive order envelope in SQL, then aggregate only checked declarations;
@@ -6082,7 +6065,8 @@ class OwnerRequestStore(DurableStore):
     def _select(self, where: str, parameters: tuple, *,
                 reader: Callable[[sqlite3.Connection, str, tuple], CapturedRows[Todo]] = Todo.capture_rows,
                 ) -> tuple[Todo, ...]:
-        """Capture selected rows and their aggregates together; decode after releasing the snapshot."""
+        """Capture selected rows and their aggregates together;
+        decode after releasing the snapshot."""
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
