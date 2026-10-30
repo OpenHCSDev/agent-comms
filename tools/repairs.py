@@ -25,7 +25,6 @@ from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
-from agent_comms.pinned_audit import audit
 from agent_comms_project import AgentCommsProject
 from module_layers import Package, TopLevelNames
 from nominal_refactor_advisor.codemod import (
@@ -38,6 +37,7 @@ from nominal_refactor_advisor.codemod import (
 )
 
 from agent_comms.declared_family import DeclaredFamily
+from agent_comms.pinned_audit import audit
 
 type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type ImportNode = ast.Import | ast.ImportFrom

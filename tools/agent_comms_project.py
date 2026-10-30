@@ -25,8 +25,10 @@ from functools import cache, partial
 from pathlib import Path
 from subprocess import CompletedProcess
 
-import agent_comms
 import stored_formats
+from module_layers import PACKAGE, StackClient
+
+import agent_comms
 from agent_comms import (
     coordination_schema,
     field_codec,
@@ -45,7 +47,6 @@ from agent_comms.phase_evidence import MainTree, PlanReading
 from agent_comms.pinned_audit import SKILL, audit
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
-from module_layers import PACKAGE, StackClient
 
 SOURCES = Path(inspect.getfile(agent_comms)).parents[1]
 REPOSITORY = SOURCES.parent
@@ -202,17 +203,19 @@ class AgentCommsProject(audit.project.Project[PlanPhase]):
         declared = Path(inspect.getfile(PlanPhase)).resolve()
         return frozenset({f"{declared.relative_to(REPOSITORY).parts[0]}/"})
 
+    @staticmethod
     @cache
-    def reading(self, commit: str) -> PlanReading:
-        return PlanReading((), MainTree(Repo.of(self.path), commit))
+    def reading(path: Path, commit: str) -> PlanReading:
+        """The plan phases as the commit declares them, read once per checkout and commit."""
+        return PlanReading((), MainTree(Repo.of(path), commit))
 
     def failing_guards(self, commit: str) -> frozenset[type[PlanPhase]]:
-        reading = self.reading(commit)
+        reading = self.reading(self.path, commit)
         return frozenset(phase for phase in PlanPhase.members_with(PlanPhase)
                          if not phase.done(reading))
 
     def guard_sites(self, head: str, guard: type[PlanPhase]) -> tuple[str, ...]:
-        reading = self.reading(head)
+        reading = self.reading(self.path, head)
         evidence = guard.phase_evidence()
         return tuple(evidence.sites(reading)) or (reading.describe(evidence),)
 
@@ -260,11 +263,6 @@ class ClientTypeErrors(audit.checkers.SideCounts):
     ) -> tuple[type[audit.ratchet.Side], tuple[audit.checkers.CheckerSite, ...]]:
         """Mypy resolves the client's other imports from the installed environment, which no
         content key names, so each comparison checks afresh under mypy's own cache."""
-        return side, cls.checked(repo, ref, client, side)
-
-    @classmethod
-    def checked(cls, repo: audit.project.Project, ref: str, client: StackClient,
-                side: type[audit.ratchet.Side]) -> tuple[audit.checkers.CheckerSite, ...]:
         selected = cls.selected(client)
         cache = repo.beside("mypy-clients") / client.name / side.family_name
         with tempfile.TemporaryDirectory(prefix="ratchet-client-") as scratch:
@@ -278,9 +276,9 @@ class ClientTypeErrors(audit.checkers.SideCounts):
                     (str(Path(scratch, "src")), str(client.checkout / "src")))},
             )
         output = cls.checker_output(result, f"{client.name} at {ref}")
-        return tuple(dataclasses.replace(site, path=f"{client.name}/{site.path}")
-                     for site in audit.checkers.TypeErrors.reported(output)
-                     if site.path in selected)
+        return side, tuple(dataclasses.replace(site, path=f"{client.name}/{site.path}")
+                           for site in audit.checkers.TypeErrors.reported(output)
+                           if site.path in selected)
 
     @classmethod
     def parts(cls, repo: audit.project.Project, base: str, head: str, changed: set[str],

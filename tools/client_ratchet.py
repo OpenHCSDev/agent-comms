@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agent_comms_project import AgentCommsProject, CheckoutReader
+
 from agent_comms.pinned_audit import audit
 
 if __name__ == "__main__":
