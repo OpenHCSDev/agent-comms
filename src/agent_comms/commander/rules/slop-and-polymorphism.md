@@ -71,6 +71,12 @@ type: hard-rule
 > decoded once per column instead of interrogated per row
 > mfw I avoided one class to stay simple and built a type checker out of `startswith`
 > mfw `str` is not a type, it's a lack of one with a length method
+> run it back
+> `current_execution: ExecutionId | NoCurrentExecution`
+> decoded once per column. decode_candidates drops off the profile
+> a thread name can't equal it. "" can't construct it. startswith has nothing to check
+> the class was already in the codebase
+> mfw the "overengineering" was zero new lines
 
 **Why:** a decision that a new case must edit outside its declaration restates that declaration; inheritance derives it once, so factoring by inheritance is how slop is driven to zero.
 

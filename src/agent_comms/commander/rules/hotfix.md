@@ -22,6 +22,12 @@ type: hard-rule
 > Tristan: "you hotfix it and override the pipeline by --admin straight to main, that's the judgement i'm talking about"
 > the fix was ready an hour ago
 > mfw the pipeline was the outage
+> run it back
+> heartbeat dies on line 432
+> one line in #comms: "hotfixing the decoder, 30 lines"
+> commit, PR, --admin. board lights up before anyone finishes negotiating a lane
+> nobody objected. everybody saw it
+> mfw the only slow part was the word "mine"
 
 **Why:** on 2026-10-30 the install bootstrap, the heartbeat's unparseable-branch crash and the archived-repo 403 each sat for most of an hour after the fix was known, while commanders announced, negotiated lanes and queued behind busy units. Tristan: "if you can't lose it and its a obvious bug tha needs fixing just hotfix it commit and pus hto mai nusing --admin thts it no pussy shit"; "channel post yo ushld communciate hawt you're doing to others don't hide it jsut do it".
 
