@@ -275,7 +275,7 @@ class ClaimedOwnerBatch:
             for thread in threads:
                 thread.require_restart_owner(snapshot.status(thread.name))
                 generation = snapshot.claim_generation(thread.name)
-                lifecycle.require_restart_idle(thread)
+                lifecycle.require_restartable(thread)
                 captured.append((thread, generation))
             runtime = request.environment(lifecycle)
         launches = tuple(RetainedOwnerLaunch.capture(
@@ -300,5 +300,5 @@ class ClaimedOwnerBatch:
         return fenced.complete(cutover)
 
     def fence(self, edit: RegistryEdit) -> FencedOwnerBatch:
-        captured = edit.fence_idle_owners(self.captured)
+        captured = edit.fence_restart_owners(self.captured)
         return FencedOwnerBatch(self.lifecycle, captured, self.launches, self.request, self.runtime)
