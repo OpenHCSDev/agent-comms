@@ -14,7 +14,7 @@ import socket
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, Self
 
 
 class UnexpectedBoardReply(ValueError):
@@ -34,7 +34,7 @@ class SessionWire:
     timeout: ClassVar[float] = 2
 
     @classmethod
-    def exchanged(cls, endpoint: Path, **fields: str) -> dict:
+    def exchanged(cls, endpoint: Path, **fields: str) -> dict[str, Sequence[str]]:
         """Ask the bridge for this member and return its one reply line, undecoded."""
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
@@ -43,19 +43,25 @@ class SessionWire:
                 asked = {cls.family_discriminator: cls.request, **fields}
                 peer.sendall(json.dumps(asked).encode() + b"\n")
                 with peer.makefile("rb") as stream:
-                    return json.loads(stream.readline())
+                    reply: dict[str, Sequence[str]] = json.loads(stream.readline())
+                    return reply
         except (FileNotFoundError, ConnectionRefusedError) as error:
             raise AbsentSessionSocket(f"No session bridge is listening: {error}") from error
         except (OSError, json.JSONDecodeError) as error:
             raise UnexpectedBoardReply(f"The session bridge did not answer: {error}") from error
 
     @classmethod
-    def replied(cls, **reply: Sequence[str]) -> SessionWire:
+    def replied(cls, **reply: Sequence[str]) -> Self:
         """Decode the declared member first; a refusal is not a constructor error."""
         member = reply.pop(cls.family_discriminator)
         if member != cls.request:
             raise UnexpectedBoardReply(f"{member}: {reply!r}")
         return cls.decoded(**reply)
+
+    @classmethod
+    def decoded(cls, **fields: Sequence[str]) -> Self:
+        """Decode this member's fields only after its discriminator matched."""
+        raise NotImplementedError
 
 
 @dataclass(frozen=True)
@@ -124,9 +130,8 @@ class SessionBoard(SessionWire):
         return cls.replied(**cls.exchanged(endpoint))
 
     @classmethod
-    def decoded(cls, lines: Sequence[str]) -> SessionBoard:
-        """Decode this member's field only after its discriminator matched."""
-        return cls(tuple(lines))
+    def decoded(cls, **fields: Sequence[str]) -> Self:
+        return cls(tuple(fields["lines"]))
 
 
 @dataclass(frozen=True)
@@ -142,5 +147,5 @@ class SessionOwnerSaid(SessionWire):
         return cls.replied(**cls.exchanged(endpoint, transcript=str(transcript)))
 
     @classmethod
-    def decoded(cls, words: Sequence[str]) -> SessionOwnerSaid:
-        return cls(tuple(words))
+    def decoded(cls, **fields: Sequence[str]) -> Self:
+        return cls(tuple(fields["words"]))
