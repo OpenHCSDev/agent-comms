@@ -367,14 +367,15 @@ class DealRecord:
             read.source.path for read in deal.reads() if read.source in sources and read.current()
         ))
 
-    def widen(self, deal: RuleDeal, dealt: type[DealtSources],
-              prompts: Callable[[], tuple[str, ...]]) -> None:
+    def widen[Said](self, deal: RuleDeal, dealt: type[DealtSources],
+                    full: Callable[[], Said], kept: Said) -> Said:
         """A session whose role now follows more sources is dealt only those: what it read and
         wrote stays, since its context was never lost."""
         deal.publish(DealRecord(
             tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
             AuditDue(self.due.rules | {rule.name for rule in dealt.rules()}, self.due.owner_words),
         ))
+        return kept
 
     def resume[Said](self, deal: Callable[[], Said], kept: Said) -> Said:
         """A resume keeps the context it had, and the deal it still answers: its reads and
@@ -398,10 +399,10 @@ class UndealtRecord(DealRecord):
     def paths(self) -> tuple[Path, ...]:
         return ()
 
-    def widen(self, deal: RuleDeal, dealt: type[DealtSources],
-              prompts: Callable[[], tuple[str, ...]]) -> None:
+    def widen[Said](self, deal: RuleDeal, dealt: type[DealtSources],
+                    full: Callable[[], Said], kept: Said) -> Said:
         """A session bound after it started is dealt in full."""
-        deal.deal(dealt, prompts())
+        return full()
 
     def answer(self, deal: RuleDeal) -> ToolGateState:
         return Undealt()

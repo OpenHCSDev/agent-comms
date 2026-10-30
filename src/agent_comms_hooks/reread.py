@@ -32,10 +32,12 @@ class SliceReminder(DeckStart):
     every: ClassVar[int] = 5
 
     def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        slices = self.slices(reader)
+        if said := self.widened(reader):
+            return said
         count = self.count_call()
         if count % self.every:
             return ()
+        slices = json.loads(self.deck(reader).read_text(encoding="utf-8"))
         return (slices[(count // self.every - 1) % len(slices)],)
 
 
