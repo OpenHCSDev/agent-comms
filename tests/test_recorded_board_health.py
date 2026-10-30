@@ -107,6 +107,19 @@ def test_stopped_heartbeat_without_failure_explains_stale_board_and_refuses_deta
         request.read(comms)
 
 
+def test_a_pass_still_inside_its_declared_duration_is_not_called_dead(published_board):
+    comms = published_board
+    services = ServicePassStore.at(comms.root)
+    owner = comms.registry.require('lead').incarnation.require_recorded()
+    services.update(lambda passes: DocumentChange.to(replace(
+        passes, commander_completed=passes.commander_completed | {
+            owner: time.time() - CommanderHeartbeat.pass_duration})))
+    hud = CommanderFrame.current(comms, 'lead')
+    assert hud.header[0] != 'no failure recorded, so no heartbeat is running'
+    assert hud.retained_status() == 'Retained board rows and load:'
+    hud.require_current()
+
+
 def test_failing_watch_does_not_make_a_fresh_heartbeat_stale(published_board):
     comms = published_board
     services = ServicePassStore.at(comms.root)
