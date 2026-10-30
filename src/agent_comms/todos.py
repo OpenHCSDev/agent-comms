@@ -2577,7 +2577,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise TodoError("Only a pending order can be claimed by its holder.")
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (ReviewedHeadVerdict, RejectedHeadVerdict)
+        """Any order that holds a head takes a decision on it, or a reviewer's mark first."""
+        return (ReviewedHeadVerdict, RejectedHeadVerdict, UnderReviewHeadVerdict)
+
+    def under_review(self, record: OrderHeadReviewRecord) -> CheckedProblemOrder:
+        """Only a claim owes a delivery verdict; elsewhere the head record is the whole mark."""
+        return self
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -3189,8 +3194,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (*super().review_verdicts(), UnderReviewHeadVerdict)
+    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
+        return self.copy_as(ReviewingProblemOrder, review=record)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -4398,8 +4403,7 @@ class UnderReviewHeadVerdict(HeadVerdict):
         return f"Under review by {reviewer} on {subject}"
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return replace(current, order=current.order.checked().copy_as(
-            ReviewingProblemOrder, review=record))
+        return replace(current, order=current.order.checked().under_review(record))
 
 
 class HeadOrderLink(HeadReviewRelation, declared_name=None):
