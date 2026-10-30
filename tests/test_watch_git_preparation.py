@@ -143,6 +143,19 @@ def test_upstream_preparation_preserves_publication_and_fallback_counts(git_prep
     assert case.snapshot() == prepared
 
 
+def test_a_detached_head_counts_its_unpublished_commits_instead_of_failing_the_read(git_preparation):
+    """A unit mid-rebase holds a detached HEAD; its checkout must not stop the whole pass."""
+    repo = git_preparation.repository
+    SourceRepository.git(repo.checkout, "commit", "--allow-empty", "-m", "Unpublished work")
+    head = Repo.git(repo.checkout, "rev-parse", "HEAD").strip()
+    Repo.git(repo.checkout, "checkout", "--detach", "-q")
+    reader = WorkBranches(repo.checkout)
+    reader.prepare_upstreams()
+    difference = reader.difference(reader.origin_main)
+    (unpublished,) = difference.unpublished
+    assert (difference.branch, unpublished.head, unpublished.commits) == ("HEAD", head, 1)
+
+
 def test_upstream_preparation_batches_only_required_heads_per_remote(
     git_preparation: GitPreparation, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
