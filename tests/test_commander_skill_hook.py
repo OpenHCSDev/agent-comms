@@ -57,11 +57,11 @@ from test_head_review import ACCEPTED, invoke
 pytest_plugins = ("test_head_review", "test_commander_notifications")
 
 
-def session_start(transcript, source):
+def session_start(transcript, source, **extra):
     return subprocess.run(
         [sys.executable, "-m", "agent_comms_hooks.skill"],
         input=json.dumps({"hook_event_name": "SessionStart", "source": source, "session_id": "s",
-                          "transcript_path": str(transcript)}),
+                          "transcript_path": str(transcript), **extra}),
         capture_output=True, text=True, timeout=30,
     )
 
@@ -729,3 +729,38 @@ def test_two_agents_on_one_session_keep_separate_deals(
     assert not refused(capsys, sub)  # the subagent was dealt nothing of its own
     assert not refused(capsys, gated(transcript, "Write", {"file_path": str(sub.audit)},
                                      agent_id="a9"))
+
+
+def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session):
+    """A resume keeps the context it had: the reads made and the audit written stay, where a
+    re-deal on 2026-10-30 unlinked claude-code's audit mid-gate and demanded 23 reads again."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert session_start(transcript, "compact").returncode == 0
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    first = start.current().dealt[0]
+    start.dealt_read.write_text(f"{first}\n", encoding="utf-8")
+    start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    result = session_start(transcript, "resume")
+    assert result.returncode == 0, result.stderr
+    assert start.audit.exists()
+    assert start.current().read_by(start) == (first,)
+    assert session_start(transcript, "compact").returncode == 0
+    assert not start.audit.exists()
+    assert start.current().read_by(start) == ()
+
+
+def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, commanding_session):
+    """A subagent's events name its session's transcript; on 2026-10-30 a commander fork's
+    compaction dealt the main agent's stem, whose audit was mid-answer."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    assert session_start(transcript, "compact").returncode == 0
+    main = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    main.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    dealt = main.record.read_bytes()
+    result = session_start(transcript, "compact", agent_id="a9")
+    assert result.returncode == 0, result.stderr
+    assert main.audit.exists() and main.record.read_bytes() == dealt
+    sub = DeckStart.of({**hook_record(transcript, "SessionStart"), "agent_id": "a9"})
+    assert sub.record.exists() and str(sub.audit) in result.stdout

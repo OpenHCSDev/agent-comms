@@ -15,7 +15,7 @@ from typing import ClassVar
 from agent_comms.active_route import resolve_comms_route
 from agent_comms.route_client import ActivityClient
 from agent_comms.turn_phase import TurnPhase
-from agent_comms_hooks import SubagentId
+from agent_comms_hooks import ClaudeSubagentHook
 from agent_comms_hooks.watch import CommanderSession, WatchClaim, WatchRecord
 
 
@@ -48,10 +48,8 @@ class SubagentSeats(CommanderSession):
 
 
 @dataclass(frozen=True)
-class SeatedSubagent(SubagentSeats):
+class SeatedSubagent(SubagentSeats, ClaudeSubagentHook):
     """The existing seat or commander-fork name identifies whose activity a hook reports."""
-
-    agent_id: SubagentId
 
     @property
     def seat(self) -> Path:
