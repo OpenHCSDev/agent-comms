@@ -43,8 +43,8 @@ from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
     CoreActsStandingRule,
     DatedStandingRule,
-    OrderHeadReviewCommands,
     IndependentStandingRule,
+    OrderHeadReviewCommands,
     OwedAnswer,
     ReasonedStandingRule,
     StandingRule,
