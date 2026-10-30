@@ -21,10 +21,9 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage, FrozenRecipient
-    from .catalog_document import CatalogAccess, CatalogDocument
+    from .catalog_document import CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand
-    from .cli_result import CliResult
     from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
@@ -162,11 +161,6 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     @abstractmethod
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]): ...
 
-    @abstractmethod
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
@@ -177,7 +171,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return (NoChannel(),)
 
@@ -393,7 +387,7 @@ class ThreadTarget(NamedTarget):
         return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return declaration.selection_channels(channel, self.name)
 
@@ -410,11 +404,6 @@ class ThreadTarget(NamedTarget):
         thread = snapshot.require(self.selected_name(snapshot))
         return ResolvedThread(thread, snapshot.status(thread.name))
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
     def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
@@ -559,11 +548,6 @@ class ChannelTarget(NamedTarget):
                         if channel.matches(thread.tags))
         return ResolvedChannel(channel, members)
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender: Message | None = None):
         from .channels import BuiltinChannelView
@@ -651,11 +635,6 @@ class ProjectTarget(CommandTarget):
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]):
         return self.project
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.project_bindings(comms, resolved)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
