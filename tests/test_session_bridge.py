@@ -5,6 +5,7 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+from agent_comms.cli_bridges.shared import Binding, GivenBinding
 
 from agent_comms.cli_bridges.monitor import AttachMonitor, InspectSession, SessionReady
 from agent_comms.cli_bridges.shared import BridgeLog
@@ -75,3 +76,10 @@ def test_enrol_is_idempotent_and_refuses_another_command(tmp_path, monkeypatch):
         assert not claim.has_reader()
         with claim.reader_held():
             assert claim.has_reader()
+
+
+def test_a_first_binding_without_a_root_is_refused_by_name(tmp_path):
+    with Binding.open(tmp_path) as db:
+        with pytest.raises(Exception, match="root") as refused:
+            GivenBinding({"bus": "unit-a"}).bind(db)
+    assert not isinstance(refused.value, KeyError)
