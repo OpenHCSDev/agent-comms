@@ -841,6 +841,18 @@ class MissingReviewMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
+class RefusedCarryMergeBlock(MergeBlock):
+    """The forge refused the carried review status on this head; only this head pays for it."""
+    refusal: str
+
+    def what(self) -> str:
+        return f"carried review status refused: {self.refusal}"
+
+    def remedy(self) -> str:
+        return "restore the repository's write access or drop it from the commander's repos"
+
+
+@dataclass(frozen=True)
 class BehindMergeBlock(MergeBlock):
     def what(self) -> str:
         return 'BEHIND: head is behind its base'
@@ -1141,7 +1153,14 @@ class PullRequests:
                 with goals.todos.snapshot() as db:
                     reviews = StoredHeadReview.latest_for_pull_request(db, current)
                 for review in reviews:
-                    if review.verdict.carry(goals, review, current, reader):
+                    try:
+                        carried = review.verdict.carry(goals, review, current, reader)
+                    except ToolRefusedError as refused:
+                        # One repository's forge refusal is that head's alarm, not every board's.
+                        self._read[repo, row.number] = replace(row, merge_blocks=(
+                            *row.merge_blocks, RefusedCarryMergeBlock(row.updated, str(refused))))
+                        break
+                    if carried:
                         self._read[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
 
@@ -4337,6 +4356,12 @@ class CarriedHeadVerdict(ReviewedHeadVerdict):
     """The original acceptance follows its unchanged patch, not a new review."""
 
     source: PullRequestHead
+
+    @contextmanager
+    def recording(self, request: PullRequestHead, reviewer: str, subject: str) -> Iterator[None]:
+        """Publish the unchanged-source carry first; a refused status records nothing in Core."""
+        self.publish_recorded(request, reviewer, subject)
+        yield
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"carried from {self.source.head[:9]}: same change"
