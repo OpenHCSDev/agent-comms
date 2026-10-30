@@ -40,10 +40,14 @@ class MessagePage:
             source_pages=pages,
         )
 
-    def evidence_for(self, message: Message) -> MessagePage | None:
-        page = next(page for page in (self.source_pages or (self,))
-                    if any(row.view_key == message.view_key for row in page.messages))
-        return page if page.selection.has_evidence else None
+    def message_evidence(self) -> tuple[tuple[Message, MessagePage | None], ...]:
+        """Each message with the source page whose selection proves it, if that page has
+        evidence. The source pages are indexed once, not rescanned per message."""
+        holders = {row.view_key: page for page in (self.source_pages or (self,))
+                   for row in page.messages}
+        return tuple(
+            (message, holder if (holder := holders[message.view_key]).selection.has_evidence else None)
+            for message in self.messages)
 
     @property
     def oldest_cursor(self) -> PageCursor | None:
