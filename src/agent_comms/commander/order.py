@@ -700,6 +700,7 @@ class Commander(CommanderContext):
              disk: bool = False, finding: ProblemFinding = UnlocatedProblemFinding(),
              answers: tuple[MessageReference, ...] = (), *, request: RequestSelection) -> None:
         """Record the decoded order, or report every failed prerequisite before any write."""
+        self.comms.registry.status(unit).require_visible(f"{unit} cannot take an order.")
         document = document.resolved(finding)
         document.order.send(self, document, unit, clean, reassign, target, traced, answers, request)
 
@@ -817,10 +818,9 @@ class Commander(CommanderContext):
             superseded_by)))
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
-        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
-                  VerdictAudience.of(unit, todo))
-        self.post(VerdictAudience((unit,)),
-             f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
+        self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} Withdrawn: {withdrawal}. '
+                       'Stop that work; it counts against no one.', 'Withdrawal',
+                       VerdictAudience.of(unit, todo))
         print(withdrawal)
 
     def fire(self, unit: str, why: str) -> None:
