@@ -705,6 +705,9 @@ class Stack(Extendable):
     def prepare_runtime(self) -> None:
         self.probe(PrepareProducerDigestsProbe())
         self.probe(PrepareNativeProbe())
+        for package in RuntimePackage.members_with(RuntimePackage):
+            for preparation in package.preparations():
+                self.probe(preparation)
 
     def publish(self, root: Path) -> None:
         """The selected interpreter owns console metadata and harness declarations, and
