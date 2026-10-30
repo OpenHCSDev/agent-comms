@@ -20,7 +20,8 @@ from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 if TYPE_CHECKING:
-    from .audience_manifest import AudiencedMessage, FrozenRecipient
+    from .audience_manifest import AudiencedMessage
+    from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand

@@ -10,7 +10,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, NoReturn
 
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .bus import Bus
 from .coordination_database import CoordinationStore
 from .coordination_tables.assignments import WakeAssignment

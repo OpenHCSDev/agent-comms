@@ -36,7 +36,7 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import ThreadLookup, TurnId
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .thread_identity import OwnerIdentity, ThreadIncarnation

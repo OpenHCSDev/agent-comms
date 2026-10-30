@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
 
 from .declared_family import DeclaredFamily
+from .frozen_recipient import FrozenRecipient
 from .field_codec import (
     FieldCodec,
     MalformedRecord,
@@ -38,7 +39,6 @@ class ConsumptionEvidence(ABC):
 
 
 if TYPE_CHECKING:
-    from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
