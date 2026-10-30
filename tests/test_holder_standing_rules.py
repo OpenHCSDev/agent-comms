@@ -19,6 +19,10 @@ from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.channel_targets import CommsTag
+from agent_comms.errors import RelationViolationError
+from agent_comms.owner_requests import NewestOpenRequest
+from agent_comms.todos import DoneTodoState
 from agent_comms.commander.order import Commander, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander.standing import (
@@ -669,6 +673,27 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     with pytest.raises(RecordProblems, match="not an open ask"):
         SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
     assert held_bus.bus.bus.revision() == revision
+
+
+def test_an_order_to_an_archived_thread_records_nothing(held_bus, tmp_path):
+    held_bus.registry.archive("outsider")
+    ctx = Commander.read_root(held_bus.root)
+    before = {todo.id for todo in ctx.todos()}
+    order = replace(held_bus.goals.todos.get("P1").order.checked(), id=OrderId.mint())
+    document = OrderFile(order, "An order for a thread nobody can start.",
+                         "This is stupid because nothing can ever carry it out.")
+    with pytest.raises(RelationViolationError, match="outsider cannot take an order"):
+        ctx.send("outsider", document, request=NewestOpenRequest())
+    assert {todo.id for todo in ctx.todos()} == before
+
+
+def test_withdrawing_from_an_archived_holder_releases_the_order_in_the_channel(held_bus):
+    held_bus.registry.archive("worker")
+    Commander.read_root(held_bus.root).withdraw(
+        "P1", "This order went to a thread that was archived and can never start it.")
+    assert held_bus.goals.todos.get("P1").state is DoneTodoState
+    posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
+    assert "Stop that work" in posted.body and posted.target == CommsTag.channel()
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
