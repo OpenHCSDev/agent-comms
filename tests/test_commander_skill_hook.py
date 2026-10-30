@@ -575,10 +575,22 @@ def test_an_answer_that_does_not_hold_keeps_the_next_file_shut(capsys, dealt_ses
 
 def test_a_quote_past_the_line_cap_is_refused(tmp_path):
     source = tmp_path / "rule.md"
-    source.write_text("\n".join(f"line {number}" for number in range(9)))
+    source.write_text("\n".join(f"> line {number}" for number in range(9)))
     capped = source.read_text().splitlines()
     assert "past 8 lines" in RuleAudit("rule", quote="\n".join(capped), does="d", why="w").unengaged(source)
     assert RuleAudit("rule", quote="\n".join(capped[:8]), does="d", why="w").unengaged(source) == ""
+
+
+@pytest.mark.parametrize("quote", [
+    "- A bullet the agent finds comfortable.",
+    "> N`) is a target",
+    "> the greentext\n- A bullet the agent finds comfortable.",
+])
+def test_a_quote_outside_the_greentext_is_refused(tmp_path, quote):
+    source = tmp_path / "rule.md"
+    source.write_text("> the greentext\n- A bullet the agent finds comfortable.\n- check (`-> N`) is a target\n")
+    assert "greentext" in RuleAudit("rule", quote=quote, does="d", why="w").unengaged(source)
+    assert RuleAudit("rule", quote="> the greentext", does="d", why="w").unengaged(source) == ""
 
 
 def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, commanding_session):
