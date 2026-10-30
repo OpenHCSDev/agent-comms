@@ -87,6 +87,7 @@ def installed_home(tmp_path_factory) -> dict[str, str]:
                    "npm_config_cache": str(Path.home() / ".npm")}
     environment.pop("PYTHONPATH", None)
     outgoing = RuntimeStack.build(shared_clone(tmp_path_factory.mktemp("installed-source") / "checkout"), InstallCommands(), home)
+    outgoing.complete()
     assert (outgoing.runtime.package_root / "__init__.py").is_file()
     (home / ".local/share/agent-comms/current").symlink_to(
         outgoing.runtime.prefix, target_is_directory=True)

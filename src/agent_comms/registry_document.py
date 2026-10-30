@@ -925,15 +925,16 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         self.owners.rename(canonical, new_name)
         return canonical, new_name
 
-    def fence_idle_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
-        """Atomically deny new turns for exactly one idle owner before signaling.
+    def fence_restart_owner(self, expected: Thread, *, expected_claimed_generation: int) -> int:
+        """Atomically deny new turns for exactly one idle or wedged owner before signaling.
 
         The outer wire lock alone cannot exclude a direct registry claim; this
-        check and the STOPPED transition share the registry's own lock.
+        check and the STOPPED transition share the registry's own lock. A wedged
+        turn's reference is dropped here exactly as stop's fence drops it.
         """
         current = self.require_active(expected.name)
         try:
-            current.require_idle()
+            current.require_restartable()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
@@ -944,6 +945,7 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
             expected, StoppingThreadStatus()))
         self.advance_claim(expected.name)
         self.owners.advance(expected.name)
+        self.threads[expected.name] = current.without_turn()
         return self.claims.generations[expected.name]
 
     def unregister(self, name: str) -> None:

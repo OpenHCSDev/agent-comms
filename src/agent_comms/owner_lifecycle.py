@@ -360,10 +360,10 @@ from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
 
 
 class OwnerLifecycle:
-    def require_restart_idle(self, thread: Thread) -> None:
-        """Do not interrupt a live turn; an old attempt settles after owner release."""
+    def require_restartable(self, thread: Thread) -> None:
+        """Do not interrupt a working turn; a wedged one ends the way stop ends it."""
         try:
-            thread.turn_record.read().require_idle()
+            thread.require_restartable()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 

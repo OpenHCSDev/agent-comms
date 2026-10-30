@@ -64,6 +64,10 @@ class TurnDeclaration(LifecycleCapability, SubclassUnion, affix=""):
     def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         return self.phase.project_activity(activity)
 
+    def require_restartable(self, last_written: float) -> None:
+        """Restart waits for an idle owner; only a wedged turn may be ended by it."""
+        self.require_idle()
+
     @property
     @abstractmethod
     def reported_turn(self) -> ReportedTurnState: ...
@@ -265,6 +269,14 @@ class ActiveTurn(Executing, RecordMember, TurnDeclaration):
 
     def require_idle(self) -> None:
         raise RelationViolationError("live owner already has an active turn")
+
+    # No tool, message or result reached the transcript for this long: the turn
+    # is wedged, and waiting for it to go idle waits forever.
+    wedged_after: ClassVar[float] = 10 * 60
+
+    def require_restartable(self, last_written: float) -> None:
+        if time.time() - max(last_written, self.started_at) < self.wedged_after:
+            self.require_idle()
 
     def require_current(self, claim_scope: int, generation: int) -> None:
         if not self.current(claim_scope, generation):
