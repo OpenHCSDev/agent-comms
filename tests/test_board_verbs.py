@@ -15,14 +15,13 @@ from agent_comms.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
-from agent_comms.held_orders import LiveHold
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.todos import (
     Assignment, ClaimOrder, DeliveredProblemOrder, NoHeadOrder, OrderHeadReview, OrderClaim,
     OrderHeadReviewRecord, OrderMessage, ProgressRead, RecordOrderHeadVerdict, RecordPullRequest, ReleaseTodo,
-    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, UnderReviewHeadVerdict, VerdictReason,
+    PullRequestLink, ReviewedHeadVerdict, SendBackStrike, StoredHeadReview, StrikeReason, TodoStore, UnderReviewHeadVerdict, VerdictReason,
 )
 
 from test_held_problem_orders import merge_two_commit_fix
@@ -71,6 +70,7 @@ def author_arguments(command, todo):
         "ok": ["--why", REASON.text, "--serves", QUOTE],
         "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
         "reviewing": [],
+        "superseded": ["--why", REASON.text, "--by", todo.id],
     }
     return arguments[1:] + authored[verb]
 
@@ -110,7 +110,8 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
     timed = replace(todo, review_at=RecordedEventTime(time.time() - 120))
-    frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
+    frame = replace(frame, review_timers=TodoStore.timers_up_in(
+        (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
     assert bool(timers) == (not claim_it)
     for timer in timers:
@@ -169,7 +170,8 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
         assert UnderReviewHeadVerdict in verdicts
     frame = capture_frame(comms, "lead", ProgressRead(()))
     timed = replace(first, review_at=RecordedEventTime(time.time() - 120))
-    frame = replace(frame, live=(LiveHold(timed, comms.registry.require("worker")),))
+    frame = replace(frame, review_timers=TodoStore.timers_up_in(
+        (timed,), time.time(), frame.pulls.progress((timed,), comms.registry)))
     timers = ReviewTimerUp.scan_observed(comms, "lead", (), frame)
     timer, = timers
     assert timer.todo == timed
