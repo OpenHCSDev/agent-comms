@@ -3073,7 +3073,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             context.comms.goals.change_problem(pid, OrderMessage(
                 context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
                 at=EventTime.capture(time.time()),
-            ), context.commander)
+            ), context.incarnation)
 
     def notify_replaced(
         self, context: Commander, unit: str, group: Sequence[str], holders: Sequence[str],
@@ -5627,11 +5627,11 @@ class Todo(TodoStoreRows, TypedTable):
             self.creator_identity)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             raise NotOrderCommander(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
