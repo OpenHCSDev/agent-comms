@@ -181,22 +181,19 @@ class DisplayReferences(RootedReferences):
         """Longest first: a name wins over any shorter name it starts with."""
         return tuple(sorted({len(name) for name in self.targets}, reverse=True))
 
-    def name_at(self, text: str, start: int) -> int | None:
-        """Where the longest declared name beginning at start ends, if one does."""
-        for length in self.name_lengths:
-            end = start + length
-            if text[start:end] in self.targets and not _NAME_END.match(text, end):
-                return end
-        return None
+    def name_end(self, text: str, start: int) -> int:
+        """Where the longest declared name beginning at start ends; start itself when none does."""
+        ends = (start + length for length in self.name_lengths)
+        return next((end for end in ends if text[start:end] in self.targets and not _NAME_END.match(text, end)), start)
 
     def find(self, text: str) -> tuple[DisplayReferenceMatch, ...]:
         """Names are looked up where one can start: thousands of threads never become a regex."""
         found = []
         position = 0
         while self.targets and (candidate := _NAME_START.search(text, position)):
-            end = self.name_at(text, candidate.end())
-            if end is None:
-                position = max(candidate.end(), candidate.start() + 1)
+            end = self.name_end(text, candidate.end())
+            if end == candidate.end():
+                position = max(end, candidate.start() + 1)
             else:
                 found.append(DisplayReferenceMatch(self.targets[text[candidate.end():end]], candidate.start(), end))
                 position = end
