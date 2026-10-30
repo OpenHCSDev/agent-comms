@@ -209,7 +209,7 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#35770a0c212906cba9bbf6c0059c8f64237b0cb8" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#1d85311339556d30182f6bd8fe90bc372093082b" }
 dependencies = [
     { name = "agent-client-protocol" },
     { name = "agent-comms" },
@@ -1028,7 +1028,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#e9f681e40c9923edec45990552e082276b23cc0b" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#76f9ef770bfa0630d09aeaee931ca4356996120b" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
