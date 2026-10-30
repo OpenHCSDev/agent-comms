@@ -251,7 +251,7 @@ class ClientFileCount(audit.ratchet.FileCount):
                 "that client file uses; run mypy on it to see which")
 
 
-class ClientTypeErrors(audit.checkers.SideCounts):
+class ClientTypeErrors(audit.checkers.SideCounts[AgentCommsProject]):
     """Mypy errors in each stack client file that imports agent_comms, checked against each
     revision's package. Both sides read the same client commit, so the client's own errors cancel
     and an error the head adds is a name or signature the client uses that the change took away:
@@ -263,7 +263,7 @@ class ClientTypeErrors(audit.checkers.SideCounts):
             side: type[audit.ratchet.Side]) -> tuple[StackClient, ...]:
         """The clients of the materialized cut that this compared side measures, selected by
         the side each cut declares, so equal base and head revisions still keep two cuts."""
-        return repo.clients.at(repo.path, base, head, CutSide.materializing(side))
+        return tuple(repo.clients.at(repo.path, base, head, CutSide.materializing(side)))
 
     @staticmethod
     def selected(client: StackClient) -> list[str]:
