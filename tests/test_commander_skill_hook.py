@@ -626,6 +626,24 @@ def test_a_parallel_batch_opens_a_batch_of_rules_and_refuses_the_next(capsys, de
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(following.path)}))
 
 
+def test_a_parallel_batch_opens_whichever_order_its_hooks_reach_the_lock(capsys, dealt_session):
+    """Each read of one call runs its own hook, and they reach the lock in any order: on
+    2026-10-30 a batch of four sent in dealt order was refused because read three got there
+    before read two, and Tristan was reduced to one read per call."""
+    transcript, start = dealt_session
+    for paper in CommanderPackage.paper():
+        read_whole(transcript, paper.resolve())
+    rules = CommanderReader.rules()
+    batch = rules[:Unengaged.batch]
+    for rule in reversed(batch):
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}))
+    start.audit.write_text(answered_audit(CommanderReader, batch))
+    following = reversed(rules[Unengaged.batch:Unengaged.batch * 2])
+    for rule in following:
+        assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rule.path)}))
+
+
 def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session):
     """Every part of a paper is judged before any read of it completes, and none waits on an
     audit answer, so the whole paper and the first rules read in one call."""
@@ -641,12 +659,13 @@ def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session):
 
 def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
     """On 2026-10-30 a session opened the indictment and two rules first and never read the
-    papers: the next dealt file opens, any later one is refused and named the next to read."""
+    papers: the next batch of dealt files opens, any later one is refused and named the next."""
     transcript, _ = dealt_session
     dealt = CommanderReader.sources()
     assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
     papers = CommanderPackage.paper()
-    for later in (CommanderPackage.indictment(), CommanderReader.rules()[0].path, papers[1]):
+    past_batch = papers[Unengaged.batch]
+    for later in (CommanderPackage.indictment(), CommanderReader.rules()[0].path, past_batch):
         call = gated(transcript, "Read", {"file_path": str(later.resolve())})
         call.judge()
         reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
