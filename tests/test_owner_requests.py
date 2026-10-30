@@ -8,7 +8,9 @@ import pytest
 
 from agent_comms.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
+from agent_comms.channel_targets import CommandersTag
 from agent_comms.commander.order import Commander
+from agent_comms.commander.standing import RequestStalled
 from agent_comms.commander.request import main as request_main
 from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
@@ -25,6 +27,7 @@ from agent_comms.todos import (
     ClaimOrder,
     OrderClaim,
     PendingProblemOrder,
+    TodoError,
     TodoStore,
     TriageScope,
     WithdrawTodo,
@@ -32,6 +35,52 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
 from agent_comms.threads import Thread
+
+
+def test_retired_commander_requests_follow_peer_authority(
+    comms: Comms, capsys: pytest.CaptureFixture[str],
+) -> None:
+    repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
+    for name, tags in (
+        ("request-author", frozenset({CommandersTag.declared_name})),
+        ("request-peer", frozenset({CommandersTag.declared_name})),
+        ("request-outsider", frozenset()),
+    ):
+        comms.registry.declare(
+            Thread(name, tags, Checkout(repository.checkout)), StoppedThreadStatus(),
+        )
+    store = comms.goals.todos
+    author = comms.registry.require("request-author")
+    peer = comms.registry.require("request-peer")
+    outsider = comms.registry.require("request-outsider")
+    first = store.add_request(author.acting_identity, "Retain the original request author.")
+    own = store.add_request(outsider.acting_identity, "The outsider's own request.")
+    newest = store.add_request(author.acting_identity, "A later author request.")
+    comms.registry.update_thread(author.name, lambda thread: replace(thread, tags=frozenset()))
+    assert store.owner_request(first.id).commander == author.incarnation
+    assert store.open_requests(peer.acting_identity) == (newest, own, first)
+    assert store.open_requests(peer.acting_identity, limit=1, descending=False) == (first,)
+    assert store.open_requests(outsider.acting_identity, limit=1) == (own,)
+    assert not store.open_requests(peer.acting_identity, limit=0)
+    assert first.id.for_order(store, peer.acting_identity) == first.id
+    assert first.id in {
+        rule.request.id for rule in RequestStalled.violations(comms, peer.name)
+    }
+    peer_context = Commander.on_root(peer.name, (repository,), comms.root)
+    request_main(["list"], peer_context)
+    assert first.id.value in capsys.readouterr().out
+    outsider_context = Commander.on_root(outsider.name, (repository,), comms.root)
+    with pytest.raises(TodoError, match="belongs to another commander"):
+        request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
+    request_main(
+        ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
+    )
+    assert f"{first.id.value} done" in capsys.readouterr().out
+    assert store.open_requests(peer.acting_identity) == (newest, own)
+    assert first.id not in {
+        rule.request.id for rule in RequestStalled.violations(comms, peer.name)
+    }
+    assert store.owner_request(first.id).commander == author.incarnation
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:
