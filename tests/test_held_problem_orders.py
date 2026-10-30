@@ -188,7 +188,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
     )
     path = ctx.root / "second-order.json"
     path.write_text(json.dumps(FieldCodec.encode(document)))
-    before = ctx.comms.goals.todos.for_commander(ctx.incarnation)
+    before = ctx.comms.goals.todos.board()
     goal = ctx.comms.registry.require("worker").goal
     # The busy-unit decision is the Todo transaction's own: --reassign passes the preflight's
     # owner check, so the refusal comes from the write that would have given worker P2.
@@ -197,7 +197,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_commander, cit
               "lead holds P2 only as its creator and must hand it to a unit"], ctx)
     assert ("worker already holds orders P1 (assigned by lead); running units holding no order:"
             in str(refused.value))
-    assert ctx.comms.goals.todos.for_commander(ctx.incarnation) == before
+    assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal
     print(str(refused.value))
@@ -234,10 +234,10 @@ def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
     )
     path = ctx.root / "second-order.json"
     path.write_text(json.dumps(FieldCodec.encode(document)))
-    before = {todo.id for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)}
+    before = {todo.id for todo in ctx.comms.goals.todos.board()}
     where = f"{second.owner.file}:{second.owner.line}"
     main(["problem", str(path), "--to", "worker", "--where", where], ctx)
-    created = [todo for todo in ctx.comms.goals.todos.for_commander(ctx.incarnation)
+    created = [todo for todo in ctx.comms.goals.todos.board()
                if todo.id not in before]
     assert [todo.holder for todo in created] == ["worker"]
 
