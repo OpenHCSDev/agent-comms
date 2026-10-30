@@ -109,18 +109,18 @@ def refused(deal: PiRedeal) -> bool:
 
 
 def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_deal):
-    """Pi's own context report deals the rules again when 66% and then 33% of the window is
-    left, once each, and each compaction arms both again."""
-    assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.66, 0.33]
+    """Pi's own context report deals the rules again once when half the window is left, and
+    each compaction arms it again."""
+    assert [refresh.remaining for refresh in unit_deal.refreshes] == [0.5]
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
-    for used, closes in ((30, False), (35, True), (40, False), (70, True), (95, False)):
+    for used, closes in ((30, False), (49, False), (50, True), (70, False), (95, False)):
         unit_deal.observe_context(ContextUsage(used, 100))
         assert refused(unit_deal) is closes, used
         answer_deal(unit_deal)
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
-    unit_deal.observe_context(ContextUsage(40, 100))
+    unit_deal.observe_context(ContextUsage(55, 100))
     assert refused(unit_deal)
 
 

@@ -407,7 +407,9 @@ class Redeals(RuleDeal):
     """A deal its backend renews itself: at the first start, after each compaction, and at
     each declared share of context left, read from the backend's own context-use report."""
 
-    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.66), RefreshAt(0.33))
+    refreshes: ClassVar[tuple[RefreshAt, ...]] = (RefreshAt(0.5),)
+    """Once per compaction, at half the window: the deal carries both papers (about 300 KB), so a
+    second mid-context re-deal costs more context than it buys."""
 
     @property
     def refreshed(self) -> Path:
