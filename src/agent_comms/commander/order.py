@@ -19,7 +19,6 @@ import dataclasses
 from difflib import SequenceMatcher
 import json
 import re
-import shlex
 import subprocess
 import sys
 import time
@@ -81,7 +80,6 @@ from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.launch_root import LaunchRoot
 from agent_comms.cli_options import SingleArgument
 from agent_comms.repo import AcquiredRepositories
 from agent_comms.repo import Repo
@@ -763,11 +761,10 @@ class Commander(CommanderContext):
         except MaintenanceHeldError as held:
             # A say records nothing but its post, so the whole command is the resend.
             answer_flags = ('--answers', *(str(answer.message_id) for answer in answers)) if answers else ()
-            command = ('agent-comms-commander', *LaunchRoot.from_path(self.root).arguments(),
-                       'order', 'say', units, body_file,
-                       *self.actor.commander_arguments(self.comms), *answer_flags)
+            command = self.actor.commander_command(
+                self.comms, *SayVerb.command_arguments(units, body_file, *answer_flags))
             sys.exit(f'Refused, nothing sent: {held}\nAfter the install reports finished, '
-                     'resend:\n  ' + shlex.join(command))
+                     'resend:\n  ' + command)
 
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
@@ -1016,9 +1013,8 @@ class DirectiveVerb(CommanderVerb):
             for asker in rule.answered_in():
                 askers.setdefault(asker, []).append(str(rule.message.message_id))
         return {f'--answers {" ".join(ids)} ({asker})':
-                shlex.join(('agent-comms-commander', *LaunchRoot.from_path(ctx.root).arguments(),
-                            SayVerb.tool(), SayVerb.declared_name, asker, 'BODYFILE',
-                            *ctx.actor.commander_arguments(ctx.comms), '--answers', *ids))
+                ctx.actor.commander_command(
+                    ctx.comms, *SayVerb.command_arguments(asker, 'BODYFILE', '--answers', *ids))
                 for asker, ids in askers.items()}
 
     def unnamed_answers(self, opened: tuple[OwedAnswer, ...],

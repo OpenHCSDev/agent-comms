@@ -1,6 +1,7 @@
 """Native commander publication uses its explicit actor, never the configured founder."""
 
 from dataclasses import replace
+import shlex
 
 import pytest
 
@@ -8,8 +9,12 @@ from agent_comms.commander.order import Commander, SayVerb
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import QuestionKind
 from agent_comms.standing_rules import OwedAnswer
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
-from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
+from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller, ThreadCaller
+from agent_comms.thread_execution import (
+    CommanderForkExecution,
+    ExternalThreadExecution,
+    NativeThreadExecution,
+)
 from cli_command import commander
 
 pytest_plugins = ('test_commander_forks',)
@@ -95,6 +100,23 @@ def test_threadless_operator_read_publishes_nothing(fork_bus):
     result = commander('--root', str(comms.root), 'order', 'idle', caller=NoThreadCaller())
     assert result.returncode == 0, result.stderr
     assert comms.bus.bus.revision() == before
+
+
+@pytest.mark.parametrize('caller', [ThreadCaller('lead'), CommanderForkCaller('command-reviewer')])
+def test_rendered_commander_command_preserves_root_actor_and_quoted_body(fork_bus, tmp_path, caller):
+    comms, _, _ = fork_bus
+    comms.registry.register_child('command-reviewer', 'lead', CommanderForkExecution, comms.goals)
+    body = tmp_path / 'body with spaces.txt'
+    body.write_text('The rendered command publishes from the declared caller')
+    command = caller.commander_command(
+        comms, *SayVerb.command_arguments('worker', str(body)))
+    _, *arguments = shlex.split(command)
+    result = commander(*arguments, caller=NoThreadCaller())
+    assert result.returncode == 0, result.stderr
+    message = comms.bus.bus.lookup(comms.bus.bus.revision())
+    assert message.sender == caller.own_thread()
+    assert message.target == 'worker'
+    assert message.body == body.read_text()
 
 
 def test_direct_commander_write_also_requires_its_actual_caller(fork_bus, tmp_path):

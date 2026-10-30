@@ -67,6 +67,12 @@ class ToolCaller(ABC):
         """Commander argv preserves the actual caller; forks also select their registered parent."""
         return self.from_flag()
 
+    def commander_command(self, comms: Comms, *verb_args: str) -> str:
+        """Render a commander invocation with this caller's root and authority."""
+        return shlex.join(('agent-comms-commander',
+                           *LaunchRoot.from_path(comms.root).arguments(),
+                           *verb_args, *self.commander_arguments(comms)))
+
     @abstractmethod
     def own_thread(self) -> str:
         """The thread a tool acts on when its call names none."""
@@ -332,13 +338,14 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
-            launch = ('agent-comms-commander', *LaunchRoot.from_path(comms.root).arguments())
-            actor = self.commander_arguments(comms)
-            command = shlex.join((*launch, 'order', 'say', '#comms', 'FILE', *actor))
-            review = shlex.join((*launch, 'judge', '...', *actor))
+            # Order verbs depend on ToolCaller; resolve the declaration only at CLI rendering.
+            from .commander.order import SayVerb
+
+            command = self.commander_command(
+                comms, *SayVerb.command_arguments('#comms', 'FILE'))
             raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: record a head verdict with"
-                f" `{review}` or post what it found with `{command}` before it stops.")
+                f"{self.name} recorded nothing in Core: record a head verdict or post"
+                f" what it found with `{command}` before it stops.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:

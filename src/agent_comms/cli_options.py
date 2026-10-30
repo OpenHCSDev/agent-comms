@@ -14,9 +14,9 @@ class SingleArgument(argparse.Action):
     """A caller selection is one explicit value, never last-writer-wins authority."""
 
     def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace,
-                 values: object, option_string: str | None = None) -> None:
+                 values: object, option_string: object = argparse.SUPPRESS) -> None:
         if self.dest in vars(namespace):
-            parser.error(f'{option_string} must be supplied only once')
+            parser.error(f'{self.format_usage()} must be supplied only once')
         setattr(namespace, self.dest, values)
 
 
