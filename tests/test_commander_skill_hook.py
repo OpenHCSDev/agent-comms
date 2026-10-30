@@ -48,7 +48,7 @@ from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
-from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader
+from agent_comms_hooks.skill import CommanderReader, DeckReader, DeckStart, FleetReader, Prime
 from agent_comms_hooks.watch import DeafWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
@@ -436,6 +436,23 @@ def test_every_deal_reads_the_paper_before_any_rule():
         assert sources[len(paper)] == RuleFile.packaged()[0].path
 
 
+def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indictment_last():
+    """/prime deals a selection of the one reader list: each variant keeps or drops the papers
+    and the commander's indictment, every rule stays, and a kept indictment stays last."""
+    paper = set(CommanderPackage.paper())
+    indictment = CommanderPackage.indictment()
+    kept = set()
+    for prime in Prime.members_with(Prime):
+        commander = prime.commander.sources()
+        assert indictment not in prime.fleet.sources()
+        assert all(rule.path in commander for rule in CommanderReader.rules())
+        kept.add((paper <= set(commander), indictment in commander))
+        if indictment in commander:
+            assert prime.commander.leading()[-1] == indictment
+        assert prime.commander.slices() and prime.fleet.slices()
+    assert kept == {(True, True), (True, False), (False, True), (False, False)}
+
+
 def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander_bus):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     transcript = tmp_path / "session.jsonl"
@@ -567,6 +584,24 @@ def test_a_parallel_batch_opens_one_unanswered_rule_and_refuses_the_next(capsys,
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
     start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+
+
+def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
+    """On 2026-10-30 a session opened the indictment and two rules first and never read the
+    papers: the next dealt file opens, any later one is refused and named the next to read."""
+    transcript, _ = dealt_session
+    dealt = CommanderReader.sources()
+    assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
+    papers = CommanderPackage.paper()
+    for later in (CommanderPackage.indictment(), CommanderReader.rules()[0].path, papers[1]):
+        call = gated(transcript, "Read", {"file_path": str(later.resolve())})
+        call.judge()
+        reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert reason["permissionDecision"] == "deny"
+        assert f"Next: {papers[0].resolve()}" in reason["permissionDecisionReason"]
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}))
+    read_whole(transcript, papers[0].resolve())
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[1].resolve())}))
 
 
 def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session):
