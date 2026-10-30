@@ -5,6 +5,7 @@ from pathlib import Path
 from agent_comms.repo import Checkout
 import os
 from functools import partial
+from hashlib import sha256
 
 import pytest
 
@@ -85,7 +86,8 @@ def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path
     assert comms.registry.require("owner").goal.progress == "one step"
 
 
-def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkeypatch, tmp_path):
+@pytest.mark.parametrize("first_status", ["active", "completed"])
+def test_each_new_goal_can_report_in_same_turn(comms, monkeypatch, tmp_path, first_status):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     comms.registry.declare(
         Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -93,20 +95,35 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     first = invoke_tool(comms, "comms_set_goal", {"text": "first"})["goal"]
     turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
     comms.agents.begin_turn("owner", turn)
+    report = tmp_path / "report.md"
+    report.write_text("Delivered report.\n")
     invoke_tool(
         comms,
         "comms_goal",
-        {"goal_id": first["id"], "status": "active", "progress": "reported"},
+        {
+            "goal_id": first["id"], "status": first_status, "progress": "reported",
+            "claims": [{"kind": "report", "source": {
+                "kind": "file", "path": str(report),
+                "sha256": sha256(report.read_bytes()).hexdigest(),
+            }}],
+        },
     )
 
     replacement = invoke_tool(comms, "comms_set_goal", {"text": "replacement"})["goal"]
     replacement_goal_id = FieldCodec.decode(GoalId, replacement["id"])
-    with pytest.raises(ValueError):
+    invoke_tool(
+        comms,
+        "comms_goal",
+        {"goal_id": replacement["id"], "status": "active", "progress": "second"},
+    )
+    reopened = wire(comms.root)
+    with pytest.raises(ValueError, match="already reported"):
         invoke_tool(
-            comms,
+            reopened,
             "comms_goal",
-            {"goal_id": replacement["id"], "status": "active", "progress": "second"},
+            {"goal_id": replacement["id"], "status": "active", "progress": "duplicate"},
         )
+    assert reopened.registry.require("owner").goal.progress == "second"
 
     comms.goals.update_goal(
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(replacement_goal_id)))
@@ -114,16 +131,21 @@ def test_replacing_or_clearing_goal_cannot_reset_turn_report_guard(comms, monkey
     after_clear = invoke_tool(comms, "comms_set_goal", {"text": "after clear"})["goal"]
     reopened = wire(comms.root)
     assert any(
-        entry.reports_turn(ReportedTurn(turn))
+        entry.after.reports_turn(ReportedTurn(turn))
         for entry in reopened.registry.goal_history("owner")
+    )
+    invoke_tool(
+        reopened,
+        "comms_goal",
+        {"goal_id": after_clear["id"], "status": "active", "progress": "third"},
     )
     with pytest.raises(ValueError):
         invoke_tool(
             reopened,
             "comms_goal",
-            {"goal_id": after_clear["id"], "status": "active", "progress": "third"},
+            {"goal_id": first["id"], "status": "active", "progress": "stale"},
         )
-    assert comms.registry.require("owner").goal.progress == ""
+    assert comms.registry.require("owner").goal.progress == "third"
 
 
 def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):

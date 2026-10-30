@@ -175,10 +175,7 @@ class GoalAction[Result: GoalDeclaration](
     def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
-        if ctx.model_report and any(
-            entry.reports_turn(ctx.reported_turn)
-            for entry in ctx.goals.registry.goal_history(ctx.thread.name)
-        ):
+        if ctx.model_report and ctx.thread.goal.reports_turn(ctx.reported_turn):
             raise ValueError("This goal was already reported in this turn.")
         goal = ctx.thread.goal.apply_action(self, ctx)
         if goal == ctx.thread.goal:
