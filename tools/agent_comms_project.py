@@ -27,6 +27,7 @@ from subprocess import CompletedProcess
 
 import stored_formats
 from module_layers import PACKAGE, StackClient
+from nominal_refactor_advisor import audit
 
 import agent_comms
 from agent_comms import (
@@ -44,7 +45,6 @@ from agent_comms.field_codec import boundary_decoder
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.phase_evidence import MainTree, PlanReading
-from nominal_refactor_advisor import audit
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 

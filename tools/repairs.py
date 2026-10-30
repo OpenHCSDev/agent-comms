@@ -27,6 +27,7 @@ from typing import ClassVar
 
 from agent_comms_project import AgentCommsProject
 from module_layers import Package, TopLevelNames
+from nominal_refactor_advisor import audit
 from nominal_refactor_advisor.codemod import (
     CodemodPlanSequence,
     CodemodSourceSnapshot,
@@ -37,7 +38,6 @@ from nominal_refactor_advisor.codemod import (
 )
 
 from agent_comms.declared_family import DeclaredFamily
-from nominal_refactor_advisor import audit
 
 type FunctionNode = ast.FunctionDef | ast.AsyncFunctionDef
 type ImportNode = ast.Import | ast.ImportFrom

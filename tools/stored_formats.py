@@ -15,8 +15,9 @@ import inspect
 import json
 from collections.abc import Iterator
 
-from agent_comms.field_codec import FieldCodec
 from nominal_refactor_advisor import audit
+
+from agent_comms.field_codec import FieldCodec
 
 
 def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
@@ -26,12 +27,17 @@ def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
     match vars(record):
         case {"version": declared}:
             match declared, FieldCodec.record_schema(record):
-                case _, {"properties": {"version": {"enum": [stamped]}, **stored},
-                         "required": required}:
+                case _, {"properties": {"version": {"enum": [int() as stamped]}, **stored},
+                         "required": list() as required}:
+                    fields: dict[object, object] = {**stored}
                     yield audit.project.StoredFormat.declared(
-                        stamped, stored, (key for key in required if key in stored))
-                case int(), {"properties": properties, "required": required}:
-                    yield audit.project.StoredFormat.declared(declared, properties, required)
+                        stamped, fields, (key for key in required
+                                          if isinstance(key, str) and key in stored))
+                case int() as version, {"properties": dict() as properties,
+                                        "required": list() as required}:
+                    yield audit.project.StoredFormat.declared(
+                        version, {**properties},
+                        (key for key in required if isinstance(key, str)))
 
 
 def stored_formats(module_name: str) -> dict[str, audit.project.StoredFormat]:
