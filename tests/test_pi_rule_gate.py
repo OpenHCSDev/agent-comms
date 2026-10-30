@@ -16,6 +16,7 @@ from agent_comms.native_tools import ReadTool
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
+from agent_comms.task_attachments.owner_notices import RestartNotice
 from agent_comms.threads import Thread
 from agent_comms_hooks.read_gate import ReadInput
 from agent_comms_hooks.skill import CommanderReader, FleetReader
@@ -60,6 +61,9 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         commander_bus.messaging.send_user_message(
             CommandTarget.named("unit-x"), body, worktree=Checkout(tmp_path)
         )
+        # Core's notice publishes under the owner's thread, but nobody typed it.
+        RestartNotice().publish(commander_bus.messaging, CommandTarget.named("unit-x"),
+                                "COMMANDER · unit-x · continue your orders")
     bash = call("bash", {"command": "ls"})
     bash.judge_under(unit_deal)  # never dealt: nothing to read
     events.CompactionAbort().deal_rules(unit_deal)

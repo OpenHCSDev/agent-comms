@@ -9,6 +9,7 @@ tool denial: Pi shows its text to the model as the tool's error.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,6 +22,7 @@ from agent_comms_hooks.skill import (
     FleetRulesReader,
 )
 
+from .bus_publication import Delivered
 from .rule_deal import DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 
@@ -84,19 +86,28 @@ class PiRedeal(PiRuleGate, Redeals):
         )
 
     def owner_words(self, snapshot: RegistrySnapshot) -> tuple[str, ...]:
-        """What the registry's human last sent this thread, oldest first: the same person
-        whose prompts the Claude deal reads from its transcript."""
+        """What the registry's human last typed to this thread, oldest first: the same person
+        whose prompts the Claude deal reads from its transcript. Core's notices (the heartbeat,
+        escalations, restart reminders) publish under his thread too; his thread's role asks
+        each message's task whether it carries his words, so a notice is never dealt as them."""
         lookup = self.thread.incarnation.require_recorded().lookup
-        return tuple(
-            reversed(
-                tuple(
-                    delivery.message.body
-                    for user in snapshot.user_thread().existing()
-                    for delivery in self.comms.bus.bus.received(
-                        lookup,
-                        sender_lookups=(user.incarnation.require_recorded().lookup,),
-                        limit=self.owner_prompts,
-                    )
-                )
-            )
-        )
+        return tuple(reversed(tuple(
+            delivery.message.body
+            for user in snapshot.user_thread().existing()
+            for delivery in self.typed_by(user, lookup)
+        )[:self.owner_prompts]))
+
+    def typed_by(self, user: Thread, lookup: str) -> Iterator[Delivered]:
+        """The human's own messages to this thread, newest first, read a page at a time
+        until the deal has its prompts or his history ends."""
+        sender = (user.incarnation.require_recorded().lookup,)
+        before: int | None = None
+        found = 0
+        while found < self.owner_prompts and (page := self.comms.bus.bus.received(
+            lookup, sender_lookups=sender, before=before, limit=self.owner_prompts * 8,
+        )):
+            for delivery in page:
+                if user.role.user_task_facts(delivery.message):
+                    found += 1
+                    yield delivery
+            before = page[-1].seq
