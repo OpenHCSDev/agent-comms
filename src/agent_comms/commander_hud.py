@@ -434,7 +434,7 @@ class CommanderHud(CommanderLoad):
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.plain_lines() for table in section.tables))
+                table.folded_lines() for table in section.tables))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)

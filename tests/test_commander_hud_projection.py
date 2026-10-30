@@ -12,7 +12,7 @@ from agent_comms.disclosure_text import (
 from agent_comms.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, FoldedRule, RulePing
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OpenPrProgress
 from agent_comms.ui_model.unit_state import (
@@ -81,7 +81,7 @@ def test_shared_hud_groups_strip_full_alarms_and_plain_text() -> None:
     assert "CommanderUnit" not in "\n".join(plain)
     assert "\x1b[" in "\n".join(hud.hud_text(1000, colour=True))
     assert sum(len(section.pings) for section in hud.alarms) == len(hud.packets[0].handled)
-    assert all(ping.text in "\n".join(hud.alarm_text(hud.alarms, 1000))
+    assert all(shows_every_word(ping, hud.alarm_text(hud.alarms, 1000))
                for ping in hud.packets[0].handled)
     assert hud.board == ()
     details = hud.alarm_detail(hud.alarms, 1000)
@@ -153,7 +153,13 @@ def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> N
     new, watching = (plain.index(section.heading()) for section in hud.alarms)
     units = [plain.index(section.heading()) for section in hud.groups]
     assert new < min(units) and max(units) < watching
-    assert all(ping.text in "\n".join(plain) for ping in pings)
+    assert all(shows_every_word(ping, plain) for ping in pings)
+
+
+def shows_every_word(ping, lines: tuple[str, ...]) -> bool:
+    """Folding moves shared words into the rule header; it never drops one."""
+    shown = "\n".join(lines)
+    return all(word in shown for word in ping.text.replace(" -> ", " ").split(" "))
 
 
 def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
@@ -161,7 +167,26 @@ def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
     section = hud.alarms[0]
     lines = section.text_lines(1000)
     for kind, pings in section.by_kind().items():
-        start = lines.index(f"{kind.declared_name} · {len(pings)}")
-        assert [line.startswith(f"  {ping.text}") for line, ping in zip(lines[start + 1:], pings)] == [True] * len(pings)
+        start = next(index for index, line in enumerate(lines)
+                     if line.startswith(f"{kind.declared_name} · {len(pings)}"))
+        rows = lines[start + 1:start + 1 + len(pings)]
+        assert all(row.startswith("  ") for row in rows)
+        assert all(shows_every_word(ping, (lines[start], *rows)) for ping in pings)
     assert "Kind:" not in "\n".join(lines)
     assert sum(len(pings) for pings in section.by_kind().values()) == len(section.pings)
+
+
+def test_rows_of_one_rule_print_their_shared_words_once() -> None:
+    ping = example_hud().packets[0].handled[0]
+    texts = (
+        "JUDGE openhcsdev/agent-comms#3766 29e260518 is sitting there unjudged. you read it yet?"
+        " -> judge ok/back --repo openhcsdev/agent-comms --pr 3766 --head 29e2605180debb204a7c77ca4b8cf772f51091da",
+        "JUDGE openhcsdev/toad#1375 31e3ca17e is sitting there unjudged. you read it yet?"
+        " -> judge ok/back --repo openhcsdev/toad --pr 1375 --head 31e3ca17e0c61cd2b827afe0c66082e0da55756b",
+    )
+    pings = tuple(replace(ping, text=text) for text in texts)
+    header, *rows = FoldedRule.of(ping.alarm_kind, pings).lines(1000)
+    assert header.endswith(": JUDGE … is sitting there unjudged. you read it yet?"
+                           " -> judge ok/back --repo REPO --pr PR --head HEAD")
+    assert rows[0].startswith("  openhcsdev/agent-comms#3766 29e2605180debb204a7c77ca4b8cf772f51091da ·")
+    assert all(shows_every_word(folded, (header, *rows)) for folded in pings)

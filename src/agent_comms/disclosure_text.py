@@ -218,6 +218,32 @@ class ViewTable[R]:
         return tuple(" · ".join(" / ".join(cell.splitlines()) for cell in row if cell)
                      for row in self.texts)
 
+    def folded_lines(self) -> tuple[str, ...]:
+        """Every cell of ``plain_lines``, with each repeated value printed once.
+
+        A column whose value repeats across rows is a shared fact of those rows, not a fact of
+        each row: rows agreeing on every repeated column print under one labelled line, and
+        each row keeps only its own cells. Nineteen units awaiting the same proof read as one
+        line and nineteen names, not nineteen copies of the same sentence.
+        """
+        rows = tuple(tuple(" / ".join(cell.splitlines()) for cell in row) for row in self.texts)
+        shared = tuple(index for index, column in enumerate(zip(*rows))
+                       if len(set(column)) < len(rows))
+        if len(rows) < 2 or not shared:
+            return self.plain_lines()
+        groups: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
+        for row in rows:
+            groups.setdefault(tuple(row[index] for index in shared), []).append(row)
+        lines: list[str] = []
+        for values, members in groups.items():
+            lines.append(" · ".join(f"{self.columns[index].label}: {value}"
+                                    for index, value in zip(shared, values) if value)
+                         + f" ({len(members)})")
+            lines.extend("  " + " · ".join(cell for index, cell in enumerate(row)
+                                           if index not in shared and cell)
+                         for row in members)
+        return tuple(lines)
+
     def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""
         return tuple(" · ".join(f"{column.label}: {cell}"
