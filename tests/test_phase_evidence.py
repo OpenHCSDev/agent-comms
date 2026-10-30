@@ -200,7 +200,7 @@ def test_source_shape_evidence_reads_declarations_on_main(tmp_path):
     reading = main_of(tmp_path, {
         "src/a.py": "class Store:\n" + copy + "\nclass Child(Store):\n    pass\n",
         "src/b.py": "class Other:\n" + copy.replace("path", "root") + "\n"
-                    "def long():\n" + "    x = 1\n" * GodFunction.threshold + "\n"
+                    "def long():\n" + "    x = 1\n" * GodFunction.threshold() + "\n"
                     "def probe(other):\n    return other.value is None\n"
                     "def check(value):\n    return isinstance(value, (int, Store))\n",
         "src/caps.py": "class Shared:\n    pass\n\nclass Lonely:\n    pass\n",
