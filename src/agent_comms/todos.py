@@ -133,7 +133,7 @@ from agent_comms.recorded_time import (
     UnrecordedEventTime,
 )
 from agent_comms.registry_store import RegistryStore
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
 from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
@@ -1018,10 +1018,11 @@ class PullRequestUpdatePage:
     page_info: PageInfo
 
 
-class PullRequests:
-    """Forge facts and checkout-local worktrees, cached within one board read."""
+class PullRequests(RepositoryReads):
+    """Forge facts and repository reads shared within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
+        super().__init__()
         self._read: dict[tuple[RepositoryName, int], ListedPullRequest] = {}
         self._open: dict[RepositoryName, tuple[int, ...]] = {}
         self._worktrees: dict[Path, Mapping[str, tuple[str, ...]]] = {}
@@ -1126,7 +1127,7 @@ class PullRequests:
         """One canonical local checkout's retained listing, not its forge namesake's."""
         checkout = Checkout(repository.checkout).resolved().path
         if checkout not in self._worktrees:
-            self._worktrees[checkout] = WorkBranches(checkout).worktrees()
+            self._worktrees[checkout] = WorkBranches(checkout, reads=self).worktrees()
         return self._worktrees[checkout]
 
     def working_on(self, goals: Goals, repo: RepositoryName,
@@ -1135,7 +1136,7 @@ class PullRequests:
         when no order says so. One worktree read per local checkout in this frame."""
         snapshot = goals.registry.snapshot()
         repository = Repo.selected(snapshot.commander_project.require().repos, repo.to_wire())
-        reader = WorkBranches(repository.checkout)
+        reader = WorkBranches(repository.checkout, reads=self)
         return tuple(dict.fromkeys(
             snapshot.require(name).incarnation
             for checkout in reader.checkouts(snapshot, row.branch, self.worktrees(repository))
@@ -1145,7 +1146,7 @@ class PullRequests:
         """Advance the frame's forge facts only after the existing verdict posts its carry."""
         project = goals.registry.snapshot().commander_project.require()
         repository = Repo.selected(project.repos, repo.to_wire())
-        reader = WorkBranches(repository.checkout)
+        reader = WorkBranches(repository.checkout, reads=self)
         for row in self.open(repo):
             if not row.has_head_review:
                 current = ReadPullRequestHead(repo, row.number, row.head, base=row.base)
@@ -1411,7 +1412,10 @@ class UnreadCheckout(ProgressCheckout):
         raise WorkBranchError(self.reason)
 
 
+@dataclass(frozen=True)
 class PresentCheckout(ProgressCheckout):
+    reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
+                                   kw_only=True)
     default_reference: ClassVar[str] = f"refs/remotes/{Repo.remote}/HEAD"
 
     @property
@@ -1420,7 +1424,7 @@ class PresentCheckout(ProgressCheckout):
 
     @cached_property
     def head(self) -> str:
-        return self.branches.history.resolve("HEAD")
+        return self.branches.head.revision()
 
     def require_read(self) -> None:
         self.head
@@ -1447,7 +1451,7 @@ class PresentCheckout(ProgressCheckout):
     @cached_property
     def branches(self) -> WorkBranches:
         """One Git branch reader for this checkout during the progress frame."""
-        return WorkBranches(self.path)
+        return WorkBranches(self.path, reads=self.reads)
 
     @cached_property
     def check_notes(self) -> dict[str, tuple[CheckedCommit, ...]]:
@@ -1521,11 +1525,11 @@ class PresentCheckout(ProgressCheckout):
         return ((sha, at) for sha, at in self.origin_pushes if sha in published)
 
 
-class CheckoutReads:
-    """Share checkout readers within one frame; each capture selects its refs once,
-    while retained commit points and push reflogs belong to that frame alone."""
+class CheckoutReads(RepositoryReads):
+    """Share repository histories and distinct worktree readers within one frame."""
 
     def __init__(self) -> None:
+        super().__init__()
         self._checkouts: dict[Path, PresentCheckout] = {}
         self._branch_mains: dict[RepositoryName, str] = {}
         self._branch_facts: dict[Path, BranchDifference] = {}
@@ -1534,7 +1538,7 @@ class CheckoutReads:
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
         path = path.resolve()
-        return self._checkouts.setdefault(path, PresentCheckout(path))
+        return self._checkouts.setdefault(path, PresentCheckout(path, reads=self))
 
     def progress_checkout(self, path: Path) -> ProgressCheckout:
         """The checkout at path, or a retired one that holds no history: this read alone
@@ -1587,8 +1591,7 @@ class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
-        CheckoutReads.__init__(self)
-        PullRequests.__init__(self, todos)
+        super().__init__(todos)
         self._progress: dict[str, OrderProgress] = {}
 
     def unread(self, todos: Iterable[Todo], error: Exception) -> None:
@@ -5913,7 +5916,9 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
 class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
 
-    def phases_checked(self, commanders: frozenset[ThreadIncarnation]) -> dict[type[OrderPhase], float]:
+    def phases_checked(
+        self, commanders: frozenset[ThreadIncarnation],
+    ) -> dict[type[OrderPhase], float]:
         """The latest checked declaration per phase, including declarations retained by folds.
 
         Decode the recursive order envelope in SQL, then aggregate only checked declarations;
@@ -6047,7 +6052,8 @@ class OwnerRequestStore(DurableStore):
     def _select(self, where: str, parameters: tuple, *,
                 reader: Callable[[sqlite3.Connection, str, tuple], CapturedRows[Todo]] = Todo.capture_rows,
                 ) -> tuple[Todo, ...]:
-        """Capture selected rows and their aggregates together; decode after releasing the snapshot."""
+        """Capture selected rows and their aggregates together;
+        decode after releasing the snapshot."""
         if not self.path.exists():
             return ()
         with self.snapshot() as db:
