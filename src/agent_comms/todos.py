@@ -133,7 +133,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import StorageRule, UnitStorage
+from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -1565,9 +1565,10 @@ class ProgressRead(PullRequests, CheckoutReads):
         PullRequests.__init__(self, todos)
         self._progress: dict[str, OrderProgress] = {}
 
-    def unread(self, todo: Todo, error: Exception) -> None:
-        directory = todo.order.checked().check.directory
-        self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
+    def unread(self, todos: Iterable[Todo], error: Exception) -> None:
+        for todo in todos:
+            directory = todo.order.checked().check.directory
+            self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
@@ -2229,6 +2230,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
     )
+
+    def source_repositories(self) -> tuple[RepositoryName, ...]:
+        return tuple(dict.fromkeys(repository for declaration in self.declarations
+                                   for repository in declaration.source_repositories()))
 
     @property
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
@@ -3371,8 +3376,13 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class SharedWorktreeRefusal(TodoError):
+class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
     """Two different order holders cannot write into the same physical worktree."""
+
+    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
+
+    def explanation(self) -> str:
+        return str(self)
 
     def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
                  holding_holder: ThreadIncarnation, worktree: Path) -> None:
@@ -3583,20 +3593,24 @@ class Assignment(TodoHolder):
         return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
-                             snapshot: RegistrySnapshot) -> None:
-        """Validate this holder against open work using the transaction's registry snapshot;
-        the incoming problems move with this holder, so their current holders share nothing."""
+                             snapshot: RegistrySnapshot, workplaces: EditWorkplaces) -> None:
+        """Compare prepared physical edit ownership; launch/check paths confer no occupancy."""
+        proposed = workplaces.orders[problem]
+        prepared = proposed.held()
+        if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):
+            raise TodoConflict(proposed)
+        workplaces.require_owner(proposed, snapshot)
         incoming.require_free(db, self.owner_identity, snapshot)
-        worktrees = {path for owner in self.holder_in(snapshot) for path in owner.home_checkouts}
+        worktrees = workplaces.roots_for(problem)
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
             if held.id in incoming.problems or previous.owner_identity == self.owner_identity:
                 continue
-            for other in previous.holder_in(snapshot):
-                for shared in worktrees.intersection(other.home_checkouts):
-                    raise SharedWorktreeRefusal(
-                        problem, held.id, self.owner_identity, other.incarnation, shared
-                    )
+            workplaces.require_current(held, snapshot)
+            for shared in worktrees.intersection(workplaces.roots_for(held.id)):
+                raise SharedWorktreeRefusal(
+                    problem, held.id, self.owner_identity, previous.owner_identity, shared
+                )
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
@@ -3738,6 +3752,10 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySo
     def prepare(self, goals: Goals, current: Todo) -> Self:
         return self
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        """Only assignment members prepare an incoming allocation boundary."""
+        return ()
+
     def record(self, goals: Goals, problem: str) -> Todo:
         """Write this operation; publish its effects only after the canonical row was written."""
         changed = goals.apply_problem(problem, self)
@@ -3852,11 +3870,14 @@ class AssignTodo(TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        return (replace(store.get(problem), assignment=self.proposed, order=self.order),)
+
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         self.proposed.require_available_in(
             db, current.id, IncomingWork(
                 self.actor, self.group | {current.id}, frozenset({self.order.id})),
-            RegistryStore.at(store.root).snapshot())
+            RegistryStore.at(store.root).snapshot(), store.prepared_edits())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -4937,13 +4958,17 @@ class RestoreHolderTodo(TodoCommand):
     actor: ThreadIncarnation
     previous: Assignment
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        return (replace(store.get(problem), assignment=self.previous),)
+
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         snapshot = RegistryStore.at(store.root).snapshot()
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
         self.previous.require_available_in(db, current.id, IncomingWork(
             self.actor, frozenset({current.id}),
-            frozenset(declared.id for declared in current.order.declarations)), snapshot)
+            frozenset(declared.id for declared in current.order.declarations)), snapshot,
+            store.prepared_edits())
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
@@ -5970,6 +5995,18 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
+    def preparing_edits(self, proposed: tuple[Todo, ...]) -> TodoStore:
+        """Prepare physical allocations outside SQL; the prepared store lives for this write only."""
+        if not proposed:
+            return self
+        snapshot = RegistryStore.at(self.root).snapshot()
+        held = self.held_orders()
+        workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
+        return PreparedTodoStore(self.root, workplaces)
+
+    def prepared_edits(self) -> EditWorkplaces:
+        raise TodoError('Assignment allocation evidence was not prepared before the write.')
+
     def allocate_problem(self) -> str:
         with self.writing() as db:
             return str(ProblemAllocation.allocate(db))
@@ -6216,10 +6253,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         proposed = Todo.ordered(
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
-        with self.writing() as db:
+        prepared = self.preparing_edits((proposed,))
+        with prepared.writing() as db:
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
-                RegistryStore.at(self.root).snapshot())
+                RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -6247,9 +6285,12 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def apply_together(self, commands: Sequence[ProblemCommand]) -> tuple[Todo, ...]:
         """Write the commands under one Todo transaction, in order: each validates against
         the rows the commands before it wrote, and any refusal writes none of them."""
-        with self.writing() as db:
+        proposed = tuple(todo for command in commands
+                         for todo in command.operation.proposed_work(self, command.problem))
+        prepared = self.preparing_edits(proposed)
+        with prepared.writing() as db:
             for command in commands:
-                command.write(db, self)
+                command.write(db, prepared)
             return self._snapshot_rows(
                 db, tuple(self._current(db, command.problem) for command in commands))
 
@@ -6301,6 +6342,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 assigner, expected.expected_revision, _thread(owner), generation, review_at,
                 order, request, traced, group))
             for expected in problems))
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedTodoStore(TodoStore):
+    """One mutation's immutable allocation cut, not another persisted edit ownership authority."""
+
+    workplaces: EditWorkplaces
+
+    def prepared_edits(self) -> EditWorkplaces:
+        return self.workplaces
 
 
 @dataclass(frozen=True, slots=True)

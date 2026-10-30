@@ -17,7 +17,6 @@ from agent_comms.bus import Bus, PrivateRecord
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.commander.order import Commander
-from agent_comms.commander_service import CommanderService
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import MessageId
@@ -52,7 +51,7 @@ def test_commander_verb_answers_under_five_seconds(
 ) -> None:
     comms.channels.create_tag("comms")
     names = tuple(f"worker-{index}" for index in range(500))
-    for index, name in enumerate((*names, "lead", CommanderService.sender)):
+    for index, name in enumerate((*names, "lead")):
         comms.registry.declare(Thread(
             name, frozenset({"comms"}), Checkout(tmp_path / name),
             created_at=10000.0 + index, execution=ExternalThreadExecution,

@@ -583,8 +583,6 @@ class Connector:
 
     def application(self) -> web.Application:
         self.store.read()  # Refuse an unreadable store before binding any port.
-        with self.opened_wire() as comms:
-            CommanderHeartbeat.register(comms.registry)
         app = web.Application(middlewares=[self.log_route])
         app.cleanup_ctx.append(self.watch_orders)
         app.on_shutdown.append(self.stop_calls)

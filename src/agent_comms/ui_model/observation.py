@@ -446,6 +446,7 @@ class ReadCommanderUnit(ReadRequest):
         if not self.commander.current(snapshot) or not self.unit.current(snapshot):
             raise ToolRefusedError("The selected commander or unit incarnation is no longer current")
         hud = CommanderFrame.current(comms, self.commander.name)
+        hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
                 return card.detail(comms, self.commander, self.orders)
