@@ -123,11 +123,13 @@ class EscalationNotice(OwnerNotice, declared_name=None):
     @classmethod
     def unanswered(cls, source: BusReader, snapshot: RegistrySnapshot, commander: str,
                    before: float) -> tuple[Message, ...]:
-        """Lines sent by ``before`` and after the newest answer to any line of this burst kind."""
+        """Lines sent by ``before`` that the bus ordered after the newest answer to any line of
+        this burst kind. Whether a line is answered is decided by bus sequence alone, the one total
+        order every writer shares: a reply whose clock ran behind still covers what it follows."""
         sent = cls.lines(source, snapshot, commander, time.time())
-        covered = max((answer.timestamp for answer in cls.newest_answer(source, snapshot, commander, sent)),
-                      default=0.0)
-        return tuple(message for message in sent if covered < message.timestamp <= before)
+        covered = max((answer.seq for answer in cls.newest_answer(source, snapshot, commander, sent)),
+                      default=0)
+        return tuple(message for message in sent if message.seq > covered and message.timestamp <= before)
 
 
 @dataclass(frozen=True)

@@ -763,10 +763,11 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     saved, = CommanderUpdate.latest(held_bus, commander.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+    owner = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
     page = MessagePageRequest(DMDisplayScope.capture(
-        heartbeat.sender, "lead", held_bus.registry.snapshot(),
+        owner, "lead", held_bus.registry.snapshot(),
     )).read_opened(held_bus.bus.bus)
-    message = next(message for message in page.messages if message.sender == heartbeat.sender)
+    message = next(message for message in page.messages if message.task == saved)
     # The compact body truncates lines; the original board entries keep every complete alert.
     board = tuple(entry.text for entry in message.task.board(held_bus, "lead"))
     assert set(expected) <= set(board)
@@ -856,6 +857,21 @@ def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
     later = escalate(held_bus, VibeCheckNotice, now - 10)
     assert [m.message_id for m in VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [
         later.message_id]
+
+
+def test_an_answer_covers_by_bus_order_whatever_its_clock_says(held_bus):
+    """Answered is decided by bus sequence alone: a reply the bus ordered after the alarm covers
+    it even when the replier's clock ran behind, and a line the bus ordered after the reply stays
+    owed even when its clock ran behind the reply's."""
+    now = time.time()
+    check = escalate(held_bus, VibeCheckNotice, now - 10)
+    reply = publish(held_bus, "lead", check.sender, now - 20, answers=(check.reference,))
+    assert reply.seq == check.seq + 1 and reply.timestamp < check.timestamp
+    for beat in (time.time(), time.time() + VibeCheckUnanswered.seconds):
+        assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", beat) == ()
+    later = escalate(held_bus, VibeCheckNotice, now - 30)
+    assert [m.reference for m in VibeCheckNotice.unanswered(
+        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [later.reference]
 
 
 def test_answering_the_owner_does_not_answer_his_escalation(held_bus):

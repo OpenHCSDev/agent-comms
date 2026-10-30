@@ -17,6 +17,7 @@ from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import Addressed
+from agent_comms.repo import Checkout
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import ConnectedThreadStatus
 from agent_comms_hooks.watch import WatchClaim
@@ -43,6 +44,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                       thread='deaf-session', start=Binding.bus_head(str(held_bus.root)))
     operation = Serve(owner=owner, transcript=tmp_path / "deaf-session.jsonl")
     heartbeat = CommanderHeartbeat()
+    owner_thread = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
 
     async def beat():
         await heartbeat.run(lambda: nullcontext(held_bus))
@@ -50,7 +52,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
     def alarms():
         with held_bus.bus.bus.observing() as db:
             sequences = tuple(row.seq for row in Addressed.table.select(
-                db, sender=heartbeat.sender, target=CommsTag.channel(),
+                db, sender=owner_thread, target=CommsTag.channel(),
             ))
         return tuple(message for sequence in sequences
                      if "COMMANDER DEAF" in (message := held_bus.bus.bus.lookup(sequence)).body)
@@ -101,7 +103,7 @@ async def test_unconfirmed_monitor_reports_commander_deaf_once(
                 await beat()
                 assert alarms() == (alarm,)
                 update, = held_bus.bus.bus.latest_addressed(
-                    frozenset({heartbeat.sender}), frozenset({"lead"}),
+                    frozenset({owner_thread}), frozenset({"lead"}),
                 )
                 assert isinstance(update.task, CommanderNotice)
             finally:
