@@ -17,7 +17,7 @@ from .notification_evidence import NotificationWindow
 if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .presentation import MessageNotification
-    from .transcripts import TranscriptReadIdentity, TranscriptSourceWindow
+    from .transcripts import TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
 
@@ -248,7 +248,7 @@ class ThreadPresentation(ThreadStatusDisplay):
         )
         if not captured.read.identity.thread.incarnation.current(snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
-        return self.with_sources(captured)
+        return captured.presentation(self)
 
     def same_observation(self, other: ThreadPresentation) -> bool:
         """Equal view and turn evidence, not merely equal global store revisions.
@@ -263,33 +263,6 @@ class ThreadPresentation(ThreadStatusDisplay):
         if original is None or current is None:
             return original is current
         return original.thread == current.thread and original.same_snapshot(current)
-
-    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
-        """Incoming and sent outcomes are views of one captured notification window, read
-        as the thread's owner may see them; the incoming outcomes carry public envelopes."""
-        from .notification_assignment import NotificationAssignment
-        from .presentation import MessageNotification
-        from .notification_evidence import OwnerOutcomes
-
-        transcripts = window.read.owner
-        sources = tuple({source.message.reference: source
-                         for source in (*window.sources, *window.sent_sources)}.values())
-        viewer = OwnerOutcomes.of(window.read.identity.thread.incarnation)
-        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
-        projected = MessageNotification.delivery_window(
-            transcripts.root, transcripts.registry, notification_read)
-        incoming = tuple(
-            replace(notification, message=source.envelope)
-            for source in window.sources
-            for notification in projected.outcomes[source.message.seq, source.message.message_id]
-        )
-        shown = replace(self, notifications=incoming, read_identity=window.read.identity)
-        return AcquiredThreadPresentation(
-            **{declared.name: getattr(shown, declared.name)
-               for declared in fields(ThreadPresentation)},
-            notification_window=projected,
-            incoming_references=tuple(source.message.reference for source in window.sources),
-            sent_references=tuple(source.message.reference for source in window.sent_sources))
 
     @property
     def label(self) -> str:
@@ -347,8 +320,5 @@ class NoThreadPresentation(ThreadPresentation):
 
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
-        return self
-
-    def with_sources(self, window: TranscriptSourceWindow) -> ThreadPresentation:
         return self
 

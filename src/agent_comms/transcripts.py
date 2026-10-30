@@ -27,7 +27,10 @@ from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
-from .notification_evidence import NotificationWindow
+from .notification_assignment import NotificationAssignment
+from .notification_evidence import NotificationWindow, OwnerOutcomes
+from .presentation import MessageNotification
+from .thread_presentation import AcquiredThreadPresentation, ThreadPresentation
 from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
@@ -639,6 +642,28 @@ class TranscriptSourceWindow:
     read: TranscriptRead
     sources: tuple[Delivered, ...]
     sent_sources: tuple[Delivered, ...]
+
+    def presentation(self, ordinary: ThreadPresentation) -> AcquiredThreadPresentation:
+        """Project incoming and sent outcomes from this one acquired source window."""
+        transcripts = self.read.owner
+        sources = tuple({source.message.reference: source
+                         for source in (*self.sources, *self.sent_sources)}.values())
+        viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
+        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
+        projected = MessageNotification.delivery_window(
+            transcripts.root, transcripts.registry, notification_read)
+        incoming = tuple(
+            replace(notification, message=source.envelope)
+            for source in self.sources
+            for notification in projected.outcomes[source.message.seq, source.message.message_id]
+        )
+        shown = replace(ordinary, notifications=incoming, read_identity=self.read.identity)
+        return AcquiredThreadPresentation(
+            **{declared.name: getattr(shown, declared.name)
+               for declared in fields(ThreadPresentation)},
+            notification_window=projected,
+            incoming_references=tuple(source.message.reference for source in self.sources),
+            sent_references=tuple(source.message.reference for source in self.sent_sources))
 
 
 class Transcripts:

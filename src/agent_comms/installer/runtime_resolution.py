@@ -19,6 +19,7 @@ from zipfile import ZipFile
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 from urllib.parse import parse_qsl, urlsplit
 
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 from packaging.markers import Marker, default_environment
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
@@ -372,6 +373,25 @@ class PrivateUvProject(UvRecord):
             self.tool.uv.sources[name] = source.materialize(original, core, projects, canonicalize_name(name))
 
 
+class RequirementMarker(MroDispatch):
+    """Decode packaging's optional marker only where its external value enters."""
+
+    @classmethod
+    @boundary_decoder
+    def active(cls, marker: object, environment: dict[str, str], extras: Iterable[str]) -> bool:
+        return bool(cls.handler_for(type(marker))(marker, environment, extras))
+
+    @handles(type(None))
+    @staticmethod
+    def unconditional(marker: object, environment: dict[str, str], extras: Iterable[str]) -> bool:
+        return True
+
+    @handles(Marker)
+    @staticmethod
+    def conditional(marker: Marker, environment: dict[str, str], extras: Iterable[str]) -> bool:
+        return any(marker.evaluate({**environment, "extra": extra}) for extra in extras)
+
+
 class StackSources:
     """Branch-tracking source declarations shared by installation and source checking."""
 
@@ -441,14 +461,8 @@ class StackSources:
                 ProjectMetadata.require_python(python)
                 return tuple(requirement for requirement in map(
                     Requirement, FieldCodec.decode(tuple[str, ...], dependencies))
-                    if cls.requirement_active(requirement, environment, ("",)))
+                    if RequirementMarker.active(requirement.marker, environment, ("",)))
         raise ValueError("A virtual runtime root requires tool.uv.package=false and project dependencies")
-
-    @staticmethod
-    @boundary_decoder
-    def requirement_active(requirement: Requirement, environment: dict[str, str], extras: Iterable[str]) -> bool:
-        return requirement.marker is None or any(
-            requirement.marker.evaluate({**environment, "extra": extra}) for extra in extras)
 
     @classmethod
     def active_requirements(cls, document: dict[str, object], projects: tuple[ProjectMetadata, ...],
@@ -479,7 +493,8 @@ class StackSources:
             if not added:
                 continue
             previous.update(added)
-            pending.extend(edge for edge in project.requirements if cls.requirement_active(edge, environment, added))
+            pending.extend(edge for edge in project.requirements
+                           if RequirementMarker.active(edge.marker, environment, added))
         return tuple(sorted(active, key=str))
 
     @staticmethod

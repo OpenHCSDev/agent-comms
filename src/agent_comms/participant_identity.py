@@ -23,7 +23,7 @@ class ParticipantIdentity(ABC):
     @classmethod
     def require_canonical(cls, value: str, label: str) -> None:
         cls.require_text(value, label)
-        if re.fullmatch(r"[a-zA-Z0-9_-]+", value) is None:
+        if not re.fullmatch(r"[a-zA-Z0-9_-]+", value):
             raise MalformedRecord(f"{label} must be a canonical thread name")
 
     @property
