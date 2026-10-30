@@ -808,7 +808,8 @@ def test_two_agents_on_one_session_keep_separate_deals(
                                      agent_id="a9"))
 
 
-def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session):
+@pytest.mark.parametrize("retired", [False, True])
+def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_session, retired):
     """A resume keeps the context it had: the reads made and the audit written stay, where a
     re-deal on 2026-10-30 unlinked claude-code's audit mid-gate and demanded 23 reads again."""
     transcript = tmp_path / "session.jsonl"
@@ -818,10 +819,13 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     first = start.current().paths[0]
     start.record_read(first, ReadSpan(1, sys.maxsize, sys.maxsize))
     start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    if retired:
+        old = start.current()
+        start.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
     result = session_start(transcript, "resume")
     assert result.returncode == 0, result.stderr
-    assert start.audit.exists()
-    assert start.current().read_by(start) == (first,)
+    assert start.audit.exists() is not retired
+    assert start.current().read_by(start) == (() if retired else (first,))
     assert session_start(transcript, "compact").returncode == 0
     assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
     assert start.current().read_by(start) == ()
