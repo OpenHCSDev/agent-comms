@@ -549,7 +549,8 @@ class ThreadManagement:
         child = spec.declare(self, resolved_bin, runtime)
         # A failed launch cannot erase a declaration another starter reserved,
         # nor erase the first input if reservation committed before the failure.
-        return self.owners._launch_owner(
+        with self.owners.launching_owner(
             child, resolved_bin, initial_input=spec.task, launch_runtime=runtime,
-        )
+        ) as owner:
+            return owner
 

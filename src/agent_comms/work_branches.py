@@ -405,16 +405,15 @@ query($owner: String!, $name: String!, $after: String) {
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
         """One complete published-ref cut per remote for this reader, not one call per branch."""
+        if remote in self._remote_heads:
+            return self.selected_heads(remote, reference)
         with Repo.acquiring():
-            if remote not in self._remote_heads:
-                heads = {
-                    reference: head
-                    for head, reference in (line.split() for line in self._git(
-                        "ls-remote", "--refs", remote,
-                    ).splitlines())
-                }
-            else:
-                return self.selected_heads(remote, reference)
+            heads = {
+                reference: head
+                for head, reference in (line.split() for line in self._git(
+                    "ls-remote", "--refs", remote,
+                ).splitlines())
+            }
         self._remote_heads[remote] = heads
         return self.selected_heads(remote, reference)
 

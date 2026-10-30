@@ -6,7 +6,7 @@ import logging
 import os
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import closing, contextmanager
+from contextlib import ExitStack, closing, contextmanager
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
@@ -429,28 +429,42 @@ class OwnerLifecycle:
         refusal = RelationViolationError("Explicit start is required for a stopped agent.")
         thread.role.require_executable(refusal)
         self.registry.status(thread.name).require_active(str(refusal))
-        return (
-            thread if thread.process_alive else self._launch_owner(
-                thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running())
-        )
+        if thread.process_alive:
+            return thread
+        with self.launching_owner(
+            thread, agent_bin, agent_args, launch_runtime=LaunchRuntime.running(),
+        ) as owner:
+            return owner
 
     def start(
         self, name: str, *, agent_bin: LaunchBinary = ConfiguredBinary(),
         agent_args: LaunchArguments = InheritedArguments(),
     ) -> OwnerStartResult:
-        thread = self.registry.require(name)
-        thread.execution.require_native()
-        status = self.registry.status(thread.name)
-        refusal = RelationViolationError("Only visible agent threads can be started.")
-        thread.role.require_executable(refusal)
-        status.require_visible(str(refusal))
-        if thread.process_alive:
-            status.require_active("Stopped owner session has not retired yet.")
-            return OwnerStartResult(thread.name, thread.require_process().pid, False)
-        owner = self._launch_owner(
-            thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
-        )
-        return OwnerStartResult(owner.name, owner.require_process().pid, True)
+        return self.start_many((name,), agent_bin=agent_bin, agent_args=agent_args)[0]
+
+    def start_many(
+        self, names: Sequence[str], *, agent_bin: LaunchBinary = ConfiguredBinary(),
+        agent_args: LaunchArguments = InheritedArguments(),
+    ) -> tuple[OwnerStartResult, ...]:
+        """Dispatch all selected owners before joining their shared host's replies."""
+        results = []
+        with ExitStack() as launches:
+            for name in names:
+                thread = self.registry.require(name)
+                thread.execution.require_native()
+                status = self.registry.status(thread.name)
+                refusal = RelationViolationError("Only visible agent threads can be started.")
+                thread.role.require_executable(refusal)
+                status.require_visible(str(refusal))
+                if thread.process_alive:
+                    status.require_active("Stopped owner session has not retired yet.")
+                    results.append(OwnerStartResult(thread.name, thread.require_process().pid, False))
+                    continue
+                owner = launches.enter_context(self.launching_owner(
+                    thread, agent_bin.configured(), agent_args, launch_runtime=LaunchRuntime.running(),
+                ))
+                results.append(OwnerStartResult(owner.name, owner.require_process().pid, True))
+        return tuple(results)
 
     @cached_property
     def launch_authority(self) -> RootLaunch:
@@ -564,7 +578,8 @@ class OwnerLifecycle:
         self.launch_authority.check()
         return self.launch_authority
 
-    def _launch_owner(
+    @contextmanager
+    def launching_owner(
         self,
         thread: Thread,
         agent_bin: str,
@@ -573,7 +588,7 @@ class OwnerLifecycle:
         launch_runtime: LaunchRuntime,
         initial_input: LaunchInput = LaunchInput(),
         environment: Mapping[str, str] | None = None,
-    ) -> Thread:
+    ) -> Iterator[Thread]:
         # Retire the predecessor while its released declaration is still stopped.
         # Reserving the replacement PID first destroys that observation.
         RecoveryMonitorCapability.recover_owners(self, (thread,))
@@ -600,11 +615,15 @@ class OwnerLifecycle:
                 raise RelationViolationError("Worker host retired before owner registration")
             owned = self._register_owner(edit, thread, host, initial_input)
             owner = edit.original.snapshot.owner_identity(owned.name)
-        OwnerConnection.exchange(self.root, host, StartOwnerRuntimeRequest(
+        with OwnerConnection.dispatching(self.root, host, StartOwnerRuntimeRequest(
             thread=owned.name, launch=RetainedOwnerLaunch(host, str(launch_runtime.interpreter), env),
             owner=owner,
-        ))
-        return owned
+        )) as response:
+            try:
+                yield owned
+            finally:
+                # Even a later launch failure must join every already-dispatched start.
+                OwnerConnection.reply(response)
 
     def _finish_stopped_owners(self, owners: Sequence[tuple[Thread, int]]) -> None:
         if not owners:
