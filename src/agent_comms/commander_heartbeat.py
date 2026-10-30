@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Mapping
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.commander_hud import CodexUsage, CommanderFrame, CommanderHud, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
@@ -18,7 +18,7 @@ from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.service_passes import CompletedWatch, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
@@ -60,8 +60,12 @@ class CommanderObservation:
         )
 
 
-class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
+class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService, CompletedWatch,
                          PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
+
+    pass_duration: ClassVar[float] = 270
+    """The longest pass on the live bus: first passes after the 2026-10-30 installs took
+    190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
@@ -70,7 +74,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
         with opened_wire() as comms:
             name = type(self).__name__
             retained = ServicePassStore.at(comms.root).read().failing[name]
-            failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
+            failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error,
+                                         failed_at=retained.failed_at)
             now = time.time()
             snapshot = comms.registry.snapshot()
             actions = CommanderHistory.read(comms, self.actors(snapshot))

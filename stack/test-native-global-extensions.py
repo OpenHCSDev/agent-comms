@@ -114,7 +114,9 @@ console.log(JSON.stringify({{errors, extensions:extensions.map(e => ({{path:e.pa
     saved_source_sha256 = hashlib.sha256(session.read_bytes()).hexdigest()
     settings_sha256 = hashlib.sha256((agent / "settings.json").read_bytes()).hexdigest()
     started = time.monotonic()
-    arguments = thread.native_launch_arguments(NativeArguments.parse(("--offline",)), package, comms.root)
+    arguments = comms.threads.native_launch_arguments(
+        thread, NativeArguments.parse(("--offline",)), package,
+    )
     launch = NativePiRpcLaunch.managed(
         "pi", arguments, package=verified, worktree=project,
         root=comms.root, owner=thread.incarnation.require_recorded(),
