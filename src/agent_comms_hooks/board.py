@@ -9,12 +9,45 @@ is the hook's half of that exchange, with the standard library only.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import socket
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
+
+
+@dataclass(frozen=True)
+class SessionEndpoint:
+    """Where one Claude session's bridge claim, record and socket live, derived from the
+    session id alone, so a per-tool-call hook finds its bridge with the standard library."""
+
+    thread: str
+    home: Path = field(default_factory=Path.home)
+
+    @classmethod
+    def directory(cls, home: Path) -> Path:
+        return home / ".local/state/agent-comms/cli-watch"
+
+    @property
+    def path(self) -> Path:
+        key = hashlib.sha256(self.thread.encode()).hexdigest()
+        return self.directory(self.home) / f"{key}.lock"
+
+    @staticmethod
+    def record_beside(claim: Path) -> Path:
+        """The saved re-arm record, published whole; the lock file only holds the flock."""
+        return claim.with_suffix(".record")
+
+    @property
+    def record_path(self) -> Path:
+        return self.record_beside(self.path)
+
+    @property
+    def socket_path(self) -> Path:
+        # sockaddr_un is short. Keep the locator derived from the session claim.
+        return self.path.with_name(self.path.stem[:32] + ".sock")
 
 
 class UnexpectedBoardReply(ValueError):

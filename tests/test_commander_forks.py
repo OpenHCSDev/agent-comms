@@ -80,7 +80,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
 from agent_comms.activity import ActivityState
-from agent_comms_hooks import read_gate
+from agent_comms_hooks.reread import ToolHookEvent
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -953,6 +953,11 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
         unknown.prepare(comms.goals, current)
 
 
+def bridge_decides() -> None:
+    """What the read gate's client prints: the session bridge's answer to its record."""
+    print(ToolHookEvent.answered(sys.stdin.read()), end="")
+
+
 @pytest.fixture
 def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
     """Runs a hook program as Claude Code does, against this bus through the real command."""
@@ -986,7 +991,7 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     fork = comms.registry.require("claude-a1")
     assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
     assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
-    assert run(read_gate.main, "PreToolUse", tool_name="Bash", tool_input={"command": "pwd"}) == ""
+    assert run(bridge_decides, "PreToolUse", tool_name="Bash", tool_input={"command": "pwd"}) == ""
     activity = comms.agents.activity.current(fork.name)
     assert (activity.state, activity.detail) == (ActivityState.WORKING, "Bash")
     found = tmp_path / "found.txt"
@@ -1091,7 +1096,7 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
     assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
     slot.execution.require_subagent()
     assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
-    assert run(read_gate.main, "PreToolUse", "a2", tool_name="Read",
+    assert run(bridge_decides, "PreToolUse", "a2", tool_name="Read",
                tool_input={"file_path": str(transcript)}) == ""
     activity = comms.agents.activity.current(slot.name)
     assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")

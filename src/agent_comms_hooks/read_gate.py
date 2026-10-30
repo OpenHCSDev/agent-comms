@@ -5,13 +5,14 @@ PreToolUse only judges: it refuses any tool but reading a dealt file and answeri
 unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
 only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
 Read leaves the gate closed.
+The session bridge decides every call (agent_comms_hooks.reread.ToolHookEvent); the hook
+Claude Code runs is its standard-library client (agent_comms_hooks.bridged).
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
 it may not write the main agent's audit, and it reports its tool activity through its seat.
 """
 
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -20,7 +21,7 @@ from pathlib import Path
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.rule_deal import DealtRuleGate, ReadSpan
 from agent_comms.turn_phase import ToolRunningPhase
-from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
+from agent_comms_hooks import ClaudeToolHook, HookRecord
 from agent_comms_hooks.seats import SeatedSubagent
 
 
@@ -125,19 +126,3 @@ class SubagentCall(GatedCall, SeatedSubagent):
             self.refuse(f"{path} is the main agent's audit; yours is {self.audit}.")
             return
         super().judge_write(tool, path)
-
-
-class ReadGateProgram(ClaudeHookProgram):
-    events = ("PreToolUse",)
-
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
-
-
-def main() -> None:
-    GatedCall.of(json.load(sys.stdin)).judge()
-
-
-if __name__ == "__main__":
-    main()
