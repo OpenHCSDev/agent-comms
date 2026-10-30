@@ -3,12 +3,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import shlex
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from agent_comms_hooks.watch import WatchClaim
 
 from .bus_publication import AgentOrigin
-from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
@@ -17,6 +17,7 @@ from .launch_runtime import CallingThreadUnavailable
 from .presentation import AllOutcomes, OutcomeViewer, OwnerOutcomes, SentMessageSummary, ThreadRecord
 from .thread_execution import CommanderForkExecution
 from .thread_identity import ThreadIncarnation
+from .registry_document import RegistrySnapshot
 from .tool_result import ToolResult
 from .turn_phase import IdlePhase
 
@@ -62,6 +63,16 @@ class ToolCaller(ABC):
     def from_flag(self) -> tuple[str, ...]:
         """The command line's --from argument naming this caller, if it names a thread."""
 
+    def commander_arguments(self, comms: Comms) -> tuple[str, ...]:
+        """Commander argv preserves the actual caller; forks also select their registered parent."""
+        return self.from_flag()
+
+    def commander_command(self, comms: Comms, *verb_args: str) -> str:
+        """Render a commander invocation with this caller's root and authority."""
+        return shlex.join(('agent-comms-commander',
+                           *LaunchRoot.from_path(comms.root).arguments(),
+                           *verb_args, *self.commander_arguments(comms)))
+
     @abstractmethod
     def own_thread(self) -> str:
         """The thread a tool acts on when its call names none."""
@@ -82,6 +93,10 @@ class ToolCaller(ABC):
 
     def end(self, comms: Comms) -> None:
         raise ToolRefusedError('Only a commander fork can retire through this verb.')
+
+    @abstractmethod
+    def commander(self, comms: Comms) -> Thread:
+        """This caller's ordering identity, or the configured fleet for an operator read."""
 
     @abstractmethod
     def as_thread(self, commander: str) -> ThreadCaller: ...
@@ -108,6 +123,11 @@ class OperatorOutcomes:
 class NoThreadCaller(OperatorOutcomes, ToolCaller):
     def acting_caller(self, grant: ToolCaller) -> ToolCaller:
         return grant
+
+    def commander(self, comms: Comms) -> Thread:
+        snapshot = comms.registry.snapshot()
+        thread, = snapshot.commander_project.require().leads(snapshot)
+        return thread
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return ThreadCaller(commander)
@@ -148,7 +168,19 @@ class ThreadCaller(ToolCaller):
         return comms.registry.require(self.name)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).acting_identity
+        return self.identity_in(comms.registry.snapshot())
+
+    def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        return snapshot.require(self.name).acting_identity
+
+    def require_repository_head_review_grant(self, snapshot: RegistrySnapshot,
+                                             actor: ThreadIncarnation) -> None:
+        snapshot.commander_project.require().require_head_review_grant_author(snapshot, actor)
+
+    def repository_head_review_grant_actor(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        actor = self.identity_in(snapshot)
+        self.require_repository_head_review_grant(snapshot, actor)
+        return actor
 
     def head_review_actor(self, comms: Comms, request: PullRequestHead,
                           order: HeadReviewOrder) -> ThreadIncarnation:
@@ -225,9 +257,8 @@ class CommanderPeerCaller(ThreadCaller):
     registered commander's."""
 
     def commanding(self, comms: Comms) -> None:
-        if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
-            raise ToolRefusedError(
-                f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
+        snapshot = comms.registry.snapshot()
+        snapshot.commander_project.require().require_commander(snapshot, self.identity_in(snapshot))
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return CommanderPeerAuthority(self.name, commander)
@@ -263,6 +294,9 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         """The SubagentStart hook declares the fork under the session that spawned it, in its
         own process, before the fork's first call; the child inherits that parent's tags.
         A connector grant names its holder, so a fork of another parent is refused."""
+        snapshot = comms.registry.snapshot()
+        snapshot.commander_project.require().require_commander(
+            snapshot, snapshot.require(parent).acting_identity)
         comms.registry.register_child(self.name, parent, CommanderForkExecution, comms.goals)
 
     def spawner(self, comms: Comms) -> str:
@@ -281,9 +315,18 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         return binding.bus
 
     def commander(self, comms: Comms) -> Thread:
-        fork = comms.registry.require(self.name)
+        snapshot = comms.registry.snapshot()
+        actor = self.identity_in(snapshot)
+        return snapshot.require(actor.commanding_identity.name)
+
+    def commander_arguments(self, comms: Comms) -> tuple[str, ...]:
+        return (*ThreadCaller(self.commander(comms).name).from_flag(), '--fork', self.name)
+
+    def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
+        fork = snapshot.require(self.name)
+        fork.execution.require_commander_fork()
         parent, = fork.parent.names()
-        return comms.registry.require(parent)
+        return fork.incarnation.require_recorded().acting_for(snapshot.require(parent).incarnation)
 
     def recorded(self, comms: Comms) -> bool:
         """A fork's record in Core is what it sent on the bus or a head verdict it recorded:
@@ -295,10 +338,7 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
-            raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: record a head verdict with"
-                f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
-                f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")
+            raise ToolRefusedError(f"{self.name} recorded nothing in Core.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:

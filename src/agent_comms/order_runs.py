@@ -20,6 +20,9 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     def require_artifact(self, path: str) -> None:
         pass
 
+    def require_successor(self, incoming: OrderRun) -> None:
+        """A mechanical order imposes no outstanding application run."""
+
     def retexted(self, text: str) -> OrderRun:
         raise ToolRefusedError("A mechanical run has no text; its check alone closes the order.")
 
@@ -61,6 +64,10 @@ class MechanicalOrderRun(OrderRun):
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
+    def require_successor(self, incoming: OrderRun) -> None:
+        if incoming != self:
+            raise ToolRefusedError("A successor must retain the outstanding application run.")
+
     def merged_line(self, state: str) -> str:
         return f"{super().merged_line(state)}, waiting on the run"
 

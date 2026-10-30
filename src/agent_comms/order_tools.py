@@ -51,7 +51,9 @@ from .order_work import OrderWork
 from .plan_phases import OrderPhase
 from .progress_claims import ProgressClaim
 from .send_result import CorrectionResult, SendResult
-from .thread_identity import ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .registry_document import RepositoryHeadReviewers
+from .repository_name import RepositoryName
 from .tool_caller import ThreadCaller, ToolCaller
 from .tool_request import (
     PublishingToolRequest,
@@ -74,6 +76,32 @@ from .turn_digests import (
     UnjudgedEdits,
     UnavailableOrderEdits,
 )
+
+
+@dataclass(frozen=True)
+class RepositoryHeadReviewersSet(RepositoryHeadReviewers, ToolResult):
+    """The persisted selection; empty reviewers mean the repository grant was removed."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSetRepositoryHeadReviewersTool(ThreadToolRequest):
+    """The configured project's repository head-review selection through its guarded registry write."""
+
+    label = 'Select repository head reviewers'
+    description = ('Select exact recorded head reviewers for one configured repository; an empty '
+                   'selection revokes it. Only current founder authority or the director may select.')
+
+    repository: Annotated[RepositoryName, *tool_field('Configured GitHub repository owner/name')]
+    reviewers: Annotated[tuple[RecordedThreadIncarnation, ...],
+                         *tool_field('Complete desired selection of exact recorded reviewer incarnations; empty revokes')]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> RepositoryHeadReviewersSet:
+        snapshot = comms.registry.snapshot()
+        actor = caller.repository_head_review_grant_actor(snapshot)
+        selection = comms.registry.set_repository_head_reviewers(
+            RepositoryHeadReviewers(self.repository, self.reviewers), actor,
+            snapshot.commander_project.require().commander, caller.repository_head_review_grant_actor)
+        return RepositoryHeadReviewersSet(selection.repository, selection.reviewers)
 
 
 @dataclass(frozen=True)
@@ -205,6 +233,10 @@ class HeadVerdictTool:
         for order in orders:
             with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
                 actors.append(caller.head_review_actor(comms, self.request, order))
+        if not orders or len(actors) != len(orders):
+            # Local argument/relationship problems remain visible, but a caller without
+            # review authority may not trigger source growth or current-forge previews.
+            raise TodoProblems(problems)
         heads = []
         with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
             heads.append(self.request.current())

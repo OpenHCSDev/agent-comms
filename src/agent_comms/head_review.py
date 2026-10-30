@@ -203,8 +203,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
     @staticmethod
     def holding(todos: Sequence[Todo], request: PullRequestHead) -> tuple[Todo, ...]:
         """The open orders whose current declaration holds this head, held or released."""
-        return tuple(todo for todo in todos if todo.repo == request.repo
-                     and todo.order.holds_head(request))
+        return tuple(todo for todo in todos if todo.order.holds_head(request))
 
     @abstractmethod
     def require_reviewer(self, goals: Goals, request: PullRequestHead,

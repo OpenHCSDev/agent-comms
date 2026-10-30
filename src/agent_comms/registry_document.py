@@ -19,7 +19,7 @@ from .channel_targets import CommandersTag
 from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError, UnregisteredThreadError
+from .errors import RelationViolationError, TodoError, UnregisteredThreadError
 from .field_codec import (
     ExternalJsonShape,
     FieldCodec,
@@ -632,9 +632,71 @@ class NoCommanderProject(CommanderProject):
 
 
 @dataclass(frozen=True)
+class RepositoryHeadReviewers:
+    """One configured repository's exact recorded head-review identities."""
+
+    repository: RepositoryName
+    reviewers: tuple[RecordedThreadIncarnation, ...]
+
+    def __post_init__(self) -> None:
+        if len(set(self.reviewers)) != len(self.reviewers):
+            raise ValueError('Repository head reviewers must have distinct recorded births.')
+
+    def resolved(self, snapshot: RegistrySnapshot) -> RepositoryHeadReviewers:
+        for reviewer in self.reviewers:
+            if not reviewer.current(snapshot):
+                raise RelationViolationError(f'Reviewer {reviewer.name!r} is no longer that registered incarnation.')
+        return replace(self, reviewers=tuple(reviewer.resolved(snapshot).require_recorded()
+                                             for reviewer in self.reviewers))
+
+
+@dataclass(frozen=True)
 class RegisteredCommanderProject(CommanderProject):
     commander: ThreadIncarnation
     repos: tuple[Repo, ...]
+    repository_head_reviewers: Annotated[tuple[RepositoryHeadReviewers, ...], WireOmitDefault()] = ()
+
+    def __post_init__(self) -> None:
+        repositories = tuple(selection.repository for selection in self.repository_head_reviewers)
+        if len(set(repositories)) != len(repositories):
+            raise ValueError('Declare repository head reviewers once per normalized repository.')
+        for selection in self.repository_head_reviewers:
+            self.require_review_repository(selection.repository)
+            if not selection.reviewers:
+                raise ValueError('Empty reviewer selections are removed, not retained.')
+
+    def require_commander(self, snapshot: RegistrySnapshot, actor: ThreadIncarnation) -> None:
+        if not any(thread.incarnation == actor for thread in self.commanders(snapshot)):
+            raise RelationViolationError(f"{actor.name} is not a current commander of this project.")
+
+    def require_review_repository(self, repository: RepositoryName) -> None:
+        if repository not in self.repository_names():
+            raise RelationViolationError(f'Repository {repository.to_wire()} is not registered in this project.')
+
+    def require_head_reviewer(self, snapshot: RegistrySnapshot, repository: RepositoryName,
+                              actor: ThreadIncarnation) -> None:
+        self.require_review_repository(repository)
+        if actor.current(snapshot):
+            if any(actor.commanding_identity == thread.incarnation
+                   for thread in self.commanders(snapshot)):
+                return
+            if any(reviewer.current(snapshot) and actor == reviewer
+                   for selection in self.repository_head_reviewers if selection.repository == repository
+                   for reviewer in selection.reviewers):
+                return
+        raise TodoError("Only a commander of this project, selected head reviewer or the director may review its heads.")
+
+    def require_head_review_grant_author(self, snapshot: RegistrySnapshot,
+                                         actor: ThreadIncarnation) -> None:
+        if not (actor.current(snapshot) and self.commander.current(snapshot)
+                and actor.commanding_identity == self.commander):
+            raise RelationViolationError('Only the current founder authority or the director may select head reviewers.')
+
+    def with_head_reviewers(self, selection: RepositoryHeadReviewers) -> RegisteredCommanderProject:
+        self.require_review_repository(selection.repository)
+        retained = tuple(item for item in self.repository_head_reviewers
+                         if item.repository != selection.repository)
+        return replace(self, repository_head_reviewers=retained + ((selection,) if selection.reviewers else ()))
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         """The registered lead first, then every thread declared in #commanders. A commander
@@ -672,10 +734,13 @@ class RegisteredCommanderProject(CommanderProject):
 
     def named(self, commander: ThreadIncarnation,
               repositories: RepositorySelection) -> RegisteredCommanderProject:
-        return RegisteredCommanderProject(commander, repositories.applied(self.repos))
+        repos = repositories.applied(self.repos)
+        retained = tuple(selection for selection in self.repository_head_reviewers
+                         if selection.repository in {repo.github for repo in repos})
+        return replace(self, commander=commander, repos=repos, repository_head_reviewers=retained)
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
-        return replace(self, repos=repositories.applied(self.repos))
+        return self.named(self.commander, repositories)
 
     def by_role[Answer](self, incarnation: ThreadIncarnation, *,
                         commander: Answer, commanded: Answer) -> Answer:
@@ -686,8 +751,8 @@ class RegisteredCommanderProject(CommanderProject):
 @dataclass
 class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     version: Annotated[
-        Literal[1], SlicePolicy(WholeDocumentValue), WireRequired()
-    ] = 1
+        Literal[2], SlicePolicy(WholeDocumentValue), WireRequired()
+    ] = 2
     purpose: Annotated[RootPurpose, SlicePolicy(WholeDocumentValue)] = field(
         default_factory=WorkingRootPurpose
     )
@@ -822,6 +887,23 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
         """Publish a project for its registered commander identity."""
         self.commander_project = project
         return project
+
+    def set_repository_head_reviewers(
+        self, selection: RepositoryHeadReviewers, original_actor: ThreadIncarnation,
+        original_commander: ThreadIncarnation,
+        authorize: Callable[[RegistrySnapshot], ThreadIncarnation],
+    ) -> RepositoryHeadReviewers:
+        """Reselect grant authority and reviewer births on the document being published."""
+        self.purpose.require_write()
+        snapshot = RegistrySnapshot.capture(self)
+        actor = authorize(snapshot)
+        project = self.commander_project.require()
+        if (project.commander != original_commander
+                or (actor, actor.commanding_identity) != (original_actor, original_actor.commanding_identity)):
+            raise RelationViolationError('Head-review grant actor or founder changed before publication.')
+        selection = selection.resolved(snapshot)
+        self.commander_project = project.with_head_reviewers(selection)
+        return selection
 
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
         canonical = self.canonical_name(thread.name)

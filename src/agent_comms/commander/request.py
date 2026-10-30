@@ -11,7 +11,7 @@ from functools import partial
 from typing import Annotated
 
 from agent_comms import field_codec
-from agent_comms.commander.order import Commander, CommanderVerb, Reasoned
+from agent_comms.commander.order import Commander, CommanderReadVerb, CommanderVerb, Reasoned
 from agent_comms.bus_write import HeldBusWrite
 from agent_comms.owner_requests import OwnerRequestId
 
@@ -49,7 +49,7 @@ class RequestCompleteVerb(Reasoned, RequestMutation, declared_name="complete"):
         print(f"{self.id.value} done")
 
 
-class RequestListVerb(RequestVerb, declared_name="list"):
+class RequestListVerb(CommanderReadVerb, RequestVerb, declared_name="list"):
     help = "every open request and its pending orders"
 
     def run(self, ctx: Commander) -> None:

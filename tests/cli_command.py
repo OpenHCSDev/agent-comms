@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from agent_comms import cli
 from agent_comms.commander import cli as commander_cli
+from agent_comms.tool_caller import ToolCaller
 
 
 def core(*argv: str) -> subprocess.CompletedProcess[str]:
@@ -31,9 +32,9 @@ def core_process(*argv: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def commander(*argv: str) -> subprocess.CompletedProcess[str]:
-    """``agent-comms-commander ARGV``, which reads its arguments from sys.argv."""
-    argv = ('agent-comms-commander', *argv)
+def commander(*argv: str, caller: ToolCaller) -> subprocess.CompletedProcess[str]:
+    """The real parser with an explicit caller, including an explicit threadless operator read."""
+    argv = ('agent-comms-commander', *caller.from_flag(), *argv)
     output, error = StringIO(), StringIO()
     code = 0
     with patch.object(sys, 'argv', list(argv)), redirect_stdout(output), redirect_stderr(error):

@@ -10,6 +10,9 @@ from agent_comms.active_route import ActiveRoute, resolve_comms_route
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.commander.order import Commander
+from agent_comms.cli_verbs.tool import InvokeCliCommand
+from agent_comms.field_codec import FieldCodec
+from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 
 def tool_name(module: str) -> str:
     """The tool a module of this package is: its name, with dashes."""
@@ -19,6 +22,8 @@ def tool_name(module: str) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--root', type=Path, metavar='ROOT')
+    caller = FieldCodec.field_plan(InvokeCliCommand, 'caller')
+    caller.add_argument(parser, {})
     options, argv = parser.parse_known_args(sys.argv[1:])
     modules = {
         tool_name(f'{package.__name__}.{info.name}'): f'{package.__name__}.{info.name}'
@@ -39,7 +44,8 @@ def main() -> None:
         # Every comms process selects its root once at startup, as the comms CLI does.
         root = LaunchRoot.startup(argv, lambda: (LaunchRoot.from_path(options.root) if options.root
                                                  else ActiveRoute.published_launch()))
-        context = Commander.read_root(resolve_comms_route(root.path).root)
+        actor = FieldCodec.decode(ThreadCaller | NoThreadCaller, caller.argument_payload(options.caller))
+        context = Commander.read_root(resolve_comms_route(root.path).root, actor)
         tools[argv[0]].main(argv[1:], context)
     except CLI_FAILURES as refused:
         # The comms CLI's one failure set: a refusal the command raises prints, never a traceback.

@@ -23,6 +23,8 @@ from agent_comms.field_codec import (
 )
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
+from commander_heartbeat_fixture import capture_frame
+from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.messages import QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.order_tools import (
@@ -50,6 +52,7 @@ from agent_comms.todos import (
     FailedCheckStrike,
     OrderClaim,
     PendingProblemOrder,
+    ProgressRead,
     ReleaseTodo,
     SendBackVerdict,
     StrikeReason,
@@ -176,6 +179,15 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_com
     assert (owed.problem, owed.request, owed.message) == ("P1", claim.request(), claim.message)
     assert owed.cited == f"P1 claim of {claim.head[:9]}"
     assert not owed.answered_by((claim.message,))
+    assert claim.message.seq == 0
+    worker = comms.registry.require('worker').incarnation
+    assert owed.questions_for(worker) == ()
+    assert owed.questions_for(ctx.incarnation) == ()
+    frame = capture_frame(comms, ctx.commander, ProgressRead())
+    observation, = (reading for reading in UnitState.observations(comms, ctx.commander, frame)
+                    if reading.thread.incarnation == worker)
+    assert claim.message not in observation.questions
+    assert tuple(AwaitingCommander.derive(observation)) == ()
     # Two identical resumptions at once publish one original with its retained content.
     with ThreadPoolExecutor(max_workers=2) as pool:
         for resumed in [pool.submit(ThreadCaller("worker").invoke, request, comms)

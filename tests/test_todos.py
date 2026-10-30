@@ -46,6 +46,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import StorageRule
+from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.transcript_events import AssistantTranscript
@@ -438,7 +439,7 @@ def pr_commander(tmp_path, monkeypatch, proof_build_checkouts, durable_home, git
     Commander.on_root('lead', (source,), tmp_path)
     bus = wire(tmp_path)
     bus.goals.todos.add_request(lead.incarnation, "Repair the copied order workflow")
-    return Commander.read_root(tmp_path)
+    return Commander.read_root(tmp_path, ThreadCaller('lead'))
 
 
 def pr_order(
@@ -769,7 +770,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                            for rule in OwedAnswer.opened(copied, ctx.commander))
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
-            SayVerb(units="#comms", body_file=str(report)).apply(Commander.read_root(root))
+            SayVerb(units="#comms", body_file=str(report)).apply(Commander.read_root(root, ThreadCaller(ctx.commander)))
             assert copied.goals.todos.get(released.id).held() == released.held()
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)

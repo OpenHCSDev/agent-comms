@@ -162,7 +162,7 @@ class Waiting(Deferral):
 
 
 class IdleRead(ABC):
-    """Core's answer to which units hold no order, read through its own command."""
+    """Explicit threadless operator read: inspect idle units without publishing or acting as the founder."""
 
     command: ClassVar[tuple[str, ...]] = ("agent-comms-commander", "order", "idle")
     timeout: ClassVar[float] = 30

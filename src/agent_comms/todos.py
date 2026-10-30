@@ -11,6 +11,9 @@ import asyncio
 import calendar
 import json
 import re
+import shlex
+
+from agent_comms.tool_caller import ThreadCaller
 import sqlite3
 import subprocess
 import sys
@@ -2340,9 +2343,13 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     def require_transfer(self, todo: Todo) -> None:
         raise TodoError("This problem cannot receive another order.")
 
-    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
+    def require_reassignment(self, todo: Todo, proposed: Assignment,
+                             incoming: ProblemOrder) -> None:
         """Every reassignment is a transfer unless the order state says otherwise."""
         self.require_transfer(todo)
+
+    def require_released_successor(self, previous: CheckedProblemOrder) -> None:
+        raise TodoError("Released claimed work requires a distinct new pending order.")
 
     def require_close(self):
         raise TodoError("Closing requires recorded installed application evidence.")
@@ -2502,7 +2509,7 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
         """Triage has no implementation declarations to validate."""
 
     @abstractmethod
-    def instructions(self, problem: str) -> tuple[str, ...]: ...
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]: ...
 
     @abstractmethod
     def verified_claims(
@@ -2533,7 +2540,7 @@ class TriageScope(OrderScope[ReportDelivery]):
     def delivery(self, todo: Todo, repo: Path, request: SourceCompletion) -> ReportDelivery:
         return ReportDelivery(report=Path(request.seen).read_text())
 
-    def instructions(self, problem: str) -> tuple[str, ...]:
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]:
         return ("Scope: triage; classify and report only. Do not edit source or deliver commits.",
                 "Return the report to your commander; do not open an implementation PR.")
 
@@ -2567,11 +2574,13 @@ class FixScope(OrderScope[CheckedDelivery]):
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.shape.require_references(roots, revision)
 
-    def instructions(self, problem: str) -> tuple[str, ...]:
+    def instructions(self, problem: str, callers: tuple[ThreadCaller, ...]) -> tuple[str, ...]:
+        commands = tuple(shlex.join(('agent-comms-commander', 'order', 'pr', problem,
+                                     *caller.from_flag(), '--title', '<title>', '--body-file', '<file>'))
+                         for caller in callers)
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
                 "Members: " + ", ".join(m.to_wire() for m in self.shape.members),
-                f"Open the PR with agent-comms-commander order pr {problem} "
-                "--title '<title>' --body-file <file>; Core records its link on this order.",
+                *(f'Open the PR with {command}; Core records its link on this order.' for command in commands),
                 "Record the unit's delivery claim in Core before waiting for the commander's "
                 "verdict; a chat report does not change the order.")
 
@@ -2855,8 +2864,9 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                   for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
 
     def instructions(self, todo):
+        callers = tuple(ThreadCaller(assignment.owner) for assignment in todo.current_holder.current_assignments())
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
-            f"Order: {self.id}", *self.scope.instructions(todo.id),
+            f"Order: {self.id}", *self.scope.instructions(todo.id, callers),
             *self.work_instructions()))
 
     def delivered(self, delivery: CheckedDelivery):
@@ -3013,6 +3023,13 @@ class DeliverableProblemOrder(FreshMainCheck, OpenProblemOrder, declared_name=No
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(Pending, DeliverableProblemOrder):
+    def require_released_successor(self, previous: CheckedProblemOrder) -> None:
+        if self.id == previous.id:
+            raise TodoError("A successor order must have a distinct new order ID.")
+        self.require_wording()
+        self.require_writable()
+        previous.run.require_successor(self.run)
+
     id: OrderId = field(default_factory=OrderId.mint)
     at: EventTime = field(default_factory=lambda: RecordedEventTime(time.time()))
     first_call_deadline: EventTime = field(
@@ -3067,7 +3084,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
                 + '\nIf two lines of this order conflict, take the narrower reading, '
                 'say which one you took, and proceed; do not stop to ask.'
                 + '\nStart now and push as you go.\n'
-                + '\n'.join(line for pid in group for line in self.scope.instructions(pid)))
+                + '\n'.join(line for pid in group for line in self.scope.instructions(pid, (ThreadCaller(unit),))))
 
     def send(
         self, context: Commander, document: OrderFile, unit: str, clean: bool,
@@ -3209,10 +3226,11 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
         Repo.git(repo, "fetch", "-q", Repo.remote, f"refs/pull/{self.claim.pull_request.number}/head")
         return super().check_base(repo)
 
-    def require_reassignment(self, todo: Todo, proposed: Assignment) -> None:
-        """A corrected order to the claimant replaces its claim; another owner is a transfer."""
+    def require_reassignment(self, todo: Todo, proposed: Assignment,
+                             incoming: ProblemOrder) -> None:
+        """A claimant correction stays local; a successor needs the recorded release."""
         if proposed.owner_identity != todo.holder_state.previous_assignment().owner_identity:
-            self.require_transfer(todo)
+            todo.holder_state.require_claim_successor(todo, incoming)
 
     def commander_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
@@ -3537,6 +3555,9 @@ class TodoHolder(ABC):
                       operation: RecordOrderHeadVerdict) -> None:
         goals.todos.apply(current.id, operation.prepare(goals, current))
 
+    def require_claim_successor(self, current: Todo, incoming: ProblemOrder) -> None:
+        current.order.require_transfer(current)
+
     def held(self, current: Todo) -> Assignment:
         raise TodoError(f"{current.id} has no open order.")
 
@@ -3740,12 +3761,7 @@ class Assignment(TodoHolder):
 
     def record_review(self, goals: Goals, current: Todo,
                       operation: RecordOrderHeadVerdict) -> None:
-        from .goal_actions import GoalPrecondition, HeadReviewedOrderGoalAction
-
-        goals.update_goal(self.owner, HeadReviewedOrderGoalAction(
-            expect=GoalPrecondition(goal_id=OneGoal(self.generation)),
-            problem=current.id, operation=operation,
-        ))
+        goals.record_order_review(self, current, operation)
 
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation and self.owner_identity != proposed.owner_identity:
@@ -3775,7 +3791,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference) -> Todo:
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference,
+               incoming: ProblemOrder) -> Todo:
         raise TodoConflict(current)
 
     @classmethod
@@ -3794,8 +3811,9 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed, traced):
-        return current.assigned(proposed, traced)
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference,
+               incoming: ProblemOrder) -> Todo:
+        return current.assigned(proposed, traced, incoming)
 
 
 class BlockedTodoState(TodoState):
@@ -3967,10 +3985,13 @@ class AssignTodo(TodoOperation):
         return (replace(store.get(problem), assignment=self.proposed, order=self.order),)
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        snapshot = RegistryStore.at(store.root).snapshot()
+        if not self.proposed.holder_in(snapshot):
+            raise TodoConflict(current)
         self.proposed.require_available_in(
             db, current.id, IncomingWork(
                 self.actor, self.group | {current.id}, frozenset({self.order.id})),
-            RegistryStore.at(store.root).snapshot(), store.prepared_edits())
+            snapshot, store.prepared_edits())
         OwnerRequest.require(db, id=self.request).require_open(self.actor)
 
     def apply(self, current: Todo) -> Todo:
@@ -3987,7 +4008,7 @@ class AssignTodo(TodoOperation):
             self.order.require_wording()
             self.order.require_writable()
         assigned = (current if current.assignment == self.proposed
-                    else current.state.assign(current, self.proposed, self.traced))
+                    else current.state.assign(current, self.proposed, self.traced, self.order))
         return replace(assigned, review_at=self.review_at,
                        order=self.order,
                        request=self.request,
@@ -4465,11 +4486,7 @@ class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
         snapshot = goals.registry.snapshot()
-        project = snapshot.commander_project.require()
-        commanders = {thread.incarnation for thread in project.commanders(snapshot)}
-        if (actor.commanding_identity not in commanders or
-                request.repo not in project.repository_names()):
-            raise TodoError("Only a commander of this project or the director may review its heads.")
+        snapshot.commander_project.require().require_head_reviewer(snapshot, request.repo, actor)
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
@@ -4848,19 +4865,21 @@ class EditVerdict(ToolCallVerdict, declared_name=None):
     in, whichever repository the order's check names."""
     path: str = field(kw_only=True)
 
-    def edited(self, goals: Goals, current: Todo) -> tuple[Repo, Path]:
+    @staticmethod
+    def edited(goals: Goals, current: Todo, previous: Assignment, path: str,
+               tool_call_id: ToolCallId) -> tuple[Repo, Path]:
         """The repository the edit belongs to and the checkout it was made in: the holder's
         allocation of that repository for this problem, or the repository's own checkout."""
         rule = goals.registry.storage_rule
-        roots = rule.roots_of(goals.registry.require(self.previous.owner))
-        edited = Path(self.path).absolute()
+        roots = rule.roots_of(goals.registry.require(previous.owner))
+        edited = Path(path).absolute()
         for repo in goals.registry.snapshot().commander_project.require().repos:
             allocated = (rule.order_checkout(roots, current.id) if repo.github == current.repo
                          else rule.repository_checkout(roots, current.id, repo.github))
             for checkout in (allocated, repo.checkout.absolute()):
                 if edited.is_relative_to(checkout):
                     return repo, checkout
-        raise TodoError(f"Edit {self.tool_call_id} at {self.path} is in no checkout of a "
+        raise TodoError(f"Edit {tool_call_id} at {path} is in no checkout of a "
                         f"registered repository for {current.id}.")
 
 
@@ -4874,7 +4893,7 @@ class GitSettledVerdict(EditVerdict, declared_name=None):
         lines = tuple(text.strip() for text in self.added if len(text.strip()) >= 4)
         if not lines:
             raise TodoError("An edit that adds no line cannot be settled by git; judge it ok or back.")
-        self.refuse_held(self.edited(goals, current)[0], lines)
+        self.refuse_held(self.edited(goals, current, self.previous, self.path, self.tool_call_id)[0], lines)
         return self
 
     @abstractmethod
@@ -4978,7 +4997,8 @@ class EditSendBackVerdict(SendBackVerdict, EditVerdict):
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
         self.require_cited(
-            OrderRoots(self.edited(goals, current)[1], goals.registry.snapshot().commander_project),
+            OrderRoots(self.edited(goals, current, self.previous, self.path, self.tool_call_id)[1],
+                       goals.registry.snapshot().commander_project),
             WorkingTree())
         return self
 
@@ -5017,6 +5037,12 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 @dataclass(frozen=True)
 class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
+
+    def require_claim_successor(self, current: Todo, incoming: ProblemOrder) -> None:
+        current.require_previous_assignment(self.previous)
+        current.require_assignment(None)
+        current.state.require_open(current)
+        incoming.require_released_successor(current.order.checked())
 
     def previous_assignment(self) -> Assignment:
         """The release keeps the assignment of the holder it removed."""
@@ -5661,8 +5687,9 @@ class Todo(TodoStoreRows, TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return self.holder_state.proposed_assignment(proposed)
 
-    def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
-        self.order.require_reassignment(self, proposed)
+    def assigned(self, proposed: Assignment, traced: SourceReference,
+                 incoming: ProblemOrder) -> Todo:
+        self.order.require_reassignment(self, proposed, incoming)
         holder = self.holder_state
         holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)

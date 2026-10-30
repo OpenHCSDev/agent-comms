@@ -12,6 +12,7 @@ import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, cast
 
@@ -44,6 +45,21 @@ class SourceText(ABC):
     def candidates(self) -> tuple[SourceText, ...]:
         """The sources a cite may stand on; one source stands alone."""
         return (self,)
+
+    def in_checkout(self, checkout: Path) -> SourceText:
+        """Unqualified callers retain their own working-tree or exact revision authority."""
+        return self
+
+    def repository_candidates(self, repository: RepositoryName) -> tuple[SourceRevision, ...]:
+        """Unbound commits and working files confer no authority in another repository."""
+        return ()
+
+    @cached_property
+    def qualified_main(self) -> MainRevision:
+        return MainRevision()
+
+    def for_repository(self, repository: RepositoryName) -> SourceText:
+        return CitedRevisions((*self.repository_candidates(repository), self.qualified_main))
 
     def require_any(self, check: Callable[[SourceText], None]) -> None:
         """A cite stands when one candidate source passes its check."""
@@ -80,20 +96,25 @@ class SourceRevision(SourceText):
     def resolve(self, repository: Path) -> str:
         """The commit this revision names in ``repository``."""
 
-    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+    def commit_at(self, repository: Path) -> str:
         if repository not in self._commits:
             self._commits[repository] = self.resolve(repository)
-        commit = self._commits[repository]
+        return self._commits[repository]
+
+    def lines(self, repository: Path, file: str) -> tuple[str, ...]:
+        return tuple(self.text(repository, file).splitlines())
+
+    def text(self, repository: Path, file: str) -> str:
+        commit = self.commit_at(repository)
         root = repository.absolute()
         path = (root / file).relative_to(root).as_posix()
         try:
-            text = Repo.git(repository, 'show', f'{commit}:{path}')
-            return tuple(text.splitlines())
+            return Repo.git(repository, 'show', f'{commit}:{path}')
         except GitCommandError as error:
             if error.source_path_absent(commit, path):
                 for submodule in Checkout(repository).submodules():
                     if submodule.contains(path):
-                        return submodule.lines(commit, path)
+                        return '\n'.join(submodule.lines(commit, path))
                 raise MissingSourceLine(
                     f'Source file {file} does not exist at {commit}.'
                 ) from error
@@ -152,6 +173,13 @@ class CitedRevisions(SourceRevision):
     def candidates(self) -> tuple[SourceRevision, ...]:
         return self.revisions
 
+    def in_checkout(self, checkout: Path) -> SourceText:
+        return self.for_repository(Repo.of(checkout).github)
+
+    def repository_candidates(self, repository: RepositoryName) -> tuple[SourceRevision, ...]:
+        return tuple(candidate for revision in self.revisions
+                     for candidate in revision.repository_candidates(repository))
+
 
 class MainRevision(FetchedRevision):
     @property
@@ -181,6 +209,9 @@ class CommitRevision(FetchedRevision):
 @dataclass(frozen=True)
 class PullRequestHeadRevision(FetchedRevision):
     link: PullRequestLink
+
+    def repository_candidates(self, repository: RepositoryName) -> tuple[SourceRevision, ...]:
+        return (self,) if self.link.repo == repository else ()
 
     @property
     def reference(self) -> str:
@@ -253,7 +284,7 @@ class OrderRepository(CitedRepository):
     """An unqualified ``file.py:line`` names the order's own repository at its revisions."""
 
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
-        return roots.order, revision
+        return roots.order, revision.in_checkout(roots.order)
 
     def qualified(self, location: str) -> str:
         return location
@@ -261,14 +292,13 @@ class OrderRepository(CitedRepository):
 
 @dataclass(frozen=True, slots=True)
 class NamedRepository(CitedRepository):
-    """``owner/name:file.py:line`` names another registered repository, read at its main:
-    the order's pull requests belong to the order's repository, not this one."""
+    """A qualified citation binds declared carrier heads and main to its registered repo."""
 
     name: RepositoryName
 
     def source(self, roots: SourceRoots, revision: SourceText) -> tuple[Path, SourceText]:
         return (Repo.selected(roots.project.require().repos, self.name.to_wire()).checkout,
-                MainRevision())
+                revision.for_repository(self.name))
 
     def named_repositories(self) -> tuple[RepositoryName, ...]:
         return (self.name,)
