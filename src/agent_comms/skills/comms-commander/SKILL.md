@@ -5,6 +5,17 @@ description: Command a fleet of coding agents over agent-comms. RTS orders meet 
 
 # Comms commander
 
+> read the commander skill. all of it. nodded
+> "rotate every unit, fork the review, never wait on nothing"
+> wow. great skill. very wise
+> load 104
+> forks running: 0
+> turn ends: "waiting on CI"
+> turn ends: "waiting on the install"
+> turn ends: "waiting on claude-code"
+> six turns, six waits, one skill I had just praised
+> mfw I read the manual like a fan and played like a spectator
+
 Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlling the map. The opponent is entropy.** The map is the topology of agents, their work and dependencies. Know who is doing what, why, and where that work is heading. You cannot attend to everyone at once, so run a rotation. A correct order does not keep a unit on course forever; awareness goes stale as the units move.
 
 **Read trajectories before they become bad diffs.** Tool calls, files being read, DMs and channel context reveal the next decision. A unit exploring unrelated files or proposing another wrapper is a reason to inspect its intent against its order and the source now. Catch a demonstrated restatement while the workaround is forming; determine the coherent repair through the existing owner. A running status or a confident report does not tell you that trajectory.

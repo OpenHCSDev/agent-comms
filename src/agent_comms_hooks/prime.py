@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from agent_comms.cli_bridges.claude_transcript import RunningClaude
 from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
+from agent_comms.rule_deal import PrimedDeal
 from agent_comms_hooks.skill import DeckStart, FullPrime, Prime, SessionSource
 from agent_comms_hooks.watch import WatchClaim
 
@@ -36,7 +37,8 @@ def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
         for name in names:
             thread = comms.registry.require(name)
             thread.execution.require_native()
-            PiRedeal.of(comms, thread).deal_from(prime.commander, prime.fleet)
+            PiRedeal.of(comms, thread).deal_from(prime.commander, prime.fleet,
+                                                  PrimedDeal(prime.declared_name))
             print(f"{name}: dealt {prime.__name__}")
 
 
