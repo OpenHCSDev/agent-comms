@@ -337,3 +337,27 @@ def test_no_claim_state_or_sidecar_is_written_by_pure_application(tmp_path):
     before = set(worktree.iterdir())
     assert transition(1, claims=(a,), generation=G1).project(ClaimProjection())[a].owner == "owner"
     assert set(worktree.iterdir()) == before and os.access(worktree / "a.py", os.R_OK)
+
+
+def _wake_scope(operation: ClaimId) -> WakeClaim:
+    return WakeClaim(
+        wire_root_id=ROOT_ID, source_seq=7, source_message_id=MessageId.mint("source-7"),
+        wake_assignment_id=AssignmentId.cohort(b"selected-wake-7"), wake_revision=3,
+        recipient_lookup=RECIPIENT_LOOKUP, execution_id="execution-7", operation_id=operation,
+        owner_claimed_generation=2, turn_id=TurnId("c" * 32), participant_generation=1,
+        attempt_ordinal=1,
+    )
+
+
+def _native_scope(operation: ClaimId) -> NativeClaim:
+    return NativeClaim(owner_claimed_generation=2, operation_id=operation,
+                       turn_id=TurnId("c" * 32), input_id=InputId("d" * 32))
+
+
+@pytest.mark.parametrize("scope", [_wake_scope, _native_scope])
+def test_every_operation_of_one_scope_reuses_its_acquisition(scope):
+    """A coding call mints an operation per tool call; a wake re-published a bus row for each."""
+    held = scope(G1)
+    assert held.reuses(scope(G2))
+    assert not held.reuses(replace(scope(G2), turn_id=TurnId("e" * 32)))
+    assert not held.reuses(replace(scope(G2), owner_claimed_generation=3))
