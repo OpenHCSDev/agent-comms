@@ -452,6 +452,16 @@ class AlarmSection:
             grouped.setdefault(ping.alarm_kind, []).append(ping)
         return {kind: tuple(pings) for kind, pings in grouped.items()}
 
+    def digest(self, now: float) -> str:
+        """The section in one line: how many of each rule, and the line left longest, so the
+        reader sees what is owed and for how long before reading any row."""
+        oldest = min(self.pings, key=lambda ping: ping.since.chronology())
+        words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
+        named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
+        counts = ", ".join(f"{len(pings)} {kind.declared_name.replace('_', ' ')}"
+                           for kind, pings in self.by_kind().items())
+        return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
+
     def text_lines(self, now: float) -> tuple[str, ...]:
         """Every line of every rule, its shared words printed once in the rule's header."""
         return tuple(line for kind, pings in self.by_kind().items()

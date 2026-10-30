@@ -190,3 +190,15 @@ def test_rows_of_one_rule_print_their_shared_words_once() -> None:
                            " -> judge ok/back --repo REPO --pr PR --head HEAD")
     assert rows[0].startswith("  openhcsdev/agent-comms#3766 29e2605180debb204a7c77ca4b8cf772f51091da ·")
     assert all(shows_every_word(folded, (header, *rows)) for folded in pings)
+
+
+def test_board_opens_with_what_is_owed_and_the_oldest_line() -> None:
+    hud = example_hud()
+    plain = hud.hud_text(1000)
+    for section in hud.alarms:
+        oldest = min(section.pings, key=lambda ping: ping.since.chronology())
+        digest = section.digest(1000)
+        assert digest in plain[:plain.index(section.heading())]
+        assert oldest.since.age(1000) in digest
+        assert all(f"{len(pings)} {kind.declared_name.replace('_', ' ')}" in digest
+                   for kind, pings in section.by_kind().items())

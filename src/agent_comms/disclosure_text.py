@@ -231,18 +231,33 @@ class ViewTable[R]:
                        if len(set(column)) < len(rows))
         if len(rows) < 2 or not shared:
             return self.plain_lines()
-        groups: dict[tuple[str, ...], list[tuple[str, ...]]] = {}
-        for row in rows:
-            groups.setdefault(tuple(row[index] for index in shared), []).append(row)
+        groups: dict[tuple[str, ...], list[tuple[tuple[str, ...], ...]]] = {}
+        for row in self.texts:
+            cells = tuple(tuple(cell.splitlines()) for cell in row)
+            groups.setdefault(tuple(" / ".join(cells[index]) for index in shared), []).append(cells)
         lines: list[str] = []
         for values, members in groups.items():
-            lines.append(" · ".join(f"{self.columns[index].label}: {value}"
-                                    for index, value in zip(shared, values) if value)
-                         + f" ({len(members)})")
-            lines.extend("  " + " · ".join(cell for index, cell in enumerate(row)
-                                           if index not in shared and cell)
-                         for row in members)
+            own = tuple(index for index in range(len(self.columns)) if index not in shared)
+            # A cell listing items that all share one state (`P821 merged…`, `P847 merged…`)
+            # names the state once in the group's line, and the cell keeps the item names.
+            tails = {index: self.shared_tail(tuple(line for row in members for line in row[index]))
+                     for index in own}
+            label = " · ".join((*(f"{self.columns[index].label}: {value}"
+                                  for index, value in zip(shared, values) if value),
+                                *(f"{self.columns[index].label}: … {tail}"
+                                  for index, tail in tails.items() if tail)))
+            lines.append(f"{label} ({len(members)})")
+            lines.extend("  " + " · ".join(
+                " / ".join(line.removesuffix(f" {tails[index]}") if tails[index] else line
+                           for line in row[index])
+                for index in own if row[index]) for row in members)
         return tuple(lines)
+
+    @staticmethod
+    def shared_tail(lines: tuple[str, ...]) -> str:
+        """The words after the first that every one of at least two lines ends with."""
+        tails = {line.partition(" ")[2] for line in lines}
+        return tails.pop() if len(lines) > 1 and len(tails) == 1 else ""
 
     def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""
