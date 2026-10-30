@@ -8,6 +8,7 @@ import json
 import pytest
 
 from agent_comms.cli import build_parser
+from agent_comms.channel_targets import CommandersTag
 from agent_comms.cli_command import PendingCommandBinding
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
@@ -119,7 +120,11 @@ def test_fork_cli_defaults_to_actual_parent_membership(comms, source_repository)
     editor = binding.edited(ForkCliCommand.editor_arguments({'name': 'child'}))
     assert editor.tags == InheritedTags()
     # A real later parent record, not the stale tags at editor opening, supplies membership.
-    current = comms.registry.declare(replace(parent, tags=frozenset({'current'})))
+    # The commander role is declared, never inherited; an explicit choice keeps it.
+    commander = CommandersTag.declared_name
+    current = comms.registry.declare(replace(parent, tags=frozenset({'current', commander})))
     child = command.specification().child(current, current.runtime, comms.threads)
-    assert child.tags == current.tags == frozenset({'current'})
+    assert child.tags == current.tags - {commander} == frozenset({'current'})
+    explicit = replace(command, tags=GivenTags(current.tags))
+    assert commander in explicit.specification().child(current, current.runtime, comms.threads).tags
     assert editor.tags.for_child(current.tags) == current.tags
