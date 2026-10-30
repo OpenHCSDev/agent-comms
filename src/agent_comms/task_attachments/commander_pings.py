@@ -30,7 +30,7 @@ from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.ui_model.message_category import HeartbeatCategory
+from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms_hooks.board import BoardEntry
 
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from agent_comms.cli_bridges.claude import ClaudeBridge
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
-    from agent_comms.ui_model.message_category import MessageCategory
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.typed_table import TypedTable
 
@@ -193,7 +192,7 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
 
-    def category(self, role: MessageRole) -> type[MessageCategory]:
+    def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """A board packet speaks in the owner's voice yet is not his words: its own category."""
         return HeartbeatCategory
 

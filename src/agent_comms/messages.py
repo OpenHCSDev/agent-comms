@@ -963,7 +963,7 @@ class Message(MessageInput, TurnOrigin):
     @property
     def category(self) -> type[MessageCategory]:
         """The filter category this message files under, answered by what it carries."""
-        return self.task.category(self.role)
+        return self.task.category(self.role.category)
 
     def require_decision(self) -> Decision:
         return self.task.require_decision()

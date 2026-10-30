@@ -22,6 +22,7 @@ from .thread_identity import (
     UserThreadRole,
 )
 from .turn_context import Provenance, WireProvenance
+from .ui_model.message_category import MessageCategory
 from .working_memory_requests import AnnotationBudgetExhausted
 
 if TYPE_CHECKING:
@@ -35,13 +36,12 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .input_attempt import StoredInput
     from .input_disposition import InputDispositions
-    from .messages import Message, MessageRole
+    from .messages import Message
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
     from .typed_table import TypedTable
-    from .ui_model.message_category import MessageCategory
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -236,9 +236,9 @@ class TaskAttachment(
         """The commander observations this attachment carries for that commander: none."""
         return ()
 
-    def category(self, role: MessageRole) -> type[MessageCategory]:
+    def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """Which category the message carrying this attachment files under: its sender's."""
-        return role.category
+        return spoken
 
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
