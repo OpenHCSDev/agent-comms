@@ -33,7 +33,7 @@ from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo
+from agent_comms.repo import Checkout, Repo, UnpushedHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
@@ -65,7 +65,7 @@ from agent_comms.todos import (
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.ui_model.unit_state import Unreadable
-from agent_comms.work_branches import SourceGrowth, UnpushedHead, WorkBranchError
+from agent_comms.work_branches import SourceGrowth, WorkBranchError
 from conftest import declare_test_bus
 from fixture_git import IDENTITY
 from github_fixture import GitHubFixture

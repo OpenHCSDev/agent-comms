@@ -803,7 +803,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
 
     @classmethod
     @abstractmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None: ...
+    def reason(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> str | None: ...
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,
@@ -813,7 +813,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        why = cls.reason(comms, commander)
+        why = cls.reason(comms, commander, frame)
         return (cls.found(why, comms, commander, observed, frame),) if why else ()
 
     def line(self) -> str:
@@ -1181,7 +1181,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
         return max((hunt.at.recorded_at("A hunt") for hunt in hunts), default=0)
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
+    def reason(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> str | None:
         age = time.time() - cls.hunted(comms, commander)
         return f"no hunt in the last {cls.seconds // 60} min" if age > cls.seconds else None
 

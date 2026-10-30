@@ -10,6 +10,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache, partial
@@ -125,11 +126,14 @@ def bus_paths(files: FilesRequest, external: tuple[type[ExternalStore], ...]) ->
                          for resource in store.resources(files)))
 
 
-def settle_bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()) -> None:
-    """Each selected declaration owns whether settling is valid for its file."""
-    paths = bus_paths(files, external)
-    for resource in RootFile.owned_files(files, paths):
-        resource.owner.settle(files.location(resource))
+def pinned_bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()
+                     ) -> ExitStack:
+    """Hold every selected file's bytes still until the returned stack closes; each
+    declaration owns how its file is pinned."""
+    with ExitStack() as pins:
+        for resource in RootFile.owned_files(files, bus_paths(files, external)):
+            pins.enter_context(resource.owner.pinned(files.location(resource)))
+        return pins.pop_all()
 
 
 def bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()

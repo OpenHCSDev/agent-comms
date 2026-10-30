@@ -250,11 +250,10 @@ def test_read_back_under_the_hold_writes_nothing_on_a_drifted_bus(private_comms)
         assert bus_files(LiveFilesRequest(root)) == before
 
 
-def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_comms):
-    """An owner that ends without the last close leaves its commits in the WAL. The practice
-    copy is a SQLite backup holding none, so the live bus is settled before its snapshot;
-    otherwise reconcile's own last close moves the frames into the file, and the carry
-    refuses a change no step names."""
+def test_a_pinned_bus_reconciles_without_moving_committed_wal_frames(private_comms):
+    """An owner that ends without the last close leaves its commits in the WAL. Unpinned,
+    reconcile's own last close moves those frames into the file (same rows, new bytes) and
+    the carry refuses a change no step names; the pin keeps every close from being last."""
     root = private_comms.root
     # The child rewrites one row in place: frames in the WAL, the same rows in the store.
     framed = subprocess.run(
@@ -278,9 +277,11 @@ def test_a_settled_bus_reconciles_without_moving_committed_wal_frames(private_co
         capture_output=True, text=True, check=True, timeout=60)
     database = Path(framed.stdout.strip())
     assert SQLiteFile.wal_path(database).stat().st_size
-    with maintenance_held(root) as holder:
-        SQLiteFile.settle(database)
-        before = bus_files(LiveFilesRequest(root))
+    with maintenance_held(root) as holder, SQLiteFile.pinned(database):
+        # A reader of the latest snapshot (a bridge, a `sqlite3 -readonly`) is open when the
+        # pin is taken and closes during the carry; neither waits on the other.
+        with closing(SQLiteFile.read_snapshot(database)):
+            before = bus_files(LiveFilesRequest(root))
         completed = reconcile(root, holder)
         assert completed.returncode == 0, completed.stdout + completed.stderr
         assert json.loads(completed.stdout)["rewritten"] == []

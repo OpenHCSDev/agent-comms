@@ -11,7 +11,7 @@ import {randomBytes} from 'node:crypto';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 
-const modes=['threshold','overflow','manual','wip','cap','oversized'];
+const modes=['threshold','overflow','manual','wip','policy','oversized'];
 const mode=process.argv[2];
 if (mode === undefined) {
     for (const scenario of modes) {
@@ -27,8 +27,8 @@ const requests=[];
 let overflowSent=false;
 let replyCount=0;
 // The next input reads the completed response's reported usage.
-const replyUsage=()=> mode!=='cap' ? 1200 : (++replyCount===2
-    ? settings.getCompactionSettings().retainedContextTokens+1 : 1200);
+const replyUsage=()=> mode!=='policy' ? 1200 : (++replyCount<=2
+    ? model.contextWindow-settings.getCompactionSettings().reserveTokens+1 : 1200);
 const chunk=(text,promptTokens)=>'data: '+JSON.stringify({id:'local',object:'chat.completion.chunk',created:1,
     model:'pi-compaction',choices:[{index:0,delta:{content:text},finish_reason:'stop'}],
     usage:{prompt_tokens:promptTokens,completion_tokens:5,total_tokens:promptTokens+5}})+'\n\ndata: [DONE]\n\n';
@@ -54,7 +54,7 @@ const server=createServer(async(request,response)=>{
     response.end(chunk('TRACKED_REPLY',replyUsage()));
 });
 const root=mkdtempSync(join(tmpdir(),'native-pi-compaction-'));
-let manager,session,settings;
+let manager,session,settings,model;
 try {
     process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
     process.env.PI_TASK='TASK_BRIEF_FIXTURE';
@@ -70,18 +70,18 @@ try {
     writeFileSync(join(root,'models.json'),JSON.stringify({providers:{'compaction-local':{
         baseUrl:`http://127.0.0.1:${server.address().port}/v1`,api:'openai-completions',
         models:[{id:'pi-compaction',name:'Compaction local',
-            contextWindow:mode==='cap'?1000000:100000,maxTokens:2048}]}}}));
+            contextWindow:mode==='policy'?1000000:100000,maxTokens:2048}]}}}));
     const runtime=await pi.ModelRuntime.create({authPath:join(root,'auth.json'),modelsPath:join(root,'models.json'),modelsStorePath:join(root,'models-store.json')});
     await runtime.setRuntimeApiKey('compaction-local','local-only');
-    const model=runtime.getModel('compaction-local','pi-compaction');
-    settings=pi.SettingsManager.inMemory({compaction:{enabled:mode!=='cap',reserveTokens:16384,keepRecentTokens:2000},retry:{enabled:false}});
-    if(mode==='cap'){
+    model=runtime.getModel('compaction-local','pi-compaction');
+    settings=pi.SettingsManager.inMemory({compaction:{enabled:true,reserveTokens:mode==='policy'?32768:16384,keepRecentTokens:2000},retry:{enabled:false}});
+    if(mode==='policy'){
         const budget=settings.getCompactionSettings();
-        assert.equal(settings.getCompactionEnabled(),true,'the Core budget cannot be disabled per thread');
-        assert.ok(budget.retainedContextTokens<model.contextWindow-budget.reserveTokens,
-            'Core retains less than the advertised model window');
-        assert.equal(pi.shouldCompact(budget.retainedContextTokens,model.contextWindow,budget),false,'the exact threshold still fits');
-        assert.equal(pi.shouldCompact(budget.retainedContextTokens+1,model.contextWindow,budget),true,'one token over the threshold compacts');
+        const threshold=model.contextWindow-budget.reserveTokens;
+        assert.equal(budget.reserveTokens,32768,'native SettingsManager retains the configured reserve');
+        assert.equal(pi.shouldCompact(300001,model.contextWindow,budget),false,'300k is not a second policy');
+        assert.equal(pi.shouldCompact(threshold,model.contextWindow,budget),false,'the exact model-safe threshold still fits');
+        assert.equal(pi.shouldCompact(threshold+1,model.contextWindow,budget),true,'one token over the model-safe threshold compacts');
     }
     const loader=new pi.DefaultResourceLoader({cwd:root,agentDir:root,settingsManager:settings,noExtensions:true,noSkills:true,noPromptTemplates:true});
     await loader.reload();
@@ -90,9 +90,7 @@ try {
     manager.appendModelChange(model.provider,model.id);
     // Old history (summarized) followed by a recent turn (kept). The last
     // assistant usage puts the context past Pi's threshold (window - reserve).
-    const budget=settings.getCompactionSettings();
-    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='cap'
-        ? budget.retainedContextTokens-budget.reserveTokens : 30000);
+    const used=(mode==='threshold'||mode==='wip') ? 90000 : (mode==='policy' ? 300001 : 30000);
     const statedLines='Now: adding an event class\nUncommitted: stack/patch test edits\nNext: run the focused tests';
     for(let turn=0;turn<4;turn++){
         const historyRepeats=mode==='oversized' ? 25000 : 1500;
@@ -121,22 +119,22 @@ try {
     const compactions=()=>[...manager.entryStore.branch(manager.getLeafId())].filter(entry=>entry.type==='compaction');
     const inputId=randomBytes(16).toString('hex');
     let result;
-    if(mode==='cap'){
-        // Under the declared cap with a 1,000,000-token window: no compaction.
-        await session.prompt('UNDER_CAP',{inputId:randomBytes(16).toString('hex')});
-        assert.equal(compactions().length,0,'context under the declared cap does not compact');
-        assert.ok(!requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the request used the full session');
-        // A completed answer settles first. AgentSession.prompt owns threshold
-        // compaction at the next input boundary, never withholding this answer.
-        await session.prompt('OVER_CAP',{inputId:randomBytes(16).toString('hex')});
-        assert.equal(compactions().length,0,'the completed answer is not held behind compaction');
-        assert.equal(events.at(-1).type,'agent_settled');
+    if(mode==='policy'){
+        await session.prompt('ABOVE_OLD_CAP',{inputId:randomBytes(16).toString('hex')});
+        assert.equal(compactions().length,0,'300k fits the model window without compaction');
+        assert.ok(requests.at(-1).text.includes('OLD_FACT_0'),'the full session reached the model');
+        assert.equal(events.at(-1).type,'agent_settled','a crossing answer settles before next-input compaction');
         assert.equal(manager.getLeafEntry().message.content[0].text,'TRACKED_REPLY');
-        await session.prompt('RESUME',{inputId:randomBytes(16).toString('hex')});
-        assert.equal(compactions().length,1,'the next input compacts the retained crossing response');
-        assert.ok(compactions()[0].summary.trimEnd().endsWith('SUMMARY_FIXTURE'),'the generated summary follows whatever the cap carries');
-        assert.ok(requests.at(-1).text.includes('SUMMARY_FIXTURE'),'the next request resumed from the compaction summary');
-        assert.ok(!requests.at(-1).text.includes('OLD_FACT_0'),'summarized history left the context');
+        settings.setCompactionEnabled(false);
+        assert.equal(settings.getCompactionEnabled(),false,'the existing disable setting is honoured');
+        await session.prompt('DISABLED_ABOVE_THRESHOLD',{inputId:randomBytes(16).toString('hex')});
+        assert.equal(compactions().length,0,'disabled automatic compaction sends the retained context unchanged');
+        assert.ok(requests.at(-1).text.includes('OLD_FACT_0'));
+        settings.setCompactionEnabled(true);
+        await session.prompt('RESUME',{inputId});
+        assert.equal(compactions().length,1,'reenabling compacts at the model-safe boundary before the next input');
+        assert.ok(requests.at(-1).text.includes('SUMMARY_FIXTURE'));
+        assert.ok(!requests.at(-1).text.includes('OLD_FACT_0'));
     } else if(mode==='manual'||mode==='oversized'){
         result=await session.compact('USER_FOCUS');
         if(mode==='manual') assert.equal(requests.length,1);
@@ -151,7 +149,7 @@ try {
     }
     const prompts=requests.filter(request=>!request.summary);
     const summaries=requests.filter(request=>request.summary);
-    if(mode!=='cap') assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
+    assert.equal(compactions().length,1,'Pi wrote exactly one compaction entry');
     if(mode==='oversized'){
         assert.ok(summaries.length>1,'an oversized history is summarized through bounded updates');
         const inputLimit=(model.contextWindow-settings.getCompactionSettings().reserveTokens)*4;
