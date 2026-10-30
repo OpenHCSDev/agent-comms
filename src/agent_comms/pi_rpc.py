@@ -35,16 +35,11 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
         # child's pipe, so draining never waits on how Core handles a record.
         super().__init__(asyncio.StreamReader())
         self.source = reader
-        self._drain: asyncio.Task | None = None
+        self.draining = asyncio.get_running_loop().create_task(self._drain_source())
         self.pending = PendingRequests()
         self.event_type = event_type
         self._events = asyncio.Queue(maxsize=100)
         self._read_task: asyncio.Task | None = None
-
-    async def readline(self, *, max_bytes: int | None = None) -> bytes:
-        if self._drain is None:
-            self._drain = asyncio.create_task(self._drain_source())
-        return await super().readline(max_bytes=max_bytes)
 
     async def _drain_source(self) -> None:
         try:
