@@ -18,6 +18,8 @@ from agent_comms.locked_store import DocumentChange
 from agent_comms.service_passes import ServicePasses, ServicePassStore
 from test_recorded_board_health import published_board
 
+pytest_plugins = ('test_commander_forks',)
+
 
 class ReadServicePassStore(ServicePassStore):
     """A real file read signals the fixture; no sleep or private-state polling."""
@@ -98,7 +100,7 @@ def test_target_heartbeat_probe_waits_only_on_served_commanders(published_board:
     CommanderHeartbeatProbe(comms.root, completed).run()
 
 
-def test_target_heartbeat_probe_refuses_only_a_failure_recorded_after_the_restart(
+async def test_heartbeat_wait_refuses_only_a_failure_recorded_after_the_restart(
         published_board: Comms) -> None:
     """Install e584e4dc0 was refused on the 03:59 failure the old runtime recorded, which the
     new runtime's first pass at 04:30 cleared; only the new runtime's own failure refuses."""
@@ -108,10 +110,10 @@ def test_target_heartbeat_probe_refuses_only_a_failure_recorded_after_the_restar
     services.failed(CommanderHeartbeat.__name__, TypeError("the old runtime's failure"))
     since = time.time()
     services.heartbeat_passed((owner,), (owner,))
-    CommanderHeartbeatProbe(comms.root, since).run()
+    await services.wait_completed((owner,), since, CommanderHeartbeat)
     services.failed(CommanderHeartbeat.__name__, ValueError("the new runtime's failure"))
     with pytest.raises(ToolRefusedError, match="the new runtime's failure"):
-        CommanderHeartbeatProbe(comms.root, since).run()
+        await services.wait_completed((owner,), since, CommanderHeartbeat)
 
 
 def test_target_heartbeat_probe_reports_unconfigured_root(private_comms: Comms, capsys) -> None:

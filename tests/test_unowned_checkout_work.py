@@ -225,7 +225,8 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
             raise TodoConflict(self.current)
 
     current = c.goals.todos.get('P1')
-    stale = ConflictingServicePass('stale-rule', time.time(), 'changed row', current)
+    stale = ConflictingServicePass(watch='stale-rule', since=time.time(), error='changed row',
+                                   failed_at=time.time(), current=current)
     following = ServicePassFailing(watch='following-rule', since=time.time(), error='independent source',
                                    failed_at=time.time())
     with LaunchRoot.from_path(c.root).selected():

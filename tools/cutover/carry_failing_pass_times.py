@@ -30,13 +30,16 @@ class FailingPassTimes(Carry):
         for path in self.input_files():
             document = FieldCodec.decode(dict[str, JsonValue], FieldCodec.parse(path.read_text()))
             failing = FieldCodec.decode(dict[str, dict[str, JsonValue]], document[failing_key])
-            stale = {watch: failure for watch, failure in failing.items()
-                     if failed_at_key not in failure}
+            stale = {
+                watch: failure for watch, failure in failing.items() if failed_at_key not in failure
+            }
             if not stale:
                 continue
-            document[failing_key] = failing | {
-                watch: failure | {failed_at_key: failure[since_key]}
-                for watch, failure in stale.items()}
+            carried: dict[str, JsonValue] = {
+                watch: failure | {failed_at_key: failure[since_key]} if watch in stale else failure
+                for watch, failure in failing.items()
+            }
+            document[failing_key] = carried
             FieldCodec.decode_document(ServicePasses, document)
             changed += len(stale)
             if apply:

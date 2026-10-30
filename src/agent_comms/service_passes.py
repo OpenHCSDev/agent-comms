@@ -7,7 +7,7 @@ import time
 from collections.abc import Iterable
 from contextlib import aclosing
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
@@ -19,8 +19,18 @@ from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .watched import FileSource, Watched
 
-if TYPE_CHECKING:
-    from .commander_heartbeat import CommanderHeartbeat
+
+class CompletedWatch:
+    """A service watch whose ordinary completion an install waits on after a restart; each
+    member declares how long its longest pass takes."""
+
+    pass_duration: ClassVar[float]
+
+    @classmethod
+    def completion_ceiling(cls) -> float:
+        """How long a new runtime may take to record its first completion: one cadence (a pass,
+        then the service loop's sleep) plus one pass of slack."""
+        return 2 * cls.pass_duration + Coordination.watch_period
 
 
 @dataclass(frozen=True)
@@ -115,7 +125,7 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
 
     async def wait_completed(
         self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
-        watch: type[CommanderHeartbeat],
+        watch: type[CompletedWatch],
     ) -> None:
         """Join ordinary recorded completions, never run the watch being qualified.
 

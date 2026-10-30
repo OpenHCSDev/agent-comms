@@ -204,7 +204,7 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
 
     recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
-    rules = (RefusedRule("refused", 1.0, "review pending"),
+    rules = (RefusedRule(watch="refused", since=1.0, error="review pending", failed_at=1.0),
              ServicePassFailing(watch="independent", since=1.0, error="another source",
                                 failed_at=1.0))
     beat(comms, rules, states=states)

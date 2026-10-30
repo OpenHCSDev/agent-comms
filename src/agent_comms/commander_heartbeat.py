@@ -14,12 +14,11 @@ from agent_comms.task_attachments.commander_pings import (
     AlarmGroup, CommanderUpdate, PublishedFacts, RulePing, UnitPing,
 )
 from agent_comms.commander_service import CommanderService
-from agent_comms.coordinator import Coordination
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
-from agent_comms.service_passes import ServicePassStore
+from agent_comms.service_passes import CompletedWatch, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead, Todo
@@ -61,18 +60,12 @@ class CommanderObservation:
         )
 
 
-class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
+class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService, CompletedWatch,
                          PreparedWatchPass[Mapping[Thread, CommanderInputs], tuple[CommanderObservation, ...]]):
 
     pass_duration: ClassVar[float] = 270
     """The longest pass on the live bus: first passes after the 2026-10-30 installs took
     190-264 s (c6d81834 restarted 04:32:49, completed 04:36:00)."""
-
-    @classmethod
-    def completion_ceiling(cls) -> float:
-        """How long a new runtime may take to record its first completion: one cadence (a pass,
-        then the service loop's sleep) plus one pass of slack."""
-        return 2 * cls.pass_duration + Coordination.watch_period
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
