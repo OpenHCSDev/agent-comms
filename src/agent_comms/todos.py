@@ -1262,7 +1262,7 @@ class LoggedCommit:
 
     def matches(self, pattern: re.Pattern[str]) -> bool:
         """Git's --grep: the pattern searched line by line, ignoring case."""
-        return pattern.search(self.message) is not None
+        return bool(pattern.search(self.message))
 
 
 @dataclass(frozen=True)
