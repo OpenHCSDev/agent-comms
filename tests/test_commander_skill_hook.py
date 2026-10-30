@@ -569,6 +569,24 @@ def test_a_parallel_batch_opens_one_unanswered_rule_and_refuses_the_next(capsys,
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
 
 
+def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
+    """On 2026-10-30 a session opened the indictment and two rules first and never read the
+    papers: the next dealt file opens, any later one is refused and named the next to read."""
+    transcript, _ = dealt_session
+    dealt = CommanderReader.sources()
+    assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
+    papers = CommanderPackage.paper()
+    for later in (CommanderPackage.indictment(), CommanderReader.rules()[0].path, papers[1]):
+        call = gated(transcript, "Read", {"file_path": str(later.resolve())})
+        call.judge()
+        reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert reason["permissionDecision"] == "deny"
+        assert f"Next: {papers[0].resolve()}" in reason["permissionDecisionReason"]
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}))
+    read_whole(transcript, papers[0].resolve())
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[1].resolve())}))
+
+
 def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session):
     transcript, start = dealt_session
     rules = CommanderReader.rules()
