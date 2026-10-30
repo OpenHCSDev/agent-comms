@@ -119,6 +119,7 @@ def test_a_refresh_deal_interleaves_like_any_other_and_pi_may_edit_the_audit(uni
     events.CompactionEnd().deal_rules(unit_deal)
     answer_deal(unit_deal)
     unit_deal.observe_context(ContextUsage(35, 100))
+    unit_deal.audit.write_text(json.dumps({"rules": [], "owner_words": []}))
     first, following = unit_deal.current().dealt[:2]
     call("read", {"path": str(first)}).judge_under(unit_deal)
     unit_deal.record_read(first, ReadInput(first).span())
@@ -163,3 +164,6 @@ def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, 
     deal = PiRedeal.of(comms, unit)
     deal.start()
     assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+
+
+
