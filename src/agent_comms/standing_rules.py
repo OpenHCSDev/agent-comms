@@ -42,6 +42,7 @@ from agent_comms.child_process import ProcessIdentity, ResidentMemory
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.threads import Thread
 from agent_comms.todos import (
     HeadVerdict,
     MergeBlock,
@@ -745,15 +746,25 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(source, snapshot, held, commander, requests))
-        references = tuple(dict.fromkeys(reference for rule in opened
-                                         for reference in rule.session_questions()))
-        answered = comms.transcripts.answered_inputs(thread, references, cut.privacy)
+        questions: dict[str, tuple[Thread, dict[MessageReference, None]]] = {}
+        for rule in opened:
+            answerer = rule.session_answerer(thread)
+            _, references = questions.setdefault(answerer.name, (answerer, {}))
+            references.update(dict.fromkeys(rule.session_questions()))
+        answered = frozenset().union(*(
+            comms.transcripts.answered_inputs(answerer, tuple(references), cut.privacy)
+            for answerer, references in questions.values()
+        ))
         return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
                      and not rule.answered_in_session(answered))
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         """Ordinary owed answers still require their existing bus answer relation."""
         return ()
+
+    def session_answerer(self, reader: Thread) -> Thread:
+        """Whose transcript answers this debt's session questions: by default its reader's."""
+        return reader
 
     def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
         questions = self.session_questions()
@@ -1231,18 +1242,28 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     request: OwnerRequestId
     directive: RequestDirective
+    answerer: Thread = field(compare=False)
 
     def session_questions(self) -> tuple[MessageReference, ...]:
         return (self.message.reference,)
+
+    def session_answerer(self, reader: Thread) -> Thread:
+        return self.answerer
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
+        """One debt whoever reads it: the request's commander answering clears it for every
+        peer and fork that inherits the request, and any of them may answer it themselves."""
+        reader = snapshot.require(commander)
+        names = snapshot.names_for(commander)
         return tuple(
-            cls(message=original, request=request.id, directive=directive)
+            cls(message=original, request=request.id, directive=directive,
+                answerer=snapshot.participant(request.commander.name).answering_thread(reader))
             for request in requests
-            for directive, original in request.directive_messages(source, snapshot.names_for(commander))
+            for directive, original in request.directive_messages(
+                source, names | snapshot.names_for(request.commander.name))
         )
 
     def answered_in(self) -> tuple[str, ...]:

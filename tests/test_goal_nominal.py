@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.field_codec import GoalId
-from agent_comms.agent_events import GoalUnchanged
+from agent_comms.agent_events import GoalChanged, GoalUnchanged
 from agent_comms.comms import wire
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -97,6 +97,28 @@ def test_goal_changed_compares_goal_snapshots(owner):
     assert event.snapshot == comms.goals.goal_snapshot("worker")
     assert event.snapshot.goal == changed
     assert isinstance(comms.goals.goal_changed("worker", event.snapshot), GoalUnchanged)
+
+
+def test_owner_declaration_routes_without_claiming_complete_projection_equality(owner):
+    from agent_comms.goal_presentation import UnpublishedGoalSnapshot
+
+    comms, goal = owner
+    assert UnpublishedGoalSnapshot().goal_changed(goal)
+    published = comms.goals.goal_snapshot("worker")
+    assert not published.goal_changed(goal)
+    changed = wire(comms.root).goals.update_goal("worker", ActiveGoalAction(progress="external"))
+    assert published.goal_changed(changed)
+    assert comms.goals.goal_changed("worker", published) == GoalChanged(
+        comms.goals.goal_snapshot("worker"))
+
+
+def test_unrelated_attempt_commit_requests_a_real_comparison_not_a_second_revision(owner):
+    comms, _ = owner
+    published = comms.goals.goal_snapshot("worker")
+    before = comms.registry.store.path.read_bytes()
+    comms.goals.open_goal_store().create_goal(GoalId.mint())
+    assert comms.registry.store.path.read_bytes() == before
+    assert isinstance(comms.goals.goal_changed("worker", published), GoalUnchanged)
 
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():

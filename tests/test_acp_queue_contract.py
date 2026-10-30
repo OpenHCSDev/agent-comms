@@ -71,7 +71,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
             is ReservedInput)
     state = next(
         f
-        for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
+        for f in decode_updates((await agent.sessions.metadata("beta", session_id=AcpSessionId("beta"))))
         if isinstance(f, QueueChangedUpdate)
     )
     assert state.scope.claimed_identity.incarnation.name == "beta"
@@ -144,7 +144,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
     (17, "x" * 4096),
 ], ids=["long-unicode", "many-inputs", "large-total"])
 async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_path, count, text):
-    from agent_comms.agent_backend import ClearQueue, SendNow
+    from agent_comms.turn_inbox import ClearQueue, SendNow
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
 
     comms, agent, _, _ = _owner(tmp_path)

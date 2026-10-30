@@ -16,9 +16,11 @@ from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted
+from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 from agent_comms.harness_delivery_states import DeliveredOutcome
 from agent_comms.messages import AckKind, AlertKind, HandoffKind, InfoKind, Message, MessageKind, NoticeRole, QuestionKind
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.repo import Checkout
 from agent_comms.turn_digests import LastTurns
 from agent_comms.registration import Registration
@@ -274,6 +276,10 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
 ) -> None:
     comms = bridge.comms
     commander = comms.registry.require('viewer')
+    comms.registry.declare(
+        Thread('peer', frozenset({CommandersTag.declared_name}), Checkout(Path.cwd())),
+        StoppedThreadStatus(),
+    )
     comms.registry.set_commander_project(RegisteredCommanderProject(commander.incarnation, ()))
     output = bridge.output_type.for_comms(comms.transcripts.external('viewer'), comms)
     session = ClaudeSession()
@@ -300,6 +306,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     expected = set() if cleared else {message.reference for message in originals}
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
     assert comms.bus.bus.revision() == before
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'peer')} == expected
     for record in (TURN_INTERRUPTED, opening_record('later-source'),
                    assistant_record('later-final', 'A different turn answers')):
         output.publish_batch(list(record.updates(session)))

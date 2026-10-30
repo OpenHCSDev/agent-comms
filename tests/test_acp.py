@@ -34,7 +34,7 @@ from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.coordination_errors import Refused
-from agent_comms.field_codec import TurnId
+from agent_comms.field_codec import AcpSessionId, FieldCodec, TurnId
 from agent_comms.native_arguments import GivenArguments
 from agent_comms.pi_counts import PiCount
 from agent_comms.read_basis import NamedViewer
@@ -95,7 +95,8 @@ class TestHandlers:
         self, tmp_path, native_runtime_package
     ):
         agent = self._agent(tmp_path)
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        session = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
+        session_id = FieldCodec.decode(AcpSessionId, session.session_id)
         agent._comms.agents.observe_runtime_info(
             "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
@@ -103,14 +104,14 @@ class TestHandlers:
             "proj", ae.AgentInfo(model=DeclaredModel('test/model'), context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
-        assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
+        assert facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
             "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
-            facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
+            facts((await reopened.sessions.metadata("proj", session_id=session_id)), CoordinationChangedUpdate)[0].context_usage
             == UnmeasuredContext()
         )
 

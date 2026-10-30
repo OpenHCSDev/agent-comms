@@ -53,6 +53,8 @@ if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
+    from .historical_native_inputs import HistoricalNativeAnswers
+    from .messages import MessageReference
     from .private_nk_entrypoint import RootLaunch
     from .registry_document import RegistrySnapshot
     from .typed_table import TableSchema
@@ -123,7 +125,10 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
 class RegistryPrivacy(ABC):
     """What a registry root's protocol marker decides, selected by the registry store."""
 
-
+    def native_answered(self, answers: HistoricalNativeAnswers,
+                        references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
+        """Which of these inputs a native transcript answered, read under this root's privacy."""
+        return answers.answered_inputs(references)
 
     @abstractmethod
     def cursor_scope(
@@ -217,6 +222,11 @@ class PublicRegistry(RegistryPrivacy):
         self, publication: CursorPublication, thread_name: str, session_id: str,
     ) -> tuple[CursorAdvancedUpdate, ...]:
         return ()
+
+    def native_answered(self, answers: HistoricalNativeAnswers,
+                        references: tuple[MessageReference, ...]) -> frozenset[MessageReference]:
+        """A public root has no native inputs, so no native answers."""
+        return frozenset()
 
     @property
     def namespace(self) -> RootId:

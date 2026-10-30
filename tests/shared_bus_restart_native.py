@@ -37,7 +37,7 @@ from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import decode_updates
 from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.field_codec import AcpSessionId
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
@@ -684,7 +684,7 @@ async def attach(service, name):
     async with asyncio.timeout(30), AsyncExitStack() as lifetime:
         client = CommsAgent(service, auto_wake=False)
         lifetime.push_async_callback(client.shutdown)
-        proxy = RuntimeProxy(client, name, socket_path(service.root, owner.pid))
+        proxy = client._create_runtime_proxy(owner, AcpSessionId(name))
         lifetime.push_async_callback(proxy.close)
         await proxy.subscribe()
 

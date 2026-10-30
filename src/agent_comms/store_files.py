@@ -503,10 +503,14 @@ class StoreContention(ABC):
     @abstractmethod
     def timeout(self) -> float: ...
 
-    def reader(self, uri: str) -> sqlite3.Connection:
+    def configure(self, connection: sqlite3.Connection) -> None:
+        """Apply this acquisition's wait budget to a retained SQLite handle."""
+        connection.execute(f"PRAGMA busy_timeout={round(self.timeout * 1000)}")
+
+    def reader(self, uri: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
         return sqlite3.connect(
             uri, uri=True, isolation_level=None, timeout=self.timeout,
-            factory=LendingConnection)
+            check_same_thread=check_same_thread, factory=LendingConnection)
 
     def writer(
         self, path: str | os.PathLike[str], *,
@@ -530,9 +534,9 @@ class StoreBusy(StoreContention):
 
     timeout: ClassVar[float] = 0.0
 
-    def reader(self, uri: str) -> sqlite3.Connection:
+    def reader(self, uri: str, *, check_same_thread: bool = True) -> sqlite3.Connection:
         with CoordinationReadUnavailable.checking():
-            return super().reader(uri)
+            return super().reader(uri, check_same_thread=check_same_thread)
 
 
 DEFAULT_STORE_CONTENTION = StoreWait()
