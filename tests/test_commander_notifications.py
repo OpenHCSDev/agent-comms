@@ -745,21 +745,15 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    from agent_comms.task_attachments.commander_pings import AlarmOverflow
-
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
     message = packet.send(comms, time.time(), hud.hud_text(time.time()))
     for frame in (lead_hud(comms), hud):
-        assert len(frame.alarm_text(frame.alarms, time.time())) < len(rules)
-        overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
-                         if table.record is AlarmOverflow for row in table.records)
-        assert sum(row.more for row in overflow) == len(rules) - 1
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
         assert all(section.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
-    assert rules[0].line() in original.body
-    assert rules[0].line() in message.body
+    assert all(rule.line() in original.body for rule in rules)
+    assert all(rule.line() in message.body for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
