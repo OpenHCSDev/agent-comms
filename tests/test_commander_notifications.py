@@ -86,9 +86,9 @@ def owner(comms):
     return comms.messaging.user_identity(Checkout(comms.root))
 
 
-def notifications(comms):
+def notifications(comms, commander="lead"):
     page = MessagePageRequest(DMDisplayScope.capture(
-        owner(comms).name, "lead", comms.registry.snapshot(),
+        owner(comms).name, commander, comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
 
@@ -903,8 +903,22 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
     assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
     assert CommanderUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
     assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
-    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
-        comms.registry.require("lead").incarnation, worker}
+    served = (lead_packet.commander, worker)
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == set(served)
+    for recipient in served:
+        hud = CommanderFrame.current(comms, recipient.name)
+        assert hud.commander == recipient
+        assert hud.packets == CommanderUpdate.latest(comms, recipient)
+        assert len(notifications(comms, recipient.name)) == 1
+    # Every recipient owns its quiet-publication receipt; the prepared board is shared.
+    beat(comms, (failing,))
+    beat(comms, (failing,))
+    for recipient in served:
+        first, quiet = notifications(comms, recipient.name)
+        assert isinstance(quiet.task, CommanderNotice)
+        assert quiet.task.commander == recipient
+        assert aged(quiet.task.handled) == aged(first.task.handled)
+        assert CommanderFrame.current(comms, recipient.name).packets == (quiet.task,)
 
 
 def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):
