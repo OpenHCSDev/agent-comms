@@ -26,7 +26,6 @@ from .field_codec import (
     boundary_decoder,
 )
 from .message_reference import MessageReference
-from .audience_manifest import FrozenRecipient
 from .recorded_bus import RecordedBusIdentity
 from .thread_identity import ThreadIncarnation
 
@@ -39,6 +38,7 @@ class ConsumptionEvidence(ABC):
 
 
 if TYPE_CHECKING:
+    from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
     from .comms import Comms
     from .coordination_tables.assignments import WakeAssignment
