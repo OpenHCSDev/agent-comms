@@ -55,7 +55,7 @@ def test_unrepresented_content_is_preserved_but_cannot_match_started_text(part):
             },
         }
     )
-    assert entry.tracked_user is entry
+    assert entry.require_tracked_user() is entry
     assert entry.message.parts != (TextContent("same"),)
     assert isinstance(entry.message.parts[0], UnknownContent)
     assert entry.message.parts[0].to_wire() == part

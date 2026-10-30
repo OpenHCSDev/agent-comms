@@ -23,6 +23,7 @@ from agent_comms.threads import Thread
 from agent_comms.todos import TodoStore
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.typed_table import ReconciledFile
+from agent_comms.turn_item import FreshNativeId
 from bus_record_fixture import prepare_native_comms
 from test_todos import order
 
@@ -96,7 +97,7 @@ def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, 
             db.execute(statement)
         db.commit()
         NativeContextJournal(
-            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id="entry",
+            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id=FreshNativeId("entry"),
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)
@@ -113,7 +114,7 @@ def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_pa
         for statement in NativeContextJournal.schema_objects().values():
             db.execute(statement)
         NativeContextJournal(
-            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id="entry",
+            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id=FreshNativeId("entry"),
             request_generation=1, llm_context_digest="c" * 64,
             committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
         ).insert(db)

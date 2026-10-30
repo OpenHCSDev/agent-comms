@@ -12,8 +12,8 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.participants import OwnerGenerations
 from .reservation_rules import ReservationRule, RuleCheck
 from .text_digest import TextDigest
-from .threads import Thread
 from .turn_goal_permission import GoalPermission
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .native_input_record import NativeInputRecord

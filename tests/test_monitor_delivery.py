@@ -55,7 +55,7 @@ from agent_comms.runtime_updates import (
     AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
-from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole
+from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
 from agent_comms.transcript_events import AssistantTranscript
@@ -408,10 +408,10 @@ def decoded_record(data):
     return ClaudeJsonLines().decode_line(json.dumps(data).encode(), 0)
 
 
-def notification(line, record_id=transcript_record('notification-record')):
+def notification(line, record_id=transcript_record('notification-record'), *, prompt_id='prompt'):
     return decoded_record(dict(
         type='user', uuid=record_id, timestamp='2026-10-16T16:40:05.123Z',
-        sessionId='session', promptId='prompt', origin=dict(kind='task-notification'),
+        sessionId='session', promptId=prompt_id, origin=dict(kind='task-notification'),
         message=dict(content='<task-notification><event>'+escape(line)+
                      '</event></task-notification>')))
 
@@ -1110,9 +1110,16 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
 
 
 @pytest.mark.asyncio
-async def test_confirmed_direct_request_replies_to_its_sender(bridge, reply_end):
-    message = bridge.comms.messaging.send('claude-code', 'viewer', 'ordinary direct request').message
-    await confirm_and_finish_reply(bridge, message, ('claude-code',), reply_end)
+@pytest.mark.parametrize(('target', 'body', 'kind', 'expected'), (
+    ('viewer', 'ordinary direct request', QuestionKind, ('claude-code',)),
+    ('#monitor', 'channel information', InfoKind, ()),
+    ('#monitor', '@viewer please answer this channel request', QuestionKind, ()),
+))
+async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
+    bridge, reply_end, target, body, kind, expected,
+):
+    message = bridge.comms.messaging.send('claude-code', target, body, kind).message
+    await confirm_and_finish_reply(bridge, message, expected, reply_end)
 
 
 @pytest.mark.asyncio
@@ -1137,14 +1144,16 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
-        output.delivered_targets((sender.name,))
+        original = comms.messaging.send(sender.name, speaker.name, "Open this answer").message
         turn = NativeTurnId(f"{speaker.name}-turn")
+        output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
         output.publish_item(FinishedItem(turn, item_id, (AssistantTranscript(
             f"{speaker.name} answers", timestamp=1.0, position=item_id),)))
         output.end_turn(turn)
-    assert comms.bus.pending_count("unit") == 0
-    assert comms.bus.pending_count("lead") == 1
+    replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
+                    if message.body in {"lead answers", "unit answers"})
+    assert replies == (("lead", "unit answers"),)
 
 
 @pytest.mark.parametrize(('rows', 'start', 'frames'), (

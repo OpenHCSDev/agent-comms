@@ -68,9 +68,9 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
                 .replace(INPUT_ID.encode(), restored_input.encode())
                 .replace(b"separate", b"restored"))
     _header, original = NativeTranscript(session).forward(0, session.stat().st_size)
-    location = NativeInputLocation(INPUT_ID, PiSessionId("sid"), FreshNativeId("entry"), session_entry_start=original.start)
+    location = NativeInputLocation(INPUT_ID, PiSessionId("sid"), original.entry.id.require_present(), session_entry_start=original.start)
     restored_location = NativeInputLocation(
-        InputId(restored_input), PiSessionId("new"), FreshNativeId("entry"), session_entry_start=original.start,
+        InputId(restored_input), PiSessionId("new"), location.session_entry_id, session_entry_start=original.start,
     )
     with NativeEvidenceScope() as scope:
         evidence = scope.for_source(session)

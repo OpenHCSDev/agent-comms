@@ -236,7 +236,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
-    context = NativeContextProof(INPUT_ID,PiSessionId('sid'),FreshNativeId('entry'),1,DIGEST,1_791_964_800_001,session,
+    context = NativeContextProof(INPUT_ID,PiSessionId('sid'),record.entry.id.require_present(),1,DIGEST,1_791_964_800_001,session,
                                  session_entry_start=record.start)
     failed = NativePiTerminalFailure('SECRET provider response including prompt data', context,
         SelectedModel('provider','model'), ModelRequestFailed('SECRET provider response including prompt data'))
@@ -263,7 +263,7 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     with NativeEntry.open_evidence(session) as evidence:
         assert evidence.corroborates_context(recorded, input_id=INPUT_ID, files=files)
         assert not evidence.corroborates_context(recorded, input_id=InputId('e'*32), files=files)
-    input_event = InputCommitted(input_id=INPUT_ID,session_id=PiSessionId('sid'),session_entry_id=FreshNativeId('entry'),session_entry_start=record.start)
+    input_event = InputCommitted(input_id=INPUT_ID,session_id=PiSessionId('sid'),session_entry_id=record.entry.id.require_present(),session_entry_start=record.start)
     context_event = ContextCommitted.from_wire({key:value for key,value in first.items() if key != 'schema'})
     with NativeInputEvidenceRead.open(session) as evidence:
         assert evidence.verify_context(files, input_event,

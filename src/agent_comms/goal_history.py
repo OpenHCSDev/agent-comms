@@ -29,8 +29,7 @@ from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
-from .tool_result import ToolResult
-from .reported_turn import ReportedTurnState
+from .tool_result import DeclaredReply
 from .typed_table import (
     Column,
     DurableTables,
@@ -170,7 +169,7 @@ class RegistryWriterObserver(JournalObserver):
 
 
 @dataclass(frozen=True)
-class RecordedGoalHistory(ToolResult):
+class RecordedGoalHistory(DeclaredReply):
     """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
 
     history: tuple[RecordedGoalRevision, ...]
@@ -192,10 +191,6 @@ class GoalHistoryEntry(RecordedGoalRevision, RowidSequenced, DurableTables):
     )
     state: Annotated[type[JournalState], HistoryExclude()] = field(kw_only=True)
     indexes = (Index(("owner_created_at", "sequence")),)
-
-    def reports_turn(self, turn: ReportedTurnState) -> bool:
-        """A committed goal revision records its original model reporting turn."""
-        return self.after.reports_turn(turn)
 
     def recorded(self) -> RecordedGoalRevision:
         return FieldCodec.construct(RecordedGoalRevision, {

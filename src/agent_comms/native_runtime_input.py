@@ -32,6 +32,7 @@ from .field_codec import (
     ToolCallId,
 )
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
+from .turn_item import FreshNativeId
 from .native_input_record import (
     NativeColumn,
     NativeInputContext,

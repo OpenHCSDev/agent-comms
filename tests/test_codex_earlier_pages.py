@@ -9,6 +9,8 @@ import pytest
 from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
+from agent_comms.cli_bridges.codex_protocol import BusClientId
+from agent_comms.field_codec import MessageId
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire
@@ -27,8 +29,12 @@ def entry(name, timestamp):
 
 async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tmp_path):
     seen = []
+    historical_id = MessageId.mint('old-delivery-with-no-retained-attempt')
+    historical_input = dict(turnId='old-turn', completedAtMs=4500, item=dict(
+        type='userMessage', id='old-bus-input', clientId=BusClientId(historical_id).external,
+        content=[dict(type='text', text='An old rendering, not the current IncomingFrame')]))
     pages = {
-        None: {'data': [entry('recent2', 5000), entry('recent1', 4000)], 'nextCursor': 'p1'},
+        None: {'data': [entry('recent2', 5000), historical_input, entry('recent1', 4000)], 'nextCursor': 'p1'},
         'p1': {'data': [entry('older2', 3000), entry('older1', 2000)], 'nextCursor': 'p2'},
         'p2': {'data': [entry('oldest', 1000)], 'nextCursor': None},
     }
@@ -75,7 +81,8 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             bridge = CodexBridge(options, binding.address(), db)
             await options.operation.prepare(bridge)
             output = ThreadOutput(transcript, comms.agents)
-            output.publish_batch([update async for update in bridge.history()])
+            output.publish_batch([await update.observed(bridge) async for update in bridge.history()])
+            assert await bridge.attempts(historical_id) == ()
             assert seen == [None]
             newest = comms.transcripts.capture_page_read('cli').read()
             assert [event.text for event in newest.events] == ['recent1', 'recent2']
@@ -109,7 +116,10 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
                 'oldest', 'older1', 'older2', 'recent1', 'recent2']
             with transcript.snapshot() as connection:
                 positions = ExternalItemRow.select(connection, thread=transcript.lookup, order_by=('seq',))
-            assert [row.seq for row in positions] == [-2, -1, 0, 1, 2]
+            assert [row.seq for row in positions] == [-2, -1, 0, 1, 2, 3]
+            # Resume passes historical inputs through PublishedPage, never live confirmation.
+            output.publish_batch([await update.observed(bridge) async for update in bridge.history()])
+            assert await bridge.attempts(historical_id) == ()
     finally:
         watching.cancel()
         with suppress(asyncio.CancelledError):
@@ -153,7 +163,7 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
     page = ItemsPage.model_validate({'data': [{
         'turnId': 't', 'completedAtMs': 1000,
         'item': {'type': 'userMessage', 'id': 'bus',
-                 'clientId': BusInput.for_message('thread', 'm1', 'input').clientUserMessageId,
+                 'clientId': BusInput.for_message('thread', MessageId.mint('hidden-page-input'), 'input').clientUserMessageId,
                  'content': [{'type': 'text', 'text': 'Already on the bus'}]},
     }], 'nextCursor': ''}).publication()
     item, = page.items
