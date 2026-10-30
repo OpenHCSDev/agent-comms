@@ -160,7 +160,7 @@ def test_nominal_owner_and_real_commander_fork_may_select_without_becoming_revie
         caller = DirectorCaller('outsider')
     else:
         caller = CommanderForkCaller('real-review-fork')
-        caller.commanding(comms, ThreadCaller('lead'))
+        caller.join(comms, 'lead')
     select_reviewers(comms, nra.repo, (reviewer,), caller)
     project = comms.registry.snapshot().commander_project.require()
     assert project.repository_head_reviewers == (RepositoryHeadReviewers(nra.repo, (reviewer,)),)

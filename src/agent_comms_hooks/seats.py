@@ -24,7 +24,6 @@ class SubagentSeats(CommanderSession):
     Claude Code names the subagent and Core names the slot, so the pairing is written only
     here, when Core seats an occupant, and removed when Core vacates it."""
 
-    command: ClassVar[tuple[str, ...]] = ("agent-comms-commander", "order")
     timeout: ClassVar[float] = 30
 
     @property

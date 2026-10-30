@@ -24,6 +24,7 @@ from pathlib import Path
 
 from agent_comms.cli_commands import RegisteredResult
 from agent_comms.comms import client_wire
+from agent_comms.commander.order import EndVerb, OrderVerb, RetireVerb, SayVerb, SessionEndVerb
 from agent_comms.field_codec import FieldCodec
 from agent_comms.store_files import AtomicFile
 from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
@@ -39,9 +40,12 @@ class SubagentHook(SeatedSubagent):
 
     agent_type: str
 
-    def commanding(self, record: WatchRecord, verb: str) -> subprocess.CompletedProcess[str]:
-        return self.run(*self.command, verb, '--root', record.root,
-                        *ThreadCaller(record.bus).from_flag(), '--fork', self.agent_id.fork)
+    def commanding(self, record: WatchRecord,
+                   verb: type[OrderVerb]) -> subprocess.CompletedProcess[str]:
+        with client_wire(Path(record.root)) as comms:
+            command = CommanderForkCaller(self.agent_id.fork).commander_command(
+                comms, *verb.command_arguments())
+        return self.run(*shlex.split(command))
 
     def register(self) -> None:
         state = WatchClaim(self.session_id).state()
@@ -51,10 +55,10 @@ class SubagentHook(SeatedSubagent):
     def join(self, record: WatchRecord) -> None:
         """Use the hook's client and captured parent; no commander CLI subprocess."""
         fork = self.agent_id.fork
-        parent = ThreadCaller(record.bus)
+        caller = CommanderForkCaller(fork)
         with client_wire(Path(record.root)) as comms:
-            CommanderForkCaller(fork).join(comms, record.bus)
-        arguments = shlex.join((*parent.from_flag(), '--fork', fork))
+            caller.join(comms, record.bus)
+            arguments = shlex.join(caller.commander_arguments(comms))
         self.warn(f"Core registered you as commander fork {fork}: pass `{arguments}`"
                   " on every agent-comms-commander verb; your stop is refused until Core holds"
                   " a record of what you found.")
@@ -92,14 +96,19 @@ class SubagentStopHook(SubagentHook):
         if self.stop_hook_active:
             self.end(record)
             return
-        run = self.commanding(record, "retire")
+        run = self.commanding(record, RetireVerb)
         if run.returncode:
+            with client_wire(Path(record.root)) as comms:
+                command = CommanderForkCaller(self.agent_id.fork).commander_command(
+                    comms, *SayVerb.command_arguments('#comms', 'FILE'))
+            reason = run.stderr.strip() or f"exit status {run.returncode}"
             print(json.dumps({"decision": "block",
-                              "reason": run.stderr.strip() or f"exit status {run.returncode}"}))
+                              "reason": f"{reason}\nRecord a head verdict or post what you found"
+                                        f" with `{command}` before stopping."}))
 
     def end(self, record: WatchRecord) -> None:
         """A send-back is never repeated: the fork ends here whatever it recorded."""
-        run = self.commanding(record, "end")
+        run = self.commanding(record, EndVerb)
         if run.returncode:
             raise SystemExit(run.stderr.strip() or f"exit status {run.returncode}")
 
@@ -127,9 +136,11 @@ class SessionSubagents(SubagentSeats):
         subagents = self.subagents()
         if not subagents:
             return ()
-        run = self.run(*self.command, "session-end", '--root', record.root,
-                       *ThreadCaller(record.bus).from_flag(), "--forks",
-                       *(agent.fork for agent in subagents))
+        with client_wire(Path(record.root)) as comms:
+            command = ThreadCaller(record.bus).commander_command(
+                comms, *SessionEndVerb.command_arguments('--forks',
+                                                       *(agent.fork for agent in subagents)))
+        run = self.run(*shlex.split(command))
         return (run.stderr.strip() or f"exit status {run.returncode}",) if run.returncode else ()
 
 

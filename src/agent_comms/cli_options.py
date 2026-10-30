@@ -45,12 +45,9 @@ class JsonFlagRecord(DisclosedRecord):
         )
 
     @classmethod
-    def from_arguments(cls, arguments: Sequence[str], *defaults: Self) -> Self:
+    def from_arguments(cls, arguments: Sequence[str]) -> Self:
         parser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
         cls.add_cli_arguments(parser, required=False, dest="record")
-        if defaults:
-            default, = defaults
-            parser.set_defaults(record=default)
         namespace, _ = parser.parse_known_args(arguments)
         if "record" not in vars(namespace):
             raise ValueError(f"Missing required {cls.value_flag}")

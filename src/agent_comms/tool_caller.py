@@ -338,14 +338,7 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
-            # Order verbs depend on ToolCaller; resolve the declaration only at CLI rendering.
-            from .commander.order import SayVerb
-
-            command = self.commander_command(
-                comms, *SayVerb.command_arguments('#comms', 'FILE'))
-            raise ToolRefusedError(
-                f"{self.name} recorded nothing in Core: record a head verdict or post"
-                f" what it found with `{command}` before it stops.")
+            raise ToolRefusedError(f"{self.name} recorded nothing in Core.")
         self.end(comms)
 
     def leaving(self, comms: Comms) -> None:
