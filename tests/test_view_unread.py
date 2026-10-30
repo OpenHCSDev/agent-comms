@@ -20,7 +20,8 @@ def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     source = tmp_path / "native.jsonl"
     source.write_bytes(b"first reply\n")
     indexed = FileRevision.capture(source)
-    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0)
+    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0,
+                       complete=indexed.size)
 
     with source.open("ab") as stream:
         stream.write(b"another reply\n")
@@ -42,7 +43,8 @@ def test_an_appended_source_keeps_its_stored_replies_while_the_delta_prepares(tm
     source = tmp_path / "native.jsonl"
     source.write_bytes(b"first reply\n")
     indexed = FileRevision.capture(source)
-    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0)
+    index = ReplyIndex(revision=indexed, records=1, source=str(source), start=0,
+                       complete=indexed.size)
     with source.open("ab") as stream:
         stream.write(b"another reply\n")
     growing = FileRevision.capture(source)

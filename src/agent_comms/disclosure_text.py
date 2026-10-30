@@ -121,7 +121,6 @@ class StructuredText(DisclosureText):
 class ViewFacts:
     """Declared displayed values; paint-time fields may exclude publication comparison."""
 
-    record: type
     columns: tuple[str, ...]
     rows: tuple[tuple[str, ...], ...]
 
@@ -174,7 +173,7 @@ class ViewTable[R]:
     def facts(self) -> ViewFacts:
         retained = tuple(index for index, column in enumerate(self.declared_columns)
                          if not column.excluded_in(PublicationExclude))
-        return ViewFacts(self.record, tuple(self.declared_columns[index].label for index in retained),
+        return ViewFacts(tuple(self.declared_columns[index].label for index in retained),
                          tuple(tuple(row[index].summary for index in retained) for row in self.cells))
 
     @cached_property
