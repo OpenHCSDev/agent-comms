@@ -1,9 +1,10 @@
 """The Claude Code leaf of the rule gate (agent_comms.rule_deal): its deal lives beside the
 transcript, and a refusal is a PreToolUse denial.
 
-PreToolUse only judges: it refuses any tool but reading a dealt file while one is unread or the
-audit does not answer the deal. PostToolUse, which Claude Code sends only after a tool completes,
-records a Read that covered a whole dealt file; a failed or partial Read leaves the gate closed.
+PreToolUse only judges: it refuses any tool but reading a dealt file and answering it while one is
+unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
+only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
+Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
 it may not write the main agent's audit, and it reports its tool activity through its seat.
 """
@@ -81,6 +82,10 @@ class WriteTool(ToolMeaning, declared_name="Write"):
 
     def judge(self, call: GatedCall) -> None:
         call.judge_write(call.tool_name, WriteInput.decode(call.tool_input).file_path.resolve())
+
+
+class EditTool(WriteTool, declared_name="Edit"):
+    """Answering one rule edits the audit in place; an edit is judged like a write."""
 
 
 @dataclass(frozen=True)
