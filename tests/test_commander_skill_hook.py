@@ -798,6 +798,14 @@ def test_a_refusal_quotes_what_he_said_last_not_what_the_deal_showed(
     reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Tristan told you, verbatim:\nthe new order\nYou did not." in reason
     assert "the old order" not in reason
+    with transcript.open("a") as stream:  # typed while the turn runs
+        stream.write(json.dumps({"type": "attachment", "attachment": {
+            "type": "queued_command", "origin": {"kind": "human"},
+            "prompt": [{"type": "text", "text": "the queued order"}]}}) + "\n")
+        stream.write(json.dumps({"type": "user", "origin": {"kind": "task-notification"},
+                                 "message": {"content": "not him"}}) + "\n")
+    gated(transcript, "Bash", {}).judge()
+    assert "verbatim:\\nthe queued order\\n" in capsys.readouterr().out
 
 
 def test_the_bus_and_the_watch_stay_open_during_a_deal(capsys, dealt_session):
