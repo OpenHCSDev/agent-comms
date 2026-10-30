@@ -17,6 +17,9 @@ from .errors import (
 )
 from .message_bus import MessageBus
 from .message_reference import MessageReference
+from .coordination_session import NativeCapture
+from .external_transcript import ExternalTranscript
+from .turn_item import NoSourceTurn, SourceTurn
 from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, NoticeRole
 from .registration import Registration
 from .send_result import CorrectionComplete, CorrectionFailed, CorrectionResult, SendResult
@@ -71,6 +74,7 @@ class Messaging:
         report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
         origin: AgentOrigin = AgentOrigin(),
+        source_turn: SourceTurn = NoSourceTurn(),
     ) -> SendResult:
         """Return the committed envelope and its separate wording-correction outcome."""
         type.require_sendable()
@@ -97,7 +101,7 @@ class Messaging:
             role=role,
             task=task,
             report=report,
-            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target)))),
+            answers=tuple(dict.fromkeys((*answers, *self._answered_by(owner, target, source_turn)))),
         )
         committed = self._publish(message, origin, destination=CommandTarget.named(target))
         correction: CorrectionResult
@@ -109,9 +113,15 @@ class Messaging:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
 
-    def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
-        """What this owner's message to target answers among its running turn's inputs."""
-        return owner.turn_lease.answered_inputs(self, owner, target)
+    def _answered_by(self, owner: Thread, target: str,
+                     source_turn: SourceTurn) -> tuple[MessageReference, ...]:
+        """Native lease or explicitly named external source; never a newest-row guess."""
+        references = list(owner.turn_lease.answered_inputs(self, owner, target))
+        references.extend(source_turn.external_answers(
+            NativeCapture(self.bus), ExternalTranscript(self.root, owner.incarnation),
+            CommandTarget.named(target),
+        ))
+        return tuple(dict.fromkeys(references))
 
     def user_identity(self, worktree: Checkout) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
@@ -122,6 +132,12 @@ class Messaging:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         user = self.user_identity(worktree)
         return self._publish_user(user, target, body, task)
+
+    def send_owner_notice(self, target: NamedTarget, body: str, notice: TaskAttachment, *,
+                          role: MessageRole) -> Message:
+        """Core speaks in the owner's voice, under his own thread; the notice task, not the sender,
+        says nobody typed it, so it directs nothing and adds no owner words to any task."""
+        return self._publish_user(self.user_identity(Checkout(self.root)), target, body, notice, role=role)
 
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: Checkout,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),

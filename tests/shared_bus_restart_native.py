@@ -244,14 +244,14 @@ async def configured_pure_channel(arguments):
                         if service.registry.require(name).executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
-                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().by_lookup[row.owner_lookup].name,
+                            'dispatched_unproven_inputs':[{'owner':service.registry.snapshot().born(row.owner_lookup).name,
                                 'stage':row.reference_stage.declared_name,'input_id':row.input_id}
                                 for row in dispatched],
                             'claims':[{'owner':row.recipient,'revision':row.revision,
                                 'disposition':row.lifecycle.declared_name} for row in claims]}
                     if not timeline or observed['dispatched_unproven_inputs'] != timeline[-1]['dispatched_unproven_inputs'] or observed['claims'] != timeline[-1]['claims']:
                         timeline.append(observed)
-                    overlap |= len({service.registry.snapshot().by_lookup[row.owner_lookup].name for row in dispatched}) == len(names)
+                    overlap |= len({service.registry.snapshot().born(row.owner_lookup).name for row in dispatched}) == len(names)
                     triage = [row for row in inputs if row.reference_stage is TriageNativeExecution]
                     full = [row for row in inputs if row.reference_stage is FullNativeExecution]
                     if len(claims) == len(names)*len(originals) and all(bool(row.lifecycle.items_with(Complete, True)) for row in claims) and not active:
@@ -307,8 +307,8 @@ async def configured_pure_channel(arguments):
                                         assert cursor.reference == native.reference
                                         assert native.sent_owner_claimed_generation.matches(cursor.owner_claimed_generation)
                                         assert cursor.injected_seq >= originals[-1].seq
-                                        assert fact.envelope.scope.owner == service.registry.snapshot().by_lookup[native.owner_lookup].require_process()
-                                        published_coverage[service.registry.snapshot().by_lookup[native.owner_lookup].name] = fact.envelope
+                                        assert fact.envelope.scope.owner == service.registry.snapshot().born(native.owner_lookup).require_process()
+                                        published_coverage[service.registry.snapshot().born(native.owner_lookup).name] = fact.envelope
                         # Original completion and informational ACP publication
                         # are separate asynchronous boundaries. Await the actual
                         # installed publisher within the existing journey budget;

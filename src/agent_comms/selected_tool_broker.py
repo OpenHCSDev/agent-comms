@@ -38,11 +38,12 @@ from .native_tool_call import (
     SelectedToolBusy,
 )
 from .native_tool_transport import (
+    GatedToolTransport,
     NativeToolRound,
     ToolListener,
-    ToolTransport,
     UnboundToolTransport,
 )
+from .pi_rule_gate import PiRuleGate
 from .selected_actions import SelectedAction
 from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .tool_denial import SelectedToolDenied
@@ -83,6 +84,7 @@ class SelectedToolMode(NativeToolMode):
     """Trusted owner callback, never parsed from a model call or injected text."""
 
     action: Callable[[int, SelectedToolRequest], None]
+    gate: PiRuleGate
 
     def __post_init__(self) -> None:
         if not callable(self.action):
@@ -92,13 +94,13 @@ class SelectedToolMode(NativeToolMode):
         return (
             "--no-builtin-tools",
             "--tools",
-            "selected_claimed_write",
+            SelectedToolRequest.declared_name,
             "-e",
             str(selected_extension(package)),
         )
 
     async def open_transport(self, turn, ownership) -> UnboundToolTransport:
-        return await SelectedToolSocket.open(turn, ownership, self.action)
+        return await SelectedToolSocket.open(turn, ownership, self.action, self.gate)
 
 
 @dataclass(frozen=True)
@@ -220,7 +222,7 @@ def selected_tool_mode_for_owner(
                 comms, worker_store, claim_scope, owner_name, input_id, round_number, request
             )
 
-    return SelectedToolMode(owner_action)
+    return SelectedToolMode(owner_action, PiRuleGate.of(comms, comms.registry.require(owner_name)))
 
 
 def verify_sent_full_input(
@@ -297,15 +299,15 @@ def perform_selected_write(
     record_selected_terminal(store.session.path, slot, request.call_id)
 
 
-class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
+class SelectedToolSocket(GatedToolTransport[SelectedToolRequest]):
     max_request = _MAX_REQUEST
     """One selected replacement, preserving the existing one-slot authority."""
 
     def __init__(
         self, listener: ToolListener, action: Callable[[int, SelectedToolRequest], None],
-        *, pid: int
+        gate: PiRuleGate, *, pid: int
     ) -> None:
-        super().__init__(listener, pid=pid)
+        super().__init__(listener, gate, pid=pid)
         self.action = action
 
     def validate_round(self, round: NativeToolRound[SelectedToolRequest]) -> None:
@@ -313,7 +315,7 @@ class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
             raise SelectedToolDenied("Native Pi returned more than one selected call")
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> SelectedToolRequest:
-        if name != "selected_claimed_write":
+        if name != SelectedToolRequest.declared_name:
             raise SelectedToolDenied("Native Pi returned an unapproved selected call")
         try:
             return FieldCodec.decode(

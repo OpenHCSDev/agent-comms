@@ -18,12 +18,11 @@ import pytest
 
 from agent_comms import agent_events as events
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import CommandTarget
+from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.order import Commander, OrderFile, SayVerb, SendVerb
-from agent_comms.commander.questions import UnansweredBurst, UnansweredUnitAsks
+from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander.standing import (
-    AnswersTo,
     HeartbeatNotStarted,
     HeartbeatSilent,
     HolderGone,
@@ -32,17 +31,22 @@ from agent_comms.commander.standing import (
     ReassignedWheelSpin,
 )
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.commander.vibe_check import ChokeholdUnanswered, VibeCheckUnanswered
 from agent_comms.commander_hud import CommanderFrame
 from agent_comms.task_attachments.commander_pings import CommanderUpdate
+from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
+from agent_comms.errors import (
+    CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
+)
 from agent_comms.todos import ReleaseTodo, SharedWorktreeRefusal, StrikeReason
 from agent_comms.work_dispatch import ReusedWorkDispatch
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
+    SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -73,6 +77,9 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    CorrectMergedLinkTodo,
+    MergedLink,
+    PullRequestLink,
     ResumeClaimOrder,
     ExpectedProblem,
     OrderClaim,
@@ -404,6 +411,16 @@ def publish(comms, sender, target, timestamp, *, answers=()):
     )
 
 
+def escalate(comms, notice, timestamp, body="Answer the escalation"):
+    """One escalation line in the owner's voice, at a chosen time."""
+    user = comms.messaging.user_identity(Checkout(comms.root))
+    return comms.bus.publisher.publish_ordinary(
+        Message(user.name, "lead", body, InfoKind, timestamp=timestamp,
+                task=notice.of(comms.registry.snapshot(), "lead")),
+        destination=ThreadTarget("lead"), origin=HumanOrigin.of(user),
+    )
+
+
 def test_an_order_rule_observation_compares_its_cited_repositories(held_bus):
     """An order's scope cites FileLines whose repository is a declared family: the
     observation key compares it, so a rule holding the order keys without crashing."""
@@ -490,6 +507,55 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
     assert held_bus.goals.todos.get(todo.id) == todo
 
 
+def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_owner(held_bus):
+    """P935: a prerequisite PR linked to the order merged it; only that link leaves, the
+    order is pending again under its own id, check, run and times, and then changes owner."""
+    store = held_bus.goals.todos
+    lead = held_bus.registry.require("lead").incarnation
+    held = store.get("P1")
+    prerequisite = PullRequestLink(held.repo, 3596)
+    implementation = PullRequestLink(held.repo, 3700)
+    with store.writing() as connection:
+        replace(held, revision=held.revision + 1, order=replace(
+            held.order.checked(), pull_requests=(prerequisite, implementation),
+        ).merged("33bd05c64abc")).upsert(connection)
+    merged = store.get("P1")
+    reason = "the merged prerequisite pull request held none of this order's checker work"
+
+    def correction(revision: int, previous: MergedLink) -> CorrectMergedLinkTodo:
+        return CorrectMergedLinkTodo(revision, lead, reason, previous=previous)
+
+    for refused in (correction(held.revision, MergedLink(prerequisite, "33bd05c64abc")),
+                    correction(merged.revision, MergedLink(PullRequestLink(held.repo, 1),
+                                                           "33bd05c64abc")),
+                    correction(merged.revision, MergedLink(prerequisite, "0123456789ab"))):
+        with pytest.raises(TodoError):
+            store.apply("P1", refused)
+        assert store.get("P1") == merged
+    with pytest.raises(TodoError, match="records no merge"):
+        correction(held.revision, MergedLink(prerequisite, "33bd05c64abc")).apply(held)
+
+    store.apply("P1", correction(merged.revision, MergedLink(prerequisite, "33bd05c64abc")))
+    corrected = store.get("P1")
+    assert isinstance(corrected.order, PendingProblemOrder)
+    assert corrected.order.pull_requests == (implementation,)
+    assert corrected.order.corrections[-1].previous == MergedLink(prerequisite, "33bd05c64abc")
+    assert (replace(corrected.order, pull_requests=(), corrections=())
+            == replace(held.order, pull_requests=(), corrections=()))
+    assert (corrected.holder, corrected.review_at) == (merged.holder, merged.review_at)
+
+    held_bus.goals.update_goal("outsider", SetGoalAction(text="Absorb the checker audit work."))
+    goals = {name: held_bus.registry.require(name).goal for name in ("worker", "outsider")}
+    outsider = held_bus.registry.require("outsider")
+    store.assign((ExpectedProblem("P1", corrected.revision),), owner=outsider, assigner=lead,
+                 generation=goals["outsider"].require().id, request=corrected.request.require(),
+                 review_at=corrected.review_at, order=corrected.order)
+    assigned = store.get("P1")
+    assert assigned.held().owner_identity == outsider.incarnation
+    assert assigned.order == corrected.order
+    assert {name: held_bus.registry.require(name).goal for name in goals} == goals
+
+
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
     now = time.time()
     publish(held_bus, "worker", "lead", now - 7200)  # before every held order
@@ -510,30 +576,6 @@ def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus)
     assert unanswered(held_bus) == ()
 
 
-def test_latest_answer_uses_the_complete_original_reference_and_time_cut(held_bus):
-    since = time.time() - 60
-    question = publish(held_bus, "worker", "lead", since + 1)
-    reply = publish(held_bus, "lead", "worker", since + 2, answers=(question.reference,))
-    publish(held_bus, "lead", "worker", since + 3)
-    with pytest.raises(RelationViolationError):
-        publish(held_bus, "lead", "worker", since + 4,
-                answers=(MessageReference(question.seq, MessageId.mint("wrong-original")),))
-    expired = publish(held_bus, "worker", "lead", since - 1)
-    publish(held_bus, "lead", "worker", since + 5, answers=(expired.reference,))
-    scope = RepliesDisplayScope(frozenset({"lead"}), frozenset({"worker"}))
-    assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
-        held_bus.bus.bus)) == (reply.reference,)
-    latest = publish(held_bus, "lead", "worker", since + 6, answers=(question.reference,))
-    assert tuple(message.reference for message in AnswersTo(scope, since).read_opened(
-        held_bus.bus.bus)) == (latest.reference,)
-    # Bus order and the producer's timestamp are independent answers.
-    backdated = publish(held_bus, "lead", "worker", since + 2.5, answers=(question.reference,))
-    unrelated = publish(held_bus, "worker", "outsider", since + 7)
-    publish(held_bus, "lead", "worker", since + 8, answers=(unrelated.reference,))
-    assert AnswersTo(scope, since).read_opened(held_bus.bus.bus) == (backdated,)
-    assert held_bus.bus.bus.answer_timestamp(scope, since=since) == latest.timestamp
-
-
 def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     now = time.time()
     questions = tuple(publish(held_bus, "worker", "lead", now - 900 - offset)
@@ -550,7 +592,7 @@ def test_unanswered_pages_match_the_complete_answer_reference(held_bus):
     )
 
 
-def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus):
+def test_answering_an_unrelated_peer_leaves_the_commander_question_open(held_bus):
     now = time.time()
     owed = publish(held_bus, "worker", "lead", now - 30)
     unrelated = publish(held_bus, "worker", "outsider", now - 20)
@@ -559,11 +601,9 @@ def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus
         scope, since=now - 60, before=now, upper=unrelated.seq + 1, limit=1,
     ) == (owed,)
     publish(held_bus, "lead", "outsider", now - 10, answers=(unrelated.reference,))
-    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == ()
-    assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == (owed,)
-    reply = publish(held_bus, "lead", "worker", now - 5, answers=(owed.reference,))
-    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == (reply,)
-    assert UnansweredBurst(scope, now - 60, now).read_opened(held_bus.bus.bus) == ()
+    assert held_bus.bus.bus.unanswered_page(
+        scope, since=now - 60, before=now, upper=unrelated.seq + 20, limit=1,
+    ) == (owed,)
 
 
 @pytest.mark.parametrize("target,body,role,human,eligible", (
@@ -575,7 +615,7 @@ def test_answering_an_unrelated_peer_does_not_clear_the_commander_burst(held_bus
     ("#comms", "@lead Informational notice", NoticeRole(), False, False),
     ("#comms", "Collective question", ConversationRole(), True, True),
 ))
-def test_latest_answer_retains_the_original_response_eligibility(
+def test_unanswered_page_retains_the_original_response_eligibility(
     held_bus, target, body, role, human, eligible,
 ):
     now = time.time()
@@ -591,22 +631,9 @@ def test_latest_answer_retains_the_original_response_eligibility(
         scope, since=now - 60, before=now, upper=original.seq + 1, limit=1,
     ) == ((original,) if eligible else ())
     reply = publish(held_bus, "lead", sender, now - 10, answers=(original.reference,))
-    found = AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus)
-    assert found == ((reply,) if eligible else ())
     assert held_bus.bus.bus.unanswered_page(
         scope, since=now - 60, before=now, upper=reply.seq + 1, limit=1,
     ) == ()
-
-
-def test_latest_answer_retains_the_original_commander_alias(held_bus):
-    now = time.time()
-    original = publish(held_bus, "worker", "lead", now - 20)
-    held_bus.threads._rename_thread("lead", "renamed-lead")
-    reply = publish(held_bus, "renamed-lead", "worker", now - 10, answers=(original.reference,))
-    scope = RepliesDisplayScope(
-        held_bus.registry.snapshot().names_for("renamed-lead"), frozenset({"worker"}),
-    )
-    assert AnswersTo(scope, now - 60).read_opened(held_bus.bus.bus) == (reply,)
 
 
 @pytest.mark.parametrize('target,body', [
@@ -716,10 +743,7 @@ def test_an_owed_answer_is_a_heartbeat_line_and_never_a_vibe_check(held_bus):
 
 def test_an_owed_vibe_check_refuses_only_verbs_that_answer_nothing(held_bus, tmp_path):
     """The vibe check waits like any owed message: a reply naming a unit's ask still lands."""
-    from agent_comms.commander.vibe_check import VibeCheckSender
-
-    VibeCheckSender.register(held_bus.registry)
-    check = publish(held_bus, VibeCheckSender.sender, "lead", time.time() - 3600)
+    check = escalate(held_bus, VibeCheckNotice, time.time() - 3600)
     ask = publish(held_bus, "worker", "lead", time.time() - AwaitingCommander.seconds - 1)
     ctx = Commander.read_root(held_bus.root, ThreadCaller('lead'))
     reply = tmp_path / "reply.txt"
@@ -866,10 +890,11 @@ def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, 
     saved, = CommanderUpdate.latest(held_bus, commander.incarnation)
     assert saved.handled
     assert isinstance(held_bus.registry.require("worker").goal.require().state, ActiveGoal)
+    owner = held_bus.messaging.user_identity(Checkout(held_bus.root)).name
     page = MessagePageRequest(DMDisplayScope.capture(
-        heartbeat.sender, "lead", held_bus.registry.snapshot(),
+        owner, "lead", held_bus.registry.snapshot(),
     )).read_opened(held_bus.bus.bus)
-    message = next(message for message in page.messages if message.sender == heartbeat.sender)
+    message = next(message for message in page.messages if message.task == saved)
     # The compact body truncates lines; the original board entries keep every complete alert.
     board = tuple(entry.text for entry in message.task.board(held_bus, "lead"))
     assert set(expected) <= set(board)
@@ -931,8 +956,8 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
     assert isinstance(never, HeartbeatNotStarted)
     assert never.request == request.id and never.since == due
     held_bus.goals.todos.add_request(commander.incarnation, "A newer independent request")
-    CommanderHeartbeat.register(held_bus.registry)
-    held_bus.messaging.send(CommanderHeartbeat.sender, "lead", "A DM is not a completed pass")
+    held_bus.messaging.send_user_message(
+        ThreadTarget("lead"), "A DM is not a completed pass", worktree=Checkout(held_bus.root))
     assert HeartbeatSilent.violations(held_bus, "lead") == (never,)
     passes = ServicePassStore.at(held_bus.root)
     observed = (commander.incarnation,)
@@ -940,7 +965,6 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
     completed = passes.read().commander_completed[commander.incarnation]
     assert HeartbeatSilent.violations(held_bus, "lead") == ()
     held_bus.threads._rename_thread("lead", "renamed-lead")
-    held_bus.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     monkeypatch.setattr(time, "time", lambda: completed + HeartbeatSilent.seconds + 1)
     silent, = HeartbeatSilent.violations(held_bus, "renamed-lead")
     assert isinstance(silent, MissedHeartbeat)
@@ -951,34 +975,52 @@ def test_first_pass_is_owed_from_oldest_request_and_survives_renames(held_bus, m
 
 
 def test_one_answer_covers_an_escalation_burst_sent_before_it(held_bus):
-    from agent_comms.commander.vibe_check import VibeCheckSender
-
-    VibeCheckSender.register(held_bus.registry)
     now = time.time()
-    burst = [publish(held_bus, VibeCheckSender.sender, "lead", now - 30 + line) for line in range(4)]
-    assert len(VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())) == 4
-    publish(held_bus, "lead", VibeCheckSender.sender, now - 20, answers=(burst[0].reference,))
-    assert VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time()) == ()
-    later = publish(held_bus, VibeCheckSender.sender, "lead", now - 10)
-    assert [m.message_id for m in VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [
+    burst = [escalate(held_bus, VibeCheckNotice, now - 30 + line) for line in range(4)]
+    owner = burst[0].sender
+    assert len(VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())) == 4
+    publish(held_bus, "lead", owner, now - 20, answers=(burst[0].reference,))
+    assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time()) == ()
+    later = escalate(held_bus, VibeCheckNotice, now - 10)
+    assert [m.message_id for m in VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [
         later.message_id]
 
 
-def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
-    """The gate reads an answer the way UnansweredBurst reads it once sent: naming any line of
-    an escalation burst covers the sender's other lines, while another sender's stay owed."""
-    from agent_comms.commander.vibe_check import (
-        ChokeholdSender,
-        ChokeholdUnanswered,
-        VibeCheckSender,
-        VibeCheckUnanswered,
-    )
+def test_an_answer_covers_by_bus_order_whatever_its_clock_says(held_bus):
+    """Answered is decided by bus sequence alone: a reply the bus ordered after the alarm covers
+    it even when the replier's clock ran behind, and a line the bus ordered after the reply stays
+    owed even when its clock ran behind the reply's."""
+    now = time.time()
+    check = escalate(held_bus, VibeCheckNotice, now - 10)
+    reply = publish(held_bus, "lead", check.sender, now - 20, answers=(check.reference,))
+    assert reply.seq == check.seq + 1 and reply.timestamp < check.timestamp
+    for beat in (time.time(), time.time() + VibeCheckUnanswered.seconds):
+        assert VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", beat) == ()
+    later = escalate(held_bus, VibeCheckNotice, now - 30)
+    assert [m.reference for m in VibeCheckNotice.unanswered(
+        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [later.reference]
 
-    VibeCheckSender.register(held_bus.registry)
-    ChokeholdSender.register(held_bus.registry)
+
+def test_answering_the_owner_does_not_answer_his_escalation(held_bus):
+    """Escalations share the owner's thread with everything he types; only an answer naming a
+    line of the burst covers it, and an escalation never becomes his request or his words."""
+    now = time.time()
+    check = escalate(held_bus, VibeCheckNotice, now - 30)
+    typed = held_bus.messaging.send_user_message(
+        ThreadTarget("lead"), "Something I typed", worktree=Checkout(held_bus.root))
+    publish(held_bus, "lead", typed.sender, now - 10, answers=(typed.reference,))
+    assert [m.reference for m in VibeCheckNotice.unanswered(
+        held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [check.reference]
+    assert tuple(check.retained_task_facts()) == ()
+    assert tuple(typed.retained_task_facts()) != ()
+
+
+def test_naming_one_line_of_a_burst_answers_the_burst_at_the_gate(held_bus):
+    """The gate reads an answer the way unanswered reads it once sent: naming any line of
+    an escalation burst covers its other lines, while another burst's stay owed."""
     now = time.time() - 3600
-    checks = [publish(held_bus, VibeCheckSender.sender, "lead", now + line) for line in range(3)]
-    holds = [publish(held_bus, ChokeholdSender.sender, "lead", now + 10 + line) for line in range(3)]
+    checks = [escalate(held_bus, VibeCheckNotice, now + line) for line in range(3)]
+    holds = [escalate(held_bus, ChokeholdNotice, now + 10 + line) for line in range(3)]
     vibe = [VibeCheckUnanswered(message) for message in checks]
     hold = [ChokeholdUnanswered(message) for message in holds]
     assert all(rule.answered_by((checks[-1],)) for rule in vibe)
@@ -1034,18 +1076,15 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
 
 def test_a_restarted_heartbeat_does_not_resend_an_escalation_burst(held_bus):
     """Deduplication sees answered and unanswered bursts through the same retained bus."""
-    from agent_comms.commander.vibe_check import VibeCheckSender
-
     first = "first escalation identity"
-    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
-    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
-    sent = VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
+    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
+    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
+    sent = VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     assert len(sent) == 1
-    publish(held_bus, "lead", VibeCheckSender.sender, time.time(), answers=(sent[0].reference,))
-    assert VibeCheckSender.sent(held_bus, "lead", first)
-    VibeCheckSender.burst_once(held_bus, "lead", (first,), first)
-    assert not VibeCheckSender.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
+    publish(held_bus, "lead", sent[0].sender, time.time(), answers=(sent[0].reference,))
+    VibeCheckNotice.burst_once(held_bus, "lead", (first,), first)
+    assert not VibeCheckNotice.unanswered(held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())
     second = "second escalation identity"
-    VibeCheckSender.burst_once(held_bus, "lead", (second,), second)
-    assert [message.body for message in VibeCheckSender.unanswered(
+    VibeCheckNotice.burst_once(held_bus, "lead", (second,), second)
+    assert [message.body for message in VibeCheckNotice.unanswered(
         held_bus.bus.bus, held_bus.registry.snapshot(), "lead", time.time())] == [second]

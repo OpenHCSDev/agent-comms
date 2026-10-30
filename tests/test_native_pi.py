@@ -235,7 +235,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
     files = _evidence(tmp_path)
     session = files.session
     _header, record = NativeTranscript(session).forward(0, session.stat().st_size)
-    context = NativeContextProof(INPUT_ID,'sid','entry',1,DIGEST,1_791_964_800_001,session,
+    context = NativeContextProof(INPUT_ID,'sid',record.entry.require_entry_id(),1,DIGEST,1_791_964_800_001,session,
                                  session_entry_start=record.start)
     failed = NativePiTerminalFailure('SECRET provider response including prompt data', context,
         SelectedModel('provider','model'), ModelRequestFailed('SECRET provider response including prompt data'))
@@ -264,7 +264,7 @@ def test_recorded_context_remains_verifiable_after_later_tool_rounds(tmp_path):
     with NativeEntry.open_evidence(session) as evidence:
         assert recorded.corroborates_input(INPUT_ID, files=files, evidence=evidence)
         assert not recorded.corroborates_input('e'*32, files=files, evidence=evidence)
-    input_event = InputCommitted(input_id=INPUT_ID,session_id='sid',session_entry_id='entry',session_entry_start=record.start)
+    input_event = InputCommitted(input_id=INPUT_ID,session_id='sid',session_entry_id=record.entry.require_entry_id(),session_entry_start=record.start)
     context_event = ContextCommitted.from_wire({key:value for key,value in first.items() if key != 'schema'})
     assert _verify_context(files,INPUT_ID,'sid',input_event,context_event) == recorded
     with pytest.raises(NativePiUnavailable):

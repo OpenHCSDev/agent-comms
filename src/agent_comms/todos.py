@@ -135,7 +135,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import StorageRule, UnitStorage
+from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -663,6 +663,13 @@ class PullRequestLink:
         if cls._reported_number(repo, str(number)) != number:
             raise TodoError(f"GitHub did not report pull request {number} in {repo.to_wire()}.")
         return link
+
+
+@dataclass(frozen=True)
+class MergedLink:
+    """A pull request an order links and the merge commit the order recorded for it."""
+    link: PullRequestLink
+    sha: str
 
 
 @dataclass(frozen=True)
@@ -1506,6 +1513,7 @@ class CheckoutReads:
         self._checkouts: dict[Path, PresentCheckout] = {}
         self._branch_mains: dict[RepositoryName, str] = {}
         self._branch_facts: dict[Path, BranchDifference] = {}
+        self._conflicts: dict[tuple[str, str], tuple[str, ...]] = {}
 
     def checkout(self, path: Path) -> PresentCheckout:
         """This read's one reader of the checkout at path."""
@@ -1542,6 +1550,21 @@ class CheckoutReads:
             raise WorkBranchError(f"Unprepared branch difference in {path}")
         return self._branch_facts[path]
 
+    def branch_conflicts(self, checkout: Path, left: str, right: str) -> tuple[str, ...]:
+        """The paths two commits cannot merge, read once per pair in this cut; a merge has
+        no direction, so either order names the same answer."""
+        pair = (min(left, right), max(left, right))
+        if pair not in self._conflicts:
+            self._conflicts[pair] = Repo.merge_conflicts(checkout, *pair)
+        return self._conflicts[pair]
+
+    def require_branch_conflicts(self, left: str, right: str) -> tuple[str, ...]:
+        """Consume this cut's prepared merge answer without opening another Git read."""
+        pair = (min(left, right), max(left, right))
+        if pair not in self._conflicts:
+            raise WorkBranchError(f"Unprepared merge of {left} and {right}")
+        return self._conflicts[pair]
+
 
 class ProgressRead(PullRequests, CheckoutReads):
     """One read of order progress: its GitHub facts and its checkouts' Git facts."""
@@ -1551,9 +1574,10 @@ class ProgressRead(PullRequests, CheckoutReads):
         PullRequests.__init__(self, todos)
         self._progress: dict[str, OrderProgress] = {}
 
-    def unread(self, todo: Todo, error: Exception) -> None:
-        directory = todo.order.checked().check.directory
-        self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
+    def unread(self, todos: Iterable[Todo], error: Exception) -> None:
+        for todo in todos:
+            directory = todo.order.checked().check.directory
+            self._progress[todo.id] = UnreadProgress(f"Source read in {directory}: {error}")
 
     def progress(self, held: Sequence[Todo], registry: Registration) -> dict[str, OrderProgress]:
         """Each held order's progress, read once per frame however many readers ask."""
@@ -1969,7 +1993,7 @@ class GrowthReason(PlainText):
 
 
 class OrderCorrectionReason(PlainText):
-    """Why the recorded check or run was wrong, in enough words to stand on the record."""
+    """Why the recorded part of an order was wrong, in enough words to stand on the record."""
 
     refusal = (
         "Say what was wrong with the recorded order in {}+ words; jargon {} hides what happened."
@@ -2215,6 +2239,10 @@ class ProblemOrder(LifecycleCapability, DeclaredFamily, StorySource, affix="Prob
     finding: Annotated[ProblemFinding, WireOmitDefault()] = field(
         default_factory=UnlocatedProblemFinding
     )
+
+    def source_repositories(self) -> tuple[RepositoryName, ...]:
+        return tuple(dict.fromkeys(repository for declaration in self.declarations
+                                   for repository in declaration.source_repositories()))
 
     @property
     def declarations(self) -> tuple[CheckedProblemOrder, ...]:
@@ -2794,8 +2822,15 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 class OpenProblemOrder(CheckedProblemOrder, declared_name=None):
     """An active order keeps corrections and accepts its checked delivery by identity."""
 
-    def corrected(self, correction: CorrectOrderTodo) -> Self:
+    def corrected(self, correction: CorrectOrderTodo) -> OpenProblemOrder:
         return correction.corrected(self)
+
+    def merged_link(self, link: PullRequestLink) -> MergedLink:
+        """The merge this order recorded through ``link``; an unmerged order recorded none."""
+        raise TodoError(f"Order {self.id} records no merge to take back.")
+
+    def unmerged(self, link: PullRequestLink) -> OpenProblemOrder:
+        raise TodoError(f"Order {self.id} records no merge to take back.")
 
     def require_delivery(self, order_id: OrderId) -> None:
         if self.id != order_id:
@@ -2838,6 +2873,16 @@ class MergedProblemOrder(AwaitingInstallationProblemOrder):
     def require_linkable(self) -> None:
         raise TodoError(f"Order {self.id} merged as {self.sha[:9]}; its pull requests are closed. "
                          "Ask the commander for a send-back before opening or linking another PR.")
+
+    def merged_link(self, link: PullRequestLink) -> MergedLink:
+        if link not in self.pull_requests:
+            raise TodoError(f"Order {self.id} does not link {link.url}; read it again.")
+        return MergedLink(link, self.sha)
+
+    def unmerged(self, link: PullRequestLink) -> PendingProblemOrder:
+        """Pending again under its own id, check, run, edits and times, without ``link``."""
+        return self.copy_as(PendingProblemOrder, pull_requests=tuple(
+            kept for kept in self.pull_requests if kept != link))
 
     def waiting_in(self, todo: Todo) -> Todo:
         return (todo if todo.order == self
@@ -3377,7 +3422,7 @@ class HuntRecord(TodoStoreRows, TypedTable):
 class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
     """Two different order holders cannot write into the same physical worktree."""
 
-    reason: ClassVar[str] = "the proposed holder shares an occupied worktree"
+    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
 
     def explanation(self) -> str:
         return str(self)
@@ -3594,20 +3639,24 @@ class Assignment(TodoHolder):
         return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
-                             snapshot: RegistrySnapshot) -> None:
-        """Validate this holder against open work using the transaction's registry snapshot;
-        the incoming problems move with this holder, so their current holders share nothing."""
+                             snapshot: RegistrySnapshot, workplaces: EditWorkplaces) -> None:
+        """Compare prepared physical edit ownership; launch/check paths confer no occupancy."""
+        proposed = workplaces.orders[problem]
+        prepared = proposed.held()
+        if (self.owner_identity, self.generation) != (prepared.owner_identity, prepared.generation):
+            raise TodoConflict(proposed)
+        workplaces.require_owner(proposed, snapshot)
         incoming.require_free(db, self.owner_identity, snapshot)
-        worktrees = {path for owner in self.holder_in(snapshot) for path in owner.home_checkouts}
+        worktrees = workplaces.roots_for(problem)
         for held in TodoStore._open(db, "assignment IS NOT NULL", ()):
             previous = held.held()
             if held.id in incoming.problems or previous.owner_identity == self.owner_identity:
                 continue
-            for other in previous.holder_in(snapshot):
-                for shared in worktrees.intersection(other.home_checkouts):
-                    raise SharedWorktreeRefusal(
-                        problem, held.id, self.owner_identity, other.incarnation, shared
-                    )
+            workplaces.require_current(held, snapshot)
+            for shared in worktrees.intersection(workplaces.roots_for(held.id)):
+                raise SharedWorktreeRefusal(
+                    problem, held.id, self.owner_identity, previous.owner_identity, shared
+                )
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
@@ -3746,6 +3795,10 @@ class TodoCommand(Command[CommandedTodo, CommandedTodo], DeclaredFamily, StorySo
     def prepare(self, goals: Goals, current: Todo) -> Self:
         return self
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        """Only assignment members prepare an incoming allocation boundary."""
+        return ()
+
     def record(self, goals: Goals, problem: str) -> Todo:
         """Write this operation; publish its effects only after the canonical row was written."""
         changed = goals.apply_problem(problem, self)
@@ -3860,13 +3913,17 @@ class AssignTodo(TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        return (replace(store.get(problem), assignment=self.proposed, order=self.order),)
+
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         snapshot = RegistryStore.at(store.root).snapshot()
         if not self.proposed.holder_in(snapshot):
             raise TodoConflict(current)
         self.proposed.require_available_in(
             db, current.id, IncomingWork(
-                self.actor, self.group | {current.id}, frozenset({self.order.id})), snapshot)
+                self.actor, self.group | {current.id}, frozenset({self.order.id})),
+            snapshot, store.prepared_edits())
         OwnerRequest.require(db, id=self.request).require_open(current.creator_identity)
 
     def apply(self, current: Todo) -> Todo:
@@ -4954,13 +5011,17 @@ class RestoreHolderTodo(TodoCommand):
     actor: ThreadIncarnation
     previous: Assignment
 
+    def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        return (replace(store.get(problem), assignment=self.previous),)
+
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         snapshot = RegistryStore.at(store.root).snapshot()
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
         self.previous.require_available_in(db, current.id, IncomingWork(
             self.actor, frozenset({current.id}),
-            frozenset(declared.id for declared in current.order.declarations)), snapshot)
+            frozenset(declared.id for declared in current.order.declarations)), snapshot,
+            store.prepared_edits())
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
@@ -4991,7 +5052,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
 
-    def corrected[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def corrected(self, order: OpenProblemOrder) -> OpenProblemOrder:
         if self.previous != self.part(order):
             raise TodoError("The corrected part changed since it was read; read it again.")
         return replace(self.replaced(order), corrections=(*order.corrections, self))
@@ -5001,8 +5062,8 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         """The order's current value of the part this correction replaces."""
 
     @abstractmethod
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
-        """The order with this correction's part replaced."""
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        """The order with this correction's part replaced; its state may change with it."""
 
 
 @dataclass(frozen=True)
@@ -5021,7 +5082,7 @@ class CorrectCheckTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderCheck:
         return order.check
 
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         self.check.require_writable()
         return replace(order, check=self.check)
 
@@ -5035,8 +5096,23 @@ class CorrectRunTodo(CorrectOrderTodo):
     def part(self, order: OpenProblemOrder) -> OrderRun:
         return order.run
 
-    def replaced[Order: OpenProblemOrder](self, order: Order) -> Order:
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
         return replace(order, run=self.run)
+
+
+@dataclass(frozen=True)
+class CorrectMergedLinkTodo(CorrectOrderTodo):
+    """The commander takes back a merge recorded through a pull request that never held this
+    order's work, such as a merged prerequisite. The order is pending again under its own id,
+    check, run, edits and times; only that link leaves it. Any other linked pull request stays,
+    so a merge of real work on it is read again from the forge, never dropped."""
+    previous: MergedLink
+
+    def part(self, order: OpenProblemOrder) -> MergedLink:
+        return order.merged_link(self.previous.link)
+
+    def replaced(self, order: OpenProblemOrder) -> OpenProblemOrder:
+        return order.unmerged(self.previous.link)
 
 
 @dataclass(frozen=True)
@@ -5077,10 +5153,15 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: GoalId
 
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        """A companion link is checked against the registered project under the write."""
+        project = RegistryStore.at(store.root).snapshot().commander_project
+        if self.link.repo not in project.linkable(current.repo):
+            raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this commander "
+                            f"project; {current.id} links only registered repositories.")
+
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)
-        if self.link.repo != current.repo:
-            raise TodoError("A recorded pull request must belong to the todo's repository.")
         order = current.order.checked()
         if self.link in order.pull_requests:
             return current
@@ -5988,6 +6069,18 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 f"{self.path}: {type(error).__name__}: {error}"
             ) from error
 
+    def preparing_edits(self, proposed: tuple[Todo, ...]) -> TodoStore:
+        """Prepare physical allocations outside SQL; the prepared store lives for this write only."""
+        if not proposed:
+            return self
+        snapshot = RegistryStore.at(self.root).snapshot()
+        held = self.held_orders()
+        workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
+        return PreparedTodoStore(self.root, workplaces)
+
+    def prepared_edits(self) -> EditWorkplaces:
+        raise TodoError('Assignment allocation evidence was not prepared before the write.')
+
     def allocate_problem(self) -> str:
         with self.writing() as db:
             return str(ProblemAllocation.allocate(db))
@@ -6234,10 +6327,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         proposed = Todo.ordered(
             todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
             review_at, order, request)
-        with self.writing() as db:
+        prepared = self.preparing_edits((proposed,))
+        with prepared.writing() as db:
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
-                RegistryStore.at(self.root).snapshot())
+                RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
             OwnerRequest.require(db, id=request).require_open(identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -6265,9 +6359,12 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def apply_together(self, commands: Sequence[ProblemCommand]) -> tuple[Todo, ...]:
         """Write the commands under one Todo transaction, in order: each validates against
         the rows the commands before it wrote, and any refusal writes none of them."""
-        with self.writing() as db:
+        proposed = tuple(todo for command in commands
+                         for todo in command.operation.proposed_work(self, command.problem))
+        prepared = self.preparing_edits(proposed)
+        with prepared.writing() as db:
             for command in commands:
-                command.write(db, self)
+                command.write(db, prepared)
             return self._snapshot_rows(
                 db, tuple(self._current(db, command.problem) for command in commands))
 
@@ -6319,6 +6416,16 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 assigner, expected.expected_revision, _thread(owner), generation, review_at,
                 order, request, traced, group))
             for expected in problems))
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedTodoStore(TodoStore):
+    """One mutation's immutable allocation cut, not another persisted edit ownership authority."""
+
+    workplaces: EditWorkplaces
+
+    def prepared_edits(self) -> EditWorkplaces:
+        return self.workplaces
 
 
 @dataclass(frozen=True, slots=True)

@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .envelope_claim_transitions import FileClaimPath
     from .native_tool_transport import UnboundToolTransport
     from .pi_payloads import PiToolResult
+    from .pi_rule_gate import PiRuleGate
     from .shell_effects import StorageEffect
     from .turn_goal_permission import TurnGoalPermission
 
@@ -225,6 +226,14 @@ class NativeToolCall(ABC):
 
     def reject_correlated(self, existing: NativeToolCall) -> None:
         raise SelectedToolDenied("Native tool request/event differs from the declared call")
+
+    def judge_under(self, gate: PiRuleGate) -> None:
+        """A tool call waits until the dealt rules are read and audited."""
+        gate.judge_tool(self.declared_name)
+
+    def completed_under(self, gate: PiRuleGate) -> None:
+        """Most completed calls read nothing the deal counts."""
+        return
 
     def announce(self) -> None:
         self.progress.observation.announce(self)

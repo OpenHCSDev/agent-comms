@@ -7,6 +7,7 @@ import shlex
 from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .bus_publication import AgentOrigin
+from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .errors import ToolRefusedError
 from .field_codec import WireForm
@@ -121,7 +122,7 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
 
     def commander(self, comms: Comms) -> Thread:
         snapshot = comms.registry.snapshot()
-        thread, = snapshot.commander_project.require().commanders(snapshot)
+        thread, = snapshot.commander_project.require().leads(snapshot)
         return thread
 
     def as_thread(self, commander: str) -> ThreadCaller:
@@ -236,8 +237,48 @@ class SubagentCaller(ThreadCaller):
         """What a child reports as it ends; a role slot's history is already on its thread."""
 
 
+class ActsForCommander(ThreadCaller):
+    """Recorded under its own incarnation, holding its commander's authority: the commander
+    verbs accept its orders and verdicts as the commander's, and the record names who acted."""
+
+    @abstractmethod
+    def commander(self, comms: Comms) -> Thread: ...
+
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation
+        return own.require_recorded().acting_for(self.commander(comms).incarnation)
+
+
 @dataclass(frozen=True)
-class CommanderForkCaller(SubagentCaller):
+class CommanderPeerCaller(ThreadCaller):
+    """Another commander acting under its own name: membership in the commanders channel is
+    the declaration, so its verdicts and orders record its own incarnation, never the
+    registered commander's."""
+
+    def commanding(self, comms: Comms, commander: ToolCaller) -> None:
+        if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
+            raise ToolRefusedError(
+                f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
+
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return CommanderPeerAuthority(self.name, commander)
+
+
+@dataclass(frozen=True)
+class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
+    """A peer bound to the registered commander whose orders it judges and directs."""
+
+    authority: str
+
+    def as_thread(self, commander: str) -> ThreadCaller:
+        return self
+
+    def commander(self, comms: Comms) -> Thread:
+        return comms.registry.require(self.authority)
+
+
+@dataclass(frozen=True)
+class CommanderForkCaller(ActsForCommander, SubagentCaller):
     """Commander verbs use a registered child without copying registry procedures."""
 
     def commanding(self, comms: Comms, commander: ToolCaller) -> None:
