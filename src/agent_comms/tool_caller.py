@@ -166,7 +166,7 @@ class ThreadCaller(ToolCaller):
         return self.identity_in(comms.registry.snapshot())
 
     def identity_in(self, snapshot: RegistrySnapshot) -> ThreadIncarnation:
-        return snapshot.require(self.name).incarnation
+        return snapshot.require(self.name).acting_identity
 
     def require_repository_head_review_grant(self, snapshot: RegistrySnapshot,
                                              actor: ThreadIncarnation) -> None:
@@ -274,6 +274,10 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
     def commander(self, comms: Comms) -> Thread:
         return comms.registry.require(self.authority)
 
+    def identity(self, comms: Comms) -> ThreadIncarnation:
+        own = comms.registry.require(self.name).incarnation.require_recorded()
+        return own.peer_for(self.commander(comms).incarnation)
+
 
 @dataclass(frozen=True)
 class CommanderForkCaller(ActsForCommander, SubagentCaller):
@@ -284,6 +288,10 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         parent = snapshot.require(commander.own_thread())
         snapshot.commander_project.require().require_commander(snapshot, parent.incarnation)
         comms.registry.register_child(self.name, parent.name, CommanderForkExecution, comms.goals)
+
+    def join(self, comms: Comms, commander: ToolCaller) -> None:
+        """The hook registers its child under its captured parent, in this process."""
+        self.commanding(comms, commander)
 
     def commander(self, comms: Comms) -> Thread:
         snapshot = comms.registry.snapshot()

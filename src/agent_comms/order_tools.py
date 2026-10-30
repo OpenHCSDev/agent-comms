@@ -155,7 +155,7 @@ class CommsTodoTool(ThreadToolRequest):
         todo = comms.goals.todos.get(self.problem)
         actor = caller.identity(comms)
         return self.result(comms.goals.change_problem(
-            self.problem, self.operation_for(todo, actor, comms), caller.commander(comms).name))
+            self.problem, self.operation_for(todo, actor, comms), actor))
 
     @abstractmethod
     def operation_for(self, todo: Todo, actor: ThreadIncarnation, comms: Comms) -> TodoOperation:
@@ -190,9 +190,9 @@ class CommsVerdictTool(ThreadToolRequest):
     ]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        actor = caller.identity(comms)
         changed, = comms.goals.judge_calls(
-            (JudgedCall(self.problem, self.operation.authored_by(caller.identity(comms))),),
-            caller.commander(comms).name)
+            (JudgedCall(self.problem, self.operation.authored_by(actor)),), actor)
         return TodoChanged(changed, changed.strike_count)
 
 
@@ -211,7 +211,7 @@ class CommsVerdictsTool(ThreadToolRequest):
         return TodoList(comms.goals.judge_calls(
             tuple(replace(call, operation=call.operation.authored_by(actor))
                   for call in self.verdicts),
-            caller.commander(comms).name))
+            actor))
 
 
 @dataclass(frozen=True, kw_only=True)

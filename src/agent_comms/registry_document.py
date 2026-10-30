@@ -698,10 +698,18 @@ class RegisteredCommanderProject(CommanderProject):
         return replace(self, repository_head_reviewers=retained + ((selection,) if selection.reviewers else ()))
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The registered lead first, then every thread declared in #commanders."""
+        """The registered lead first, then every thread declared in #commanders. A commander
+        fork sits in that channel with its commander's tags but acts for it, never as one."""
         return tuple(dict.fromkeys((
             *self.leads(snapshot),
-            *ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name])))
+            *(thread for thread in
+              ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
+              if not thread.execution.commander_forks(thread)))))
+
+    def lead(self, snapshot: RegistrySnapshot) -> Thread:
+        """The one registered commander a fork is declared under."""
+        (thread,) = self.leads(snapshot)
+        return thread
 
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         selected = snapshot.threads_for(self.commander.require_recorded())

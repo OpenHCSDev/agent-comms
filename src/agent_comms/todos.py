@@ -841,6 +841,18 @@ class MissingReviewMergeBlock(MergeBlock):
 
 
 @dataclass(frozen=True)
+class RefusedCarryMergeBlock(MergeBlock):
+    """The forge refused the carried review status on this head; only this head pays for it."""
+    refusal: str
+
+    def what(self) -> str:
+        return f"carried review status refused: {self.refusal}"
+
+    def remedy(self) -> str:
+        return "restore the repository's write access or drop it from the commander's repos"
+
+
+@dataclass(frozen=True)
 class BehindMergeBlock(MergeBlock):
     def what(self) -> str:
         return 'BEHIND: head is behind its base'
@@ -1141,7 +1153,14 @@ class PullRequests:
                 with goals.todos.snapshot() as db:
                     reviews = StoredHeadReview.latest_for_pull_request(db, current)
                 for review in reviews:
-                    if review.verdict.carry(goals, review, current, reader):
+                    try:
+                        carried = review.verdict.carry(goals, review, current, reader)
+                    except ToolRefusedError as refused:
+                        # One repository's forge refusal is that head's alarm, not every board's.
+                        self._read[repo, row.number] = replace(row, merge_blocks=(
+                            *row.merge_blocks, RefusedCarryMergeBlock(row.updated, str(refused))))
+                        break
+                    if carried:
                         self._read[repo, row.number] = replace(
                             row, status_contexts=(*row.status_contexts, HeadReview.context))
 
@@ -3071,7 +3090,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
             context.comms.goals.change_problem(pid, OrderMessage(
                 context.comms.goals.todos.get(pid).revision, context.actor_identity, sent,
                 at=EventTime.capture(time.time()),
-            ), context.commander)
+            ), context.incarnation)
 
     def notify_replaced(
         self, context: Commander, unit: str, group: Sequence[str], holders: Sequence[str],
@@ -4300,8 +4319,9 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         verdict = CarriedHeadVerdict(self.reason, record.request)
         carried = replace(record, request=replace(record.request, head=current.head),
                           verdict=verdict, at=RecordedEventTime(time.time()))
-        goals.todos.record_head(carried)
+        # GitHub first: Core never records a carry whose status the forge refused.
         verdict.post(current.repo, current.head, record.actor.name, f"#{current.pr}")
+        goals.todos.record_head(carried)
         return True
 
     @classmethod
@@ -4316,6 +4336,7 @@ class ReviewedHeadVerdict(DecidedHeadVerdict):
         project = goals.registry.snapshot().commander_project.require()
         growth = WorkBranches(Repo.selected(project.repos, request.repo.to_wire()).checkout
                               ).reviewed_growth(request.pr, request.head, request.base)
+        growth.require_parsed()
         self.require_growth(growth)
         return f"#{request.pr} (src {growth.total:+d})"
 
@@ -5636,11 +5657,11 @@ class Todo(TodoStoreRows, TypedTable):
             self.creator_identity)
 
     def require_commander(self, actor: ThreadIncarnation) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             raise NotOrderCommander(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
-        if self.creator_identity != actor.commanding_identity:
+        if not actor.commands(self.creator_identity):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
