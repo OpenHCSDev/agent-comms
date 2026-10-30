@@ -23,6 +23,7 @@ from agent_comms.execution_states import (
     PendingExecution,
     QueuedExecution,
 )
+from agent_comms.field_codec import ThreadLookup
 from agent_comms.obligation_states import (
     FailedResponse,
     PendingResponse,
@@ -38,7 +39,7 @@ class ExecutionStore(RecoveryReader):
         self,
         execution_id: str,
         origin: type[ExecutionProvenance],
-        owner_lookup: str,
+        owner_lookup: ThreadLookup,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...] = (),
@@ -51,7 +52,7 @@ class ExecutionStore(RecoveryReader):
         self,
         execution_id: str,
         origin: type[ExecutionProvenance],
-        owner_lookup: str,
+        owner_lookup: ThreadLookup,
         max_attempts: int,
         *,
         sources: tuple[SelectedSource, ...],

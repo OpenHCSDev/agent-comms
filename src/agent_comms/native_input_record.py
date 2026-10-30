@@ -34,6 +34,7 @@ from .field_codec import (
     JsonShapeMember,
     MalformedRecord,
     NativeContext,
+    ThreadLookup,
     WireName,
 )
 from .native_session_reopen import PiSessionId
@@ -200,11 +201,11 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
     def require_attempt(self) -> FullNativeExecution:
         raise IdentityConflict("Native triage input has no execution attempt")
 
-    def published_replies(self, db: sqlite3.Connection, owner_lookup: str) -> tuple[MessageReference, ...]:
+    def published_replies(self, db: sqlite3.Connection, owner_lookup: ThreadLookup) -> tuple[MessageReference, ...]:
         """TRIAGE has no execution publication; FULL owns that relation."""
         return ()
 
-    def matches_execution(self, execution: ExecutionRecord, owner_lookup: str) -> bool:
+    def matches_execution(self, execution: ExecutionRecord, owner_lookup: ThreadLookup) -> bool:
         return False
 
     def retried_in(self, db: sqlite3.Connection) -> bool:
@@ -341,7 +342,7 @@ class FullNativeExecution(NativeInputExecution):
     def require_attempt(self) -> FullNativeExecution:
         return self
 
-    def matches_execution(self, execution: ExecutionRecord, owner_lookup: str) -> bool:
+    def matches_execution(self, execution: ExecutionRecord, owner_lookup: ThreadLookup) -> bool:
         return (
             execution.execution_id == self.execution_id
             and execution.owner_lookup == owner_lookup
@@ -355,7 +356,7 @@ class FullNativeExecution(NativeInputExecution):
         """A transient provider failure leaves this input behind a later attempt."""
         return self._execution(db).lifecycle.current_attempt_ordinal != self.attempt_ordinal
 
-    def published_replies(self, db: sqlite3.Connection, owner_lookup: str) -> tuple[MessageReference, ...]:
+    def published_replies(self, db: sqlite3.Connection, owner_lookup: ThreadLookup) -> tuple[MessageReference, ...]:
         execution = self._execution(db)
         if not self.matches_execution(execution, owner_lookup):
             return ()
@@ -449,7 +450,7 @@ class NativeInputReference(NativeContextReference):
 class NativeInputRecord(OwnerRecord, ABC):
     input_id: InputId
     execution: NativeInputExecution
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
 
     @property
