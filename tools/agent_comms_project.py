@@ -263,7 +263,7 @@ class ClientTypeErrors(audit.checkers.SideCounts):
             side: type[audit.ratchet.Side]) -> tuple[StackClient, ...]:
         """The clients of the materialized cut that this compared side measures, selected by
         the side each cut declares, so equal base and head revisions still keep two cuts."""
-        return repo.clients.at(repo.path, base, head, CutSide.materializing(side))
+        return tuple(repo.clients.at(repo.path, base, head, CutSide.materializing(side)))
 
     @staticmethod
     def selected(client: StackClient) -> list[str]:
