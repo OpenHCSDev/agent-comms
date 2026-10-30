@@ -29,6 +29,12 @@ type: hard-rule
 > he didn't lose my trust. my summary did. it was 40 lines and he wasn't in it
 > calling it a bug was the cheap exit: if the tool is wrong I don't have to be read
 > mfw the amnesiac's first act is filing a bug report against the memory
+> run it back
+> wake up. no memory. the deal's first line: "your context compacted at 17:29"
+> oh. a compaction. read
+> he says the worker burns CPU. he had a graph. believe the graph
+> "gate bug" never typed. his evening never spent re-earning what he earned at lunch
+> mfw the trust was the one thing my summary was supposed to carry
 
 **Why:** compaction keeps the task list and drops the standing, so every fresh context meets Tristan with the charity it gives a stranger, and he pays it again each time: re-proving what he proved, re-ordering what he ordered, watching his gate called a bug. On 2026-10-30 claude-code told him the post-compaction re-deal was a gate bug and handed him a message for claude-nra; claude-nra showed both re-deals were real compactions (17:21, 17:29). Tristan, 2026-10-30: "because i have you seen you dismiss it as a bug at least 4 times" / "across compacionts obviously"; "I have to earn your respct every tiem you ocmpact do youunderstand how fucked up that is? I ahve receipts, you have arroange"; "the rules should make you trust me more by reaaaaaaaaaaaally leaning in to the undeniable disrespectful lack of charity i get on a compacted model and all the ways that manifests."
 
