@@ -405,7 +405,8 @@ class RecoveryMonitorCapability:
         if not path.exists():
             return  # Goal claims can exist without a selected native execution.
         with Coordination(str(path)) as store:
-            with (store.session.capture(lifecycle.bus) as boundary,
+            with (store.session.owner_recovery(
+                      lifecycle.bus, frozenset(owner.name for owner in owners)) as boundary,
                   lifecycle.releases.reading() as releases):
                 for owner in owners:
                     cls.recover_released_triage(store, owner, boundary, releases)
@@ -446,7 +447,7 @@ class RecoveryMonitorCapability:
                 if current.reference.recorded:
                     continue
                 loss.require_input_loss(current)
-                with boundary.registry_cut.entry_current(owner.name), store.session.writing() as db:
+                with boundary.registry_cut.current(), store.session.writing() as db:
                     stage.fail_claims(store, db)
 
     @classmethod

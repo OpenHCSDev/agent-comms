@@ -6,7 +6,7 @@ import sqlite3
 import time
 from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, ExitStack, contextmanager, nullcontext
-from functools import cached_property
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
@@ -93,6 +93,17 @@ class NativeCapture(CoordinationCapture, ExitStack, StoredBusReader):
         snapshot.release_resources(self, outcome)
 
 
+class OwnerRecoveryCapture(NativeCapture):
+    """A released owner's recovery decides from these owners' own entries alone."""
+
+    def __init__(self, bus: MessageBus, owners: frozenset[str]) -> None:
+        super().__init__(bus)
+        self.owners = owners
+
+    def registry_capture(self) -> AbstractContextManager[RegistryCut]:
+        return nullcontext(self.bus._registry.store.entries_cut(self.owners))
+
+
 class NativeCommit(NativeCapture):
     """Keep a current decoded cut through a bounded write decision."""
 
@@ -117,6 +128,10 @@ class CoordinationSession(CoordinationStore):
     def capture(self, bus: MessageBus) -> NativeCapture:
         """Return a detached read, never a publication permission."""
         return self._boundary(bus, NativeCapture)
+
+    def owner_recovery(self, bus: MessageBus, owners: frozenset[str]) -> OwnerRecoveryCapture:
+        """Return a detached read fenced on the recovered owners' entries only."""
+        return self._boundary(bus, partial(OwnerRecoveryCapture, owners=owners))
 
     def _boundary[Boundary: NativeCapture](
         self, bus: MessageBus, boundary_type: type[Boundary],
