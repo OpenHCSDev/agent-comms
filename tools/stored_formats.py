@@ -1,6 +1,6 @@
 """Report the stored form of each versioned record declared in the named modules.
 
-The debt ratchet runs this once per revision with that revision's source first on sys.path,
+The NRA gate runs this once per revision with that revision's source first on sys.path,
 so each side's stored form comes from its own FieldCodec declarations and no revision's
 code is imported into another's process. A record's stored form is FieldCodec's record
 schema: each key on disk and its representation's wire spelling. Its version is the
@@ -15,8 +15,9 @@ import inspect
 import json
 from collections.abc import Iterator
 
+from nominal_refactor_advisor import audit
+
 from agent_comms.field_codec import FieldCodec
-from agent_comms.pinned_audit import audit
 
 
 def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
@@ -26,12 +27,17 @@ def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:
     match vars(record):
         case {"version": declared}:
             match declared, FieldCodec.record_schema(record):
-                case _, {"properties": {"version": {"enum": [stamped]}, **stored},
-                         "required": required}:
+                case _, {"properties": {"version": {"enum": [int() as stamped]}, **stored},
+                         "required": list() as required}:
+                    fields: dict[object, object] = {**stored}
                     yield audit.project.StoredFormat.declared(
-                        stamped, stored, (key for key in required if key in stored))
-                case int(), {"properties": properties, "required": required}:
-                    yield audit.project.StoredFormat.declared(declared, properties, required)
+                        stamped, fields, (key for key in required
+                                          if isinstance(key, str) and key in stored))
+                case int() as version, {"properties": dict() as properties,
+                                        "required": list() as required}:
+                    yield audit.project.StoredFormat.declared(
+                        version, {**properties},
+                        (key for key in required if isinstance(key, str)))
 
 
 def stored_formats(module_name: str) -> dict[str, audit.project.StoredFormat]:
