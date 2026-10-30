@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from pathlib import Path
 
 from agent_comms.cli_bridges.claude_transcript import RunningClaude
 from agent_comms.comms import client_wire
@@ -30,28 +29,28 @@ def session_start() -> DeckStart:
     return DeckStart(session, "Prime", str(RunningClaude(session).source), SessionSource("prime"))
 
 
-def prime_threads(prime: type[Prime], names: Sequence[str], root: Path | None) -> None:
-    """Deal each named thread the variant's readers through its Core-held gate."""
-    with client_wire(root) as comms:
+def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
+    """Deal each named thread the variant's readers through its Core-held gate, on the bus
+    route the client resolves."""
+    with client_wire() as comms:
         for name in names:
             thread = comms.registry.require(name)
             thread.execution.require_native()
             PiRedeal.of(comms, thread).deal_from(prime.commander, prime.fleet)
-            print(f"{name}: dealt {prime.declared_name}")
+            print(f"{name}: dealt {prime.__name__}")
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main() -> None:
     parser = argparse.ArgumentParser(prog="agent-comms-prime", description=__doc__)
-    parser.add_argument("--variant", choices=Prime.names(), default=FullPrime.declared_name)
+    parser.add_argument("--variant", type=Prime.member_named, default=FullPrime,
+                        metavar="|".join(Prime.names()))
     parser.add_argument("--to", nargs="+", metavar="THREAD", default=(),
                         help="deal these native threads instead of this session")
-    parser.add_argument("--root", type=Path, default=None)
-    arguments = parser.parse_args(argv)
-    prime = Prime.member_named(arguments.variant)
+    arguments = parser.parse_args()
     if arguments.to:
-        prime_threads(prime, arguments.to, arguments.root)
+        prime_threads(arguments.variant, arguments.to)
         return
-    print("\n\n".join(session_start().primed(prime)))
+    print("\n\n".join(session_start().primed(arguments.variant)))
 
 
 if __name__ == "__main__":
