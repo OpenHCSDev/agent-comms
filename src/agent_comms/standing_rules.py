@@ -31,6 +31,7 @@ from agent_comms.heartbeat_subjects import (
 )
 from agent_comms.held_orders import HeldOrders
 from agent_comms.messages import Message
+from agent_comms.message_reference import MessageReference
 from agent_comms.owner_requests import OwnerRequestId, RequestDirective
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.repository_name import RepositoryName
@@ -703,13 +704,27 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
         # Capture committed order/directive references before the bus cut.
-        snapshot = comms.registry.snapshot()
-        requests = comms.goals.todos.open_requests(snapshot.require(commander).incarnation)
+        cut = comms.registry.store.snapshot_with_authority()
+        snapshot = cut.snapshot
+        thread = snapshot.require(commander)
+        requests = comms.goals.todos.open_requests(thread.incarnation)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
                            for rule in member.read_open(source, snapshot, held, commander, requests))
-        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos))
+        references = tuple(dict.fromkeys(reference for rule in opened
+                                         for reference in rule.session_questions()))
+        answered = comms.transcripts.answered_inputs(thread, references, cut.privacy)
+        return tuple(rule for rule in opened if rule.undecided(comms.goals.todos)
+                     and not rule.answered_in_session(answered))
+
+    def session_questions(self) -> tuple[MessageReference, ...]:
+        """Ordinary owed answers still require their existing bus answer relation."""
+        return ()
+
+    def answered_in_session(self, answered: frozenset[MessageReference]) -> bool:
+        questions = self.session_questions()
+        return bool(questions) and all(question in answered for question in questions)
 
     def answered_by(self, named: tuple[Message, ...]) -> bool:
         """Whether an action naming these open messages answers this one."""
@@ -1182,6 +1197,9 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
 
     request: OwnerRequestId
     directive: RequestDirective
+
+    def session_questions(self) -> tuple[MessageReference, ...]:
+        return (self.message.reference,)
 
     @classmethod
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
