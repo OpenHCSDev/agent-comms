@@ -124,7 +124,9 @@ from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import CommanderHeartbeatProbe, ServingProbe
-from agent_comms.installer.refusals import InstallRolledBack, InterpreterWorkerDied, UpgradeRefused
+from agent_comms.installer.refusals import (
+    InstallRolledBack, InterpreterWorkerDied, OwnersNotRestarted, UpgradeRefused,
+)
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
@@ -479,6 +481,19 @@ class OwnersStopped:
         self.stopped.extend(name for name in running if name not in self.stopped)
         for outcome in stack.owners(root, StopCliCommand, running):
             outcome.require_success(UpgradeRefused)
+
+    def given_back_on(self, stack: Stack, root: Path) -> None:
+        """Every exit starts the stopped owners on ``stack`` again. When the install itself
+        is failing, a refused restart carries that failure instead of replacing it."""
+        def start_again(_type: object, failure: BaseException | None, _trace: object) -> bool:
+            try:
+                self.start_on(stack, root)
+            except UpgradeRefused as restart:
+                if failure is None:
+                    raise
+                raise OwnersNotRestarted(failure, restart) from failure
+            return False
+        self.give_back.push(start_again)
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
         self.started = stack.owners(root, StartCliCommand, self.stopped)
@@ -955,7 +970,7 @@ class StopsOwners:
                        staged: TargetStack) -> Iterator[OwnersStopped]:
         owners = OwnersStopped()
         with owners.give_back:
-            owners.give_back.callback(owners.start_on, installed, root)
+            owners.given_back_on(installed, root)
             owners.stop(installed, root)
             yield owners
 
@@ -982,7 +997,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         owners = HeldOwnersStopped()
         with owners.give_back:
-            owners.give_back.callback(owners.start_on, installed, root)
+            owners.given_back_on(installed, root)
             with owners.hold:
                 with BeginMaintenancePhase().running(clock):
                     held = maintenance.begin(MaintenanceOperator.current())

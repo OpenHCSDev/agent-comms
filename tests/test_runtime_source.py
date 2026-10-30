@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.refusals import OwnersNotRestarted, UpgradeRefused
 from agent_comms.installer.upgrade import OwnersStopped, Stack
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime, RunningRuntime, RunningSource
 from agent_comms.maintenance_barrier import TargetRuntime
@@ -54,13 +54,14 @@ def test_restart_refusal_is_retained_and_chained(comms, tmp_path):
     with InstallCommands() as commands:
         stack = Stack(Path(__file__).resolve().parents[1], commands, home=tmp_path,
                       runtime=LaunchRuntime.running())
-        with pytest.raises(UpgradeRefused) as failed:
+        with pytest.raises(OwnersNotRestarted) as failed:
             with owners.give_back:
-                owners.give_back.callback(owners.start_on, stack, comms.root)
+                owners.given_back_on(stack, comms.root)
                 raise UpgradeRefused("original stop refusal")
     assert owners.started
     assert owners.started[0].name == owners.stopped[0]
-    assert failed.value.__context__.args == ("original stop refusal",)
+    assert failed.value.__cause__.args == ("original stop refusal",)
     with pytest.raises(UpgradeRefused) as recorded:
         owners.started[0].require_success(UpgradeRefused)
-    assert str(failed.value) == str(recorded.value)
+    assert str(failed.value.restart) == str(recorded.value)
+    assert "original stop refusal" in str(failed.value)
