@@ -156,9 +156,9 @@ def test_default_off_then_close_reopen_and_no_stale_transition(tmp_path: Path) -
             TurnId('d15690f08a575024650b01ffac892cfd'),
             expected_generation=comms.registry.snapshot().claim_generation("owner"),
         )
-    assert not comms.owners.start("owner").launched
+    assert not comms.owners.start_many(("owner",))[0].launched
     with pytest.raises(RelationViolationError, match="under maintenance"):
-        comms.owners.start("waiting")
+        comms.owners.start_many(("waiting",))
     second = control.advance(first, MaintenancePhase.member_named("paused"))
     assert second.generation == 2
     with pytest.raises(RelationViolationError):
@@ -254,7 +254,7 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
     comms.registry.unregister("renamed")
     comms.owners.maintenance.begin(MaintenanceOperator.current())
     with pytest.raises(RelationViolationError):
-        comms.owners.start("owner")
+        comms.owners.start_many(("owner",))
     with pytest.raises(RelationViolationError):
         comms.registry.register(comms.registry.require("renamed"), new_owner=True)
     assert comms.registry.require("renamed").same_local_process(owner.require_process())

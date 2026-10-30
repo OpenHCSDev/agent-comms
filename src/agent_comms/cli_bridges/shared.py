@@ -31,6 +31,7 @@ from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesT
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
     AttachedChild,
     OutlivesLauncherLifetime,
@@ -626,7 +627,8 @@ class Serve(Watch):
         offset = log.stat().st_size if log.exists() else 0
         with log.open('ab') as output:
             child = SpawnedProcess.launch(
-                command, env=runtime.environment(os.environ), output=output, runtime=runtime,
+                command, env=runtime.environment(os.environ),
+                stdio=DetachedChildStdio(stdout=output), runtime=runtime,
                 lifetime=OutlivesLauncherLifetime)
         announced = False
         while child.alive():
