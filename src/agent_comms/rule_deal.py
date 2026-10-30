@@ -68,11 +68,19 @@ class DealtSource:
     @classmethod
     def of(cls, path: Path) -> DealtSource:
         """The installed package file this path names, under this runtime or an earlier one."""
+        source = cls.find(path)
+        if source is None:
+            raise ValueError(f"{path} names no file of an installed package")
+        return source
+
+    @classmethod
+    def find(cls, path: Path) -> DealtSource | None:
+        """The current installed source, or none when its package no longer supplies it."""
         for index, name in enumerate(path.parts[:-1]):
             source = cls(name, PurePosixPath(*path.parts[index + 1:]).as_posix())
             if name.isidentifier() and source.installed():
                 return source
-        raise ValueError(f"{path} names no file of an installed package")
+        return None
 
     def installed(self) -> bool:
         spec = find_spec(self.package)
@@ -663,11 +671,19 @@ class RuleDeal(State):
             return calls.tell()
 
     def current(self) -> DealRecord:
-        """The deal this session holds; the record is its one declaration."""
+        """Keep a deal while its sources exist; a retired source requires a fresh deal.
+
+        Installation can move or remove packaged files without losing native context. The
+        old list then cannot be answered: startup must use the backend's current deck, not
+        crash while resolving the old list or silently waive the unread replacement.
+        """
         try:
-            return FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            record = FieldCodec.decode(DealRecord, FieldCodec.parse(self.record.read_bytes()))
+            if all(DealtSource.find(path) is not None for path in record.dealt):
+                return record
         except FileNotFoundError:
-            return UndealtRecord((), AuditDue(frozenset(), ()))
+            pass
+        return UndealtRecord((), AuditDue(frozenset(), ()))
 
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
