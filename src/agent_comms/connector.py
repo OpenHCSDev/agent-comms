@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 
 import asyncio
 import base64
@@ -275,7 +277,7 @@ class InvalidRequestError(McpError):
 
 @dataclass(frozen=True)
 class MethodNotFoundError(McpError):
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def code(self) -> int:
         return Refused.METHOD_NOT_FOUND
 
@@ -582,7 +584,7 @@ class Connector:
         tool.require_entry_open(self.root)
         with self.opened_wire() as comms:
             acting, rest = caller.acting(arguments)
-            acting.commanding(comms, caller)
+            acting.join(comms, caller.own_thread())
             return tool.invoke(comms, rest, caller=acting)
 
     def application(self) -> web.Application:

@@ -16,6 +16,17 @@ import agent_comms
 from agent_comms.field_codec import WireValue
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.package_stamp import STAMP
+from agent_comms.runtime_preparation import RuntimePreparation
+
+
+@dataclass(frozen=True)
+class PreparePackageProbe(TargetProbe, RuntimeProbe[None]):
+    """Only the built target loads its distribution's preparation implementation."""
+
+    distribution: str
+
+    def run(self) -> None:
+        RuntimePreparation.load(self.distribution).prepare()
 
 
 @dataclass(frozen=True)

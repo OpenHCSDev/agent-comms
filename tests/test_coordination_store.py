@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.field_codec import SnapshotExclude
+
 import hashlib
 import multiprocessing
 import sqlite3
@@ -399,7 +401,7 @@ def test_token_prepared_before_transaction_and_loss_replay_ignores_mutable(db_pa
             attempt.lifecycle.lease_expires_at_ms
             == attempt.created_at_ms + INITIAL_LEASE_DURATION_MS
         )
-        assert token not in str(FieldCodec.project(first.value.snapshot, "snapshot"))
+        assert token not in str(FieldCodec.project(first.value.snapshot, SnapshotExclude))
         assert token not in db_path.read_bytes().decode("latin1")
         duplicate = db.start(
             AttemptStart(

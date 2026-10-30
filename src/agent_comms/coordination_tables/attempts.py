@@ -198,19 +198,19 @@ class AttemptRecord(
     created_at_ms: Annotated[int, FrozenColumn(check="created_at_ms >= 0")]
     updated_at_ms: Annotated[int, Column(check="updated_at_ms >= created_at_ms")]
 
-    @projected(view="snapshot", name="phase")
+    @projected(view=SnapshotExclude, name="phase")
     def snapshot_phase(self):
         return type(self.lifecycle)
 
-    @projected(view="snapshot", name="lease_expires_at_ms")
+    @projected(view=SnapshotExclude, name="lease_expires_at_ms")
     def snapshot_lease_expires_at_ms(self):
         return self.lifecycle.lease_expires_at_ms
 
-    @projected(view="snapshot", name="backend_done")
+    @projected(view=SnapshotExclude, name="backend_done")
     def snapshot_backend_done(self):
         return self.lifecycle.backend_done
 
-    @projected(view="snapshot", name="process_dead")
+    @projected(view=SnapshotExclude, name="process_dead")
     def snapshot_process_dead(self):
         return self.lifecycle.process_dead
 

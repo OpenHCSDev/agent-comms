@@ -55,7 +55,7 @@ def test_generic_base_identity_excludes_its_type_arguments():
     assert forwarders_added('+    def answer(self): return self.peer.answer()\n', (unrelated,))
 
 
-def test_retained_generic_decoder_fragments_use_the_actual_after_declarations():
+def test_incomplete_fragments_refuse_even_when_after_source_has_nominal_overrides():
     from agent_comms.commander.judge import Hunk
 
     parents = ('class DecoderPlan:\n    editor_annotation: object\n'
@@ -80,7 +80,8 @@ def test_retained_generic_decoder_fragments_use_the_actual_after_declarations():
     # call94d8's final hunk ends at the next class header; it is not a whole module.
     tail = '@dataclass(frozen=True, slots=True)\nclass _ArrayDecoder[T: Iterable[object]](ValueDecoder[T]):\n'
     after = parents + represented + text_edited + tail + '    pass\n'
-    assert Hunk(tail, text_edited + '\n' + tail).introduced_forwarders((after,)) == []
+    with pytest.raises(MissingSourceLine):
+        Hunk(tail, text_edited + '\n' + tail).introduced_forwarders((after,))
     assert not forwarders_added(OverrideNames.introduced(parents, parents + represented),
                                 (parents + represented,))
 

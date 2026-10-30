@@ -79,6 +79,7 @@ from agent_comms.errors import (
 from agent_comms.field_codec import (
     DefaultNonNull,
     Description,
+    DisclosedRecord,
     DisclosureIdentity,
     FieldCodec,
     GitCommitText,
@@ -674,7 +675,7 @@ class MergedLink:
 
 
 @dataclass(frozen=True)
-class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
+class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -1235,7 +1236,7 @@ class PullRequests:
 
 
 @dataclass(frozen=True)
-class ProgressPoint:
+class ProgressPoint(DisclosedRecord):
     """A revision and its time in the order's progress; Git rows use committer time."""
     sha: Annotated[str, DisclosureIdentity()]
     at: float
@@ -1248,14 +1249,14 @@ class ProgressPoint:
 
 
 @dataclass(frozen=True)
-class DistanceReading:
+class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
     command: str = ""
 
 
 @dataclass(frozen=True)
-class DistanceReadings:
+class DistanceReadings(DisclosedRecord):
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
@@ -1706,7 +1707,7 @@ class MeasuredProgressSource(ProgressSource):
 
 
 @dataclass(frozen=True)
-class OrderProgress(DeclaredFamily, affix="Progress"):
+class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
     Never stored: the checkout and GitHub are its owners."""
@@ -2585,7 +2586,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise TodoError("Only a pending order can be claimed by its holder.")
 
     def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (ReviewedHeadVerdict, RejectedHeadVerdict)
+        """Any order that holds a head takes a decision on it, or a reviewer's mark first."""
+        return (ReviewedHeadVerdict, RejectedHeadVerdict, UnderReviewHeadVerdict)
+
+    def under_review(self, record: OrderHeadReviewRecord) -> CheckedProblemOrder:
+        """Only a claim owes a delivery verdict; elsewhere the head record is the whole mark."""
+        return self
 
     def sent_back(self, reason: StrikeReason) -> CheckedProblemOrder:
         return self
@@ -3206,8 +3212,8 @@ class ClaimedProblemOrder(BranchPointCheck, DeliverableProblemOrder):
     def owed_claims(self) -> tuple[OrderClaim, ...]:
         return (self.claim,)
 
-    def review_verdicts(self) -> tuple[type[HeadVerdict], ...]:
-        return (*super().review_verdicts(), UnderReviewHeadVerdict)
+    def under_review(self, record: OrderHeadReviewRecord) -> ReviewingProblemOrder:
+        return self.copy_as(ReviewingProblemOrder, review=record)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -4418,8 +4424,7 @@ class UnderReviewHeadVerdict(HeadVerdict):
         return f"Under review by {reviewer} on {subject}"
 
     def judge_order(self, current: Todo, record: OrderHeadReviewRecord) -> Todo:
-        return replace(current, order=current.order.checked().copy_as(
-            ReviewingProblemOrder, review=record))
+        return replace(current, order=current.order.checked().under_review(record))
 
 
 class HeadOrderLink(HeadReviewRelation, declared_name=None):
@@ -5399,7 +5404,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
         return cls(OwnerRequestId.new(), commander.require_recorded(), text)
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
-        if self.commander != commander.require_recorded():
+        if not commander.commands(self.commander):
             raise TodoError(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:

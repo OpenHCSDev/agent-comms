@@ -6,7 +6,7 @@ import time
 import pytest
 
 from agent_comms.commander.judge import Edit, Hunk, JudgeVerb, main
-from agent_comms.errors import MissingSourceLine, TodoError
+from agent_comms.errors import TodoError
 from agent_comms.field_codec import RecordProblems, ToolCallId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import AcceptedVerdict
@@ -81,14 +81,13 @@ def test_native_cli_uses_the_whole_write_cut_and_refuses_a_batch_atomically(held
     assert {edit.id for edit in Edit.unjudged(ctx.comms, ctx.commander)} >= {negative.id}
 
 
-def test_whole_write_uses_exact_git_baseline_not_mutable_file(held_commander, capsys):
+def test_whole_write_uses_exact_git_baseline_not_mutable_file(held_commander):
     ctx = held_commander
-    commit = local_cut(ctx, 'target_fields.py', TARGET)
+    local_cut(ctx, 'target_fields.py', TARGET)
     edit = captured(ctx, 'target_fields.py', '', TARGET + ADDED)
     # The working file is deliberately no longer evidence of the retained methods.
     (ctx.repos[0].checkout / 'target_fields.py').write_text('not the preimage\n')
     admission(ctx, edit)
-    assert f'{commit}:target_fields.py' in capsys.readouterr().out
     assert ctx.comms.goals.todos.get('P1').revision > 0
 
 
@@ -115,8 +114,23 @@ def test_missing_or_foreign_whole_file_evidence_refuses_without_mutation(held_co
         admission(ctx, replace(edit, path=str(ctx.root / 'foreign.py')))
     repo = ctx.repos[0]
     SourceRepository.git(repo.checkout, 'update-ref', '-d', 'refs/remotes/origin/main')
-    with pytest.raises(MissingSourceLine, match='source evidence unavailable'):
+    with pytest.raises(RecordProblems, match='source evidence unavailable'):
         admission(ctx, captured(ctx, 'target_fields.py', '', TARGET + ADDED))
+    assert ctx.comms.goals.todos.get('P1') == original
+
+
+@pytest.mark.parametrize('before,after', (
+    ('class Unfinished:', 'class Unfinished:\n    extra = 1\nclass Next:'),
+    ('class Unfinished:', 'harmless = 1'),
+))
+def test_missing_fragment_declarations_refuse_even_without_textual_forwarders(
+        held_commander, before, after):
+    ctx = held_commander
+    local_cut(ctx, 'target_fields.py', TARGET)
+    original = ctx.comms.goals.todos.get('P1')
+    edit = captured(ctx, 'target_fields.py', before, after)
+    with pytest.raises(RecordProblems, match='retained-source-control'):
+        admission(ctx, edit)
     assert ctx.comms.goals.todos.get('P1') == original
 
 

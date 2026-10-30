@@ -42,6 +42,7 @@ from agent_comms.commander.standing import (
 from agent_comms.comms import Comms, wire
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import MissingSourceLine, RelationViolationError
+from agent_comms.messaging import CommanderReceipts
 from agent_comms.field_codec import (
     Argument,
     FieldCodec,
@@ -472,7 +473,8 @@ class CommanderContext(BaseModel):
         target = audience.target
         return self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers,
-            origin=self.actor.origin()).message
+            origin=self.actor.origin(),
+            answerer=CommanderReceipts(self.actor_identity, (self.incarnation,))).message
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -909,7 +911,7 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
 
     def apply(self, ctx: Commander) -> None:
         self.require_caller(ctx)
-        self.actor.commanding(ctx.comms, ctx.actor)
+        self.actor.commanding(ctx.comms)
         actor = self.actor.acting_caller(ctx.actor)
         ctx = ctx.model_copy(update={'actor': actor.as_thread(ctx.commander)})
         self.act(ctx)

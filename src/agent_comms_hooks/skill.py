@@ -235,16 +235,18 @@ class DeckStart(DealtDeck):
             self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
-            " until each one is read. Then, before your next action, check what you did since"
-            " your last start or compaction against them and say, one line each, every rule you"
-            " broke and the action that broke it, and fix what you can: reading alone is passive,"
-            " the audit is what finds the breaks (on 2026-10-27 one reread found six broken rules"
-            " in one session). That audit is not optional: every tool but Read, and Write of"
+            " until each one is read. After each rule file, before the next unread file opens,"
+            " answer it in the audit: a line it holds quoted verbatim, what that line did, and why"
+            " it holds. Check what you did since your last start or compaction against it and"
+            " name every action that broke it, and fix what you can: reading alone is passive, the"
+            " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
+            " one session). That audit is not optional: every tool but Read, and Write or Edit of"
             f" {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "broke": [each action since the last start or'
-            ' compaction that broke it; empty means kept]}, one entry for every rule you were'
-            ' dealt], "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are'
-            " doing about it right now}]}. This order is given once per session start or"
+            ' {"rules": [{"rule": NAME, "quote": A LINE OF IT VERBATIM, "does": what that line did,'
+            ' "why": why it holds, "broke": [each action since the last start or compaction that'
+            ' broke it; empty means kept]}, one entry for every rule you were dealt],'
+            ' "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are doing about'
+            " it right now}]}. This order is given once per session start or"
             " compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
             self.owner_words(prompts),

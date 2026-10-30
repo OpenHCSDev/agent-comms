@@ -95,21 +95,9 @@ class Hunk(ReplacementEdit):
             1 for line in self.old_text.splitlines() if BRANCH.search(line))
 
     def introduced_forwarders(self, sources: tuple[str, ...]) -> list[str]:
-        """Captured replacements own both texts, including branch-only and repeated edits.
-
-        A capture may end at an unfinished declaration header. Its complete after-source
-        still proves nominal overrides; ambiguous retained bodies get no guessed waiver.
-        """
-        try:
-            diff = order.OverrideNames.introduced(self.old_text, self.new_text)
-        except MissingSourceLine as error:
-            added = ''.join('+' + line + '\n' for line in self.new_text.splitlines())
-            if order.forwarders_added(added, sources):
-                raise MissingSourceLine(
-                    'The captured fragment needs complete declaration context to distinguish '
-                    'retained bodies from introduced forwarding.') from error
-            return []
-        return order.forwarders_added(diff, sources)
+        """Captured replacements own both texts; unavailable declarations refuse judgment."""
+        return order.forwarders_added(
+            order.OverrideNames.introduced(self.old_text, self.new_text), sources)
 
     def rendered(self) -> str:
         return (''.join(f'- {line}\n' for line in self.old_text.splitlines())
@@ -139,7 +127,8 @@ class Edit(EditCall):
         return tuple(line for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def introduced_forwarders(self, ctx: order.Commander, todo: Todo,
-                              revision: BranchHeadRevision) -> list[str]:
+                              revision: BranchHeadRevision,
+                              after_revision: BranchHeadRevision) -> list[str]:
         """Retained hunk text, or an exact local declared main cut for whole-file writes.
 
         Mutable checkout bytes are never a preimage. All checked edits share the
@@ -149,15 +138,13 @@ class Edit(EditCall):
         repo, checkout = EditVerdict.edited(ctx.comms.goals, todo, todo.held(), self.path, self.id)
         path = Path(self.path).absolute().relative_to(checkout).as_posix()
         if all(hunk.old_text for hunk in self.hunks):
-            # This is after-source for inheritance, never an invented replacement preimage.
-            edited = checkout / path
-            sources = (edited.read_text(),) if edited.is_file() else ()
-            print(f'edit {self.id} source: captured old/new replacements in {repo.github.to_wire()}:{path}')
+            # Capture the allocation's committed head, never mutable checkout bytes.
+            sources = (after_revision.text(checkout, path),)
             return [found for hunk in self.hunks for found in hunk.introduced_forwarders(sources)]
         if len(self.hunks) != 1:
             raise MissingSourceLine(f'Edit {self.id} has no established whole-file preimage.')
         try:
-            commit = revision.commit_at(repo.checkout)
+            revision.commit_at(repo.checkout)
             try:
                 before = revision.text(repo.checkout, path)
             except MissingSourceLine:
@@ -166,7 +153,6 @@ class Edit(EditCall):
             raise MissingSourceLine(
                 f'Edit {self.id} source evidence unavailable in {repo.github.to_wire()}: {error}') from error
         after = self.hunks[0].new_text
-        print(f'edit {self.id} source {repo.github.to_wire()} {commit}:{path}')
         return order.forwarders_added(order.OverrideNames.introduced(before, after), (after,))
 
     def rendered(self) -> str:
@@ -586,9 +572,15 @@ class OkVerb(ReasonedVerb, QuotingVerb):
 
     def check_edits(self, ctx: order.Commander, edits: list[tuple[Todo, Edit]]) -> None:
         revision = BranchHeadRevision(MainRevision().reference)
+        after_revision = BranchHeadRevision('HEAD')
         for todo, edit in edits:
             if edit.path.endswith('.py'):
-                if added := edit.introduced_forwarders(ctx, todo, revision):
+                try:
+                    added = edit.introduced_forwarders(ctx, todo, revision, after_revision)
+                except MissingSourceLine as error:
+                    raise RecordProblems(MalformedRecord(str(error)).located(
+                        edit.id, 'restore captured source evidence before judging this edit')) from error
+                if added:
                     raise RecordProblems(MalformedRecord(
                         f'edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok').located(
                             edit.id, 'send this edit back with judge back'))
