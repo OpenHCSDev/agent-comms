@@ -183,6 +183,10 @@ class ProcessState(SubclassUnion, affix=""):
     def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus: ...
 
     @abstractmethod
+    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+        """A stored stop with no process is stopped; one still bound is a fence."""
+
+    @abstractmethod
     def runs_here(self) -> bool: ...
     @abstractmethod
     def owns_turn(self, turn: ActiveTurn) -> bool: ...
@@ -237,6 +241,9 @@ class NoProcess(NullMember, ProcessState):
 
     def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
         return presence.heartbeat_seen(last_seen)
+
+    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+        return stopped
 
     def runs_here(self) -> bool:
         return False
@@ -362,6 +369,9 @@ class ProcessIdentity(RecordMember, ProcessState):
 
     def thread_status(self, presence: ActiveThreadPresence, last_seen: float) -> ThreadStatus:
         return presence.process_seen(self)
+
+    def stopped_seen(self, stopped: ThreadStatus) -> ThreadStatus:
+        return stopped.fenced()
 
     def registration_change(
         self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
