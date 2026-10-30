@@ -42,6 +42,8 @@ def main():
             print(listed["head"], listed["base"], str(listed["kind"] == "draft").lower())
         elif parts[:1] == ["statuses"] and len(parts) == 2:
             assert arguments[arguments.index("--method") + 1] == "POST"
+            if refusal := data.get("status_refusal"):
+                sys.exit(refusal)
             print("{}")
         elif len(parts) == 3 and parts[0] == "commits" and parts[2] == "status":
             query = arguments[arguments.index("--jq") + 1]

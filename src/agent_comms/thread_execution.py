@@ -253,7 +253,9 @@ class CommanderForkExecution(SubagentExecution):
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return parent.commanded_child(child)
+        """A fork acts for its commander, so it carries every tag the commander carries,
+        #commanders included: it is seen where its commander is."""
+        return replace(child, tags=parent.tags)
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

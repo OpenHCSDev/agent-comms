@@ -162,6 +162,12 @@ class Repo(GitLaunch, BaseModel, WireValue):
         """A repository name or path identifies this declared checkout, not another worktree."""
         return self.github.named(name) or self.checkout == Path(name).resolve()
 
+    @property
+    def checked_out(self) -> bool:
+        """The checkout is a work tree of its own; a removed submodule leaves an empty directory
+        that git would resolve to the enclosing repository instead."""
+        return (self.checkout / ".git").exists()
+
     def holds(self, todo: Todo) -> bool:
         return self.github == todo.repo
 
@@ -448,7 +454,7 @@ class KeptBranchStart(CheckoutStart):
 class Checkout(SingleFieldValue, PresentMember):
     """A recorded working tree of one of our repositories.
 
-    Its pinned submodules (the refactor-audit catalog) belong to the tree, and `git worktree
+    Its pinned submodules belong to the tree, and `git worktree
     add` leaves them empty even with submodule.recurse set, so every tree is added, prepared
     and retired here and nowhere else."""
 

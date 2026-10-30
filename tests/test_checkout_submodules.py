@@ -21,7 +21,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Checkout, CheckoutHoldsWorkError, DetachedStart, GitCommandError, LaunchCheckout, NewBranchStart, Repo, ScratchCheckout
 from agent_comms.repository_name import RepositoryName
-from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_rules import StorageDenied, StorageRule
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
@@ -44,7 +44,7 @@ def git(path: Path, *args: str) -> str:
 
 @pytest.fixture
 def repository(tmp_path, monkeypatch):
-    """A repository pinning one submodule from a local source, as ours pins refactor-audit."""
+    """A repository pinning one submodule from a local source."""
     monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
     monkeypatch.setenv("GIT_CONFIG_KEY_0", "protocol.file.allow")
     monkeypatch.setenv("GIT_CONFIG_VALUE_0", "always")
@@ -387,7 +387,7 @@ def retained_transfer(checkout_command_bus, repository):
     comms = checkout_command_bus
     worker = comms.registry.require('worker')
     rule = comms.registry.storage_rule
-    source = rule.order_checkout(rule.roots_of(worker), 'P0')
+    source = rule.order_checkout(rule.roots_of(worker), 'P4')
     source.parent.mkdir(parents=True, exist_ok=True)
     checkout = Checkout.add(repository, source, NewBranchStart('retained-transfer', 'HEAD'))
     comms.registry.register(replace(worker, worktree=checkout), StoppedThreadStatus())
@@ -458,6 +458,106 @@ def test_transfer_refuses_before_moving_retained_work(retained_transfer, refusal
     assert result.returncode != 0
     assert source.path.exists()
     assert (git(source.path, 'status', '--porcelain'), git(source.path, 'rev-parse', 'HEAD')) == before
+
+
+def test_transfer_refuses_current_reviewer_then_keeps_departed_reviewers_history(
+    retained_transfer, repository,
+):
+    comms, source, destination = retained_transfer
+    reviewer = comms.registry.declare(Thread(
+        'reviewer', frozenset(), source, execution=ExternalThreadExecution))
+    rule = comms.registry.storage_rule
+    reviewer_path = rule.order_checkout(rule.roots_of(reviewer), 'P2')
+    Checkout.add(repository, reviewer_path, NewBranchStart('reviewer', 'HEAD'))
+    before = git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')
+    arguments = ('--root', str(comms.root), 'checkout', '--from', 'worker',
+                 'transfer', 'P1', '--source', str(source.path))
+    refused = core_process(*arguments)
+    assert refused.returncode != 0
+    assert source.path.exists() and not destination.exists()
+    assert (git(source.path, 'rev-parse', 'HEAD'),
+            git(source.path, 'status', '--porcelain')) == before
+
+    assert comms.threads.set_project(reviewer.name, str(reviewer_path)).changed
+    departed = comms.registry.require(reviewer.name)
+    assert departed.incarnation == reviewer.incarnation
+    assert departed.worktree == Checkout(reviewer_path)
+    assert source in departed.earlier_projects
+    assert not rule.owns_present_checkout(departed, source.path)
+    moved = core_process(*arguments)
+    assert moved.returncode == 0, moved.stdout + moved.stderr
+    assert not source.path.exists()
+    assert (git(destination, 'rev-parse', 'HEAD'),
+            git(destination, 'status', '--porcelain')) == before
+    assert (destination / 'untracked.bin').read_bytes() == b'\x00retained\xff'
+    assert comms.registry.require(reviewer.name) == departed
+
+
+def test_transfer_refuses_foreign_allocation_even_after_its_owner_changes_project(
+    retained_transfer, repository,
+):
+    comms, source, destination = retained_transfer
+    rule = comms.registry.storage_rule
+    worker = comms.registry.require('worker')
+    assert rule.owns_present_checkout(worker, source.path)
+    worker_path = rule.order_checkout(rule.roots_of(worker), 'P2')
+    Checkout.add(repository, worker_path, NewBranchStart('worker-next', 'HEAD'))
+    reviewer = comms.registry.declare(Thread(
+        'reviewer', frozenset(), source, execution=ExternalThreadExecution))
+    reviewer_path = rule.order_checkout(rule.roots_of(reviewer), 'P3')
+    Checkout.add(repository, reviewer_path, NewBranchStart('reviewer-next', 'HEAD'))
+    assert comms.threads.set_project(worker.name, str(worker_path)).changed
+    assert comms.threads.set_project(reviewer.name, str(reviewer_path)).changed
+    worker = comms.registry.require(worker.name)
+    reviewer = comms.registry.require(reviewer.name)
+    assert worker.worktree == Checkout(worker_path)
+    assert source in worker.earlier_projects and source in reviewer.earlier_projects
+    assert rule.owns_present_checkout(worker, source.path)
+    assert not rule.owns_present_checkout(reviewer, source.path)
+    before = git(source.path, 'rev-parse', 'HEAD'), git(source.path, 'status', '--porcelain')
+    with pytest.raises(StorageDenied, match='worker'):
+        rule.require_transfer_source(
+            reviewer, source.path, comms.registry.snapshot().threads.values(),
+            comms.goals.todos.get('P1').repository)
+    assert source.path.exists() and not destination.exists()
+    assert (git(source.path, 'rev-parse', 'HEAD'),
+            git(source.path, 'status', '--porcelain')) == before
+
+
+def test_transfer_accepts_callers_historical_launch_without_current_allocation(
+    checkout_command_bus, repository,
+):
+    comms = checkout_command_bus
+    rule = comms.registry.storage_rule
+    worker = comms.registry.require('worker')
+    source = rule.checkout_base / 'historical-launch'
+    source.parent.mkdir(parents=True, exist_ok=True)
+    checkout = Checkout.add(repository, source, NewBranchStart('historical', 'HEAD'))
+    next_project = rule.order_checkout(rule.roots_of(worker), 'P2')
+    Checkout.add(repository, next_project, NewBranchStart('historical-next', 'HEAD'))
+    with pytest.raises(StorageDenied, match='not a current or historical checkout'):
+        rule.require_transfer_source(
+            worker, source, comms.registry.snapshot().threads.values(),
+            comms.goals.todos.get('P1').repository)
+    assert comms.threads.set_project(worker.name, str(source)).changed
+    assert comms.threads.set_project(worker.name, str(next_project)).changed
+    worker = comms.registry.require(worker.name)
+    assert checkout in worker.earlier_projects
+    assert not rule.owns_present_checkout(worker, source)
+    comms.registry.register(worker, StoppedThreadStatus())
+    destination = rule.order_checkout(rule.roots_of(worker), 'P1')
+    (source / 'owner.py').write_text('historical dirty bytes\n')
+    before = git(source, 'branch', '--show-current'), git(source, 'rev-parse', 'HEAD')
+    moved = core_process('--root', str(comms.root), 'checkout', '--from', worker.name,
+                         'transfer', 'P1', '--source', str(source))
+    assert moved.returncode == 0, moved.stdout + moved.stderr
+    assert not source.exists()
+    assert (git(destination, 'branch', '--show-current'),
+            git(destination, 'rev-parse', 'HEAD')) == before
+    assert (destination / 'owner.py').read_text() == 'historical dirty bytes\n'
+    current = comms.registry.require(worker.name)
+    assert current.worktree == Checkout(next_project)
+    assert Checkout(destination) in current.earlier_projects
 
 
 def test_transfer_restores_original_tree_and_modules_after_actual_git_failure(repository, tmp_path):

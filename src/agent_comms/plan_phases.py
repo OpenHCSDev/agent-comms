@@ -1018,7 +1018,7 @@ class MaintenanceInWritePhase(StoreGuardsPhase):
 
 
 class LockCensusPhase(StoreGuardsPhase):
-    """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
+    """5: the NRA gate counts lock calls outside the store owners and refuses growth."""
 
     evidence = AuditPatternPresent(r"^class StoreLockCalls\(")
 
