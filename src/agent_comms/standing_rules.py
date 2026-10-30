@@ -237,6 +237,10 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
     def attention(self) -> bool:
         return True
 
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return (ping,)
+
     def subjects(self) -> tuple[HeartbeatSubject, ...]:
         """What a recorded action must touch to dispose of this rule's heartbeat line; a rule
         about nothing a verb can act on clears only when its condition does."""
@@ -660,7 +664,7 @@ class ConflictingBranches(HeldBranchRule):
                 other_branch=second.difference.branch, repository=first.difference.repository,
                 paths=conflicts)
             for first, second in HolderBranch.touching(branches)
-            if (conflicts := first.source.pulls.require_branch_conflicts(
+            if (conflicts := first.source.frame.pulls.require_branch_conflicts(
                 first.difference.head, second.difference.head))
         )
 
@@ -872,14 +876,15 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
 
 
 class ReviewTimerUp(HeldOrderDue, FamilyScan):
-    """Each round of a held order's review timer is its own condition, so the heartbeat wakes
-    the commander once per round; the unit sees no timer and nothing is struck."""
+    """The timer owns the request and wake; the unit's ReviewDue row owns its display."""
+
+    @classmethod
+    def alarm_pings[P](cls, ping: P) -> tuple[P, ...]:
+        return ()
 
     @classmethod
     def conditions(cls, comms: Comms, frame: HeartbeatFrame) -> Iterable[tuple[Todo, EventTime]]:
-        return comms.goals.todos.timers_up_in(
-            frame.todos, time.time(), frame.pulls.progress(frame.todos, comms.registry),
-        )
+        return frame.review_timers
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -1116,7 +1121,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
                     *(f"order {holder.name}" for holder in self.holders))
                    or (self.unowned,))
         return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
-                f" {why}, idle {int((time.time() - self.moved) // 60)} min. who owns it, or are we"
+                f" {why}, unchanged since {RecordedEventTime(self.moved).stamp()}. who owns it, or are we"
                 f" pretending it doesn't exist? -> {'; '.join(actions)}")
 
 
@@ -1168,7 +1173,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
         age = time.time() - cls.hunted(comms, commander)
-        return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
+        return f"no hunt in the last {cls.seconds // 60} min" if age > cls.seconds else None
 
     @classmethod
     def found(cls, why: str, comms: Comms, commander: str,

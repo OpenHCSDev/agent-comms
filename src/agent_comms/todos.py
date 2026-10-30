@@ -76,6 +76,7 @@ from agent_comms.errors import (
 from agent_comms.field_codec import (
     DefaultNonNull,
     Description,
+    DisclosedRecord,
     DisclosureIdentity,
     FieldCodec,
     GitCommitText,
@@ -671,7 +672,7 @@ class MergedLink:
 
 
 @dataclass(frozen=True)
-class PullRequest(HeadReviewStatus, DeclaredFamily, affix="PullRequest"):
+class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -1232,7 +1233,7 @@ class PullRequests:
 
 
 @dataclass(frozen=True)
-class ProgressPoint:
+class ProgressPoint(DisclosedRecord):
     """A revision and its time in the order's progress; Git rows use committer time."""
     sha: Annotated[str, DisclosureIdentity()]
     at: float
@@ -1245,14 +1246,14 @@ class ProgressPoint:
 
 
 @dataclass(frozen=True)
-class DistanceReading:
+class DistanceReading(DisclosedRecord):
     at: float
     distance: CheckPrinted
     command: str = ""
 
 
 @dataclass(frozen=True)
-class DistanceReadings:
+class DistanceReadings(DisclosedRecord):
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
@@ -1703,7 +1704,7 @@ class MeasuredProgressSource(ProgressSource):
 
 
 @dataclass(frozen=True)
-class OrderProgress(DeclaredFamily, affix="Progress"):
+class OrderProgress(DisclosedRecord, DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
     Never stored: the checkout and GitHub are its owners."""

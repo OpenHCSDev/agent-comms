@@ -1,9 +1,9 @@
 """Declared CLI and tool replies share their JSON behavior."""
 
-from .field_codec import FieldCodec
+from .field_codec import DisclosedRecord, FieldCodec
 
 
-class DeclaredReply:
+class DeclaredReply(DisclosedRecord):
     """A declared reply record; the one sender that owns its transport encodes it."""
 
     __slots__ = ()

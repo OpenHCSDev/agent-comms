@@ -8,6 +8,8 @@ nothing is refused until the commander answers that message (the OwedAnswer gate
 
 from __future__ import annotations
 
+from agent_comms.field_codec import WireExclude
+
 import time
 from collections.abc import Mapping, Sequence
 from abc import abstractmethod
@@ -25,6 +27,7 @@ from agent_comms.goal_actions import (
     OwnerInvocable,
 )
 from agent_comms.messages import Message
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, EscalationNotice, VibeCheckNotice
 from agent_comms.standing_rules import (
@@ -93,11 +96,11 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         """One load projection shared by the heartbeat's HUD and standing rules."""
         return cls(sum(todo.pending for todo in orders), timers_up, unjudged)
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def total(self) -> float:
         return self.owed + 2 * self.timers_up + self.unjudged
 
-    @projected(view="wire")
+    @projected(view=WireExclude)
     def overloaded(self) -> bool:
         return self.total >= self.ceiling
 
@@ -173,8 +176,8 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
         return self.message.timestamp <= now - self.seconds
 
     def line(self) -> str:
-        age = max(0, int((time.time() - self.message.timestamp) // 60))
-        return f"vibe check {self.cited} is {age} min old. still ignoring it? -> answer it"
+        return (f"vibe check {self.cited} from {RecordedEventTime(self.message.timestamp).stamp()}."
+                " still ignoring it? -> answer it")
 
 
 class Indictment:
