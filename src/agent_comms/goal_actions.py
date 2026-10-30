@@ -583,7 +583,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         """Recheck local request facts before goal reservation or allocating a child."""
         self.require_sendable(ctx.goals.registry.snapshot().commander_project)
         commander = ctx.goals.registry.require(self.commander)
-        ctx.goals.todos.owner_request(self.request).require_open(commander.incarnation)
+        ctx.goals.todos.owner_request(self.request).require_open(commander.acting_identity)
         self.review_at.require_recorded("A review time")
 
     def require_sendable(self, project: CommanderProject) -> None:

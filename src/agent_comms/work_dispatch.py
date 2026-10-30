@@ -145,7 +145,7 @@ class CheckedPhaseTask(PhaseTask):
             repo=self.repo,
             text=self.text,
             order=order,
-            request=NewestOpenRequest().for_order(comms.goals.todos, commander.incarnation),
+            request=NewestOpenRequest().for_order(comms.goals.todos, commander.acting_identity),
             commander=commander.name,
             assigner=commander.incarnation,
             review_at=RecordedEventTime(now + self.review_seconds),
