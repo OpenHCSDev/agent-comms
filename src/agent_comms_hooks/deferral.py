@@ -7,7 +7,5 @@ class DeferralGuard(SessionHookProgram):
     events = ("Stop",)
 
 
-main = DeferralGuard.main
-
 if __name__ == "__main__":
-    main()
+    DeferralGuard.main()

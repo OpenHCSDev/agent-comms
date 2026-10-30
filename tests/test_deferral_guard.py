@@ -131,5 +131,5 @@ def test_an_unbound_session_stops_freely(
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps({
         "session_id": "unbound", "hook_event_name": "Stop",
         "transcript_path": str(tmp_path / "session.jsonl"), "stop_hook_active": False})))
-    deferral.main()
+    deferral.DeferralGuard.main()
     assert capsys.readouterr().out == ""

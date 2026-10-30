@@ -73,7 +73,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     )
     with owner_log.open('wb') as errors, subprocess.Popen(
             ('/bin/sh', '-c', shell, 'session-owner',
-             str(source_programs.script(hook_session.main)), str(packet)),
+             str(source_programs.script(hook_session.SessionHook.main)), str(packet)),
             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors) as owner:
         try:
             assert select.select((owner.stdout,), (), (), 40)[0], owner_log.read_text()

@@ -1038,7 +1038,7 @@ def test_an_unbound_subagent_has_no_bus_to_join(
               "transcript_path": str(tmp_path / "unit.jsonl"),
               "agent_id": "a2", "agent_type": "Explore"}
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
-    forks.started()
+    forks.SubagentStartProgram.main()
     assert capsys.readouterr().out == ""
     assert not fork_bus[0].registry.snapshot().children("worker")
 

@@ -207,8 +207,5 @@ class QueueBypassGuard(SessionHookProgram, BashRefusal):
         return tuple(bypass.reason for bypass in cls.bypasses(command))
 
 
-main = QueueBypassGuard.main
-
-
 if __name__ == "__main__":
-    main()
+    QueueBypassGuard.main()

@@ -7,7 +7,5 @@ class ReminderProgram(SessionHookProgram):
     events = ("PostToolUse",)
 
 
-main = ReminderProgram.main
-
 if __name__ == "__main__":
-    main()
+    ReminderProgram.main()

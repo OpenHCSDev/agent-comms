@@ -257,7 +257,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
-                    (str(old.script(hook_session.main)),), input=packet, text=True, capture_output=True,
+                    (str(old.script(hook_session.SessionHook.main)),), input=packet, text=True, capture_output=True,
                     timeout=40, env={**env, 'CLAUDE_CODE_SESSION_ID': claim.thread,
                                      'CLAUDE_PID': str(os.getpid())})
                 assert hook.returncode != 0

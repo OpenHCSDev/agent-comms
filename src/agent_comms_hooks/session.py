@@ -4,7 +4,3 @@ from .watch import SessionHookProgram
 
 class SessionEnded(SessionHookProgram):
     events = ("SessionEnd",)
-
-
-def ended() -> None:
-    SessionEnded.main()

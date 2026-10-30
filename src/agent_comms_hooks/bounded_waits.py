@@ -153,8 +153,5 @@ class BoundedWaits(SessionHookProgram, BashRefusal):
         return WaitCommand(command).unbounded_wait()
 
 
-main = BoundedWaits.main
-
-
 if __name__ == "__main__":
-    main()
+    BoundedWaits.main()

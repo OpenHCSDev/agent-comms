@@ -12,7 +12,5 @@ class SkillText(SessionHookProgram):
         return ()
 
 
-main = SkillText.main
-
 if __name__ == "__main__":
-    main()
+    SkillText.main()

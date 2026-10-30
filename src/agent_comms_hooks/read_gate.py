@@ -8,7 +8,5 @@ class ReadGateProgram(SessionHookProgram, PermissionHookProgram):
     events = ("PreToolUse",)
 
 
-main = ReadGateProgram.main
-
 if __name__ == "__main__":
-    main()
+    ReadGateProgram.main()

@@ -9,7 +9,3 @@ class SubagentStartProgram(SessionHookProgram):
 
 class SubagentStopProgram(SessionHookProgram):
     events = ("SubagentStop",)
-
-
-started = SubagentStartProgram.main
-stopped = SubagentStopProgram.main

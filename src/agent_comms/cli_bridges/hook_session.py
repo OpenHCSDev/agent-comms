@@ -1,19 +1,23 @@
 """Resident Claude session hook behavior, behind the existing session socket."""
 from __future__ import annotations
 
+import json
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 
-from .hook_skill import DeckStart
+from agent_comms_hooks import ClaudeTranscriptHook
+from agent_comms_hooks.skill import SkillText
+from agent_comms_hooks.watch import SessionEndpoint
 from .session_watch import WatchClaim
 from .shared import Serve
 from ..child_process import ProcessIdentity
 
 
 @dataclass(frozen=True)
-class SessionHook(DeckStart):
+class SessionHook(ClaudeTranscriptHook):
     @staticmethod
     def environment_session() -> str:
         """Claude exports the identity shared by its hook and bare Monitor command."""
@@ -36,19 +40,14 @@ class SessionHook(DeckStart):
         owner.require_ancestor_of(os.getpid())
         return owner
 
-    def start(self) -> None:
-        Serve.launch(WatchClaim(self.session_id), self.owner, Path(self.transcript_path))
-        # Launch and the initial deal are one ordered startup, not parallel hooks racing a socket.
-        self.warn(*self.take())
-
     @classmethod
     def main(cls) -> None:
-        """Run the existing SessionStart lifecycle owner at its process boundary."""
-        cls.read().start()
-
-
-main = SessionHook.main
+        """Launch once, then deal through that resident's actual Comms and Binding."""
+        record = json.load(sys.stdin)
+        hook = cls.decode(record)
+        Serve.launch(WatchClaim(hook.session_id), hook.owner, Path(hook.transcript_path))
+        SessionEndpoint(hook.session_id).session().invoke(SkillText, record)
 
 
 if __name__ == "__main__":
-    main()
+    SessionHook.main()
