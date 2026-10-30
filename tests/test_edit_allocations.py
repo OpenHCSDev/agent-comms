@@ -152,3 +152,15 @@ def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
                                             frozenset({current.order.id})),
                 comms.registry.snapshot(), prepared.prepared_edits())
     assert comms.goals.todos.get(current.id) == current
+
+
+def test_a_thread_launched_above_its_scratch_may_write_only_its_own_scratch(allocation_bus):
+    comms, _, _ = allocation_bus
+    rule = StorageRule.load(comms.root)
+    home = rule.scratch_base.parent
+    owner = comms.registry.declare(replace(comms.registry.require('first'), worktree=Checkout(home)))
+    assert rule.roots_of(owner).scratch.is_relative_to(owner.project_path)
+    StorageProjection(rule, owner, comms).check((
+        WriteStorageEffect(rule.roots_of(owner).scratch / 'compaction-deal.audit.json'),))
+    with pytest.raises(StorageDenied):
+        StorageProjection(rule, owner, comms).check((WriteStorageEffect(home / 'source.py'),))

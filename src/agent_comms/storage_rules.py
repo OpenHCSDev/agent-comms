@@ -641,8 +641,13 @@ class StorageProjection:
         allowed = frozenset(boundary for root in sources
                             for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
                             for boundary in allocation.edit_boundary(self.rule, owner, root, store))
+        # A thread launched from its home holds its own scratch inside its project; scratch is
+        # the one place every thread owns, and the rule gate's audit must be writable there.
+        inside_project = (resolved.is_relative_to(owner.project_path.resolve())
+                          and not resolved.is_relative_to(
+                              self.rule.roots_of(owner).scratch.resolve()))
         if (sources or path.is_relative_to(self.rule.checkout_base)
-                or resolved.is_relative_to(owner.project_path.resolve())) and not any(
+                or inside_project) and not any(
                 resolved.is_relative_to(root) for root in allowed):
             self.rule.deny(f'{path} is a read/launch source, not allocated editable work of {owner.name}.')
 
