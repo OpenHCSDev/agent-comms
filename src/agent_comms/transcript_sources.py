@@ -642,22 +642,18 @@ class LiveAssignedTranscriptSource(AssignedTranscriptSource):
         lookup = self.recipient.lookup
         for fragment in fragments:
             fragment = tuple(fragment)
-            selected = tuple(
-                (record, user.entry if user else None)
-                for record, user in zip(fragment, reader.inputs_for(fragment), strict=True)
-            )
+            selected = tuple(zip(fragment, reader.inputs_for(fragment), strict=True))
             with TranscriptRead.publication_source(self.root) as db:
                 # Missing coordination remains detached native history. Do not
                 # introduce header failures where no SQL source was selected.
                 session_id = (reader.session_id
                               if db is not None and any(
-                                  user and user.message.input_id.reported
-                                  for _, user in selected) else None)
+                                  user.input_reported for _, user in selected) else None)
                 capture = partial(
                     NativeRuntimeInput.transcript_projection,
                     db, reader, owner_lookup=lookup, session_id=session_id,
                 )
-                originals = tuple((record, record.project(partial(capture, user=user)))
+                originals = tuple((record, record.project(partial(capture, user=user.entry)))
                                   for record, user in selected)
             for record, projection in originals:
                 yield record, record.project(

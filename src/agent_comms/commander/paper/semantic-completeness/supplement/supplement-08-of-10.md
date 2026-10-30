@@ -1,0 +1,1146 @@
+# Supplement to Semantic Completeness for Correct Maintenance: part 8 of 10
+
+Optional reading: the paper1 supplement converted to layout-preserving text, page by page. Figures are PNG files in `figures/`.
+
+ID      Lean Handle / Source
+
+        Ssot.HolderCoverConfigurations.complete_iff_all_holders_enabled
+HCC1
+        Paper1PL/HolderCoverConfigurations.lean
+        Ssot.HolderCoverConfigurations.distinct_completion_maps_card
+HCC2
+        Paper1PL/HolderCoverConfigurations.lean
+        Ssot.HolderCoverConfigurations.enabled_subsets_give_distinct_answers
+HCC3
+        Paper1PL/HolderCoverConfigurations.lean
+        Ssot.HolderCoverConfigurations.minimum_cover_has_private_answers
+HCC4
+        Paper1PL/HolderCoverConfigurations.lean
+        Ssot.HistoryViewDominance.adequateThroughout_iff_exact_resolvers
+HVD1
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.retained_nominal_view_weakly_dominates
+HVD3
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.retained_nominal_view_needs_no_residual_names
+HVD4
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.collision_gives_strict_history_separation
+HVD7
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.derived_helpers_cannot_remove_collision
+HVD8
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.merging_history_strict_separation
+HVD11
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.collision_forces_recourse_but_nominal_stays_unchanged
+HVD12
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.IdentityDiscipline.structural_adequate_iff_profile_injective
+IDD1
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.structural_inadequate_of_clone
+IDD2
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.every_structural_discipline_fails_on_clone_extension
+IDD3
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.nominal_extension_stable
+IDD4
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.canonical_adequate
+IDD5
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.structurallyEnforceable_iff_fiberSaturated
+IDD6
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityDiscipline.not_structurallyEnforceable_of_boundary_clone
+IDD7
+        Paper1IT/IdentityDiscipline.lean
+        Ssot.IdentityMigration.clone_extension_forces_disciplineChange_eq_one
+IMR1
+        Paper1PL/IdentityMigration.lean
+        Ssot.IdentityMigration.nominal_extension_has_zero_disciplineChange
+IMR2
+        Paper1PL/IdentityMigration.lean
+        Ssot.IdentityMigration.equal_initial_cost_clone_upgrade_strict
+IMR3
+        Paper1PL/IdentityMigration.lean
+        Ssot.IdentityMigration.retained_structural_upgrade_costs_twice_direct
+IMR4
+        Paper1PL/IdentityMigration.lean
+        Ssot.IdentityMigration.replaced_structural_upgrade_costs_three_times_direct
+IMR5
+        Paper1PL/IdentityMigration.lean
+        Ssot.DeclaredIncentive.declaredLedger_strictly_prefers_decline
+INC1
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.hiddenCompletionIndicator_laminar_eq_zero
+INC2
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.hiddenCompletionIndicator_crossing_eq_one
+INC3
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.no_successful_native_observation_estimator_for_completion
+INC4
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.maintenanceLedger_eventually_prefers_acquire
+INC5
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.declared_and_maintenance_orders_reverse_after_someHorizon
+INC6
+        Paper1PL/DeclaredIncentive.lean
+
+ID      Lean Handle / Source
+
+        Ssot.DeclaredIncentive.zeroValue_decline_cost_independent_of_repairPrice
+INC7
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.reversalThreshold_antitone_in_repairPrice
+INC8
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.DeclaredIncentive.observationHidden_completion_reverses_outputOnly_order
+INC9
+        Paper1PL/DeclaredIncentive.lean
+        Ssot.BoundaryIntent.Intent.sameAnswer_equivalence
+INT1
+        Paper1IT/BoundaryIntent.lean
+        Ssot.BoundaryIntent.Intent.Exact.adequate
+INT2
+        Paper1IT/BoundaryIntent.lean
+        Ssot.BoundaryIntent.Intent.adequate_iff_exists_reachable_resolver
+INT3
+        Paper1IT/BoundaryIntent.lean
+        Ssot.BoundaryIntent.Intent.exact_requiredRelation_iff
+INT4
+        Paper1IT/BoundaryIntent.lean
+        Ssot.BoundaryIntent.Intent.no_intent_free_defect
+INT5
+        Paper1IT/BoundaryIntent.lean
+        Ssot.EvolvingObservation.behaviorAdequateThroughout_iff_boundaryIntent
+INT6
+        Paper1IT/EvolvingObservation.lean
+        Ssot.NominalFactorization.IndexedDerivationRepresentation.realizes_boundaryIntent
+INT7
+        Paper1PL/NominalFactorization.lean
+        Ssot.BoundaryIntent.Intent.Exact.alternativeDispatch_eq_contractCall
+INT8
+        Paper1IT/BoundaryIntent.lean
+        Ssot.BoundaryIntent.Intent.no_exact_resolver_of_visible_collision
+INT9
+        Paper1IT/BoundaryIntent.lean
+        Ssot.ImmediateParentEvolution.between_preserved_path
+IPE1
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.nested_growth_below_stable_base_forces_parent_edge_removal
+IPE2
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionScope_each_state_has_exact_singleParent
+IPE3
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionSingleParentPolicy_removedParentEdgeCount_eq_one
+IPE4
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionScope_multiParent_edges_monotone
+IPE5
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_laminar
+IPE6
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_cumulative_parent_edge_removal_lower_bound
+IPE7
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_multiParent_edges_monotone
+IPE8
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_unbounded_parent_edge_separation
+IPE9
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ImmediateSingleParentPolicy.exists_addedParentEdge_of_new_
+IPE10   ancestor
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionScope_oneParent_two_le_parentEdgeEditCount
+IPE11
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionSingleParentPolicy_parentEdgeEditCount_eq_two
+IPE12
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionMultiParent_exact
+IPE13
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionMultiParent_edges_monotone
+IPE14
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.insertionMultiParentAddedEdgeCount_eq_one
+IPE15
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_cumulative_parent_edge_edit_lower_bound
+IPE16
+        Paper1PL/ImmediateParentEvolution.lean
+
+ID      Lean Handle / Source
+
+        Ssot.ImmediateParentEvolution.stagedMultiParent_exact
+IPE17
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedMultiParentAddedEdgeCount_eq_one
+IPE18
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedMultiParent_cumulative_edge_edit_count_eq_n
+IPE19
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedMultiParent_edges_monotone
+IPE20
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_step_two_edits_or_external_pair
+IPE21
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedFrozenWitness_card
+IPE22
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_frozen_parent_quadratic_external_lower_bound
+IPE23
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_monotone
+IPE24
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_step_retraction_or_external_pair
+IPE25
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ImmediateDelegatingSingleParentPolicy.retracted_edge_pair_
+IPE26   remains_required
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_step_edgeMonotone_implies_external_endpoint
+IPE27
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.directMultiParent_edges_monotone
+IPE28
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedGapToFrozenWitness
+IPE29
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedFrozenWitnessToGap_gapToWitness
+IPE30
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedGapToFrozenWitness_injective
+IPE31
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.stagedScope_frozen_initially_exact_external_eq
+IPE32
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChain_exact
+IPE33
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChain_acyclic
+IPE34
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChain_edges_monotone
+IPE35
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChain_update_iff
+IPE36
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChainAddedEdgeCount_eq_one
+IPE37
+        Paper1PL/ImmediateParentEvolution.lean
+        Ssot.ImmediateParentEvolution.ownerChain_cumulative_edge_edit_count_eq_n
+IPE38
+        Paper1PL/ImmediateParentEvolution.lean
+        finset_matroid_basis_equicardinality
+L10
+        axis_framework.lean
+        inclusionMinimal_spanning_iff_basis
+L11
+        axis_framework.lean
+        matroidal_distinguishing_minimal_iff_basis
+L12
+        axis_framework.lean
+        exists_inclusionMinimalFamily_subset
+L13
+        axis_framework.lean
+        matroidal_distinguishing_criterion_iff
+L14
+        axis_framework.lean
+        freeAxisMatroid_basis_eq_ground
+L15
+        axis_framework.lean
+
+ID      Lean Handle / Source
+
+        closureInducedAxisMatroid
+L16
+        axis_framework.lean
+        closureInducedBasisEquicardinality
+L17
+        axis_framework.lean
+        not_spanning_of_card_lt_basis
+L18
+        axis_framework.lean
+        spanning_of_basis_card_lt_has_redundant_subset
+L19
+        axis_framework.lean
+        Ssot.LocalRepairRatchet.finiteGapCost_eq_sum_sdiff
+LRR1
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.fixedCarrier_completion_growth_eq
+LRR2
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.fixedCarrier_admissible_after_growth
+LRR3
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.bruteForceGap_growth_le
+LRR4
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.arrangementExcess_mono_fixedCarrier
+LRR5
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.arrangementExcess_strict_fixedCarrier
+LRR6
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.LocalRepairRatchet.arrangementExcess_growth_eq_of_gap_eq
+LRR7
+        Paper1PL/LocalRepairRatchet.lean
+        Ssot.MonotoneMultiParentHistory.path_eq_or_step
+MGH1
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MonotoneMultiParentHistory.exact_supply
+MGH2
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MonotoneMultiParentHistory.acyclic
+MGH3
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MonotoneMultiParentHistory.repairEdges_empty
+MGH9
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MonotoneMultiParentHistory.normalizedStepRepair_zero
+MGH10
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MonotoneMultiParentHistory.arbitrary_history_joint_zero
+MGH11
+        Paper1PL/MonotoneMultiParentHistory.lean
+        Ssot.MatchingRecourse.population_le_twice_pairCapacity_add_colors
+MRC1
+        Paper1PL/MatchingRecourse.lean
+        Ssot.MatchingRecourse.population_le_colors_add_twice_recourse
+MRC2
+        Paper1PL/MatchingRecourse.lean
+        Ssot.MatchingRecourse.exact_price_lower_bound
+MRC3
+        Paper1PL/MatchingRecourse.lean
+        Ssot.MatchingRecourse.extremal_class_capacity_le_recourse
+MRC4
+        Paper1PL/MatchingRecourse.lean
+        Ssot.MatchingRecourse.exact_price_upper_parameters
+MRC5
+        Paper1PL/MatchingRecourse.lean
+        Ssot.NominalFactorization.nominal_not_determined_by_observation
+NHF1
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.structural_helper_preserves_has_collision
+NHF3
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.every_behavior_factors_through_nominal_baseline
+NHF4
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.retaining_nominal_identity_has_no_marginal_penalty
+NHF5
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.laminar_of_singleInheritanceRepresentation
+NHF6
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.singleInheritance_iff_laminar
+NHF7
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.nonlaminar_requires_multiParent
+NHF8
+        Paper1PL/NominalFactorization.lean
+
+ID      Lean Handle / Source
+
+        Ssot.NominalFactorization.nonlaminar_has_incomparable_applicable_owners
+NHF9
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.contraction_consistent_resolution_requires_linearization
+NHF10
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.identity_dependent_behavior_not_structurally_decodable
+NHF11
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.nominal_hierarchical_factorization
+NHF12
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.nonlaminar_forces_externalized_derivation
+NHF13
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.nonlaminar_multiParent_avoids_externalization
+NHF14
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.external_repair_provider_lookup_coloring
+NHF15
+        Paper1PL/NominalFactorization.lean
+        Ssot.ProductResolution.typeFirst_eq_scopeFirst_iff_coordinateMinimum_mem
+NHF16
+        Paper1PL/ProductResolution.lean
+        Ssot.ProductResolution.typeFirstResolution_eq_of_columnEq
+NHF17
+        Paper1PL/ProductResolution.lean
+        Ssot.ProductResolution.typeFirstResolution_insert_empty_provider
+NHF18
+        Paper1PL/ProductResolution.lean
+        Ssot.NominalFactorization.FiniteResolver.toLinearization_extends_reverseAncestry
+NHF19
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.DerivationRepresentation.owner_injective
+NHF20
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.ancestryOnly_singleInheritance_iff_laminar
+NHF21
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.ancestry_not_determined_by_observation_and_nominal
+NHF22
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.ExternalizedSingleInheritanceRepresentation.external_iff_applicable_
+NHF23   and_gap
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.ExternalizedSingleInheritanceRepresentation.ownerGrowthNeedsNoRepair_
+NHF24   iff
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.gap_forces_forward_target
+NHF25
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.ancestryGap_card_le_
+NHF26   forwardingDecision_card
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.ancestryGap_card_eq_sum
+NHF27
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.minimumDelegationCost_iff_minimumLaminarGapCost
+NHF28
+        Paper1PL/NominalFactorization.lean
+        Ssot.DelegationCompression.FactObliviousDelegation.gap_of_provides_of_reaches
+NHF29
+        Paper1PL/DelegationCompression.lean
+        Ssot.DelegationCompression.FoolingFamily.card_le_activeHolder_card
+NHF30
+        Paper1PL/DelegationCompression.lean
+        Ssot.LaminarRepairFPT.local_conflict_forces_branch
+NHF31
+        Paper1PL/LaminarRepairFPT.lean
+        Ssot.LaminarRepairFPT.laminarOn_union_of_cross_disjoint
+NHF34
+        Paper1PL/LaminarRepairFPT.lean
+        Ssot.FixedHierarchyScopes.replaceRow_laminar
+NHF35
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.FixedHierarchyScopes.gapCost_replace_equal_scope_le
+NHF36
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.FixedHierarchyScopes.fixedHierarchy_pointwise_minimizes
+NHF37
+        Paper1PL/FixedHierarchyScopes.lean
+
+ID      Lean Handle / Source
+
+        Ssot.FixedHierarchyScopes.normalizeRows_laminar
+NHF38
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.FixedHierarchyScopes.gapCost_normalize_equal_scope_le
+NHF39
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.FixedHierarchyScopes.normalizeRows_eq_of_representative_eq
+NHF40
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.FixedHierarchyScopes.fixedHierarchy_pointwise_minimizes_with_empty
+NHF41
+        Paper1PL/FixedHierarchyScopes.lean
+        Ssot.NominalFactorization.canonicalDerivation_applies_iff
+NHF44
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.every_applicability_family_has_exact_multiParent
+NHF45
+        Paper1PL/NominalFactorization.lean
+        Ssot.DelegationCompression.RectangleCover.toFactObliviousDelegation
+NHF47
+        Paper1PL/DelegationCompression.lean
+        Ssot.DelegationCompression.FactObliviousDelegation.toActiveRectangleCover
+NHF48
+        Paper1PL/DelegationCompression.lean
+        Ssot.NominalFactorization.every_indexed_applicability_family_has_owner_preserving_multiParent
+NHF50
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.indexed_singleInheritance_iff_laminar
+NHF51
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.workflowScopes_nonlaminar
+NHF52
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.coverage_resolution_lower_
+NHF53   bound
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.coverage_resolution_strict
+NHF54
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.zero_conflict_strict
+NHF55
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.minimum_coverage_resolution_cost
+NHF56
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.minimum_coverage_resolution_cost_strict
+NHF57
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.DelegatingSingleInheritanceRepresentation.coverageResolutionLedger_
+NHF58   strict
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.every_policy_state_has_owner_preserving_multiParent
+NHF59
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.policy_singleInheritance_iff_every_state_laminar
+NHF60
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.policy_pointwise_minimumDelegationCost
+NHF61
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.policy_crossing_state_has_positive_minimumDelegationCost
+NHF62
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.minimumDelegationCost_isLeast_exactRepresentations
+NHF63
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.SelectorCarrier.conflictSite_iff_of_exact
+NHF64
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.SelectorCarrier.exact_carriers_conflictSite_iff
+NHF65
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.SelectorCarrier.exact_carriers_winner_eq
+NHF66
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.SelectorCarrier.exact_carriers_conflictSet_eq
+NHF67
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.SelectorCarrier.conflictSet_eq_contract_of_exact
+NHF68
+        Paper1PL/CoverageResolution.lean
+        nominal_centralized
+NOM1
+        AbstractClassSystem/Extended.lean
+
+ID     Lean Handle / Source
+
+       Ssot.NativeProofSystem.derives_iff_declared
+NPS1
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.derivation_sound
+NPS2
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.unrestrictedNative_sound
+NPS3
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.unrestrictedNative_complete
+NPS4
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.unrestrictedNative_has_exact_multiParent
+NPS5
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.oneParent_sound_complete_implies_required_laminar
+NPS6
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.crossingScope_not_laminar
+NPS7
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.crossing_no_sound_complete_oneParent
+NPS8
+       Paper1PL/NativeProofSystem.lean
+       Ssot.NativeProofSystem.crossing_exists_valid_not_derivable
+NPS9
+       Paper1PL/NativeProofSystem.lean
+       Ssot.SemanticRepairHistory.ancestor_preserved_on_path
+NRH1
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.between_preserved_supported_path
+NRH2
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.strict_insertion_exact_forces_repairDeletion
+NRH3
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.strict_insertion_forces_normalized_repair
+NRH4
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.strict_insertion_normalized_cost_pos
+NRH5
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.staged_normalized_cost_lower_bound
+NRH6
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.withdrawn_path_requires_raw_deletion
+NRH7
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.staged_normalized_repair
+NRH8
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.SemanticRepairHistory.staged_deletions_add_outside_updates_lower_bound
+NRH9
+       Paper1PL/SemanticRepairHistory.lean
+       Ssot.ObservationLocalCapacity.no_observation_classifier_of_collision
+OLC1
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.hiddenWorkflowSuccessfulNativeObservation_eq
+OLC2
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.no_successful_native_observation_classifier_for_treeShape
+OLC3
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.successful_native_observation_policy_same_decision
+OLC4
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.no_successful_native_observation_policy_fires_exactly_on_crossing
+OLC5
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.total_successful_native_attributor_misclassifies_one
+OLC7
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.sound_partial_successful_native_attributor_abstains
+OLC8
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.ObservationLocalCapacity.correct_supply_routes_recover_requirements
+OLC9
+       Paper1PL/ObservationLocalCapacity.lean
+       Ssot.OptionRegret.restriction_regret
+OPT1
+       Paper1PL/OptionRegret.lean
+       Ssot.OptionRegret.stagedStepBurden_pos
+OPT3
+       Paper1PL/OptionRegret.lean
+       Ssot.OptionRegret.stagedCumulativeBurden_ge_horizon
+OPT4
+       Paper1PL/OptionRegret.lean
+
+ID      Lean Handle / Source
+
+        Ssot.OptionRegret.exists_horizon_recurringBurden_exceeds_finiteAcquisition
+OPT5
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.finitePreventionCost_lt_recurringBurden_after_someHorizon
+OPT6
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.stagedRestriction_includes_cumulativeBurden
+OPT7
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.acquisitionExcess_lt_recurringBurden_after_someHorizon
+OPT8
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.acquisitionExcess_lt_linearRepair_from_affineThreshold
+OPT9
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.acquisitionExcess_lt_stagedBurden_from_affineThreshold
+OPT10
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.lowerRateAcquisition_eventually_beats_permanentRestriction
+OPT11
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.lowerRateAcquisition_refutes_permanentRestrictionBound
+OPT12
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.policySet_infimum_antitone
+OPT13
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.acquisitionUnion_infimum_le_staying
+OPT14
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.cheaper_feasible_excludes_staying
+OPT15
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.lowerRateAcquisition_excludes_stagedStayingPolicies
+OPT16
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.attained_minimum_eq_iff_retained_optimum
+OPT17
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.attained_minimum_strict_of_no_retained_optimum
+OPT18
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.dominated_removal_preserves_attained_minimum
+OPT19
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.conservativeExtension_preserves_old_answers
+OPT20
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.rungUnion_eq_top
+OPT21
+        Paper1PL/OptionRegret.lean
+        Ssot.OptionRegret.rungUnion_infimum_eq_top
+OPT22
+        Paper1PL/OptionRegret.lean
+        Ssot.NominalFactorization.structural_current_exact_but_nominal_extension_stable
+OWM1
+        Paper1PL/NominalFactorization.lean
+        Ssot.NominalFactorization.workflow_singleParent_not_extension_stable
+OWM2
+        Paper1PL/NominalFactorization.lean
+        nominal_pareto_dominates_shape
+PD1
+        discipline_migration.lean
+        Ssot.PriceInvariantSeparation.nonempty_cost_pos
+PIS1
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.PriceInvariantSeparation.zero_cost_iff_empty
+PIS2
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.PriceInvariantSeparation.finite_universe_uniform_floor
+PIS3
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.PriceInvariantSeparation.every_price_preserves_witness
+PIS4
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.PriceInvariantSeparation.crossing_forces_nonempty_residual
+PIS5
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.PriceInvariantSeparation.crossing_cost_positive_under_every_price
+PIS6
+        Paper1PL/PriceInvariantSeparation.lean
+        Ssot.ProjectionDuality.exactRecovery_iff_no_fiberConflict
+PJD1
+        Paper1IT/ProjectionDuality.lean
+        Ssot.ProjectionDuality.everyDecoderFails_iff_hasFiberConflict
+PJD2
+        Paper1IT/ProjectionDuality.lean
+
+ID      Lean Handle / Source
+
+        Ssot.ProjectionDuality.dual_certification
+PJD3
+        Paper1IT/ProjectionDuality.lean
+        Ssot.ProjectionDuality.channel_separation
+PJD4
+        Paper1IT/ProjectionDuality.lean
+        AbstractClassSystem.ProtocolRuntime.protoCheck_in_shapeQuerySet
+PRT2
+        AbstractClassSystem/Extended.lean
+        Ssot.PartitionStateThreshold.zeroErrorTagging_iff_colorClasses_profileIndependent
+PST1
+        Paper1PL/PartitionStateThreshold.lean
+        Ssot.PartitionStateThreshold.twoStateTagging_iff_commonPartitionIndependent
+PST2
+        Paper1PL/PartitionStateThreshold.lean
+        Ssot.PartitionStateThreshold.commonPartitionIndependent_iff_bipartiteMatchingClass
+PST3
+        Paper1PL/PartitionStateThreshold.lean
+        Ssot.PartitionStateThreshold.three_states_double_snapshot_price
+PST4
+        Paper1PL/PartitionStateThreshold.lean
+        Ssot.RuleBasedFactoring.compiled_ancestry_exact
+RBF1
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RuleBasedFactoring.compileRule_preserves_revision_count
+RBF2
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RuleBasedFactoring.unchanged_rule_iff_input_sufficient
+RBF3
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RuleBasedFactoring.exact_rules_with_allowed_changes_iff_hits_conflicts
+RBF4
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RuleBasedFactoring.rule_revision_budget_iff_conflict_hitting_budget
+RBF5
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RuleBasedFactoring.conflicting_updates_revision_lower_bound
+RBF6
+        Paper1PL/RuleBasedFactoring.lean
+        Ssot.RepresentationCanonicity.exactEncoding_refines_canonicalQuotient
+RCN1
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.minimalExact_iff_samePartition_canonicalQuotient
+RCN2
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.canonicalDecisionEncoding_minimalExact
+RCN3
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.minimalExact_sameRepresentationPartition
+RCN4
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.answerCapacityEquivalent_iff_sameRepresentationPartition
+RCN5
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.minimalExact_answerCapacityEquivalent
+RCN6
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.minimalExact_exists_presentationEquivalence
+RCN7
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.IndexedDerivationRepresentation.toExactDecisionEncoding
+RCN8
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.DelegatingSingleInheritanceRepresentation.
+RCN9    toNominalDecisionEncoding
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.optimizerQuotientMap_eq_iff
+RCN10
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RepresentationCanonicity.exactValidActionEncoding_refines_optimizerQuotient
+RCN11
+        Paper1PL/RepresentationCanonicity.lean
+        Ssot.RelationCarrier.independentRelation_carrier_card_lower_bound
+RLC3
+        Paper1IT/RelationCarrier.lean
+        Ssot.RelationCarrier.independentRelation_requiredBits_lower_bound
+RLC4
+        Paper1IT/RelationCarrier.lean
+        Ssot.RelationCarrier.zeroError_iff_of_same_realizedRelations
+RLC6
+        Paper1IT/RelationCarrier.lean
+        Ssot.RelationCarrier.reachableRelation_input_injective
+RLC7
+        Paper1IT/RelationCarrier.lean
+
+ID      Lean Handle / Source
+
+        Ssot.RelationCarrier.reachableRelation_input_card_lower_bound
+RLC8
+        Paper1IT/RelationCarrier.lean
+        Ssot.RelationCarrier.reachableRelation_input_bits_lower_bound
+RLC9
+        Paper1IT/RelationCarrier.lean
+        Ssot.RelationCarrier.independentRelation_fixed_generator_bits_lower_bound
+RLC10
+        Paper1IT/RelationCarrier.lean
+        Ssot.SemanticChangeCost.faithful_endpoints_differ
+SCC1
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.faithful_reencoding_preserves_change
+SCC2
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.semantic_change_requires_operation
+SCC3
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.semantic_change_has_changing_step
+SCC4
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.preserving_operations_preserve_meaning
+SCC5
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.nonempty_trace_cost_pos
+SCC6
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.faithful_semantic_change_cost_pos
+SCC7
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.operation_floor_bounds_trace
+SCC8
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.SemanticChangeCost.finite_positive_trace_has_floor
+SCC9
+        Paper1PL/SemanticChangeCost.lean
+        Ssot.NominalFactorization.CoordinationCarrier.correct_answers_invariant
+SCI1
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.CoordinationCarrier.correct_answers_all
+SCI2
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.CoordinationCarrier.correct_answer_count
+SCI3
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.cooperativeTrace_eq
+SCI4
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.initializationRank_lt_iff
+SCI5
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.distinct_sharing_requires_outside_access
+SCI6
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.distinct_sharing_count_lower_bound
+SCI7
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.no_native_sharing_count
+SCI8
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.coupling_witness_lower_bound
+SCI9
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.coupling_witness_attained
+SCI10
+        Paper1PL/CoverageResolution.lean
+        Ssot.NominalFactorization.CoordinationCarrier.lookup_and_state_answer_count
+SCI11
+        Paper1PL/CoverageResolution.lean
+        Ssot.HistoryViewDominance.structural_membership_exact_iff
+SCM1
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.unwanted_match_refutes_exact_membership
+SCM2
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.nominal_admission_exact
+SCM3
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.HistoryViewDominance.nominal_exact_structural_inexact
+SCM4
+        Paper1PL/HistoryViewDominance.lean
+        Ssot.SemanticCompletionTax.semanticConsequence_iff_semanticallyValid
+SCT1
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.zeroErrorFor_iff_soundFor_and_completeFor
+SCT2
+        Paper1PL/SemanticCompletionTax.lean
+
+ID      Lean Handle / Source
+
+        Ssot.SemanticCompletionTax.AuxiliaryCompletion.deficitToDecision_injective
+SCT3
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.exists_auxiliaryCompletion_iff_soundFor
+SCT4
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.nativeDeficitEquivGap
+SCT5
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.gap_card_le_auxiliaryDecision_card
+SCT6
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumSemanticCompletionTax_iff_minimumLaminarGapCost
+SCT7
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumSemanticCompletionTax_pos_of_not_laminar
+SCT8
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.multiParent_realizes_zeroError_with_zero_completionTax
+SCT9
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.nativeDeficitEquivPositiveGapAt
+SCT10
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.nativeExcessEquivEffectiveBlockAt
+SCT11
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stagedScope_step_retraction_or_semanticCompletionBurden
+SCT12
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stagedScope_recurrent_parent_quadratic_semanticCompletion_lower_
+SCT13   bound
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumSemanticCompletionTax_iff_minimumDelegationCost
+SCT14
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.contractOnly_canonicalCompletion_card_eq_requiredRelation
+SCT15
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumSemanticCompletionTax_le_contractOnly
+SCT16
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.contractOnly_positive_of_requiredIncidence
+SCT17
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.family_optimizerQuotient_eq_iff_same_required_owners
+SCT18
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumSemanticCompletionTax_lt_contractOnly_of_requiredIncidence
+SCT19
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedNativeDeficitEquivGap
+SCT20
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumIndexedSemanticCompletionTax_iff_minimumIndexedLaminarGapCost
+SCT21
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedContractOnly_canonicalCompletion_card_eq_requiredRelation
+SCT22
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumIndexedSemanticCompletionTax_lt_contractOnly_of_
+SCT23   requiredIncidence
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumIndexedDelegationCost_iff_minimumIndexedLaminarGapCost
+SCT24
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumIndexedSemanticCompletionTax_iff_minimumIndexedDelegationCost
+SCT25
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedMultiParent_realizes_zeroError_with_zero_completionTax
+SCT26
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.IndexedDelegatingSingleInheritanceRepresentation.gap_forces_forward_
+SCT27   target
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.IndexedDelegatingSingleInheritanceRepresentation.
+SCT28   gapToForwardingDecision_injective
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.IndexedDelegatingSingleInheritanceRepresentation.gap_card_le_
+SCT29   forwardingDecision_card
+        Paper1PL/SemanticCompletionTax.lean
+
+ID      Lean Handle / Source
+
+        Ssot.SemanticCompletionTax.minimumIndexedSemanticCompletionTax_pos_of_not_laminar
+SCT30
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.minimumIndexedSemanticCompletionTax_eq_zero_iff_laminar
+SCT31
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedZeroErrorMaintenanceCostLadder
+SCT32
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedExactCarrierTrichotomy
+SCT33
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedExactOneParentDichotomy
+SCT34
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.exactStructuralDebtBalance_and_cases
+SCT35
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.languageOwnedCompleteness_eliminates_programSpecificRepair
+SCT36
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.zeroDeficit_sound_nativeProvenance_eq_required_and_has_multiParent
+SCT37
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactViewErrorEquivSemanticChange
+SCT38
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactView_errorCount_eq_semanticChangeCount
+SCT39
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactViewCoverageEquivRequiredBefore
+SCT40
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactView_coverageCount_eq_initialRequiredCount
+SCT41
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactView_coverageFraction_eq
+SCT42
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.stableExactView_coverageFraction_strictly_decreases
+SCT43
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.boundedView_coverageFraction_le
+SCT44
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.boundedView_coverageCeiling_strictly_decreases
+SCT45
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.zeroErrorFor_iff_exactCoupling
+SCT46
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.zeroErrorFor_iff_correctMaintenanceDebt_empty
+SCT47
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.correctMaintenanceDebt_card_eq_deficit_add_excess
+SCT48
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.correctMaintenanceDebt_card_pos_iff_not_zeroErrorFor
+SCT49
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.not_zeroErrorFor_iff_underCoupled_or_overCoupled
+SCT50
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.exists_auxiliaryCompletion_iff_nativeExcess_empty
+SCT51
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedOneParentDebtEquivGap
+SCT52
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedOneParentDebt_card_eq_gap
+SCT53
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.oneParentDebt_eq_forcedFloor_add_avoidable
+SCT54
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.oneParentAvoidableDebt_eq_zero_iff_optimal
+SCT55
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.AuxiliaryCompletion.outsideDecision_iff_nativeDeficit
+SCT56
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.AuxiliaryCompletion.nativeDeficitEquivOutsideDecision
+SCT57
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticCompletionTax.indexedReplicaCompletion_outsideDecision_card_eq_gap
+SCT58
+        Paper1PL/SemanticCompletionTax.lean
+
+ID      Lean Handle / Source
+
+        Ssot.SemanticCompletionTax.minimumIndexedLaminarGapCost_le_replicaCompletion_outsideDecision_
+SCT59   card
+        Paper1PL/SemanticCompletionTax.lean
+        Ssot.SemanticDenotation.Specification.exact_iff_complete_and_sound
+SDN1
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.Specification.exact_of_equivalent
+SDN2
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.Specification.equivalent_erase_of_denotation_covered
+SDN3
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.Specification.exact_erase_of_denotation_covered
+SDN4
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.AtomicAuthoritySystem.toRoleSystem_role_eq_iff
+SDN5
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.AtomicAuthoritySystem.basis_denotations_eq_required
+SDN6
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.AtomicAuthoritySystem.basis_card_eq_required_card
+SDN7
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.AtomicAuthoritySystem.role_invariant_quantity_eq
+SDN8
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.existsUnique_realizes
+SDN9
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.realizes_iff_roleOf_eq
+SDN10
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.roleOf_surjective
+SDN11
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.toRoleSystem
+SDN12
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.exact_iff_complete
+SDN13
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.irredundantExact_iff_isBasis
+SDN14
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.encodedScopes_eq_intendedScopes_of_exact
+SDN15
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.encodedScopes_eq_intendedScopes_of_basis
+SDN16
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.scopeQuantity_basis_invariant
+SDN17
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.scopeQuantity_same_or_changedAnswer
+SDN18
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.roleOf_eq_iff_declDenote_eq
+SDN19
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.coarseRoles_agree_or_semanticRefinementWitness
+SDN20
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticDenotation.DenotationalRoleSystem.scopeQuantity_eq_across_bases
+SDN21
+        Paper1PL/SemanticDenotation.lean
+        Ssot.SemanticFactoring.sameDecisionColumn_historyDecision_iff
+SEF1
+        Paper1PL/SemanticFactoring.lean
+        Ssot.SemanticFactoring.exactHistoryEncoding_code_eq_implies_sameMaintenanceAnswers
+SEF2
+        Paper1PL/SemanticFactoring.lean
+        Ssot.SemanticFactoring.canonicalHistoryCode_eq_iff
+SEF3
+        Paper1PL/SemanticFactoring.lean
+        Ssot.SemanticFactoring.minimalExactHistoryEncoding_code_eq_iff
+SEF4
+        Paper1PL/SemanticFactoring.lean
+        Ssot.SemanticFactoring.sameCompleteDecisionColumn_iff
+SEF5
+        Paper1PL/SemanticFactoring.lean
+        Ssot.SemanticFactoring.merge_share_or_separate
+SEF6
+        Paper1PL/SemanticFactoring.lean

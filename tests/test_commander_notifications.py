@@ -14,6 +14,8 @@ import pytest
 from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
@@ -38,10 +40,13 @@ from agent_comms.ui_model.unit_state import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
+from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.transcript_events import IncomingTranscript
+from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
@@ -261,8 +266,8 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
     lead = comms.registry.require("lead").incarnation
     assert CommanderUpdate.latest(comms, lead) == (board.task,)
-    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms, "lead")
-    assert lead_hud(comms).board == board.task.board(comms, "lead")
+    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms)
+    assert lead_hud(comms).board == board.task.board(comms)
     assert raw.reference in everything_to_lead(comms)
     # The next pass derives from the typed board, so nothing is restated as new.
     beat(comms, (failing,))
@@ -661,7 +666,7 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
     assert max(map(len, message.body.splitlines())) < 300
     assert len(message.task.handled) == 12
-    assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
+    assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
 
 
@@ -669,10 +674,85 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     """The registry names the commander; an old open request does not make one."""
     comms = notification_bus
     lead = comms.registry.require("lead")
-    assert lead.name in {thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+    assert lead.name in {thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
     assert CommanderHeartbeat.requested_by(lead, comms.goals)
     comms.registry.set_commander_project(RegisteredCommanderProject(
         comms.registry.require("worker").incarnation, ()))
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
-        thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+        thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
+
+
+def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
+    """#commanders declares who commands: one board read, one packet per live member under its
+    own incarnation. A thread outside the channel, and a fork of a commander, get none."""
+    comms = notification_bus
+    live = ProcessIdentity.capture(os.getpid())
+    for name, tags in (("worker", {"comms", CommandersTag.declared_name}), ("outsider", {"comms"})):
+        comms.registry.register(replace(comms.registry.require(name), tags=frozenset(tags),
+                                        process_identity=live))
+    fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(fork, process_identity=live))
+    assert CommandersTag.declared_name not in comms.registry.require("worker-fork").tags
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,))
+    lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
+    worker = comms.registry.require("worker").incarnation
+    worker_packet, = CommanderUpdate.latest(comms, worker)
+    assert worker_packet.commander == worker
+    assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
+    assert CommanderUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
+    assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
+        comms.registry.require("lead").incarnation, worker}
+
+
+def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):
+    comms = notification_bus
+    parent = comms.registry.require('worker')
+    tag = CommandersTag.declared_name
+    parent = comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
+    command = ForkCliCommand.thread_binding(parent)
+    assert command.tags.for_new() == parent.tags - {tag}
+    explicit = replace(command, tags=GivenTags(parent.tags))
+    assert tag in explicit.tags.for_new()
+
+
+def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
+    """The hook's role answer reads the one derivation: a thread registered with the tag
+    commands, fork or not; a fork or bound unit of a commander does not inherit the role."""
+    comms = notification_bus
+    tag = CommandersTag.declared_name
+    for name in ("lead", "worker"):
+        thread = comms.registry.require(name)
+        comms.registry.register(replace(thread, tags=thread.tags | {tag}))
+    declared = comms.registry.register_child("declared-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(declared, tags=declared.tags | {tag}))
+    comms.registry.register_child("copied-fork", "worker", CommanderForkExecution, comms.goals)
+    worker = comms.registry.require("worker")
+    comms.registry.register_commanded_unit(
+        "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))
+
+    def commands(name):
+        return RecordedWatch(WatchClaim(name, home=tmp_path),
+                             WatchRecord(name, str(comms.root), (), tmp_path)).commands()
+
+    assert commands("lead") and commands("worker") and commands("declared-fork")
+    assert not commands("outsider")
+    assert not commands("copied-fork")
+    assert not commands("bound-unit")
+    assert "comms" in comms.registry.require("copied-fork").tags
+
+
+def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_inbound(notification_bus):
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    user = owner(comms)
+    board = Message(sender=user.name, target="lead", body="board", type=InfoKind,
+                    role=CommanderDecisions.role, task=CommanderDecisions(lead, (), (), ()))
+    spoken = Message(sender=user.name, target="lead", body="his words", type=InfoKind,
+                     role=ConversationRole())
+    assert board.category is HeartbeatCategory
+    assert spoken.category is InboundCategory
+    assert IncomingTranscript.of(board, reader="lead").category is HeartbeatCategory
+    assert HeartbeatCategory in all_categories()

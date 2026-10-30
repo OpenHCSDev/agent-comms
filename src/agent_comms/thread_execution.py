@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
+from .channel_targets import DeclaredTag
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
@@ -227,7 +228,7 @@ class SubagentExecution(ExternalThreadExecution):
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return replace(child, tags=parent.tags)
+        return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

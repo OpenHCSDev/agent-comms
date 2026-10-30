@@ -1,8 +1,9 @@
 """At session start, resume and compaction, write a bound session's sources, order them read
 once, and deal the reminder deck.
 
-Every session bound to a bus is dealt the fleet's sources: the voice, the recorded failures and
-the fleet rules. The session the registry names commander is also dealt the indictment, the
+Every session bound to a bus is dealt the fleet's sources: paper1 first, the proof the rules are
+consequences of, then the fleet rules in their reading order, the voice and the recorded
+failures. The session the registry names commander is also dealt the indictment, the
 commander skill, the commander's own rules and the refactor-audit catalog's index; a rung file
 is read when an order or roast cites its pattern ID. Claude Code caps injected hook text at
 10,000 characters and the sources are far longer, so they go into parts beside the transcript
@@ -57,7 +58,12 @@ class DeckReader(DealtSources):
 
     def __init_subclass__(cls, audience: type[RuleAudience], **options: object) -> None:
         super().__init_subclass__(**options)
-        cls.audiences = (*cls.audiences, audience)
+        cls.audiences = tuple(dict.fromkeys((*cls.audiences, audience)))
+
+    @classmethod
+    def proofs(cls) -> tuple[Path, ...]:
+        """The papers every rule is a consequence of, read before any rule."""
+        return CommanderPackage.paper()
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -128,8 +134,8 @@ class DeckReader(DealtSources):
 
 
 class FleetReader(DeckReader, audience=FleetAudience):
-    """A bound session the registry does not name commander: the fleet rules, the voice they
-    are said in and the failures already caught."""
+    """A bound session the registry does not name commander: the paper the rules derive from,
+    the fleet rules, the voice they are said in and the failures already caught."""
 
     deck_suffix = ".fleet-deck.json"
 
@@ -139,10 +145,12 @@ class FleetReader(DeckReader, audience=FleetAudience):
 
     @classmethod
     def sources(cls) -> tuple[Path, ...]:
+        """Proof first, then the rules it makes binding, then how they are said and broken."""
         return (
+            *cls.proofs(),
+            *(rule.path for rule in cls.rules()),
             CommanderPackage.voice(),
             Path(inspect.getfile(PostmortemFailure)),
-            *(rule.path for rule in cls.rules()),
         )
 
     def header(self, start: DeckStart) -> str:
@@ -176,6 +184,23 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
     def board(self, session: str) -> tuple[str, ...]:
         return WatchClaim(session).state().board()
+
+
+class RulesOnly(DeckReader, audience=FleetAudience):
+    """A refresh dealt before any compaction: the papers are still in the context word for word,
+    so it deals the rules, the voice and the failures again, never the papers a second time."""
+
+    @classmethod
+    def proofs(cls) -> tuple[Path, ...]:
+        return ()
+
+
+class FleetRulesReader(RulesOnly, FleetReader, audience=FleetAudience):
+    """A fleet session's refresh."""
+
+
+class CommanderRulesReader(RulesOnly, CommanderReader, audience=CommanderAudience):
+    """The commander's refresh."""
 
 
 @dataclass(frozen=True)

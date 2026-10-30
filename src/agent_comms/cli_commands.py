@@ -438,6 +438,13 @@ class CheckoutResult(CliResult):
 
 
 @dataclass(frozen=True)
+class TransferredCheckoutResult(CheckoutResult):
+    source: Annotated[Path, PathText]
+    branch: str
+    head: str
+
+
+@dataclass(frozen=True)
 class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
     """The caller's existing work authority, not a synthetic problem order."""
 
@@ -449,6 +456,9 @@ class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
     @abstractmethod
     def source(self) -> Repo: ...
 
+    def require_transfer(self, ctx: Comms, repository: Repo) -> None:
+        raise ValueError('Checkout transfer requires a current held problem')
+
 
 @dataclass(frozen=True)
 class OrderCheckoutGrant(CheckoutGrant):
@@ -459,6 +469,15 @@ class OrderCheckoutGrant(CheckoutGrant):
 
     def source(self) -> Repo:
         return self.todo.repository
+
+    def require_transfer(self, ctx: Comms, repository: Repo) -> None:
+        current = ctx.goals.todos.get(self.todo.id)
+        if current != self.todo:
+            raise ValueError(f'Target problem {self.todo.id} changed before checkout transfer')
+        current.state.require_open(current)
+        self.require()
+        if repository.github not in (current.repo, *current.order.source_repositories()):
+            raise ValueError(f'{repository.github} is not a source repository of {current.id}')
 
 
 @dataclass(frozen=True)
@@ -483,7 +502,7 @@ class CheckoutOperation(DeclaredFamily, affix="CheckoutOperation"):
     @classmethod
     @abstractmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> None: ...
+              destination: Path) -> CheckoutResult: ...
 
 
 class AddCheckoutOperation(CheckoutOperation):
@@ -492,7 +511,7 @@ class AddCheckoutOperation(CheckoutOperation):
 
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> None:
+              destination: Path) -> CheckoutResult:
         grant = command.grant(ctx, thread)
         grant.require()
         repository = command.source(ctx, grant)
@@ -506,6 +525,29 @@ class AddCheckoutOperation(CheckoutOperation):
             start = CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}")
             CreateCheckoutStorageEffect(destination, repository, start).check(projection)
             Checkout.add(repository.checkout, destination, start)
+        return CheckoutResult(destination)
+
+
+class TransferCheckoutOperation(CheckoutOperation):
+    """Relocate the caller's retained work into its current held allocation."""
+
+    @classmethod
+    def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
+              destination: Path) -> CheckoutResult:
+        source, = command.source_checkout
+        source = source.expanduser().absolute()
+        grant = command.grant(ctx, thread)
+        requested = command.source(ctx, grant)
+        registered = ctx.registry.snapshot().commander_project.require().repos
+        matching = tuple(entry for entry in registered if entry.github == requested.github)
+        if len(matching) != 1:
+            raise ValueError(f'{requested.github} is not one unambiguous registered repository')
+        repository, = matching
+        grant.require_transfer(ctx, repository)
+        transfer = ctx.registry.transfer_checkout(
+            thread, Checkout(source), destination, repository,
+            lambda: grant.require_transfer(ctx, repository))
+        return TransferredCheckoutResult(destination, source, transfer.branch, transfer.head)
 
 
 class RemoveCheckoutOperation(CheckoutOperation):
@@ -515,10 +557,11 @@ class RemoveCheckoutOperation(CheckoutOperation):
 
     @classmethod
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
-              destination: Path) -> None:
+              destination: Path) -> CheckoutResult:
         RemoveCheckoutStorageEffect(destination).check(
             StorageProjection(ctx.registry.storage_rule, thread, ctx))
         Checkout(destination).retire()
+        return CheckoutResult(destination)
 
 
 @dataclass(frozen=True)
