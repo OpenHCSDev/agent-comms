@@ -16,6 +16,7 @@ from dataclasses import dataclass, replace
 from .command import Command
 from .declared_family import DeclaredFamily
 from .tool_result import DeclaredReply
+from .thread_identity import ThreadIncarnation
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -147,15 +148,14 @@ class OwnerConnection:
         return OwnerLine.read(line).reply()
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
-        return self.wire_request(action, self.session_id, parameters)
+        return self.wire_request(action, self._identity.name, parameters)
 
-    def __init__(self, comms: Comms, session_id: AcpSessionId, path: Path):
-        self.session_id = session_id
+    def __init__(self, comms: Comms, identity: ThreadIncarnation, path: Path):
+        self._identity = identity
         self.path = path
         self._comms = comms
         self._closed = False
         self._requests: set[asyncio.Task] = set()
-        self._identity = comms.registry.entry(session_id).entry.thread.incarnation
         self._root_identity = comms.root.stat()
 
     def _owner_entry(self) -> RegistryEntry:
@@ -168,7 +168,7 @@ class OwnerConnection:
         if not same_root:
             raise OwnerIdentityChangedError("Wire root changed; open a new attachment.")
         try:
-            entry = self._comms.registry.entry(self.session_id).entry
+            entry = self._comms.registry.entry(self._identity.name).entry
         except UnregisteredThreadError as error:
             raise OwnerIdentityChangedError(
                 "Thread identity changed; open a new attachment."
@@ -182,10 +182,10 @@ class OwnerConnection:
         try:
             self._owner_entry().require_owner_process(owner, process)
         except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+            raise ConnectionError(f"Cannot attach {self._identity.name!r}: {error}") from error
         if not process.alive():
             raise ConnectionError(
-                f"Owner {process.pid} for {self.session_id!r} exited before attachment; "
+                f"Owner {process.pid} for {self._identity.name!r} exited before attachment; "
                 f"request not sent. Startup output: {self._comms.root / 'diagnostics'}"
             )
 
@@ -197,7 +197,7 @@ class OwnerConnection:
             entry.status.require_active()
             process = entry.thread.require_process()
         except RelationViolationError as error:
-            raise ConnectionError(f"Cannot attach {self.session_id!r}: {error}") from error
+            raise ConnectionError(f"Cannot attach {self._identity.name!r}: {error}") from error
         owner = entry.owner_identity
         path = socket_path(self._comms.root, process.pid)
 

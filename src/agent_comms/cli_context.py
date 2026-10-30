@@ -53,7 +53,7 @@ class CurrentContextCliCommand(CliCommand, declared_name=None):
 
     def apply(self, ctx: Comms) -> CliResult:
         owner = ctx.registry.require(self.thread)
-        connection = OwnerConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
+        connection = OwnerConnection(ctx, owner.incarnation, socket_path(ctx.root, owner.require_process().pid))
 
         async def inspect() -> CliResult:
             try:

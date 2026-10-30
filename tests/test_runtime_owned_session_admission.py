@@ -20,7 +20,7 @@ from agent_comms.errors import UnregisteredThreadError
 from agent_comms.field_codec import AcpSessionId, FieldCodec
 from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.private_path import PrivateSocketRole
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import socket_path
 from agent_comms.runtime_requests import GoalHistoryRuntimeRequest
 from agent_comms.threads import Thread
 
@@ -63,7 +63,7 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
     assert json.loads(registered.stdout) == {"registered": "registered"}
     thread = comms.registry.require("registered")
     await owner._runtime.start()
-    proxy = RuntimeProxy(client, "registered", socket_path(root, os.getpid()))
+    proxy = client._create_runtime_proxy(thread, AcpSessionId("registered"))
     try:
         for action, parameters in (
             (

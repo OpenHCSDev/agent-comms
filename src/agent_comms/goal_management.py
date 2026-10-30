@@ -82,6 +82,7 @@ class Goals(GoalWaitRecovery):
         self.bus = bus
         self.agents = agents
         self.waits = GoalWaits(root)
+        self.dispositions = InputDispositions(root)
         self.goal_store: GoalAttemptFile = GoalAttemptFile(GoalAttemptStore.path_in(
             GoalAttemptStore.directory_in(root)))
 
@@ -185,7 +186,7 @@ class Goals(GoalWaitRecovery):
     def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         entry = self.registry.entry(name).entry
-        rows = InputDispositions(self.root).unresolved((entry,)).unknown(entry.names)
+        rows = self.dispositions.unresolved((entry,)).unknown(entry.names)
         return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
@@ -197,14 +198,14 @@ class Goals(GoalWaitRecovery):
     ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         entry = self.registry.entry(name).entry
-        return InputDispositions(self.root).unresolved((entry,)).delivery_overview(
+        return self.dispositions.unresolved((entry,)).delivery_overview(
             entry.names, include_history=include_history, scope=scope)
 
     def dismiss_historical_inputs(
         self, name: str, *, scope: InputDeliveryScope = UNOBSERVED_DELIVERY_SCOPE
     ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
-        return InputDispositions(self.root).dismiss_historical(
+        return self.dispositions.dismiss_historical(
             (self.registry.entry(name).entry,), scope=scope)
 
     def goal_input_review(
@@ -230,7 +231,7 @@ class Goals(GoalWaitRecovery):
             dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
         )
         owners = captured.owners
-        dispositions = InputDispositions(self.root)
+        dispositions = self.dispositions
         unknown = {row.key: row for row in
                    dispositions.unresolved((snapshot.entry(thread.name),)).unknown(owners)}
         eligible = set()

@@ -15,7 +15,6 @@ from acp.schema import SessionInfoUpdate
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import AcpSessionId
 from agent_comms.threads import Thread
@@ -110,8 +109,9 @@ async def test_close_joins_unsent_request_and_capability_requires_claim(tmp_path
     comms = wire(tmp_path / "w")
     comms.registry.declare(Thread('cold', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     client = CommsClient(comms, auto_wake=False, use_unstable_protocol=True)
-    proxy = RuntimeProxy(client, "cold", socket_path(comms.root, os.getpid()))
-    client.sessions.proxies["cold"] = proxy
+    identifier = AcpSessionId("cold")
+    proxy = client._create_runtime_proxy(comms.registry.require("cold"), identifier)
+    client.sessions.proxies[identifier] = proxy
     request = asyncio.create_task(proxy.request("clear_queue"))
     try:
         async with asyncio.timeout(5):

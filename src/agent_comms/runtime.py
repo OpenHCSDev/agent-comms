@@ -55,6 +55,7 @@ from .owner_protocol import (
 from .owner_connection import NoControllerToken, OwnerConnection, OwnerIdentityChangedError, socket_path
 from .owner_connection import RuntimeRequest
 from .runtime_requests import SubscribeRuntimeRequest
+from .thread_identity import ThreadIncarnation
 from .errors import RelationViolationError
 from .coordination_errors import CoordinationError, IdentityConflict
 from .native_failures import NativeRequestFailure
@@ -411,7 +412,7 @@ def present_session(metadata: dict[str, object], session_id: AcpSessionId) -> di
 
 
 class RuntimeConnection(OwnerConnection):
-    """ACP attachments select declared request behavior and their controller token."""
+    """Owner requests select declared behavior independently of ACP attachment identity."""
 
     @property
     def controller_token(self) -> str | NoControllerToken:
@@ -419,7 +420,7 @@ class RuntimeConnection(OwnerConnection):
 
     def request_payload(self, action: str, parameters: dict[str, object]) -> dict[str, object]:
         return RuntimeRequest.member_named(action).proxy_payload(
-            self.session_id, self.controller_token, parameters,
+            self._identity.name, self.controller_token, parameters,
         )
 
 
@@ -443,8 +444,12 @@ class OwnerAttachment:
 
 
 class RuntimeProxy(RuntimeConnection):
-    def __init__(self, agent: CommsAgent, session_id: AcpSessionId, path: Path):
-        super().__init__(agent._comms, session_id, path)
+    def __init__(
+        self, agent: CommsAgent, identity: ThreadIncarnation,
+        session_id: AcpSessionId, path: Path,
+    ):
+        super().__init__(agent._comms, identity, path)
+        self.session_id = session_id
         self.agent = agent
         self.writer: asyncio.StreamWriter | None = None
         self.task: asyncio.Task[None] | None = None
@@ -470,7 +475,7 @@ class RuntimeProxy(RuntimeConnection):
         try:
             writer.write(
                 (
-                    json.dumps(FieldCodec.encode(subscription(thread=self.session_id)))
+                    json.dumps(FieldCodec.encode(subscription(thread=self._identity.name)))
                     + "\n"
                 ).encode()
             )
@@ -482,8 +487,8 @@ class RuntimeProxy(RuntimeConnection):
                 first = OwnerLine.read(announcement)
             except MalformedRecord as error:
                 # An owner older than the declared lines writes an undeclared first line.
-                raise IncompatibleOwnerError(UnannouncedOwner(thread=self.session_id)) from error
-            first.announced(self.session_id)
+                raise IncompatibleOwnerError(UnannouncedOwner(thread=self._identity.name)) from error
+            first.announced(self._identity.name)
             while line := await reader.readline():
                 ready = await OwnerLine.read(line).attach(self)
                 if ready is None:

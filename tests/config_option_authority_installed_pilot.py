@@ -23,7 +23,7 @@ from acp.exceptions import RequestError
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.field_codec import AcpSessionId
 from agent_comms.threads import Thread
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_text import GivenThreadText
@@ -131,8 +131,8 @@ async def run(stage, package, models, ui, menu_contention=False):
             async with AsyncExitStack() as lifetime:
                 client = CommsAgent(service, auto_wake=False)
                 lifetime.push_async_callback(client.shutdown)
-                path = socket_path(service.root, owner.pid)
-                proxy = RuntimeProxy(client, name, path)
+                identifier = AcpSessionId(name)
+                proxy = client._create_runtime_proxy(owner, identifier)
                 lifetime.push_async_callback(proxy.close)
                 async with asyncio.timeout(15):
                     ready = await proxy.subscribe()
@@ -151,7 +151,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                 assert service.registry.require(name).thinking_level is OffThinkingLevel
                 before = (service.root / 'registry.json').read_bytes()
                 await proxy.close()
-                repeated = RuntimeProxy(client, name, path)
+                repeated = client._create_runtime_proxy(owner, identifier)
                 lifetime.push_async_callback(repeated.close)
                 async with asyncio.timeout(15):
                     again = await repeated.subscribe()
@@ -171,7 +171,7 @@ async def run(stage, package, models, ui, menu_contention=False):
                     await repeated.request('set_config_option', config_id='thinking_level', value='high')
                 assert service.registry.require(name).thinking_level is HighThinkingLevel
                 await repeated.close()
-                refreshed = RuntimeProxy(client, name, path)
+                refreshed = client._create_runtime_proxy(owner, identifier)
                 lifetime.push_async_callback(refreshed.close)
                 async with asyncio.timeout(15):
                     final = await refreshed.subscribe()

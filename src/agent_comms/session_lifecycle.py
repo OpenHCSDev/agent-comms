@@ -209,8 +209,10 @@ class SessionLifecycle:
     ) -> OwnerSession:
         async with self._attachment_lock:
             await self.retire_proxy(session_id)
-        state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
         await Coordination.run_worker(PiRedeal.of(self.comms, thread).start)
+        # Acquisition starts the authentication producer. Publish its session
+        # in the same loop turn, before any await can let that producer read it.
+        state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
         self.published[session_id] = PublishedSession.of(thread)
         if self.runtime_enabled:
             await self.runtime.start()

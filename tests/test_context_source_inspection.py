@@ -115,7 +115,7 @@ async def test_core_context_socket_reads_without_native_session_or_preview(tmp_p
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")
         assert owner.session_file == NoSessionFile()
-        connection = RuntimeConnection(comms, owner.name,
+        connection = RuntimeConnection(comms, owner.incarnation,
                                        socket_path(comms.root, owner.require_process().pid))
         try:
             context = FieldCodec.decode(TurnContext, await connection.request("context_core"))

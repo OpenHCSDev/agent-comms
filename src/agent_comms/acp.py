@@ -197,7 +197,8 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     def _create_runtime_proxy(self, thread: Thread, session_id: AcpSessionId) -> RuntimeProxy:
         return RuntimeProxy(
-            self, session_id, socket_path(self._comms.root, thread.require_process().pid),
+            self, thread.incarnation, session_id,
+            socket_path(self._comms.root, thread.require_process().pid),
         )
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
