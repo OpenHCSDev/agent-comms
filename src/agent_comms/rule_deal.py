@@ -4,7 +4,7 @@ but reading them and writing the audit that answers them is refused until it has
 The order to read the rules is text, and text loses to a compaction summary: the model holds its
 own paraphrase of the rules and treats the order as optional. The gate makes the order the only
 path forward, whatever runs the agent. Reading alone is passive too, so each rule read is answered
-in the audit, by a verbatim quote and what it did, before the next unread file opens.
+in the audit, by a verbatim greentext quote and what it did, before the next unread file opens.
 
 `State` is the one root: a deal is a state, a gate state is a state, and what a deal still owes
 is a state, so every consumer holds the family and asks it. `RuleDeal` owns where one session's
@@ -102,7 +102,7 @@ class DealtRead:
 @dataclass(frozen=True)
 class RuleAudit:
     """One dealt rule: each action since the last start or compaction that broke it, and the
-    answer to reading it: a line it holds verbatim, what that line did, and why it holds."""
+    answer to reading it: greentext lines it holds verbatim, what they did, and why it holds."""
 
     rule: str
     broke: tuple[str, ...] = ()
@@ -116,8 +116,12 @@ class RuleAudit:
         """Why this entry does not answer reading `source`, or nothing when it does."""
         if not self.quote.strip():
             return "its quote is blank"
-        if self.quote not in source.read_text(encoding="utf-8"):
+        text = source.read_text(encoding="utf-8")
+        if self.quote not in text:
             return f"its quote is not verbatim in {source}"
+        greentext = {line for line in text.splitlines() if line.startswith("> ")}
+        if not greentext.issuperset(self.quote.splitlines()):
+            return f"its quote must be whole greentext lines of {source}: every line starts with >"
         if len(self.quote.splitlines()) > self.max_quote_lines:
             return f"its quote runs past {self.max_quote_lines} lines"
         if not self.does.strip() or not self.why.strip():
@@ -217,8 +221,8 @@ class AuditDue:
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
                 "After each rule file you read, answer it in the audit before the next unread file"
-                f" opens: quote a line it holds, verbatim and at most {RuleAudit.max_quote_lines}"
-                " lines; does says what that line did to you; why says why it holds. Answered:\n"
+                f" opens: quote its greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
+                " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
                 " keep every rule name and quoted words unchanged. Empty broke means the rule was"
