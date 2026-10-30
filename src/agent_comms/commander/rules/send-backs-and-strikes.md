@@ -21,6 +21,12 @@ type: hard-rule
 > because the tests passed
 > they tested the unit's own fake
 > mfw the strikes measured the commander
+> run it back
+> gh pr view --json headRefOid, not FETCH_HEAD
+> reread P704: the shape I faulted was my own order
+> correction, --clean, no strike. unit keeps its turn
+> the hour I saved goes on the real defect: the tests faked the unit's own code. back, with file:line
+> mfw the strike that mattered was the one I didn't owe
 
 **Why:** a strike that waits or hides teaches nothing, a strike against a mechanism that does not exist is the commander's own slop, and a passing test is not a review. Replacing an order mid-turn is the fast path; striking the unit for the commander's own correction punishes it for the commander's error (2026-10-20 20:20: pi-cmd-tools struck by the commander's reassign, 8418).
 

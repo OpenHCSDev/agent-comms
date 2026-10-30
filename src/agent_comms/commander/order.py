@@ -80,7 +80,7 @@ from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.repo import Repo
+from agent_comms.repo import Checkout, Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
@@ -390,7 +390,8 @@ class CommanderContext(BaseModel):
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
         return NominalPlanReadings().prepare_reading(repository, todos, tuple(
-            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
+            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
+            history=Checkout(repository.checkout).read())
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,

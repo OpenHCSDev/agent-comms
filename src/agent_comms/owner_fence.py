@@ -44,9 +44,8 @@ class OwnerFence:
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        for field, value in (("owner_lookup", self.owner_lookup), ("token", self.token)):
-            require_nonempty(value, field)
-            require_bounded(value, field, MAX_IDENTIFIER_CHARS)
+        require_nonempty(self.token, "token")
+        require_bounded(self.token, "token", MAX_IDENTIFIER_CHARS)
         if min(self.attempt_ordinal, self.owner_generation, self.revision) <= 0:
             raise ValueError("fence ordinal, generation and revision must be positive")
 

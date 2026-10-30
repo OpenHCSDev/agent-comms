@@ -38,7 +38,7 @@ from agent_comms.service_passes import BoardUnavailable, FailingPass, ServicePas
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import OrderProgress, ProgressPoint, ProgressRead, ProgressSource, PullRequest
 from agent_comms.tool_result import ToolResult
-from agent_comms.turn_digests import LastTurns, OrderEditCountRead
+from agent_comms.turn_digests import LastTurns
 from agent_comms.ui_model.unit_state import ExpandedHudGroup, HudGroup, UnitClock, UnitState, UrgentGroup
 from agent_comms.task_attachments.commander_pings import (
     AlarmGroup, AlarmSection, CommanderDelivery, CommanderUpdate, Ping,
@@ -329,11 +329,7 @@ class CommanderHud(CommanderLoad):
         progress = pulls.progress(held, comms.registry)
         timers = frame.review_timers
         installed = InstalledBuild.read()
-        edits = dict.fromkeys((todo.id for todo in held), 0) | {
-            read.todo.id: read.read()
-            for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, progress, frame.workplaces)
-        }
+        edits = frame.edit_counts(comms)
         units = []
         for state in states:
             unit, orders = state.unit, state.source.todos

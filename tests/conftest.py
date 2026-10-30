@@ -17,6 +17,7 @@ from pydantic import JsonValue
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
+from agent_comms.rule_deal import StartedDeal
 from agent_comms.rule_deal import ReadSpan
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
@@ -560,7 +561,7 @@ def answer_rules(comms: Comms, name: str) -> None:
     """Deal a Pi unit its fleet rules and answer them, as a unit does before its first tool:
     every dealt file read in full, then an audit answering every rule and prompt."""
     deal = PiRedeal.of(comms, comms.registry.require(name))
-    deal.redeal()
+    deal.redeal(StartedDeal())
     answer_deal(deal)
 
 

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import heapq
+import re
 import shutil
 import subprocess
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from functools import cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -16,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainVa
 from .coordination_errors import CommandFailure
 from .declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, PresentMember, SingleFieldValue, WireValue
+from .field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
 
@@ -512,6 +515,16 @@ class Checkout(SingleFieldValue, PresentMember):
         checkout.prepare()
         return checkout
 
+    @cached_property
+    def common_dir(self) -> Path:
+        """Git's shared ref and object owner, independent of this worktree's HEAD."""
+        return Path(Repo.git(self.path, "rev-parse", "--path-format=absolute",
+                             "--git-common-dir").strip()).resolve()
+
+    def read(self) -> CheckoutHistory:
+        """One operation's refs and commit graph; the caller owns this read's lifetime."""
+        return CheckoutHistory(self)
+
     def submodules(self) -> tuple[PinnedSubmodule, ...]:
         if not (self.path / ".gitmodules").is_file():
             return ()
@@ -550,8 +563,7 @@ class Checkout(SingleFieldValue, PresentMember):
             raise ValueError(f'{source} is not an isolated linked worktree')
         if destination.exists() or destination.is_symlink():
             raise ValueError(f'Checkout destination {destination} is occupied')
-        common = Path(Repo.git(source, 'rev-parse', '--path-format=absolute',
-                               '--git-common-dir').strip())
+        common = self.common_dir
         modules = tuple(SubmoduleTransfer.capture(module, source, destination)
                         for module in self.initialized_submodules())
         transfer = CheckoutTransfer(source, destination,
@@ -588,10 +600,433 @@ class Checkout(SingleFieldValue, PresentMember):
         held = self.held_work()
         if held:
             raise CheckoutHoldsWorkError(self.path, held)
-        common = Path(
-            Repo.git(self.path, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
-        )
+        common = self.common_dir
         Repo.git(common.parent, "worktree", "remove", "--force", str(self.path))
+
+
+@dataclass(frozen=True)
+class UnpushedHead:
+    head: str
+    commits: int = field(compare=False)
+    upstream: str = field(compare=False)
+
+
+@dataclass(frozen=True)
+class BranchUpstream(DeclaredFamily):
+    """Git's upstream decoded once; each member owns acquisition and publication answers."""
+
+    branch: str
+    prefix: ClassVar[str] = "refs/heads/"
+
+    @classmethod
+    def from_git(cls, name: str, upstream: str, remote: str, reference: str) -> BranchUpstream:
+        """Decode foreign for-each-ref fields before the reference enters our family."""
+        branch = name.removeprefix(cls.prefix)
+        if not upstream:
+            return NoUpstream(branch)
+        if remote == Repo.local_remote:
+            return LocalUpstream(branch, upstream)
+        return PublishedUpstream(branch, upstream, remote, reference)
+
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        """Only published upstreams supply remote/reference acquisition requirements."""
+        return ()
+
+    def tracking_name(self) -> str:
+        return ""
+
+    def unpushed(self, history: CheckoutHistory, head: str,
+                 published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
+        # A local, absent or deleted upstream cannot make its stale tracking ref publication.
+        tracking = self.tracking_name()
+        count = history.unpublished(head, tracking)
+        return (UnpushedHead(head, count, tracking),) if count else ()
+
+
+class NoUpstream(BranchUpstream):
+    """This local branch declares no upstream."""
+
+
+class DetachedHead(BranchUpstream):
+    """Git names a checkout on no branch `HEAD`, as during a rebase; it declares no upstream."""
+
+
+@dataclass(frozen=True)
+class TrackedUpstream(BranchUpstream, declared_name=None):
+    tracking: str
+
+    def tracking_name(self) -> str:
+        return self.tracking
+
+
+class LocalUpstream(TrackedUpstream):
+    """Git's dot remote names another local branch, never a publication."""
+
+
+@dataclass(frozen=True)
+class PublishedUpstream(TrackedUpstream):
+    remote: str
+    reference: str
+
+    def publication_inputs(self) -> tuple[tuple[str, str], ...]:
+        return ((self.remote, self.reference),)
+
+    def unpushed(self, history: CheckoutHistory, head: str,
+                 published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
+        if published:
+            (remote_head,) = published
+            count = history.count(head, remote_head)
+            return (UnpushedHead(head, count, self.tracking),) if count else ()
+        return super().unpushed(history, head, published)
+
+
+@dataclass(frozen=True)
+class GitReference:
+    """A repository ref; local branch members additionally own their decoded upstream."""
+
+    name: str
+    commit: Annotated[str, GitCommitText]
+
+    @classmethod
+    def listed(cls, row: str) -> GitReference:
+        name, commit, upstream, remote, remote_ref = row.split("\0")
+        sha = GitCommitText.decode(commit)
+        if name.startswith(BranchUpstream.prefix):
+            return LocalGitReference(
+                name, sha, BranchUpstream.from_git(name, upstream, remote, remote_ref),
+            )
+        return cls(name, sha)
+
+    def upstreams(self) -> tuple[BranchUpstream, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class LocalGitReference(GitReference):
+    upstream: BranchUpstream
+
+    def upstreams(self) -> tuple[BranchUpstream, ...]:
+        return (self.upstream,)
+
+
+@dataclass(frozen=True)
+class GitHead(ABC):
+    """A worktree's own HEAD, decoded independently of the repository's shared refs."""
+
+    checkout: Checkout
+    reference: ClassVar[str] = "HEAD"
+
+    @classmethod
+    def listed(cls, record: str) -> GitHead:
+        # Git's porcelain record opens with "worktree PATH" and "HEAD SHA", in that order;
+        # the attribute lines after them declare the branch or the detached state.
+        worktree, head, *attributes = record.split("\0")
+        path = worktree.removeprefix("worktree ")
+        sha = head.removeprefix(f"{cls.reference} ")
+        symbolic = next((line.removeprefix("branch ") for line in attributes
+                         if line.startswith("branch ")), "")
+        checkout = Checkout(Path(path).resolve())
+        commit = GitCommitText.decode(sha)
+        if not commit.strip("0"):
+            return UnbornGitHead(checkout, symbolic)
+        if symbolic:
+            return AttachedGitHead(checkout, sha=commit, symbolic=symbolic)
+        if "detached" not in attributes:
+            raise ValueError(f"Git HEAD in {path} has neither a branch nor a detached declaration")
+        return DetachedGitHead(checkout, commit)
+
+    @property
+    @abstractmethod
+    def branch(self) -> str: ...
+
+    @abstractmethod
+    def revision(self) -> str: ...
+
+    def required(self) -> tuple[str, ...]:
+        return ()
+
+    def checked_branch(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class SymbolicGitHead(GitHead):
+    symbolic: str
+
+    @property
+    def branch(self) -> str:
+        return self.symbolic.removeprefix("refs/heads/")
+
+
+@dataclass(frozen=True)
+class UnbornGitHead(SymbolicGitHead):
+    def revision(self) -> str:
+        raise UnavailableCommitError(self.checkout.path, (self.reference,))
+
+
+@dataclass(frozen=True)
+class CommittedGitHead(GitHead):
+    sha: Annotated[str, GitCommitText]
+
+    def revision(self) -> str:
+        return self.sha
+
+    def required(self) -> tuple[str, ...]:
+        return (self.sha,)
+
+
+@dataclass(frozen=True)
+class AttachedGitHead(CommittedGitHead, SymbolicGitHead):
+    def checked_branch(self) -> tuple[str, ...]:
+        return (self.branch,)
+
+
+@dataclass(frozen=True)
+class DetachedGitHead(CommittedGitHead):
+    @property
+    def branch(self) -> str:
+        return self.reference
+
+
+class RepositoryReads:
+    """A pass's repository reads, keyed by Git's common directory, not worktree aliases."""
+
+    def __init__(self) -> None:
+        self._histories: dict[Path, CheckoutHistory] = {}
+        self._worktree_histories: dict[Path, CheckoutHistory] = {}
+
+    def history_for(self, checkout: Checkout) -> CheckoutHistory:
+        checkout = checkout.resolved()
+        if checkout.path not in self._worktree_histories:
+            common = checkout.common_dir
+            if common not in self._histories:
+                self._histories[common] = checkout.read()
+            history = self._histories[common]
+            self._worktree_histories.update((path, history) for path in history.heads)
+            self._worktree_histories[checkout.path] = history
+        return self._worktree_histories[checkout.path]
+
+
+@dataclass(frozen=True)
+class GitCommit:
+    """The commit facts needed by ancestry and order progress, decoded once."""
+
+    sha: Annotated[str, GitCommitText]
+    parents: tuple[Annotated[str, GitCommitText], ...]
+    at: float
+    message: str
+
+
+@dataclass(frozen=True)
+class CommitSelection:
+    """One revision walk, independent of the problem-message filter applied to it."""
+
+    refs: tuple[str, ...]
+    excluded: tuple[str, ...]
+    first_parent: bool = False
+
+
+class CheckoutHistory:
+    """A pass's selected refs and immutable commit graph, never a command-output cache.
+
+    Acquisitions declare additional heads before the graph is first consumed. A later
+    acquisition cannot silently change an answer already observed in this cut.
+    """
+
+    def __init__(self, checkout: Checkout) -> None:
+        self.checkout = checkout
+        self.required: set[str] = set()
+        self._ancestry: dict[frozenset[str], int] = {}
+        self._remote_selections: dict[str, int] = {}
+        self._bases: dict[int, tuple[str, ...]] = {}
+        self._walks: dict[CommitSelection, tuple[GitCommit, ...]] = {}
+
+    @cached_property
+    def refs(self) -> dict[str, GitReference]:
+        return {reference.name: reference for reference in map(GitReference.listed, Repo.git(
+            self.checkout.common_dir, "for-each-ref",
+            "--format=%(refname)%00%(objectname)%00%(upstream)"
+            "%00%(upstream:remotename)%00%(upstream:remoteref)",
+            "refs/heads/", "refs/remotes/",
+        ).splitlines())}
+
+    @cached_property
+    def heads(self) -> dict[Path, GitHead]:
+        """One listing supplies every linked worktree's distinct HEAD before the graph cut."""
+        listed = Repo.git(self.checkout.common_dir, "worktree", "list", "--porcelain", "-z")
+        return {head.checkout.path: head for head in (
+            GitHead.listed(record) for record in listed.split("\0\0")
+            if record and "bare" not in record.split("\0"))}
+
+    def require_read(self) -> dict[str, GitReference]:
+        """Read the ref cut, propagating unreadable-checkout errors to its caller."""
+        return self.refs
+
+    def head_for(self, checkout: Checkout) -> GitHead:
+        """Select by the worktree identity; shared refs cannot answer its HEAD."""
+        return self.heads[checkout.resolved().path]
+
+    def include(self, *heads: str) -> None:
+        """Prepare acquired objects before observation; an already read graph stays immutable."""
+        self.required.update(heads)
+
+    @cached_property
+    def graph(self) -> dict[str, GitCommit]:
+        heads = tuple(dict.fromkeys((
+            *self.required, *(reference.commit for reference in self.refs.values()),
+            *(sha for head in self.heads.values() for sha in head.required()),
+        )))
+        if not heads:
+            return {}
+        text = Repo.git(self.checkout.common_dir, "rev-list", "--stdin", "--no-commit-header",
+                        "--format=%H%x00%P%x00%ct%x00%B%x00",
+                        input="".join(f"{head}\n" for head in heads))
+        commits = {}
+        for row in text.split("\0\n"):
+            if not row:
+                continue
+            sha, parents, at, message = row.split("\0", 3)
+            commit = GitCommit(
+                GitCommitText.decode(sha),
+                tuple(map(GitCommitText.decode, parents.split())), float(at), message,
+            )
+            commits[commit.sha] = commit
+        return commits
+
+    def resolve(self, revision: str) -> str:
+        """Resolve captured ref names or an unambiguous captured commit abbreviation."""
+        revision = revision.removesuffix("^{commit}")
+        for name in (revision, f"refs/heads/{revision}", f"refs/remotes/{revision}"):
+            if name in self.refs:
+                return self.refs[name].commit
+        if revision in self.graph:
+            return revision
+        matches = tuple(sha for sha in self.graph if sha.startswith(revision))
+        if len(matches) != 1:
+            raise UnavailableCommitError(self.checkout.path, (revision,))
+        return matches[0]
+
+    def commit(self, revision: str) -> GitCommit:
+        return self.graph[self.resolve(revision)]
+
+    def references(self, prefix: str) -> tuple[str, ...]:
+        return tuple(name for name in self.refs if name.startswith(prefix))
+
+    @cached_property
+    def positions(self) -> dict[str, int]:
+        return {sha: position for position, sha in enumerate(self.graph)}
+
+    @cached_property
+    def records(self) -> tuple[GitCommit, ...]:
+        return tuple(self.graph.values())
+
+    def bit(self, sha: str) -> int:
+        return 1 << self.positions[sha]
+
+    def selected(self, bits: int) -> Iterator[GitCommit]:
+        while bits:
+            first = bits & -bits
+            yield self.records[first.bit_length() - 1]
+            bits ^= first
+
+    def ancestors(self, *revisions: str) -> int:
+        """Memoized compact reachability; shallow boundaries are graph leaves."""
+        selection = frozenset(self.resolve(revision) for revision in revisions)
+        if selection not in self._ancestry:
+            pending = list(selection)
+            found = 0
+            while pending:
+                sha = pending.pop()
+                bit = self.bit(sha)
+                if found & bit:
+                    continue
+                known = self._ancestry.get(frozenset((sha,)), 0)
+                if known:
+                    found |= known
+                    continue
+                found |= bit
+                pending.extend(parent for parent in self.graph[sha].parents
+                               if parent in self.graph)
+            self._ancestry[selection] = found
+        return self._ancestry[selection]
+
+    def contains(self, ancestor: str, revision: str) -> bool:
+        return bool(self.ancestors(revision) & self.bit(self.resolve(ancestor)))
+
+    def unpublished(self, head: str, tracking: str = "") -> int:
+        """The whole remote selection has one closure, not one DFS for each remote ref."""
+        if tracking not in self._remote_selections:
+            self._remote_selections[tracking] = self.ancestors(*(
+                ref for ref in self.references("refs/remotes/") if ref != tracking))
+        return (self.ancestors(head) & ~self._remote_selections[tracking]).bit_count()
+
+    def walk(self, selection: CommitSelection) -> tuple[GitCommit, ...]:
+        """Traverse each selection once; problem filters share the resulting commit order."""
+        if selection not in self._walks:
+            seen = self.ancestors(*selection.excluded)
+            pending: list[tuple[float, int, str]] = []
+            sequence = 0
+            for ref in selection.refs:
+                commit = self.commit(ref)
+                heapq.heappush(pending, (-commit.at, sequence, commit.sha))
+                sequence += 1
+            commits: list[GitCommit] = []
+            while pending:
+                _at, _sequence, sha = heapq.heappop(pending)
+                bit = self.bit(sha)
+                if seen & bit:
+                    continue
+                seen |= bit
+                commit = self.graph[sha]
+                commits.append(commit)
+                parents = commit.parents[:1] if selection.first_parent else commit.parents
+                for parent in parents:
+                    if parent in self.graph and not seen & self.bit(parent):
+                        heapq.heappush(pending, (-self.graph[parent].at, sequence, parent))
+                        sequence += 1
+            self._walks[selection] = tuple(commits)
+        return self._walks[selection]
+
+    def commits(self, refs: tuple[str, ...], *excluded: str,
+                pattern: str = "", first_parent: bool = False) -> Iterator[GitCommit]:
+        """Filter a captured newest-first walk without traversing the graph again."""
+        matching = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+        return (commit for commit in self.walk(CommitSelection(refs, excluded, first_parent))
+                if matching.search(commit.message))
+
+    @cached_property
+    def children(self) -> dict[str, tuple[str, ...]]:
+        """Each captured commit's children, inverted once from the parent edges."""
+        children: dict[str, list[str]] = {sha: [] for sha in self.graph}
+        for commit in self.records:
+            for parent in commit.parents:
+                if parent in children:
+                    children[parent].append(commit.sha)
+        return {sha: tuple(shas) for sha, shas in children.items()}
+
+    def merge_base(self, left: str, right: str) -> tuple[str, ...]:
+        """Best common ancestors: common commits with no child in common.
+
+        The common set is ancestor-closed, so a best base is either a tip or the parent of a
+        commit only one side reaches; only those few candidates are tested, never the whole
+        shared history.
+        """
+        tips = (self.resolve(left), self.resolve(right))
+        common = self.ancestors(tips[0]) & self.ancestors(tips[1])
+        if common not in self._bases:
+            candidates = dict.fromkeys((*tips, *(
+                parent for commit in self.selected(
+                    self.ancestors(tips[0]) ^ self.ancestors(tips[1]))
+                for parent in commit.parents if parent in self.graph)))
+            best = tuple(self.graph[sha] for sha in candidates
+                         if common & self.bit(sha)
+                         and not any(common & self.bit(child) for child in self.children[sha]))
+            self._bases[common] = tuple(commit.sha for commit in sorted(
+                best, key=lambda commit: commit.at, reverse=True))
+        return self._bases[common]
+
+    def count(self, head: str, *excluded: str) -> int:
+        return (self.ancestors(head) & ~self.ancestors(*excluded)).bit_count()
 
 
 @dataclass(frozen=True)

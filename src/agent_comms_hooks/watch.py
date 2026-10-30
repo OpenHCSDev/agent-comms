@@ -22,7 +22,7 @@ from agent_comms.process_claim import ProcessSingleton
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import AtomicFile
 from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.board import SessionBoard
+from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
 
 if TYPE_CHECKING:
     from agent_comms.cli_bridges.monitor import SessionRequest
@@ -336,8 +336,14 @@ class LiveWatch(RecordedWatch):
         return
 
     def board(self) -> tuple[str, ...]:
-        """The bridge derives the current board; a failed read is a hook failure."""
-        return SessionBoard.asked(self.claim.socket_path).lines
+        """The bridge derives the current board. A held claim's absent socket is an install's
+        swap (announce_absence), so it is one board line and the call's slice still lands;
+        any other failed read is a hook failure."""
+        try:
+            return SessionBoard.asked(self.claim.socket_path).lines
+        except AbsentSessionSocket:
+            return ("BOARD: not read this call: an install is swapping the session bridge, "
+                    "so no bridge listens yet; the board returns when the new one does",)
 
     def reconnect(self, serve: Serve, request: SessionRequest) -> None:
         raise RuntimeError(

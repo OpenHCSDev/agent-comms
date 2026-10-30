@@ -24,6 +24,11 @@ type: feedback
 > Tristan is now the agent's manager
 > at 2 a.m.
 > mfw "yes" was the whole report
+> run it back
+> Tristan: did the install work?
+> agent: "no. connector died at the bus probe. rerunning, 2 min"
+> Tristan goes back to sleep
+> mfw the whole report fit in a notification
 
 **Why:** the owner reads at a glance while juggling, and a private name or a label that needs an explanation sentence makes every reader translate.
 

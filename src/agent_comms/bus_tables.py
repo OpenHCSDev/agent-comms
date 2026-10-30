@@ -62,7 +62,7 @@ class ReceivedSource(ParticipantSource):
 
     @classmethod
     def query(
-        cls, lookup: ThreadLookup, sender_lookups: tuple[str, ...] = (),
+        cls, lookup: ThreadLookup, sender_lookups: tuple[ThreadLookup, ...] = (),
     ) -> tuple[str, tuple[object, ...]]:
         query, parameters = super().query(lookup)
         if sender_lookups:
@@ -101,7 +101,7 @@ class DirectReplySource(AwaitingAnswerSource, declared_name=None):
 
     @classmethod
     def query(
-        cls, lookup: ThreadLookup, sender_lookups: tuple[str, ...] = (),
+        cls, lookup: ThreadLookup, sender_lookups: tuple[ThreadLookup, ...] = (),
     ) -> tuple[str, tuple[object, ...]]:
         query, parameters = AwaitingAnswerSource.query(lookup, sender_lookups)
         return query + " AND starts_direct_turn=?", (*parameters, True)

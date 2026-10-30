@@ -52,7 +52,7 @@ from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
 from agent_comms.transcript_events import IncomingTranscript
 from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, UnpushedHead
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
@@ -649,7 +649,6 @@ def test_latest_observation_follows_the_commander_rename_alias(notification_bus)
 
 def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification_bus, tmp_path):
     from agent_comms.commander.publication_rules import UnpushedBranch
-    from agent_comms.work_branches import UnpushedHead
 
     comms = notification_bus
     holder = comms.registry.require("worker").incarnation

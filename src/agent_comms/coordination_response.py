@@ -106,7 +106,7 @@ class PublicationAppendDispatches(ResponseTable, WithoutRowid):
     @classmethod
     def resolve_retained(
         cls, store: Coordination, bus: MessageBus, boundary, *,
-        owner_lookup: str, execution_id: str | None = None,
+        owner_lookup: ThreadLookup, execution_id: str | None = None,
     ) -> tuple[RecoverySnapshot, ...]:
         """Finish only frozen responses whose exact keyed bus rows already exist.
 

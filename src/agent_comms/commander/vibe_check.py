@@ -46,7 +46,6 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
-from agent_comms.turn_digests import OrderEditCountRead
 
 
 class Escalation:
@@ -86,9 +85,7 @@ class OverloadDegradation(Degradation, BlocksRelease, ToolResult):
         return cls.from_orders(
             frame.todos,
             len(tuple(ReviewTimerUp.conditions(comms, frame))),
-            sum(read.read() for read in OrderEditCountRead.judgeable(
-                comms.root, frame.live, frame.pulls.progress(frame.todos, comms.registry),
-                frame.workplaces)),
+            sum(frame.edit_counts(comms).values()),
         )
 
     @classmethod

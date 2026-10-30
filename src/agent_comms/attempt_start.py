@@ -12,6 +12,7 @@ from .coordination_errors import (
 )
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.attempts import AttemptRecord
+from .field_codec import ThreadLookup
 from .owner_fence import OwnerFence, _digest
 from .participant_store import ParticipantSnapshot
 
@@ -27,7 +28,7 @@ INITIAL_LEASE_DURATION_MS = 60_000
 class AttemptStart:
     execution_id: str
     attempt_ordinal: int
-    owner_lookup: str
+    owner_lookup: ThreadLookup
     owner_generation: int
     token: str
     expected_execution_revision: int
