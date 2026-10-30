@@ -38,6 +38,7 @@ from agent_comms.commander.standing import (
     UnownedWheelSpin,
 )
 from agent_comms.comms import Comms, wire
+from agent_comms.coordination_errors import DeferredRead
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging import CommanderReceipts
@@ -445,10 +446,14 @@ class CommanderContext(BaseModel):
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
 
-        A publish alone is only queued."""
-        outcomes = MessageNotification.references(
-            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,),
-            viewer=AllOutcomes())
+        A publish alone is only queued. The message is already published when this reads, so a
+        busy read leaves its delivery unread and never refuses what was sent."""
+        try:
+            outcomes = MessageNotification.references(
+                self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,),
+                viewer=AllOutcomes())
+        except DeferredRead as unread:
+            return f'delivery unread: {unread}'
         return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):

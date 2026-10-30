@@ -1,5 +1,9 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+from types import SimpleNamespace
+
+from agent_comms.commander.order import Commander, MessageNotification
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.repo import Checkout
 import asyncio
 import io
@@ -1140,3 +1144,13 @@ def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_
                                   parent=ForkedParent("other")), status=StoppedThreadStatus())
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)
+
+
+def test_a_sent_message_is_not_refused_when_its_delivery_read_is_busy(monkeypatch):
+    def busy(*_args, **_kwargs):
+        raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
+
+    monkeypatch.setattr(MessageNotification, "references", busy)
+    comms = SimpleNamespace(root=None, registry=None, bus=SimpleNamespace(bus=None))
+    reported = Commander.delivery(SimpleNamespace(comms=comms), None)
+    assert reported == f"delivery unread: {CoordinationReadUnavailable.busy_message}"
