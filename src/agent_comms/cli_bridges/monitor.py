@@ -15,7 +15,7 @@ from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import get_original_bases
-from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, cast, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.harness_delivery_states import Outcome
@@ -246,8 +246,9 @@ class AttachedReader(UnreadyReader):
 @dataclass(frozen=True)
 class SessionReply(SessionWire, DeclaredFamily, affix=""):
 
-    def require(self) -> None:
-        """Successful replies carry no refusal."""
+    def require(self) -> Self:
+        """A successful reply keeps its declared type; a refusal never returns."""
+        return self
 
     async def publish(self, peer: MonitorPeer) -> None:
         await peer.write(FieldCodec.compact(FieldCodec.encode(self)))
@@ -305,12 +306,11 @@ class PeerGone(SessionReply, declared_name='gone'):
 
 @dataclass(frozen=True)
 class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix=""):
-    reply_class: ClassVar[type[SessionReply]]
     reply_timeout: ClassVar[float] = 30
 
-    def __init_subclass__(cls, **options):
-        super().__init_subclass__(**options)
-        cls.reply_class = cls.declared_argument(SessionRequest)
+    @classmethod
+    def reply_type(cls) -> type[Reply]:
+        return cast(type[Reply], cls.declared_argument(SessionRequest))
 
     @classmethod
     def declared_argument(cls, family: type) -> type:
@@ -372,9 +372,8 @@ class SessionRequest[Reply: SessionReply](SessionWire, DeclaredFamily, affix="")
             raw = stream.readline()
         if not raw:
             raise SessionConnectionClosed('Session bridge closed before replying')
-        reply = FieldCodec.decode(self.reply_class | SessionRefused, FieldCodec.parse(raw))
-        reply.require()
-        return reply
+        reply = FieldCodec.decode(self.reply_type() | SessionRefused, FieldCodec.parse(raw))
+        return reply.require()
 
     @abstractmethod
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply: ...

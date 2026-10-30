@@ -1,20 +1,16 @@
 """The real PreToolUse hook requires Core's exact-head verdict for a commander bypass."""
 
-import asyncio
 import json
 import subprocess
 import sys
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.hook_requests import HookReply, QueueBypassRequest, ResidentHookOutput
+from agent_comms.cli_bridges.hook_requests import HookReply, QueueBypassRequest
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
-from agent_comms.cli_bridges.shared import Binding, GivenBinding, Options, StoredBinding, Watch
-from agent_comms.comms import Comms
+from hook_session_fixture import resident_hook, resident_session
 from agent_comms.todos import ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
 from agent_comms_hooks.shell_commands import ShellCommand
@@ -25,26 +21,9 @@ pytest_plugins = ("test_head_review",)
 ADMIN_MERGE = "gh pr merge 2557 --admin --merge"
 
 
-@contextmanager
-def resident_queue(comms: Comms, state: Path, actor: str) -> Iterator[ClaudeBridge]:
-    """Admit the real actor through the bridge owner; never recover it from a later claim."""
-    with Binding.open(state) as db:
-        binding = GivenBinding({
-            "root": str(comms.root), "bus_thread": actor, "session": "s",
-        }).bind(db).registered(comms).bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
-        asyncio.run(bridge.options.operation.prepare(bridge))
-        yield bridge
-
-
 def resident_tool_use(command: str, transcript: Path, bridge: ClaudeBridge) -> HookReply:
-    """The actual resident evaluator; root qualifies the stdlib client/socket journey separately."""
-    payload = {"session_id": "s", "hook_event_name": "PreToolUse",
-               "transcript_path": str(transcript), "tool_name": "Bash", "tool_input": {"command": command}}
-    request = QueueBypassRequest(payload=payload)
-    output = ResidentHookOutput()
-    event = request.event_type().of(payload, output=output)
-    return request.evaluate(event, bridge.comms, output, bridge.binding)
+    return resident_hook(bridge, QueueBypassRequest, transcript,
+                         tool_name=QueueBypassRequest.tool, tool_input={"command": command})
 
 
 def pre_tool_use(command: str, transcript: Path = Path("s.jsonl")) -> subprocess.CompletedProcess:
@@ -139,7 +118,7 @@ def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
             f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge -f merge_method=merge -f sha={head}",
         )
 
-    with resident_queue(comms, tmp_path / "state", "lead") as bridge:
+    with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
         def refused(head):
             for command in commands(head):
                 result = resident_tool_use(command, transcript, bridge)
@@ -175,7 +154,7 @@ def test_merge_authority_comes_from_the_admitted_actor_not_a_changed_launcher(
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     command = (f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
                f" --match-head-commit {request.head}")
-    with resident_queue(comms, tmp_path / "state", actor) as bridge:
+    with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
         # A replacement launcher's record may neither revoke nor grant this admitted actor's role.
         replacement = "worker" if allowed else "lead"
         WatchClaim("s").enrol(WatchRecord(replacement, str(comms.root), (), tmp_path / "elsewhere"))

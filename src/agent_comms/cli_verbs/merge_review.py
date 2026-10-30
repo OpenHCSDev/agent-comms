@@ -55,7 +55,8 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
         if not bindings:
             raise ToolRefusedError("The commander session has no recorded binding to this bus; no verdict can be read.")
         snapshot = ctx.registry.snapshot()
-        actor, *others = (snapshot.require(binding.bus).incarnation for binding in bindings)
+        actor, *others = (snapshot.require(binding.bus).incarnation.require_recorded()
+                          for binding in bindings)
         for other in others:
             self.require_actor(snapshot, other)
         return self.reviewed_merges(ctx, snapshot, actor, QueueBypassGuard.bypasses(self.bash))

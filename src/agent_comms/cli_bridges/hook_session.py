@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
-from .hook_forks import SessionSubagents
 from .hook_skill import DeckStart
 from .session_watch import WatchClaim
 from .shared import Serve
@@ -14,7 +13,7 @@ from ..child_process import ProcessIdentity
 
 
 @dataclass(frozen=True)
-class SessionHook(SessionSubagents, DeckStart):
+class SessionHook(DeckStart):
     @staticmethod
     def environment_session() -> str:
         """Claude exports the identity shared by its hook and bare Monitor command."""
@@ -43,5 +42,10 @@ class SessionHook(SessionSubagents, DeckStart):
         self.warn(*self.take())
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """The SessionStart console entrypoint runs its existing lifecycle owner directly."""
     SessionHook.read().start()
+
+
+if __name__ == "__main__":
+    main()

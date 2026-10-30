@@ -3,11 +3,9 @@ from __future__ import annotations
 
 import json
 import re
-from abc import (
-    ABC,
-    abstractmethod,
-)
+from abc import ABC
 from collections.abc import (
+    Iterable,
     Iterator,
     Mapping,
 )
@@ -22,28 +20,26 @@ from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 
 from .shared import Binding
 from ..comms import Comms
+from ..declared_family import DeclaredFamily
 from ..commander.standing import UnownedWheelSpin
 
 
-class Tagged(HookRecord):
+class Tagged(HookRecord, DeclaredFamily):
     """A record Claude Code tags with "type"; each member declares its tag, and the family's
     one `Untagged` member answers for every tag nobody declared."""
 
-    tag: ClassVar[str]
+    family_discriminator = "type"
 
     @classmethod
     def of(cls, record: Mapping[str, object]) -> Self:
-        members = cls.__subclasses__()
-        (other,) = (kind for kind in members if issubclass(kind, Untagged))
-        kinds = {kind.tag: kind for kind in members if not issubclass(kind, Untagged)}
-        return kinds.get(record.get("type"), other).decode(record)
+        return cls.member_or_default(record.get(cls.family_discriminator), Untagged).decode(record)
 
 
 class Untagged:
     """The member of a tagged family that stands for every record whose tag it does not read."""
 
 
-class ReplyBlock(Tagged):
+class ReplyBlock(Tagged, declared_name=None):
     """One content block of a model reply."""
 
     acts: ClassVar[bool] = False
@@ -54,16 +50,14 @@ class ReplyBlock(Tagged):
 
 
 @dataclass(frozen=True)
-class TextBlock(ReplyBlock):
-    tag = "text"
+class TextBlock(ReplyBlock, declared_name="text"):
     text: str
 
     def said(self) -> str:
         return self.text
 
 
-class ToolUseBlock(ReplyBlock):
-    tag = "tool_use"
+class ToolUseBlock(ReplyBlock, declared_name="tool_use"):
     acts = True
 
 
@@ -71,42 +65,47 @@ class OtherBlock(ReplyBlock, Untagged):
     pass
 
 
+class ReplyBlocks(tuple[ReplyBlock, ...]):
+    """The message decodes each content block once at its existing field boundary."""
+
+    def __new__(cls, blocks: Iterable[Mapping[str, object]]) -> Self:
+        return super().__new__(cls, (ReplyBlock.of(block) for block in blocks))
+
+
 @dataclass(frozen=True)
 class ReplyMessage(HookRecord):
-    content: list[Mapping[str, object]]
+    content: ReplyBlocks
 
 
-class TranscriptRecord(Tagged):
+class TranscriptRecord(Tagged, declared_name=None):
     """One transcript line, read backwards to find the reply that ends the turn."""
 
-    ends_reply: ClassVar[bool] = False
+    @property
+    def ends_reply(self) -> bool:
+        return False
 
     def said(self) -> str:
         return ""
 
 
 @dataclass(frozen=True)
-class AssistantRecord(TranscriptRecord):
-    tag = "assistant"
+class AssistantRecord(TranscriptRecord, declared_name="assistant"):
     message: ReplyMessage
 
     @property
-    def blocks(self) -> tuple[ReplyBlock, ...]:
-        return tuple(ReplyBlock.of(block) for block in self.message.content)
+    def ends_reply(self) -> bool:
+        return any(block.acts for block in self.message.content)
+
+    def said(self) -> str:
+        return "".join(block.said() for block in self.message.content)
+
+
+class UserRecord(TranscriptRecord, declared_name="user"):
+    """A prompt or a tool result; the final reply comes after it."""
 
     @property
     def ends_reply(self) -> bool:
-        return any(block.acts for block in self.blocks)
-
-    def said(self) -> str:
-        return "".join(block.said() for block in self.blocks)
-
-
-class UserRecord(TranscriptRecord):
-    """A prompt or a tool result; the final reply comes after it."""
-
-    tag = "user"
-    ends_reply = True
+        return True
 
 
 class OtherRecord(TranscriptRecord, Untagged):
@@ -164,38 +163,20 @@ class Waiting(Deferral):
                "trajectory or hunt a hot path now")
 
 
-class IdleRead(ABC):
-    """Core's idle answer or an explicit failed read, on the admitted resident context."""
-
-    @abstractmethod
-    def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]: ...
-
-    @staticmethod
-    def read(comms: Comms, binding: Binding) -> IdleRead:
-        try:
-            return ReadIdle(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
-        except Exception as failed:
-            # A failed read is an explicit blocking result, never an empty/successful answer.
-            return FailedIdleRead(str(failed))
-
-
 @dataclass(frozen=True)
-class ReadIdle(IdleRead):
+class ReadIdle:
+    """The idle owner's answer; Core read bugs propagate instead of becoming a reply."""
+
     units: tuple[str, ...]
+
+    @classmethod
+    def read(cls, comms: Comms, binding: Binding) -> Self:
+        return cls(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
 
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
         if self.units:
             yield (f"You deferred {quoted(deferred)} while {', '.join(self.units)} hold no order:"
                    " order it now.")
-
-
-@dataclass(frozen=True)
-class FailedIdleRead(IdleRead):
-    error: str
-
-    def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
-        yield (f"You deferred {quoted(deferred)} and Core's idle read failed ({self.error}):"
-               " repair the Core idle read and order every idle unit now.")
 
 
 def quoted(phrases: tuple[str, ...]) -> str:
@@ -209,8 +190,8 @@ class StopHook(ClaudeTranscriptHook):
     binding: Binding = field(kw_only=True, compare=False, repr=False)
 
     @cached_property
-    def idle(self) -> IdleRead:
-        return IdleRead.read(self.comms, self.binding)
+    def idle(self) -> ReadIdle:
+        return ReadIdle.read(self.comms, self.binding)
 
     def reply(self) -> str:
         """The text of the reply that ends the turn: what the model said after its last act."""
@@ -227,7 +208,7 @@ class StopHook(ClaudeTranscriptHook):
         if self.stop_hook_active:
             return
         selected = self.comms.registry.snapshot().commander_project.session_output(
-            self.binding.owner, commander=self.judge_reply, commanded=lambda: None)
+            self.binding.recipient(self.comms), commander=self.judge_reply, commanded=lambda: None)
         selected()
 
     def judge_reply(self) -> None:

@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import asyncio
-import traceback
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import ClassVar, cast
@@ -79,24 +78,14 @@ class HookRequest[Event: ClaudeHook](SessionRequest[HookReply], ClaudeHookProgra
                  binding: Binding) -> HookReply:
         try:
             self.run_hook(event, comms, binding)
-        except SystemExit as stopped:
-            if stopped.code is None or stopped.code == 0:
-                return output.answer()
-            if isinstance(stopped.code, int):
-                return output.answer(status=self.failure_status(stopped.code))
-            return output.answer(stderr=f"{stopped.code}\n", status=self.failure_status())
-        except Exception:
-            # A program failure is a failed hook result, never success or death of the serving owner.
-            return output.answer(stderr=traceback.format_exc(), status=self.failure_status())
+        except ToolRefusedError as refused:
+            return output.answer(stderr=f"{refused}\n", status=self.failure_status())
         return output.answer()
 
     async def handle(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
         output = ResidentHookOutput()
-        try:
-            event = await asyncio.to_thread(self.decode_event, service.bridge.comms,
-                                            service.bridge.binding, output)
-        except Exception:
-            return SessionRefused(error=traceback.format_exc())
+        event = await asyncio.to_thread(self.decode_event, service.bridge.comms,
+                                        service.bridge.binding, output)
         if event.session_id != service.bridge.binding.thread or event.hook_event_name not in self.events:
             return SessionRefused(error="Hook event does not belong to this resident session/program")
         reply = await asyncio.to_thread(self.evaluate, event, service.bridge.comms, output,
@@ -149,7 +138,7 @@ class SubagentStopRequest(SubagentStopProgram, HookRequest[SubagentStopHook], de
 class SessionEndRequest(SessionEnded, HookRequest[SessionSubagents], declared_name=SessionEnded.command()):
     def run_hook(self, event: SessionSubagents, comms: Comms, binding: Binding) -> None:
         for refusal in event.end_subagents(comms, binding):
-            raise SystemExit(refusal)
+            raise ToolRefusedError(refusal)
 
     def completed(self, service: MonitorService) -> None:
         SessionReady().end_session(service)

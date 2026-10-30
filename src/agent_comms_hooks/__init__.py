@@ -2,9 +2,10 @@
 
 Claude Code runs a hook on every prompt or tool call it is registered for, and
 importing agent_comms takes a second, so a hook's import path is the standard
-library only. Each program declares the events it answers; the command that
-runs it is derived from the installed console scripts. Install writes Claude
-Code's settings from these declarations.
+library only. SessionStart alone bootstraps Core; it does not run per tool.
+Each program declares the events it answers; the command that runs it is derived
+from the installed console scripts. Install writes Claude Code's settings from
+these declarations.
 """
 
 from __future__ import annotations

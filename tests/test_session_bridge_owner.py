@@ -25,7 +25,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
-from agent_comms_hooks.session import started
+from agent_comms.cli_bridges import hook_session
 from conftest import installed_comms
 
 
@@ -73,7 +73,7 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
     )
     with owner_log.open('wb') as errors, subprocess.Popen(
             ('/bin/sh', '-c', shell, 'session-owner',
-             str(source_programs.script(started)), str(packet)),
+             str(source_programs.script(hook_session.main)), str(packet)),
             env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=errors) as owner:
         try:
             assert select.select((owner.stdout,), (), (), 40)[0], owner_log.read_text()
