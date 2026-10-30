@@ -259,7 +259,7 @@ def test_claim_is_a_commander_question_not_a_verified_delivery(held_bus, claim_o
         (state,) = state_cards(comms, AwaitingCommander)
         (question,) = state.owed
         assert question.message_id == claim.message.message_id
-        assert question.seq > claim.message.answers[0].seq
+        assert question.answers == claim.message.answers
         assert state_cards(comms, DeliveredUnclosed) == ()
 
 
@@ -317,8 +317,12 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
 ):
     todo = held_bus.goals.todos.get("P1")
     directory = todo.order.checked().check.directory
-    branch = Repo.git(directory, "branch", "--show-current").strip()
+    rule = held_bus.registry.storage_rule
+    holder = held_bus.registry.require(todo.held().owner)
+    branch = "holder-branch"
     head = Repo.git(directory, "rev-parse", "HEAD").strip()
+    Repo.git(directory, "worktree", "add", "-q", "-b", branch,
+             str(rule.order_checkout(rule.roots_of(holder), todo.id)))
     missing = tmp_path / "unavailable-remote"
     Repo.git(directory, "remote", "add", "publication", str(missing))
     Repo.git(directory, "update-ref", "refs/remotes/publication/main", head)

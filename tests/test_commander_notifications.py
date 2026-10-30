@@ -268,17 +268,23 @@ def everything_to_lead(comms):
 
 
 def test_hidden_tool_time_does_not_append_quiet_bus_history(notification_bus):
+    from test_holder_standing_rules import publish
+
     comms = notification_bus
     recorded_turn(comms, (False,))
-    hud = beat(comms, states=state_cards(comms, UnitState))
+    beat(comms, states=state_cards(comms, UnitState))
     first, = notifications(comms)
-    assert isinstance(first.task, CommanderNotice)
+    assert isinstance(first.task, CommanderDecisions)
+    publish(comms, "lead", "worker", time.time())
+    hud = beat(comms, states=state_cards(comms, UnitState))
+    assert hud.board == ()
+    settled = tuple(message.reference for message in notifications(comms))
     for _ in range(2):
         recorded_turn(comms, (False,))
         later = beat(comms, states=state_cards(comms, UnitState))
         assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
         assert hud.display_facts == later.display_facts
-    assert tuple(message.reference for message in notifications(comms)) == (first.reference,)
+    assert tuple(message.reference for message in notifications(comms)) == settled
 
 
 def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
@@ -301,11 +307,10 @@ def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notificati
 
     publish(comms, "lead", "worker", time.time())
     beat(comms, (rule,))
-    _, _, cleared = notifications(comms)
-    assert isinstance(cleared.task, CommanderNotice)
+    # A timer shows on the unit's row, not as an alarm, so clearing it changes nothing to repaint.
     assert CommanderFrame.current(comms, "lead").board == ()
     beat(comms, (rule,))
-    assert len(notifications(comms)) == 3
+    assert len(notifications(comms)) == 2
 
 
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):

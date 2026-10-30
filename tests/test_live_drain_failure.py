@@ -15,15 +15,27 @@ from agent_comms.activity import (
     NativeInputDrainDiagnostic, StoppedDrainDiagnostic, UnavailableDrainDiagnostic,
 )
 from agent_comms.comms import wire
+from agent_comms.config_options import ConfigOptions
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
 from agent_comms.field_codec import AcpSessionId, TurnId
+from agent_comms.launch_root import LaunchRoot
 from agent_comms.queued_input import DeliveredInput
-from test_acp_private_nk_delivery import _session
+from test_acp_private_nk_delivery import _session as _published_session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
+
+
+def _session(tmp_path):
+    """A session the drain may act for: the lifecycle acquires an owner before publishing it."""
+    comms, agent, root_id, session_id = _published_session(tmp_path)
+    with LaunchRoot.from_path(comms.root).selected():
+        configuration = ConfigOptions.configured()
+    agent.inputs.acquire_owner(session_id, configuration,
+                               comms.registry.snapshot().owner_identity("beta"))
+    return comms, agent, root_id, session_id
 
 
 async def until(predicate):

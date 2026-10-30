@@ -561,6 +561,8 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
     behind: int = field(compare=False)
 
     def enforce(self, comms: Comms, commander: str) -> None:
+        if self.holder.name == commander:
+            return  # The bus refuses a message to oneself; this rule's line reaches the commander anyway.
         comms.messaging.send(commander, self.holder.name, (
             f"{self.branch} is {self.behind} commits behind main. Merge origin/main into it now,"
             " resolve every conflict yourself, push, and keep working; a stale tree turns your"

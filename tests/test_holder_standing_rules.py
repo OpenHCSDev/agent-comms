@@ -23,7 +23,7 @@ from agent_comms.channel_targets import CommandersTag, CommsTag
 from agent_comms.messaging import CommanderReceipts
 from agent_comms.errors import RelationViolationError
 from agent_comms.owner_requests import NewestOpenRequest
-from agent_comms.todos import DoneTodoState
+from agent_comms.todos import DoneTodoState, DraftListedPullRequest
 from agent_comms.commander.order import Commander, ListedProblems, OrderFile, SayVerb, SendVerb
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander.standing import (
@@ -168,16 +168,19 @@ def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
 
 
 @pytest.fixture
-def claim_order(held_bus):
+def claim_order(held_bus, github_cli):
     """Publish the real order and claim messages, using their retained identities."""
     def claim(problem):
         todo = held_bus.goals.todos.get(problem)
+        github_cli.put(todo.repo, DraftListedPullRequest(
+            number=1, branch="repair", head="a" * 40, updated="2026-10-28T12:00:00Z",
+            base="main", reviewable_times=()))
         lead = held_bus.registry.require("lead").incarnation
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
-        claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
+        claimed = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, 1), "a" * 40,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(
