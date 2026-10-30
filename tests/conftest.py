@@ -226,7 +226,7 @@ async def tool_listener() -> AsyncIterator[Callable[[Path, str], ToolListener]]:
 
 @pytest.fixture
 def undealt_gate(tmp_path: Path) -> PiRuleGate:
-    """A Pi rule gate never dealt any rules, so it admits every call."""
+    """A Pi rule gate never dealt any rules, so it lets every call run."""
     return PiRuleGate(tmp_path / "scratch", tmp_path)
 
 

@@ -30,7 +30,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import GoalId, InputId, TurnId
+from .field_codec import AcpSessionId, GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -145,7 +145,9 @@ class TurnRunner:
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
-    async def observe_context(self, session_id: str, usage: ContextUsage) -> None:
+    async def observe_context(
+        self, session_id: AcpSessionId, usage: ContextUsage,
+    ) -> None:
         """Pi's own context-use report deals the rules again at each declared share left."""
         if session_id not in self.sessions.published:
             return

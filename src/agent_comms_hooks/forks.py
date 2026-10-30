@@ -158,7 +158,7 @@ class SessionSubagents(SubagentSeats):
     def subagents(self) -> tuple[SubagentId, ...]:
         """Claude Code keeps each subagent's transcript beside the session's own."""
         return tuple(SubagentId(path.stem.removeprefix("agent-"))
-                     for path in sorted(self.subagents.glob("agent-*.jsonl")))
+                     for path in sorted(self.subagent_transcripts.glob("agent-*.jsonl")))
 
     def end_subagents(self) -> tuple[str, ...]:
         """Core's refusals to end this session's children, or none."""

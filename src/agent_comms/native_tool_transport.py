@@ -337,18 +337,19 @@ class ToolTransport(Generic[Call]):
         for call in self.calls.values():
             call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
-    def admit(self, call: Call) -> None:
-        """Refuse a call before its policy is asked; a transport exposing no tools admits none."""
+    def judge(self, call: Call) -> None:
+        """Refuse a call before its policy is asked; a transport exposing no tools allows none."""
         raise SelectedToolDenied("Native tools are disabled for this input")
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
-        await call.authorize(lambda: self.admitted(self.calls.identity_for(call).round_number, call))
+        await call.authorize(
+            lambda: self.judged_allow(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
 
-    async def admitted(self, round_number: int, call: Call) -> None:
+    async def judged_allow(self, round_number: int, call: Call) -> None:
         """Inside the call's one claim, so a refusal is the call's own failed terminal."""
-        self.admit(call)
+        self.judge(call)
         await self.allow(round_number, call)
 
     @staticmethod
@@ -420,5 +421,5 @@ class GatedToolTransport(ToolTransport[Call]):
         super().__init__(listener, pid=pid)
         self.rule_gate = gate
 
-    def admit(self, call: Call) -> None:
+    def judge(self, call: Call) -> None:
         call.judge_under(self.rule_gate)

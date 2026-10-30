@@ -35,7 +35,7 @@ from .acp_extension import (
 )
 from .context_reading import ContextUsage, UnsizedContext
 from .coordinator import Coordination
-from .field_codec import TurnId
+from .field_codec import AcpSessionId, TurnId
 from .tool_declaration import (
     EditAction,
     ExecuteAction,
@@ -225,7 +225,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(ContextUsage)
     async def on_context_usage(self, usage: ContextUsage) -> None:
-        await self.agent.turns.observe_context(self.session_id, usage)
+        await self.agent.turns.observe_context(AcpSessionId(self.session_id), usage)
         await self.client.publish_update(
             session_id=self.session_id,
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),

@@ -92,7 +92,7 @@ class ClaudeTranscriptHook(ClaudeHook):
         return Path(self.transcript_path)
 
     @property
-    def subagents(self) -> Path:
+    def subagent_transcripts(self) -> Path:
         """Claude Code keeps each subagent's transcript in this directory beside the session's."""
         return Path(self.transcript_path).with_suffix("") / "subagents"
 

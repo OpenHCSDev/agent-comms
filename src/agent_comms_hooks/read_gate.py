@@ -126,7 +126,7 @@ class SubagentCall(GatedCall, SeatedSubagent):
 
     @property
     def stem(self) -> Path:
-        return self.subagents / f"agent-{self.agent_id}.jsonl"
+        return self.subagent_transcripts / f"agent-{self.agent_id}.jsonl"
 
     def judge(self) -> None:
         self.enter(ToolRunningPhase(self.tool_name))
