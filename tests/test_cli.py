@@ -523,8 +523,8 @@ class TestSelectedTargetActions:
         catalog = comms.channels.catalog.read()
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
-            comms, target, NoChannel(), project=Checkout(tmp_path), snapshot=snapshot, catalog=catalog,
-            resolved=target.resolve(snapshot, comms.bus.require_channel))
+            target.resolve(snapshot, comms.bus.require_channel), comms, NoChannel(),
+            project=Checkout(tmp_path), snapshot=snapshot, catalog=catalog)
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()
                    for name in ("alpha", "external", "archived", "human"))

@@ -939,11 +939,16 @@ def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_
     comms = notification_bus
     parent = comms.registry.require('worker')
     tag = CommandersTag.declared_name
-    parent = comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
-    command = ForkCliCommand.thread_binding(parent)
-    assert command.tags.for_new() == parent.tags - {tag}
-    explicit = replace(command, tags=GivenTags(parent.tags))
-    assert tag in explicit.tags.for_new()
+    comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
+    parent = comms.registry.require('worker')
+    binding = ForkCliCommand.thread_binding(parent)
+    command = binding.edited(ForkCliCommand.editor_arguments({'name': 'child'}))
+
+    def child_tags(fork: ForkCliCommand) -> frozenset[str]:
+        return fork.specification().child(parent, parent.runtime, comms.threads).tags
+
+    assert child_tags(command) == parent.tags - {tag}
+    assert tag in child_tags(replace(command, tags=GivenTags(parent.tags)))
 
 
 def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
