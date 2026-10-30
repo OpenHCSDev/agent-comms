@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import Tag
+from .channel_targets import DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_result import ThreadToolCatalogResult
 from .context_segments.wake_values import WakeWorkContext
@@ -336,8 +336,9 @@ class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
 
     def commanded_child(self, child: Thread) -> Thread:
-        """A commanded declaration inherits its initial audience from its commander."""
-        return replace(child, tags=self.tags)
+        """A commanded declaration inherits its initial audience from its commander, never its
+        commander's role."""
+        return replace(child, tags=DeclaredTag.for_child(self.tags))
 
     def inherited_history(self, registry, visited):
         if self.name in visited:

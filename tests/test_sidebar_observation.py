@@ -61,20 +61,20 @@ def test_registry_snapshot_constructor_and_pickle_own_immutable_maps(comms, decl
     supplied = dict(captured.threads)
     snapshot = replace(captured, threads=ThreadRows.from_threads(supplied))
     supplied.clear()
-    assert snapshot.by_lookup  # Derived cached views must not enter the pickle.
+    assert snapshot.lookup_names  # Derived cached views must not enter the pickle.
     for restored in (snapshot, pickle.loads(pickle.dumps(snapshot, protocol=5))):
         assert restored.purpose == captured.purpose
         assert restored.threads[original.name] == original
         lookup = original.incarnation.require_recorded().lookup
-        assert restored.by_lookup[lookup] == original
-        assert dict(restored.by_lookup) == {lookup: original}
-        assert list(restored.by_lookup.items()) == [(lookup, original)]
-        assert list(restored.by_lookup.values()) == [original]
-        assert restored.by_lookup == {lookup: original}
+        assert restored.born(lookup) == original
+        assert dict(restored.lookup_names) == {lookup: original.name}
+        assert list(restored.lookup_names.items()) == [(lookup, original.name)]
+        assert list(restored.lookup_names.values()) == [original.name]
+        assert restored.lookup_names == {lookup: original.name}
         with pytest.raises(TypeError):
-            restored.by_lookup[lookup] = original
+            restored.lookup_names[lookup] = original.name
         with pytest.raises(TypeError):
-            del restored.by_lookup[lookup]
+            del restored.lookup_names[lookup]
         for declaration in fields(restored):
             value = getattr(restored, declaration.name)
             if isinstance(value, Mapping):
@@ -99,18 +99,19 @@ def test_snapshot_constructor_retains_namespace_validation_and_derives_birth_ind
     with pytest.raises(RelationViolationError, match="alias"):
         replace(captured, aliases={"unowned": "absent"})
     retired = replace(captured, threads=ThreadRows.from_threads({}))
-    assert not retired.by_lookup
-    assert captured.by_lookup[original.incarnation.lookup] == original
+    assert not retired.lookup_names
+    assert captured.born(original.incarnation.lookup) == original
 
 
 def test_current_reference_resolves_original_birth_after_registry_rename(comms, declare_reference):
     original = declare_reference(status=RunningThreadStatus())
     captured = comms.registry.snapshot()
-    before = captured.by_lookup
+    before = captured.lookup_names
     lookup = original.incarnation.lookup
     comms.registry.rename(original.name, "renamed")
-    assert comms.registry.snapshot().by_lookup[lookup].name == "renamed"
-    assert before[lookup].name == original.name
+    assert comms.registry.snapshot().born(lookup).name == "renamed"
+    assert before[lookup] == original.name
+    assert captured.born(lookup) == original
     snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
     references = pickle.loads(pickle.dumps(snapshot, protocol=5)).references
     current = references.thread(original.incarnation)
@@ -122,18 +123,18 @@ def test_current_reference_resolves_original_birth_after_registry_rename(comms, 
 
 def test_recreated_thread_reference_resolves_new_birth_not_same_name(comms, declare_reference):
     original = declare_reference()
-    captured = comms.registry.snapshot().by_lookup
+    captured = comms.registry.snapshot()
     before = comms.views.viewer_snapshot(Checkout(comms.root.parent)).references
     comms.threads.delete(original.name)
-    deleted = comms.registry.snapshot().by_lookup
+    deleted = comms.registry.snapshot().lookup_names
     recreated = declare_reference(original.name)
-    current = comms.registry.snapshot().by_lookup
+    current = comms.registry.snapshot()
     assert original.incarnation.lookup not in deleted
-    assert original.incarnation.lookup not in current
-    assert current[recreated.incarnation.lookup] == recreated
-    assert captured[original.incarnation.lookup] == original
-    with pytest.raises(KeyError):
-        current[original.incarnation.lookup]
+    assert original.incarnation.lookup not in current.lookup_names
+    assert current.born(recreated.incarnation.lookup) == recreated
+    assert captured.born(original.incarnation.lookup) == original
+    with pytest.raises(UnregisteredThreadError):
+        current.born(original.incarnation.lookup)
     snapshot = comms.views.viewer_snapshot(Checkout(comms.root.parent))
     references = pickle.loads(pickle.dumps(snapshot, protocol=5)).references
     assert recreated.incarnation != original.incarnation
@@ -175,7 +176,7 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
     decoded_before = frozenset(snapshot.threads._decoded)
     expected = {thread.name: thread.incarnation.lookup for thread in originals}
 
-    lookup = snapshot.by_lookup
+    lookup = snapshot.lookup_names
     assert lookup
     assert len(lookup) == len(originals)
     assert tuple(lookup) == tuple(expected[name] for name in snapshot.threads)
@@ -189,17 +190,17 @@ def test_captured_lookup_acquires_and_binds_only_requested_complete_rows(
     assert caught.value.args == (missing,)
     assert frozenset(snapshot.threads._decoded) == decoded_before
 
-    acquired = lookup[selected.incarnation.lookup]
+    acquired = snapshot.born(selected.incarnation.lookup)
     assert acquired is snapshot.require(selected.name)
     assert acquired.session_file == selected.session_file
     assert acquired.session_file.bound_to(comms.root) is acquired.session_file
-    assert lookup.get(selected.incarnation.lookup) is acquired
-    assert lookup[selected.incarnation.lookup] is acquired
+    assert lookup.get(selected.incarnation.lookup) == selected.name
+    assert snapshot.born(selected.incarnation.lookup) is acquired
     assert frozenset(snapshot.threads._decoded) == decoded_before | {selected.name}
     with pytest.raises(InvalidRegistryDocument):
-        lookup[invalid.incarnation.lookup]
+        snapshot.born(invalid.incarnation.lookup)
     with pytest.raises(InvalidRegistryDocument):
-        dict(lookup)
+        {key: snapshot.born(key) for key in lookup}
     with pytest.raises(UnregisteredThreadError):
         comms.registry.require_lookup(missing)
 
@@ -244,12 +245,12 @@ def test_cold_shape_and_birth_capture_do_not_acquire_unrequested_goal_fields(
     assert not rows._decoded
     snapshot = replace(captured, threads=rows)
     assert snapshot.incarnation(original.name) == original.incarnation
-    assert original.incarnation.lookup in snapshot.by_lookup
+    assert original.incarnation.lookup in snapshot.lookup_names
     assert not snapshot.threads._decoded
     with pytest.raises(MalformedRecord):
         snapshot.threads.determining(original.name)
     with pytest.raises(InvalidRegistryDocument):
-        snapshot.by_lookup[original.incarnation.lookup]
+        snapshot.born(original.incarnation.lookup)
 
 
 def test_lookup_metadata_is_carried_from_snapshot_through_data_only_revision(
@@ -259,24 +260,25 @@ def test_lookup_metadata_is_carried_from_snapshot_through_data_only_revision(
     declare_reference("unrelated")
     before = comms.registry.snapshot()
     lookup = original.incarnation.lookup
-    original_index = before.by_lookup
+    original_index = before.lookup_names
     metadata = before.threads._lookup_names
     changed = comms.registry.update_thread(
         original.name, lambda thread: replace(thread, task=GivenThreadText("data-only edit")),
     )
     after = comms.registry.snapshot()
-    assert after.by_lookup[lookup] == changed
+    assert after.born(lookup) == changed
     assert after.threads._lookup_names is metadata
-    assert original_index[lookup] == original
-    assert tuple(after.by_lookup) == tuple(after.incarnation(name).require_recorded().lookup
-                                         for name in after.threads)
+    assert original_index[lookup] == original.name
+    assert before.born(lookup) == original
+    assert tuple(after.lookup_names) == tuple(after.incarnation(name).require_recorded().lookup
+                                            for name in after.threads)
     comms.registry.rename(original.name, "renamed")
     renamed = comms.registry.snapshot()
-    assert renamed.by_lookup[lookup].name == "renamed"
-    assert original_index[lookup].name == original.name
-    assert after.by_lookup[lookup].name == original.name
-    assert tuple(renamed.by_lookup) == tuple(renamed.incarnation(name).require_recorded().lookup
-                                           for name in renamed.threads)
+    assert renamed.born(lookup).name == "renamed"
+    assert original_index[lookup] == original.name
+    assert after.born(lookup).name == original.name
+    assert tuple(renamed.lookup_names) == tuple(renamed.incarnation(name).require_recorded().lookup
+                                              for name in renamed.threads)
 
 
 @pytest.mark.parametrize("entry,value", (

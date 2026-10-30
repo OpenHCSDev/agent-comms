@@ -681,7 +681,28 @@ class DeclaredTag(DeclaredFamily, affix="Tag"):
     def channel(cls) -> str:
         return ChannelTarget.normalize_name(cls.declared_name)
 
+    @classmethod
+    def inherited(cls) -> bool:
+        """Whether a child declared under a carrier starts with this tag: an audience is."""
+        return True
+
+    @classmethod
+    def for_child(cls, parent: frozenset[str]) -> frozenset[str]:
+        """A child's first tags: its parent's created tags and every inherited declared one."""
+        return parent - {member.declared_name for member in cls.members_with(cls)
+                         if not member.inherited()}
+
 
 class CommsTag(DeclaredTag):
     """The channel the fleet coordinates on: installer reports, Core's strike announcements
     and the commander's posts address it."""
+
+
+class CommandersTag(DeclaredTag):
+    """The commanders of this bus: a member acts under its own name, holds the commander role
+    in its hooks and receives the heartbeat board. A role, not an audience: a thread carries
+    it only when it was itself declared a commander, never because its parent was."""
+
+    @classmethod
+    def inherited(cls) -> bool:
+        return False

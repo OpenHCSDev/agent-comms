@@ -13,6 +13,7 @@ from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing, UnitPing
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
+from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import ServicePassStore
@@ -62,14 +63,16 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
 
     def failed(self, opened_wire: Callable[[], AbstractContextManager[Comms]],
                error: Exception) -> None:
-        """The service loop has already recorded the failure; each commander's board gains that
-        retained occurrence once, and every line it already holds keeps its age."""
+        """The service loop has already recorded the failure; every served commander's board
+        gains that retained occurrence once, and every line it already holds keeps its age."""
         with opened_wire() as comms:
             name = type(self).__name__
             retained = ServicePassStore.at(comms.root).read().failing[name]
             failure = ServicePassFailing(watch=name, since=retained.since, error=retained.error)
             now = time.time()
-            for thread in self.commanders(comms.registry, comms.goals):
+            snapshot = comms.registry.snapshot()
+            for thread in (recipient for lead in self.boards(comms.registry, comms.goals)
+                           for recipient in self.recipients(snapshot, lead)):
                 for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
@@ -78,7 +81,7 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
 
     def prepare(self, comms: Comms) -> Mapping[Thread, CommanderInputs]:
         return {thread: CommanderInputs.prepare(comms, thread.name, ProgressRead(), self)
-                for thread in self.commanders(comms.registry, comms.goals)}
+                for thread in self.boards(comms.registry, comms.goals)}
 
     def observe(self, comms: Comms, prepared: Mapping[Thread, CommanderInputs]) -> tuple[CommanderObservation, ...]:
         return tuple(
@@ -87,14 +90,20 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
-        """The committed packet survives connector replacement; local memory owns nothing."""
+        """The committed packet survives connector replacement; local memory owns nothing.
+
+        One board is read per registered commander; every commander it serves receives that
+        board under its own incarnation and completes its own pass."""
         completed = []
         huds = []
         now = time.time()
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merges(comms))
-                previous = CommanderUpdate.latest(comms, item.thread.incarnation)
+                recipients = self.recipients(comms.registry.snapshot(), item.thread)
+                held = {recipient: CommanderUpdate.latest(comms, recipient.incarnation)
+                        for recipient in recipients}
+                previous = held[item.thread]
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
                     comms, item.thread.name,
@@ -104,21 +113,21 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, CommanderService,
                 )
                 # Board disposition reads CommanderHistory after enforcement.
                 hud = CommanderHud.of(comms, item.thread.name, item.frame, item.states)
-                for update in CommanderUpdate.derive(
-                    item.thread.incarnation,
-                    tuple(state for state in item.states if state not in rejected),
-                    tuple(rule for rule in item.rules if rule not in rejected), previous,
-                    now=now,
-                    undisposed=tuple(
-                        ping for packet in previous
-                        for ping in packet.undisposed(comms, item.thread.name,
-                                                      now - AwaitingCommander.seconds)),
-                    not_applied=tuple(
-                        rule.rejected_line(error) for rule, error in rejected.items()),
-                ):
-                    update.send(comms, now, hud.brief())
+                history = CommanderHistory.read(comms, self.actors(comms.registry.snapshot()))
+                states = tuple(state for state in item.states if state not in rejected)
+                rules = tuple(rule for rule in item.rules if rule not in rejected)
+                not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
+                for recipient, latest in held.items():
+                    for update in CommanderUpdate.derive(
+                        recipient.incarnation, states, rules, latest, now=now,
+                        undisposed=tuple(
+                            ping for packet in latest
+                            for ping in packet.undisposed(history, now - AwaitingCommander.seconds)),
+                        not_applied=not_applied,
+                    ):
+                        update.send(comms, now, hud.brief())
+                    completed.append(recipient.incarnation)
                 huds.append(hud)
-                completed.append(item.thread.incarnation)
         finally:
             # A later commander's failure does not erase passes already completed.
             CommanderFrame.replace_all(comms.root, tuple(huds))

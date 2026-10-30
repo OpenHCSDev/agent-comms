@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Self
 
 from agent_comms.coordination_errors import CoordinationError
 
+from .channel_targets import DeclaredTag
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .goal_waits import GoalWaits
@@ -186,7 +187,7 @@ class ForkSpec(NewThreadSpec):
     def child(self, parent: Thread, runtime: RuntimeLocation, threads: ThreadManagement) -> Thread:
         saved = RegistrySessionLocation.from_path(runtime.read_key, threads.root)
         return replace(self.declaration(),
-                       parent=ForkedParent(parent.name), tags=self.tags.for_child(parent.tags),
+                       parent=ForkedParent(parent.name), tags=self.tags.for_child(DeclaredTag.for_child(parent.tags)),
                        backend=parent.backend, session_file=saved)
 
     def declare(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Thread:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
+from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -30,7 +31,7 @@ from .channel_targets import NamedTarget
 from .channels import AllChannel
 from .controller import Controller
 from .coordinator import Coordination
-from .field_codec import GoalId, InputId, TurnId
+from .field_codec import AcpSessionId, GoalId, InputId, TurnId
 from .errors import RelationViolationError
 from .following_inputs import OwnerFollowingInputs
 from .goal_actions import (
@@ -50,6 +51,7 @@ from .pi_commands import (
 )
 from .pi_payloads import StateData
 from .queued_input import InitialInput
+from .pi_rule_gate import PiRedeal
 from .routing import NoTurnRouting, Routing
 from .runtime import (
     RuntimeServer,
@@ -67,6 +69,7 @@ from .goal_scope import OneGoal
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .comms import Comms
+    from .context_reading import ContextUsage
     from .coordinated_runtime import SelectedExecution
     from .input_drain import DrainTurn, InputDrain, OwnerSession
     from .session_lifecycle import SessionLifecycle
@@ -87,7 +90,7 @@ class CompactionObservation(MroDispatch):
     async def start(self, event):
         await self.publish(self.phase.compacting())
 
-    @handles(events.CompactionEnd)
+    @handles(events.CompactionFinish)
     async def end(self, event):
         await self.publish(self.phase.compaction_ended())
 
@@ -134,13 +137,36 @@ class TurnRunner:
                 TurnTranscriptUpdate(state=state)
             )
 
-    async def observe_compaction(self, session_id: str, event) -> None:
+    async def on_published_thread(
+        self, session_id: str, observe: Callable[[Thread], Awaitable[None]],
+    ) -> None:
+        """Hand a published session's thread to `observe`; an unpublished session has none."""
         if session_id not in self.sessions.published:
             return
-        thread = await Coordination.run_worker(partial(
-            self.comms.registry.require, self.sessions.require(session_id)))
+        await observe(await Coordination.run_worker(partial(
+            self.comms.registry.require, self.sessions.require(session_id))))
+
+    async def observe_compaction(self, session_id: str, event) -> None:
+        await self.on_published_thread(session_id, partial(self.compacted, session_id, event))
+
+    async def compacted(self, session_id: str, event, thread: Thread) -> None:
+        await Coordination.run_worker(partial(self.deal_rules, thread, event))
         for lease in thread.turn_lease.held():
             await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+
+    async def observe_context(
+        self, session_id: AcpSessionId, usage: ContextUsage,
+    ) -> None:
+        """Pi's own context-use report deals the rules again at each declared share left."""
+        await self.on_published_thread(session_id, partial(self.context_used, usage))
+
+    async def context_used(self, usage: ContextUsage, thread: Thread) -> None:
+        await Coordination.run_worker(partial(PiRedeal.of(self.comms, thread).observe_context, usage))
+
+    def deal_rules(self, thread: Thread, event: events.CompactionEvent) -> None:
+        """Every compaction Core observes, Pi's own or one it asked for, deals the thread the
+        rules its role follows; its tool transports refuse other calls until they are read."""
+        event.deal_rules(PiRedeal.of(self.comms, thread))
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""

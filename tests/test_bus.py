@@ -564,9 +564,12 @@ def test_scoped_and_frozen_source_queries_are_sequence_bounded(bus):
         Message("author", "worker", "notice", ClaimHistoryKind, seq=seq)))
     reply = bus.append(lambda seq, db: record_from(PrivateRecord,
         Message("author", "worker", "reply", InfoKind, seq=seq, answers=(original.reference,))))
-    assert bus.scoped_page("target=?", ("worker",), descending=True, limit=1) == (reply,)
-    assert bus.scoped_page("target=?", ("worker",), upper=reply.seq, limit=1) == (notice,)
-    assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (reply,)
+    assert bus.scoped_page("target=?", ("worker",), descending=True, limit=1) == (
+        Message.from_message(reply),)
+    assert bus.scoped_page("target=?", ("worker",), upper=reply.seq, limit=1) == (
+        Message.from_message(notice),)
+    assert bus.scoped_page("target=?", ("worker",), kinds=(InfoKind,), limit=2) == (
+        Message.from_message(reply),)
     assert bus.conversation("b" * 32, limit=2) == (reply, notice)
     assert bus.sent("a" * 32, limit=1) == (reply,)
     assert bus.direct_replies("b" * 32, after=original.seq, limit=1, descending=False,

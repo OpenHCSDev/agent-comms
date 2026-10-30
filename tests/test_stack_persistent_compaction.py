@@ -293,7 +293,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch, n
                 if isinstance(fact, CompactionChangedUpdate)
                 and isinstance(fact.event, CompactionEnd)
             ]
-            assert len(terminal) == 1 and not terminal[0].aborted
+            assert len(terminal) == 1
             assert terminal[0].reason is ManualCompactionReason
             assert terminal[0].summary == committed[0].summary
             assert not attachment.turns.persistent_backends

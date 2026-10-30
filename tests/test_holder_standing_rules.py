@@ -35,11 +35,14 @@ from agent_comms.task_attachments.commander_pings import CommanderUpdate
 from agent_comms.task_attachments.owner_notices import ChokeholdNotice, VibeCheckNotice
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.errors import CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict
+from agent_comms.errors import (
+    CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
+)
 from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
+    SetGoalAction,
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
@@ -70,6 +73,9 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    CorrectMergedLinkTodo,
+    MergedLink,
+    PullRequestLink,
     ResumeClaimOrder,
     ExpectedProblem,
     OrderClaim,
@@ -449,6 +455,55 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
             order=todo.order.checked().reissued(time.time()),
         )
     assert held_bus.goals.todos.get(todo.id) == todo
+
+
+def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_owner(held_bus):
+    """P935: a prerequisite PR linked to the order merged it; only that link leaves, the
+    order is pending again under its own id, check, run and times, and then changes owner."""
+    store = held_bus.goals.todos
+    lead = held_bus.registry.require("lead").incarnation
+    held = store.get("P1")
+    prerequisite = PullRequestLink(held.repo, 3596)
+    implementation = PullRequestLink(held.repo, 3700)
+    with store.writing() as connection:
+        replace(held, revision=held.revision + 1, order=replace(
+            held.order.checked(), pull_requests=(prerequisite, implementation),
+        ).merged("33bd05c64abc")).upsert(connection)
+    merged = store.get("P1")
+    reason = "the merged prerequisite pull request held none of this order's checker work"
+
+    def correction(revision: int, previous: MergedLink) -> CorrectMergedLinkTodo:
+        return CorrectMergedLinkTodo(revision, lead, reason, previous=previous)
+
+    for refused in (correction(held.revision, MergedLink(prerequisite, "33bd05c64abc")),
+                    correction(merged.revision, MergedLink(PullRequestLink(held.repo, 1),
+                                                           "33bd05c64abc")),
+                    correction(merged.revision, MergedLink(prerequisite, "0123456789ab"))):
+        with pytest.raises(TodoError):
+            store.apply("P1", refused)
+        assert store.get("P1") == merged
+    with pytest.raises(TodoError, match="records no merge"):
+        correction(held.revision, MergedLink(prerequisite, "33bd05c64abc")).apply(held)
+
+    store.apply("P1", correction(merged.revision, MergedLink(prerequisite, "33bd05c64abc")))
+    corrected = store.get("P1")
+    assert isinstance(corrected.order, PendingProblemOrder)
+    assert corrected.order.pull_requests == (implementation,)
+    assert corrected.order.corrections[-1].previous == MergedLink(prerequisite, "33bd05c64abc")
+    assert (replace(corrected.order, pull_requests=(), corrections=())
+            == replace(held.order, pull_requests=(), corrections=()))
+    assert (corrected.holder, corrected.review_at) == (merged.holder, merged.review_at)
+
+    held_bus.goals.update_goal("outsider", SetGoalAction(text="Absorb the checker audit work."))
+    goals = {name: held_bus.registry.require(name).goal for name in ("worker", "outsider")}
+    outsider = held_bus.registry.require("outsider")
+    store.assign((ExpectedProblem("P1", corrected.revision),), owner=outsider, assigner=lead,
+                 generation=goals["outsider"].require().id, request=corrected.request.require(),
+                 review_at=corrected.review_at, order=corrected.order)
+    assigned = store.get("P1")
+    assert assigned.held().owner_identity == outsider.incarnation
+    assert assigned.order == corrected.order
+    assert {name: held_bus.registry.require(name).goal for name in goals} == goals
 
 
 def test_unanswered_uses_age_direct_target_and_later_answer_references(held_bus):
