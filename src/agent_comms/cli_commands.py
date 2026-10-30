@@ -45,7 +45,7 @@ from .owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import ThreadRecord, ThreadView
 from .repo import Checkout, CheckoutStart, Repo
-from .storage_rules import StorageProjection
+from .storage_projection import StorageProjection
 from .shell_effects import CheckoutStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .thread_model import ThreadModel
 from .threads import Thread

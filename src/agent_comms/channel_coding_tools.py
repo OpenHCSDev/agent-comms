@@ -41,7 +41,7 @@ from .selected_tool_broker import (
 )
 from .shell_effects import StorageDenied
 from .storage_room import NoRoomNeeded, RoomReservation
-from .storage_rules import StorageProjection
+from .storage_projection import StorageProjection
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 from .threads import Thread

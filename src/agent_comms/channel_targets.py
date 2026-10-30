@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
     from .thread_status import ThreadStatus
@@ -100,18 +100,6 @@ class PerTargetChannels(ChannelSelection):
 
     def require_unbound(self) -> None:
         raise ValueError('This action does not accept per-target channels')
-
-
-@dataclass(frozen=True)
-class ResolvedThread:
-    thread: Thread
-    status: ThreadStatus
-
-
-@dataclass(frozen=True)
-class ResolvedChannel:
-    channel: Channel
-    members: tuple[ResolvedThread, ...]
 
 
 def exact_stored_target(name: str) -> bool:
@@ -408,8 +396,7 @@ class ThreadTarget(NamedTarget):
         return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedThread:
-        thread = snapshot.require(self.selected_name(snapshot))
-        return ResolvedThread(thread, snapshot.status(thread.name))
+        return snapshot.resolve_thread(self.selected_name(snapshot))
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
@@ -554,11 +541,7 @@ class ChannelTarget(NamedTarget):
         return require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedChannel:
-        channel = require_channel(self.name)
-        members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
-                        for thread in snapshot.channel_audience()
-                        if channel.matches(thread.tags))
-        return ResolvedChannel(channel, members)
+        return snapshot.resolve_channel(require_channel(self.name))
 
     def bindings[C: CliCommand](
         self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,

@@ -7,7 +7,8 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.repo import Repo
-from agent_comms.storage_rules import StorageRule, StorageProjection
+from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_projection import StorageProjection
 from agent_comms.shell_effects import AllocateStorageEffect, StorageDenied
 
 from agent_comms.session_file import RegistrySessionLocation

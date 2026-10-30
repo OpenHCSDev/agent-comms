@@ -17,7 +17,8 @@ from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateR
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .storage_rules import StorageProjection, UnitStorage
+    from .storage_rules import UnitStorage
+    from .storage_projection import StorageProjection
 
 
 class ShellProgram(NamedProgram):

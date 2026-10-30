@@ -21,7 +21,8 @@ from pydantic import JsonValue
 from collections.abc import Mapping
 from typing import Annotated, Generic, Self, TypeVar
 
-from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
+from agent_comms.channel_targets import OneChannel
+from agent_comms.registry_document import ResolvedChannel, ResolvedThread
 from agent_comms.declared_verb import DeclaredCommand
 from agent_comms.declared_family import ModuleMembers
 from agent_comms.field_codec import FieldPlan, TargetBound

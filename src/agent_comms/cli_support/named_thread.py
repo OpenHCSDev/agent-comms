@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import OneChannel, ResolvedChannel
-from agent_comms.channel_targets import ResolvedThread
+from agent_comms.channel_targets import OneChannel
+from agent_comms.registry_document import ResolvedChannel, ResolvedThread
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.cli_support.thread_bound import ThreadBoundCliCommand
 from agent_comms.comms import Comms

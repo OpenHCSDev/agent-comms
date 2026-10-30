@@ -7,7 +7,7 @@ from agent_comms.cli_command import CliCommand
 from typing import Self
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import ResolvedChannel
+from agent_comms.registry_document import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_verbs.archive import ArchiveCliCommand

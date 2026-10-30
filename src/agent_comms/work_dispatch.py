@@ -26,7 +26,7 @@ from .recorded_time import RecordedEventTime
 from .repo import Checkout, CheckoutStart, Repo
 from .repository_name import RepositoryName
 from .shell_effects import CreateCheckoutStorageEffect
-from .storage_rules import StorageProjection
+from .storage_projection import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 

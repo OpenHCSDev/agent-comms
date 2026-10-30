@@ -5,7 +5,7 @@ from agent_comms.repo import Checkout
 from agent_comms.channel_targets import SurroundingChannel
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import ResolvedChannel
+from agent_comms.registry_document import ResolvedChannel
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_commands import TargetReadResult

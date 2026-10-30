@@ -16,7 +16,7 @@ from pydantic import JsonValue
 
 from .activity import ActivityCapture
 from .channel_targets import CommandersTag
-from .channels import ChannelMemberIndex
+from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -96,6 +96,18 @@ class RosterVisibility:
 DEFAULT_ROSTER = RosterVisibility()
 
 
+@dataclass(frozen=True)
+class ResolvedThread:
+    thread: Thread
+    status: ThreadStatus
+
+
+@dataclass(frozen=True)
+class ResolvedChannel:
+    channel: Channel
+    members: tuple[ResolvedThread, ...]
+
+
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
@@ -118,6 +130,18 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def status(self, name: str) -> ThreadStatus:
         thread = self.require(name)
         return self.statuses[thread.name].registered(thread, self.last_seen[thread.name])
+
+    def resolve_thread(self, name: str) -> ResolvedThread:
+        """Bind a thread and its status from this same acquired registry."""
+        thread = self.require(name)
+        return ResolvedThread(thread, self.status(thread.name))
+
+    def resolve_channel(self, channel: Channel) -> ResolvedChannel:
+        """A channel's visible members and statuses share this one registry cut."""
+        members = tuple(self.resolve_thread(thread.name)
+                        for thread in self.channel_audience()
+                        if channel.matches(thread.tags))
+        return ResolvedChannel(channel, members)
 
     def receiving(self, name: str) -> bool:
         """Whether a message sent now is read now; an unregistered name reads nothing."""

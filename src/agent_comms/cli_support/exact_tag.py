@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from agent_comms.catalog_document import CatalogAccess
-from agent_comms.channel_targets import ResolvedChannel
+from agent_comms.registry_document import ResolvedChannel
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
 from agent_comms.registry_document import RegistrySnapshot
