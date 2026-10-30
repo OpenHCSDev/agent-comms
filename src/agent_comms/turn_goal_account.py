@@ -45,17 +45,17 @@ class VerifiedGoalSettlement(MroDispatch):
     turn: TurnId
 
     @classmethod
-    def settle_current(cls, account: TurnGoalAccount) -> None:
-        comms, owner = account.comms, account.owner
+    def settle_current(cls, comms: Comms, owner: Thread, turn: TurnId) -> None:
+        """Every verified owner turn, Toad-typed or bus-selected, continues its current goal."""
         with comms.registry.store.current_snapshot() as cut:
-            current = cut.snapshot.require(account.thread_name)
+            current = cut.snapshot.require(cut.snapshot.canonical_name(owner.name))
             if current.incarnation != owner.incarnation or current.worktree != owner.worktree:
                 return
             for goal in owner.goal.continued_by(current.goal):
                 store = comms.goals.open_goal_store()
                 generation = store.require_generation(goal.id)
                 generation.lifecycle.continue_work(
-                    store, generation, VerifiedTurnDecision(account.turn)
+                    store, generation, VerifiedTurnDecision(turn)
                 )
 
     @property
