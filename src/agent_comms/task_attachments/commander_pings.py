@@ -59,6 +59,8 @@ class Ping(DeclaredFamily, affix="Ping"):
     """
 
     text: str = field(compare=False, kw_only=True)
+    ask: str = field(default="", compare=False, kw_only=True)
+    facts: str = field(default="", compare=False, kw_only=True)
     subjects: tuple[HeartbeatSubject, ...] = field(default=(), compare=False, kw_only=True)
     since: EventTime = field(default_factory=UnrecordedEventTime, compare=False, kw_only=True)
 
@@ -148,7 +150,8 @@ class RulePing(Ping):
 
     @classmethod
     def capture(cls, rule: StandingRule) -> Self:
-        return cls(type(rule), rule.observation_key(), text=rule.line(), subjects=rule.subjects())
+        return cls(type(rule), rule.observation_key(), text=rule.line(), ask=rule.ask,
+                   facts=rule.facts(), subjects=rule.subjects())
 
 
 @dataclass(frozen=True)
@@ -451,10 +454,12 @@ class AlarmSection:
         return {kind: tuple(pings) for kind, pings in grouped.items()}
 
     def text_lines(self, now: float) -> tuple[str, ...]:
-        """Every original line under its rule's count; the kind and labels print once."""
+        """Under each rule's count, what the rule asks once, then each row's own facts and age.
+        Every original line stays in alarm_detail and comms_hud board/open_pings."""
         return tuple(line for kind, pings in self.by_kind().items() for line in (
             f"{kind.declared_name} · {len(pings)}",
-            *(f"  {ping.text} · {ping.since.age(now)}" for ping in pings),
+            *(ask for ask in dict.fromkeys(ping.ask for ping in pings) if ask),
+            *(f"  {ping.facts if ping.ask else ping.text} · {ping.since.age(now)}" for ping in pings),
         ))
 
     def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:

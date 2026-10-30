@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, ClassVar, Self, TYPE_CHECKING
 
 from agent_comms.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
@@ -103,6 +103,12 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
     def command_values(self) -> Mapping[str, str]:
         return {'pr': str(self.request.pr), 'head': self.request.head,
                 'repo': self.request.repo.to_wire()}
+
+    ask: ClassVar[str] = "LOST: closed unmerged -> land them, or record why they are dropped"
+
+    def facts(self) -> str:
+        pull = PullRequestLink(self.request.repo, self.request.pr)
+        return f'{pull.url} {self.base.description(len(self.commits))}'
 
     def line(self) -> str:
         pull = PullRequestLink(self.request.repo, self.request.pr)

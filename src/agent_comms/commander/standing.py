@@ -252,8 +252,14 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
         return tuple(cls(request) for request in store.open_requests(thread.acting_identity)
                      if not store.serving_orders(request.id))
 
+    ask: ClassVar[str] = ("ADVANCE: no order serves these requests. is anyone on it, or did we forget?"
+                          " -> order its next step or mark it done")
+
+    def facts(self) -> str:
+        return f"{self.request.id.value} ({self.request.text})"
+
     def line(self) -> str:
-        return (f"ADVANCE request {self.request.id.value} ({self.request.text}) has no order serving it."
+        return (f"ADVANCE request {self.facts()} has no order serving it."
                 " is anyone on it, or did we forget? -> order its next step or mark it done")
 
 
@@ -330,6 +336,14 @@ class PlanStalled(PlanRule):
             for since in (phase.ordered_since(reading),)
             if now - since >= cls.window
         )
+
+    ask: ClassVar[str] = ("UNSTALL: held and still not on main. what's actually holding it?"
+                          " -> find it and change that this wake: integrate steps that only land together,"
+                          " take it over, or reassign it")
+
+    def facts(self) -> str:
+        return (f"{self.phase.plan.declared_name}/{self.phase.declared_name} since"
+                f" {RecordedEventTime(self.since).stamp()} ({self.phase.plan.document})")
 
     def line(self) -> str:
         return (
@@ -775,8 +789,13 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
                      for count in (todo.strikes_against(held.owner_identity),)
                      if count >= cls.threshold)
 
+    ask: ClassVar[str] = "SCRUTINIZE: read the unit's trail and diff, name the cause, and order the fix to the cause"
+
+    def facts(self) -> str:
+        return f"{self.holder.owner} {self.todo.id}: {self.count} strikes"
+
     def line(self) -> str:
-        return (f"SCRUTINIZE {self.holder.owner} {self.todo.id}: {self.count} strikes"
+        return (f"SCRUTINIZE {self.facts()}"
                 " -> read the unit's trail and diff, name the cause, and order the fix to the cause")
 
 

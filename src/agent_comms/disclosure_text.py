@@ -218,6 +218,15 @@ class ViewTable[R]:
         return tuple(" · ".join(" / ".join(cell.splitlines()) for cell in row if cell)
                      for row in self.texts)
 
+    def by_action_lines(self) -> tuple[str, ...]:
+        """Rows grouped by their last declared cell, which prints once above its rows."""
+        grouped: dict[str, list[str]] = {}
+        for *cells, last in self.texts:
+            grouped.setdefault(last, []).append(
+                " · ".join(" / ".join(cell.splitlines()) for cell in cells if cell))
+        return tuple(line for last, rows in grouped.items()
+                     for line in (f"{last} · {len(rows)}", *(f"  {row}" for row in rows)))
+
     def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""
         return tuple(" · ".join(f"{column.label}: {cell}"
