@@ -1,5 +1,6 @@
 """Committed notifications survive a new watcher and use the real publisher/readers."""
 
+import asyncio
 import json
 import os
 import pickle
@@ -13,19 +14,22 @@ import pytest
 from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
+from agent_comms.comms import Comms
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.commander_hud import (
     BoardRow, CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, QuietUnits, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import OverdueHeadRefusalError, RelationViolationError, UnregisteredThreadError
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
 from agent_comms.service_passes import ServicePassStore
-from agent_comms.todos import ProgressRead
+from agent_comms.todos import ProgressRead, UnitOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
 from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
@@ -36,10 +40,14 @@ from agent_comms.ui_model.unit_state import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms_hooks.board import BoardEntry
+from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
-from agent_comms.bus_publication import AgentOrigin
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
+from agent_comms.channel_targets import CommandersTag, ThreadTarget
 from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.transcript_events import IncomingTranscript
+from agent_comms.ui_model.message_category import HeartbeatCategory, InboundCategory, all_categories
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from test_holder_standing_rules import state_cards
 from test_unit_state import recorded_turn
@@ -55,28 +63,47 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
     monkeypatch.setattr(CodexConnection, "CONTROL_SOCKET", tmp_path / "no-account.sock")
     lead = held_bus.registry.require("lead")
     held_bus.registry.register(replace(lead, process_identity=ProcessIdentity.capture(os.getpid())))
-    CommanderHeartbeat.register(held_bus.registry)
     with LaunchRoot.from_path(held_bus.root).selected():
         yield held_bus
 
 
+def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
+    heartbeat = CommanderHeartbeat()
+    prepared = heartbeat.prepare(notification_bus)
+    lead = notification_bus.registry.require("lead")
+    inputs = prepared[lead]
+    observed = heartbeat.observe(notification_bus, prepared)
+    item = next(item for item in observed if item.thread == lead)
+    assert item.frame.plan is inputs.plan
+    assert item.frame.pulls is inputs.pulls
+    assert (item.frame.live, item.frame.orphaned) == (inputs.live, inputs.orphaned)
+    assert inputs.plan.reads
+    assert any(plan.main == inputs.plan.main for plan in heartbeat.plans)
+
+
+def owner(comms):
+    """The owner's thread, which the heartbeat speaks under."""
+    return comms.messaging.user_identity(Checkout(comms.root))
+
+
 def notifications(comms):
     page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+        owner(comms).name, "lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
 
 
 def lead_hud(comms, states=()):
-    return CommanderHud.of(comms, "lead", HeartbeatFrame.capture(comms, "lead", ProgressRead()), states)
+    return CommanderHud.of(comms, "lead", capture_frame(comms, "lead", ProgressRead()), states)
 
 
 def beat(comms, rules=(), *, states=()):
-    frame = CommanderObservation(
-        comms.registry.require("lead"), (), rules, states, hud=lead_hud(comms, states))
+    observed = CommanderObservation(
+        comms.registry.require("lead"), capture_frame(comms, "lead", ProgressRead()),
+        rules, states)
     # Deliberately construct a fresh watcher on every pass, never reuse a cache.
-    CommanderHeartbeat().pass_body(comms, (frame,))
-    return frame.hud
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
+    return CommanderFrame.current(comms, "lead")
 
 
 def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_stale_selection(
@@ -121,7 +148,7 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
 
 
 class BrokenHeartbeat(CommanderHeartbeat, declared_name=None):
-    def observe(self, comms):
+    def observe(self, comms, prepared):
         raise RuntimeError("forced heartbeat pass failure")
 
 
@@ -130,7 +157,7 @@ def failed_pass(comms, error):
     watcher's callback runs; the original exception still escapes the pass."""
     heartbeat = BrokenHeartbeat()
     with pytest.raises(RuntimeError) as raised:
-        heartbeat.watch_pass(lambda: nullcontext(comms))
+        asyncio.run(heartbeat.run(lambda: nullcontext(comms)))
     ServicePassStore.at(comms.root).failed(BrokenHeartbeat.__name__, error)
     heartbeat.failed(lambda: nullcontext(comms), error)
     return raised.value
@@ -138,7 +165,7 @@ def failed_pass(comms, error):
 
 def retained_failure(comms):
     stored = ServicePassStore.at(comms.root).read().failing[BrokenHeartbeat.__name__]
-    return ServicePassFailing(BrokenHeartbeat.__name__, stored.since, stored.error)
+    return ServicePassFailing(watch=BrokenHeartbeat.__name__, since=stored.since, error=stored.error)
 
 
 def aged(pings):
@@ -151,7 +178,7 @@ def test_failed_heartbeat_pass_publishes_one_typed_packet_and_still_raises(notif
     assert str(raised) == "forced heartbeat pass failure"
     failure = retained_failure(comms)
     message, = notifications(comms)
-    assert message.sender == CommanderHeartbeat.sender and message.target == "lead"
+    assert message.sender == owner(comms).name and message.target == "lead"
     assert isinstance(message.task, CommanderDecisions)
     assert message.task.decisions == message.task.handled == (RulePing.capture(failure),)
     assert failure.line() in message.body and "first wording" in message.body
@@ -166,12 +193,12 @@ def test_failure_keeps_the_board_and_recovery_clears_only_the_failure(notificati
 
     class RefusedRule(ServicePassFailing):
         def enforce(self, _comms, _commander):
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+            raise UnitOccupied("another order already holds the selected unit")
 
     recorded_turn(comms, (True, True))
     states = state_cards(comms, Spinning)
     rules = (RefusedRule("refused", 1.0, "review pending"),
-             ServicePassFailing("independent", 1.0, "another source"))
+             ServicePassFailing(watch="independent", since=1.0, error="another source"))
     beat(comms, rules, states=states)
     board, = notifications(comms)
     assert board.task.not_applied and len(board.task.handled) == 2
@@ -220,31 +247,27 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
 
 
 def independent_instruction(comms, body):
-    """A taskless message from the heartbeat's own sender, as raw alarms were published."""
-    return comms.bus.publisher.publish_ordinary(
-        Message(sender=CommanderHeartbeat.sender, target="lead", body=body,
-                type=InfoKind, role=ConversationRole()),
-        origin=AgentOrigin(), destination=ThreadTarget("lead"),
-    )
+    """A taskless message the owner typed, under the same thread the heartbeat speaks in."""
+    return comms.messaging.send_user_message(ThreadTarget("lead"), body, worktree=Checkout(comms.root))
 
 
 def everything_to_lead(comms):
     page = MessagePageRequest(DMDisplayScope.capture(
-        CommanderHeartbeat.sender, "lead", comms.registry.snapshot(),
+        owner(comms).name, "lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return {message.reference for message in page.messages}
 
 
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,))
     board, = notifications(comms)
     raw = independent_instruction(comms, "Heartbeat pass failed: an old raw alarm")
     lead = comms.registry.require("lead").incarnation
     assert CommanderUpdate.latest(comms, lead) == (board.task,)
-    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms, "lead")
-    assert lead_hud(comms).board == board.task.board(comms, "lead")
+    assert CommanderUpdate.current_board(comms, "lead") == board.task.board(comms)
+    assert lead_hud(comms).board == board.task.board(comms)
     assert raw.reference in everything_to_lead(comms)
     # The next pass derives from the typed board, so nothing is restated as new.
     beat(comms, (failing,))
@@ -253,8 +276,8 @@ def test_an_independent_heartbeat_message_never_replaces_the_board(notification_
 
 def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notification_bus):
     comms = notification_bus
-    kept = ServicePassFailing("kept-rule", time.time(), "still failing")
-    cleared = ServicePassFailing("cleared-rule", time.time(), "now fixed")
+    kept = ServicePassFailing(watch="kept-rule", since=time.time(), error="still failing")
+    cleared = ServicePassFailing(watch="cleared-rule", since=time.time(), error="now fixed")
     beat(comms, (kept, cleared))
     decisions, = notifications(comms)
     beat(comms, (kept,))
@@ -268,7 +291,7 @@ def test_a_later_notice_is_the_baseline_and_keeps_the_lines_still_on_it(notifica
 
 def test_a_raw_message_between_failures_does_not_restate_the_board(notification_bus):
     comms = notification_bus
-    rules = (ServicePassFailing("independent", 1.0, "another source"),)
+    rules = (ServicePassFailing(watch="independent", since=1.0, error="another source"),)
     beat(comms, rules)
     board, = notifications(comms)
     failed_pass(comms, RuntimeError("down"))
@@ -285,7 +308,7 @@ def test_a_raw_message_between_failures_does_not_restate_the_board(notification_
 
 def test_a_recreated_commander_inherits_no_board(notification_bus):
     comms = notification_bus
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,))
     board, = notifications(comms)
     worktree = comms.registry.require("lead").worktree
@@ -307,27 +330,27 @@ def test_only_the_heartbeat_publishes_a_packet_for_its_exact_commander(notificat
     comms = notification_bus
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
-    for sender, target, commander in (("worker", "lead", lead),
-                                      (CommanderHeartbeat.sender, "lead", worker)):
+    user = owner(comms)
+    for sender, origin, commander in (("worker", AgentOrigin(), lead),
+                                      (user.name, HumanOrigin.of(user), worker)):
         with pytest.raises(RelationViolationError):
             comms.bus.publisher.publish_ordinary(
-                Message(sender=sender, target=target, body="forged board", type=InfoKind,
+                Message(sender=sender, target="lead", body="forged board", type=InfoKind,
                         role=CommanderNotice.role, task=CommanderNotice(commander, ())),
-                origin=AgentOrigin(), destination=ThreadTarget(target),
+                origin=origin, destination=ThreadTarget("lead"),
             )
     assert CommanderUpdate.latest(comms, lead) == ()
     assert CommanderUpdate.latest(comms, worker) == ()
 
 
-def test_failure_packet_follows_commander_and_service_rename_aliases(notification_bus):
+def test_failure_packet_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
     failed_pass(comms, RuntimeError("down"))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
-    comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     failed_pass(comms, RuntimeError("still down"))
     page = MessagePageRequest(DMDisplayScope.capture(
-        "renamed-heartbeat", "renamed-lead", comms.registry.snapshot(),
+        owner(comms).name, "renamed-lead", comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     published = tuple(message for message in page.messages
                       if isinstance(message.task, CommanderUpdate))
@@ -345,15 +368,16 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
     comms = notification_bus
     lead = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
-    hud = CommanderHud(lead, (), (
+    hud = CommanderHud(commander=lead, units=(), phases=(
         CommanderPhase(RetainedStorePhase, True, False, ()),
         CommanderPhase(OneOrderOwnerPhase, True, False, ()),
         CommanderPhase(DesignReconciledPhase, False, False, (worker,)),
         CommanderPhase(RecordPlanePhase, False, True, ()),
         CommanderPhase(ReviewQueuePhase, True, False, (worker,)),
-    ), OverloadDegradation.from_orders((), 0, 0), (worker,), CodexUsage(UnreadableUsage(reason='not requested')))
+    ), load=OverloadDegradation.from_orders((), 0, 0), forks=(worker,),
+        usage=CodexUsage(UnreadableUsage(reason='not requested')))
     assert hud.frame == (
-        str(hud.load),
+        *hud.header,
         "commander_native/record_plane done=False ready=True holders=",
         "commander_native/review_queue done=True ready=False holders=worker",
         "commander_native/design_reconciled done=False ready=False holders=worker",
@@ -378,9 +402,9 @@ def test_frame_keeps_committed_board_order_and_folds_units_needing_no_hand(tmp_p
         BoardEntry("judge", "JUDGE #1", now - 240, now + 3600),
     )
     hud = CommanderHud(
-        RecordedThreadIncarnation("lead", 3.0), (awaiting, stuck), (),
-        OverloadDegradation.from_orders((), 0, 0), (),
-        CodexUsage(UnreadableUsage(reason="not requested")), board,
+        commander=RecordedThreadIncarnation("lead", 3.0), units=(awaiting, stuck), phases=(),
+        load=OverloadDegradation.from_orders((), 0, 0), forks=(),
+        usage=CodexUsage(UnreadableUsage(reason="not requested")), board=board,
     )
 
     CommanderFrame.replace_all(tmp_path, (hud,))
@@ -404,11 +428,12 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     comms = notification_bus
     lead = comms.registry.require("lead")
     missing = replace(comms.registry.require("worker"), name="unregistered-recipient")
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
-    frames = tuple(CommanderObservation(thread, (), (failing,), (), hud=lead_hud(comms))
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
+    frame = capture_frame(comms, "lead", ProgressRead())
+    frames = tuple(CommanderObservation(thread, frame, (failing,), ())
                    for thread in (lead, missing))
     with pytest.raises(UnregisteredThreadError):
-        CommanderHeartbeat().pass_body(comms, frames)
+        asyncio.run(ObservedHeartbeat(frames).run(lambda: nullcontext(comms)))
     completed = ServicePassStore.at(comms.root).read().commander_completed
     assert set(completed) == {lead.incarnation}
     assert missing.incarnation not in completed
@@ -416,13 +441,13 @@ def test_quiet_completion_is_per_commander_even_when_a_later_recipient_fails(not
     beat(comms, (failing,))
     assert len(notifications(comms)) == 1
     # A pass that misses a still-registered commander retires nothing but its frame.
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert CommanderFrame.read_all(comms.root) == ()
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == {lead.incarnation}
     # Only the registry retiring the incarnation drops its completion.
     comms.registry.unregister("lead")
     comms.registry.remove("lead")
-    CommanderHeartbeat().pass_body(comms, ())
+    asyncio.run(ObservedHeartbeat(()).run(lambda: nullcontext(comms)))
     assert not ServicePassStore.at(comms.root).read().commander_completed
 
 
@@ -432,7 +457,7 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     comms = notification_bus
     states = state_cards(comms, UnitState)
     assert states and not any(state.attention() for state in states)
-    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    failing = ServicePassFailing(watch="following-rule", since=time.time(), error="independent source")
     beat(comms, (failing,), states=states)
     first, = notifications(comms)
     assert failing.line() in first.body
@@ -447,26 +472,28 @@ def test_recreated_watcher_reads_original_committed_unit_observation(notificatio
     assert unchanged.reference == first.reference
 
 
-def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notification_bus):
+def test_occupied_unit_refusal_is_published_and_later_rule_still_runs(notification_bus):
     comms = notification_bus
     enforced = []
+    refusal = UnitOccupied("another order already holds the selected unit")
 
     class FollowingRule(ServicePassFailing):
         def enforce(self, _comms, _commander):
             enforced.append(self.watch)
 
-    class OverdueRule(FollowingRule):
+    class OccupiedRule(FollowingRule):
         def enforce(self, _comms, _commander):
             super().enforce(_comms, _commander)
-            raise OverdueHeadRefusalError("Review overdue heads before sending new orders:\ntoad#1176")
+            raise refusal
 
-    rules = (OverdueRule("overdue-head", 1.0, "review pending"),
+    rules = (OccupiedRule("occupied-unit", 1.0, "unit already holds work"),
              FollowingRule("following-rule", 1.0, "another rule"))
     beat(comms, rules)
 
-    assert enforced == ["overdue-head", "following-rule"]
+    assert enforced == ["occupied-unit", "following-rule"]
     message, = notifications(comms)
-    assert "Not applied (a reviewed head is overdue):" in message.body
+    assert len(message.task.not_applied) == 1
+    assert refusal.explanation() in message.body
     assert rules[0].line() in message.body
     assert RulePing.capture(rules[0]) not in message.task.handled
     assert RulePing.capture(rules[1]) in message.task.handled
@@ -476,7 +503,7 @@ def test_overdue_head_refusal_is_published_and_later_rule_still_runs(notificatio
 
 def test_rule_packets_list_every_new_line_and_never_restate_one(notification_bus):
     comms = notification_bus
-    rules = tuple(ServicePassFailing(f"watch-{index}", 1.0, "failed source read")
+    rules = tuple(ServicePassFailing(watch=f"watch-{index}", since=1.0, error="failed source read")
                   for index in range(7))
     beat(comms, rules)
     first, = notifications(comms)
@@ -514,12 +541,11 @@ def test_resolution_is_passive_and_same_rule_can_recur(notification_bus):
     assert repeated.task.decisions == first.task.decisions
 
 
-def test_latest_observation_follows_commander_and_service_rename_aliases(notification_bus):
+def test_latest_observation_follows_the_commander_rename_alias(notification_bus):
     comms = notification_bus
-    beat(comms, (ServicePassFailing("watch", 1.0, "failed source read"),))
+    beat(comms, (ServicePassFailing(watch="watch", since=1.0, error="failed source read"),))
     first, = notifications(comms)
     comms.threads._rename_thread("lead", "renamed-lead")
-    comms.threads._rename_thread(CommanderHeartbeat.sender, "renamed-heartbeat")
     previous = CommanderUpdate.latest(comms, comms.registry.require("renamed-lead").incarnation)
     assert previous == (first.task,)
 
@@ -541,7 +567,7 @@ def test_new_local_commit_on_an_unpushed_branch_is_not_a_resolution(notification
 
 def test_failed_rule_scan_raises_to_the_heartbeat(notification_bus, request):
     comms = notification_bus
-    frame = HeartbeatFrame.capture(comms, "lead", ProgressRead())
+    frame = capture_frame(comms, "lead", ProgressRead())
     states = UnitState.current(comms, "lead", frame)
     @dataclass(frozen=True)
     class FailedScan(UndatedStandingRule):
@@ -640,7 +666,7 @@ def test_waiting_notification_is_bounded_but_original_packet_keeps_every_alert(n
     assert sum(f"#{rule.request.pr} " in message.body for rule in rules) == 2
     assert max(map(len, message.body.splitlines())) < 300
     assert len(message.task.handled) == 12
-    assert {entry.text for entry in message.task.board(comms, "lead")} == {rule.line() for rule in rules}
+    assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
 
 
@@ -648,10 +674,85 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     """The registry names the commander; an old open request does not make one."""
     comms = notification_bus
     lead = comms.registry.require("lead")
-    assert lead.name in {thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+    assert lead.name in {thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
     assert CommanderHeartbeat.requested_by(lead, comms.goals)
     comms.registry.set_commander_project(RegisteredCommanderProject(
         comms.registry.require("worker").incarnation, ()))
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
-        thread.name for thread in CommanderHeartbeat.commanders(comms.registry, comms.goals)}
+        thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
+
+
+def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
+    """#commanders declares who commands: one board read, one packet per live member under its
+    own incarnation. A thread outside the channel, and a fork of a commander, get none."""
+    comms = notification_bus
+    live = ProcessIdentity.capture(os.getpid())
+    for name, tags in (("worker", {"comms", CommandersTag.declared_name}), ("outsider", {"comms"})):
+        comms.registry.register(replace(comms.registry.require(name), tags=frozenset(tags),
+                                        process_identity=live))
+    fork = comms.registry.register_child("worker-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(fork, process_identity=live))
+    assert CommandersTag.declared_name not in comms.registry.require("worker-fork").tags
+    failing = ServicePassFailing("following-rule", time.time(), "independent source")
+    beat(comms, (failing,))
+    lead_packet, = CommanderUpdate.latest(comms, comms.registry.require("lead").incarnation)
+    worker = comms.registry.require("worker").incarnation
+    worker_packet, = CommanderUpdate.latest(comms, worker)
+    assert worker_packet.commander == worker
+    assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
+    assert CommanderUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
+    assert CommanderUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
+    assert set(ServicePassStore.at(comms.root).read().commander_completed) == {
+        comms.registry.require("lead").incarnation, worker}
+
+
+def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):
+    comms = notification_bus
+    parent = comms.registry.require('worker')
+    tag = CommandersTag.declared_name
+    parent = comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
+    command = ForkCliCommand.thread_binding(parent)
+    assert command.tags.for_new() == parent.tags - {tag}
+    explicit = replace(command, tags=GivenTags(parent.tags))
+    assert tag in explicit.tags.for_new()
+
+
+def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
+    """The hook's role answer reads the one derivation: a thread registered with the tag
+    commands, fork or not; a fork or bound unit of a commander does not inherit the role."""
+    comms = notification_bus
+    tag = CommandersTag.declared_name
+    for name in ("lead", "worker"):
+        thread = comms.registry.require(name)
+        comms.registry.register(replace(thread, tags=thread.tags | {tag}))
+    declared = comms.registry.register_child("declared-fork", "worker", CommanderForkExecution, comms.goals)
+    comms.registry.register(replace(declared, tags=declared.tags | {tag}))
+    comms.registry.register_child("copied-fork", "worker", CommanderForkExecution, comms.goals)
+    worker = comms.registry.require("worker")
+    comms.registry.register_commanded_unit(
+        "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))
+
+    def commands(name):
+        return RecordedWatch(WatchClaim(name, home=tmp_path),
+                             WatchRecord(name, str(comms.root), (), tmp_path)).commands()
+
+    assert commands("lead") and commands("worker") and commands("declared-fork")
+    assert not commands("outsider")
+    assert not commands("copied-fork")
+    assert not commands("bound-unit")
+    assert "comms" in comms.registry.require("copied-fork").tags
+
+
+def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_inbound(notification_bus):
+    comms = notification_bus
+    lead = comms.registry.require("lead").incarnation
+    user = owner(comms)
+    board = Message(sender=user.name, target="lead", body="board", type=InfoKind,
+                    role=CommanderDecisions.role, task=CommanderDecisions(lead, (), (), ()))
+    spoken = Message(sender=user.name, target="lead", body="his words", type=InfoKind,
+                     role=ConversationRole())
+    assert board.category is HeartbeatCategory
+    assert spoken.category is InboundCategory
+    assert IncomingTranscript.of(board, reader="lead").category is HeartbeatCategory
+    assert HeartbeatCategory in all_categories()

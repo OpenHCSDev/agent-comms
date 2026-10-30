@@ -1,7 +1,9 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
 from agent_comms.repo import Checkout
+import asyncio
 import io
+from contextlib import nullcontext
 import json
 import os
 import subprocess
@@ -20,8 +22,7 @@ from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.commander.order import CommanderContext, OrderFile
 from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
-from agent_comms.commander_hud import CommanderHud
-from agent_comms.heartbeat_frame import HeartbeatFrame
+from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
@@ -39,7 +40,8 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.turn_digests import EditWorkplaces, OrderEditsRead, OrderEditCountRead, TurnsSince
+from agent_comms.storage_rules import EditWorkplaces
+from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier,
@@ -76,6 +78,8 @@ from agent_comms.todos import (
     UnlocatedProblemFinding,
 )
 from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
+from agent_comms.activity import ActivityState
+from agent_comms_hooks import read_gate
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -237,11 +241,10 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     ctx = CommanderContext.read_root(comms.root).model_copy(
         update={"actor": CommanderForkCaller(fork.name)}
     )
-    frame = HeartbeatFrame.capture(comms, parent.name, ProgressRead())
+    frame = capture_frame(comms, parent.name, ProgressRead())
     states = UnitState.current(comms, parent.name, frame)
-    observed = CommanderObservation(parent, (), (), states,
-        CommanderHud.of(comms, parent.name, frame, states))
-    CommanderHeartbeat().pass_body(comms, (observed,))
+    observed = CommanderObservation(parent, frame, (), states)
+    asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(comms)))
     hud = ctx.call(CommsHudTool(thread=ctx.commander))
     assert hud.commander == parent.incarnation
     assert [(unit.unit, tuple(order.problem for order in unit.orders)) for unit in hud.units] == [
@@ -251,8 +254,8 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert ctx.held_orders() == (saved,)
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
     load = ctx.call(CommsCommanderLoadTool(thread=ctx.commander))
-    assert load.owed == 1 and load.timers_up == 0 and load.unjudged == 0
-    assert "unjudged edits" in str(load)
+    assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
+    assert "unjudged edits" in str(load.load)
     refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
     assert refused.returncode != 0 and "worker is assigned by fork-one" in refused.stderr
     assert store.get("P40") == saved
@@ -335,7 +338,7 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
-        comms, comms.registry.snapshot(), holds, tuple(hold.todo for hold in holds), ProgressRead())
+        comms, comms.registry.snapshot(), holds, ProgressRead())
     assert [read.read() for read in OrderEditCountRead.judgeable(
         comms.root, holds, open_order, workplaces)] == [3]
     assert tuple(OrderEditCountRead.judgeable(comms.root, holds, merged, workplaces)) == ()
@@ -359,7 +362,7 @@ def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
     holds = HeldOrders.of(comms.goals.todos, snapshot, "lead").live
     history = comms.goals.todos.history_for_commander(snapshot.require("lead").incarnation)
-    return holds, EditWorkplaces.capture(comms, snapshot, holds, history, ProgressRead(history))
+    return holds, EditWorkplaces.capture(comms, snapshot, holds, ProgressRead(history))
 
 
 def save_edit_order(comms, todo):
@@ -479,7 +482,7 @@ def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sou
     selected = workplaces[owner.incarnation]
     assert selected.problems_for(str(primary / "new.py")) == frozenset(("P40",))
     assert selected.problems_for(str(companion / "new.py")) == frozenset(("P40",))
-    assert selected.problems_for(str(released_path / "new.py")) == frozenset(("P41",))
+    assert selected.problems_for(str(released_path / "new.py")) == frozenset()
     # A registered foreign repository in an undeclared companion allocation stays unowned.
     current = store.get("P40")
     save_edit_order(comms, replace(current, order=replace(
@@ -527,7 +530,7 @@ def test_noncanonical_worktree_needs_qualified_link_not_matching_origin(edit_sou
     # The explicit retained source may be a different clone: it will not occur in the
     # registered checkout's worktree list, but its own branch still has to match the PR.
     separate = tmp_path / "explicit-source-clone"
-    source.git(tmp_path, "clone", "-q", str(source.remote), str(separate))
+    source.git(tmp_path, "clone", "-q", str(source.remote_path), str(separate))
     source.git(separate, "checkout", "-q", "-b", "linked-repair")
     independent = SourceRepository.of(separate)
     assert independent.github == source.github
@@ -978,10 +981,15 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
     assert "--fork claude-a1" in told["additionalContext"]
     fork = comms.registry.require("claude-a1")
     assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
+    assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
+    assert run(read_gate.main, "PreToolUse", tool_name="Bash", tool_input={"command": "pwd"}) == ""
+    activity = comms.agents.activity.current(fork.name)
+    assert (activity.state, activity.detail) == (ActivityState.WORKING, "Bash")
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
     assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
+    assert comms.agents.activity.current(fork.name).state is ActivityState.IDLE
     run(forks.started, "SubagentStart")
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
@@ -1039,9 +1047,9 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
     monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "unit.jsonl"
 
-    def run(program, event, agent_id):
+    def run(program, event, agent_id, **tool):
         record = {"session_id": "unit", "hook_event_name": event, "transcript_path": str(transcript),
-                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False}
+                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False, **tool}
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
         program()
         return capsys.readouterr().out
@@ -1055,6 +1063,15 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
     slot = comms.registry.require("worker-explore")
     assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
     slot.execution.require_subagent()
+    assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
+    assert run(read_gate.main, "PreToolUse", "a2", tool_name="Read",
+               tool_input={"file_path": str(transcript)}) == ""
+    activity = comms.agents.activity.current(slot.name)
+    assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")
+    # A long-running tool stays working beyond the activity store's ordinary stale budget.
+    comms.agents.activity.emit(replace(activity, timestamp=1.))
+    snapshot = comms.registry.snapshot()
+    assert comms.agents.activity_of(slot.name, snapshot=snapshot).state is ActivityState.WORKING
     with pytest.raises(RelationViolationError, match="not a declared commander fork"):
         slot.execution.require_commander_fork()
     assert "claude-a2" not in comms.registry
@@ -1063,6 +1080,7 @@ def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_
 
     assert run(forks.stopped, "SubagentStop", "a2") == ""
     assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+    assert comms.agents.activity.current(slot.name).state is ActivityState.IDLE
     assert comms.registry.status("worker-explore-2").receiving
     run(forks.started, "SubagentStart", "a4")
     assert comms.registry.require("worker-explore").incarnation == slot.incarnation

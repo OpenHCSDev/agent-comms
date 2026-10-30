@@ -50,8 +50,7 @@ class ThreadOutput(ABC):
     def activity_thread(self) -> str: ...
 
     def enter(self, phase: TurnPhase) -> None:
-        self.agents.set_activity(self.activity_thread, phase.activity_state,
-                                 " ".join(phase.activity_detail.split()))
+        self.agents.enter_phase(self.activity_thread, phase)
 
 
 class ActivityState(Enum):

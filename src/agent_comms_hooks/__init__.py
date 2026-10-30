@@ -72,8 +72,10 @@ class ClaudeHook(HookRecord):
         """Claude Code's answer to this event: its event name plus the given fields."""
         print(json.dumps({"hookSpecificOutput": {"hookEventName": self.hook_event_name, **fields}}))
 
-    def warn(self, reason: str) -> None:
-        self.respond(additionalContext=reason)
+    def warn(self, *texts: str) -> None:
+        """One event has one JSON answer, however many sources supply its context."""
+        if texts:
+            self.respond(additionalContext="\n\n".join(texts))
 
 
 @dataclass(frozen=True)
@@ -85,15 +87,14 @@ class ClaudeTranscriptHook(ClaudeHook):
     """Transcript bytes read from the end."""
 
     @property
-    def parts(self) -> Path:
-        """The sources dealt to a bound session, written by the session start hook beside the
-        transcript; they exist only in a session bound to a bus."""
-        return Path(self.transcript_path).with_suffix(".reread")
+    def stem(self) -> Path:
+        """A session's deal and deck files sit beside its transcript, each with its own suffix."""
+        return Path(self.transcript_path)
 
     @property
-    def parts_read(self) -> Path:
-        """The names of the dealt parts read in full since the last deal, one per line."""
-        return Path(self.transcript_path).with_suffix(".reread-done")
+    def subagent_transcripts(self) -> Path:
+        """Claude Code keeps each subagent's transcript in this directory beside the session's."""
+        return Path(self.transcript_path).with_suffix("") / "subagents"
 
     def tail(self) -> list[bytes]:
         """Transcript lines in the last `window` bytes, oldest first; a line the window cuts is dropped."""

@@ -9,6 +9,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from .child_process import ProcessState
+from .channel_targets import DeclaredTag
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
@@ -134,6 +135,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return UnavailableRecipientActivity()
 
     @classmethod
+    def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
+        """An executing native turn keeps its last activity current."""
+        return thread.executing
+
+    @classmethod
     def project_activity(cls, thread: Thread, activity):
         """External participants report their own activity events."""
         return activity
@@ -198,6 +204,11 @@ class SubagentExecution(ExternalThreadExecution):
     order and has no unit card of its own, and starts with its parent's audience."""
 
     @classmethod
+    def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
+        """The occupied registration lasts until SubagentStop or SessionEnd retires it."""
+        return status.receiving
+
+    @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
         return requested
 
@@ -217,7 +228,7 @@ class SubagentExecution(ExternalThreadExecution):
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:
-        return replace(child, tags=parent.tags)
+        return replace(child, tags=DeclaredTag.for_child(parent.tags))
 
     @classmethod
     def child_goal(cls, goals: Goals, parent: Thread) -> Callable[[Thread], GoalDeclaration]:

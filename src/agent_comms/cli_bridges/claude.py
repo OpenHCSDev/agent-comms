@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import aclosing
-from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, AsyncIterator, BinaryIO, ClassVar
+from typing import TYPE_CHECKING, AsyncIterator, BinaryIO
 
 from agent_comms.bus import Bus
 from agent_comms.harness_delivery_states import Outcome
@@ -32,12 +31,9 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
     Heartbeat packets reach the session through the board its tool-call hook prints, which
     this bridge derives from Core whenever the hook asks, not through the Monitor: the harness
     frames Monitor events as routine background, so a line said once there scrolls away. The
-    Monitor only gets a wake line, since an idle session runs no tool calls."""
-
-    board_wake: ClassVar[str] = (
-        "Heartbeat: your board changed. New and changed lines print once as BOARD: on your next "
-        "tool call; later calls print one unchanged count."
-    )
+    Monitor gets the packet itself too, since an idle session runs no tool calls. It is the
+    same message the delivery attempt was begun for: a rewritten body hashes to another
+    message_id, which no attempt was stored under."""
 
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
@@ -58,17 +54,16 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         return await update.wake(self, message)
 
     async def wake(self, message: Message) -> type[Outcome]:
-        return await self.deliver(replace(message, body=self.board_wake))
+        return await self.deliver(message)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
-        """On restart only the last 4 MiB is published again; Core's finish is idempotent, so
-        completed items may overlap. The first record starts after a newline in that window."""
+        """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""
         start = max(0, boundary - self.RECENT_BYTES)
         if start:
             stream.seek(start - 1)
             stream.readline()
             start = stream.tell()
-        return start
+        return self.opening_before(stream, start)
 
     async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
         session = self.start_state()

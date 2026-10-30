@@ -15,17 +15,22 @@ import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from threading import Lock
+from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin, get_type_hints
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.head_review import HeadReview
-from agent_comms.pinned_audit import ForeignAbsenceProbe, GodFunction, ParsedModule
+from nominal_refactor_advisor import audit
+from nominal_refactor_advisor.ast_tools import ParsedModule
+from nominal_refactor_advisor.audit.findings import GodFunction
+from nominal_refactor_advisor.audit.source_measures import ForeignAbsenceProbe
 from agent_comms.private_path import FileObservation, FileRevision
-from agent_comms.repo import Repo
+from agent_comms.repo import GitCommandError, Repo
 
 if TYPE_CHECKING:
     from agent_comms.todos import Todo
@@ -45,20 +50,19 @@ class MainTree:
 
     @classmethod
     def of(cls, repo: Repo) -> MainTree:
-        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"origin/{cls.branch}").strip())
+        return cls(repo, Repo.git(repo.checkout, "rev-parse", f"{repo.remote}/{cls.branch}").strip())
 
     def advanced(self) -> MainTree:
         """An explicitly selected historical tree never moves."""
         return self
 
     def has(self, path: str) -> bool:
-        return not self.missing(f"{self.commit}:{path}\n")[0]
+        return not self.missing((path,))[0]
 
-    def missing(self, requests: str) -> tuple[bool, ...]:
-        """For each ``REV:PATH`` line, whether this repository lacks it; any other failure
-        is a GitCommandError, never an absence."""
-        return tuple(line.endswith(" missing") for line in Repo.git(
-            self.repo.checkout, "cat-file", "--batch-check", input=requests).splitlines())
+    def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
+        """Tree membership does not require a present path's promised contents."""
+        entries = Repo.tree_objects(self.repo.checkout, self.commit, paths)
+        return tuple(path not in entries for path in paths)
 
     def grep(self, *options: str, pattern: str, paths: tuple[str, ...]) -> list[str]:
         """``git grep -E`` rows of this tree's Python modules, like ``module`` and ``modules``;
@@ -100,13 +104,13 @@ class MainTree:
         )
 
     def module(self, path: str) -> ParsedModule:
-        source = Repo.git(self.repo.checkout, "show", f"{self.commit}:{path}")
-        return ParsedModule(path, source, ast.parse(source, filename=path), path)
+        module, = self.modules((path,))
+        return module
 
     def present_modules(self, paths: tuple[str, ...]) -> Iterator[ParsedModule]:
         """The parsed modules of the ``paths`` main holds. Plans finish by deleting files, so
         a declared path main no longer holds has no module, and nothing it held is left."""
-        missing = self.missing("".join(f"{self.commit}:{path}\n" for path in paths))
+        missing = self.missing(paths)
         for path, absent in zip(paths, missing, strict=True):
             if not absent:
                 yield self.module(path)
@@ -115,21 +119,16 @@ class MainTree:
         """Every Python module under ``paths``. Each path keeps its last parsed blob, so every
         evidence reading one commit parses it once, and the rest are read in one
         ``git cat-file --batch``."""
-        listed = Repo.git(self.repo.checkout, "ls-tree", "-r", self.commit, "--", *paths)
-        blobs = [(entry.split()[2], name) for entry, _, name in
-                 (line.partition("\t") for line in listed.splitlines())
-                 if name.endswith(self.source)]
+        listed = Repo.tree_objects(self.repo.checkout, self.commit, paths, "-r")
+        blobs = [(blob, name) for name, blob in listed.items() if name.endswith(self.source)]
         fresh = [(blob, name) for blob, name in blobs
                  if self.parsed.get(name, ("", None))[0] != blob]
-        batch = Repo.git_bytes(self.repo.checkout, "cat-file", "--batch",
-                               input="".join(f"{blob}\n" for blob, _ in fresh)) if fresh else b""
-        for blob, name in fresh:
-            header, _, batch = batch.partition(b"\n")
-            size = int(header.rsplit(b" ", 1)[1])
-            source = batch[:size].decode()
-            self.parsed[name] = blob, ParsedModule(name, source,
-                                                   ast.parse(source, filename=name), name)
-            batch = batch[size + 1 :]
+        contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
+        for (blob, name), content in zip(fresh, contents, strict=True):
+            source = content.decode()
+            self.parsed[name] = blob, ParsedModule(
+                path=Path(name), module_name=name,
+                module=ast.parse(source, filename=name), source=source)
         yield from (self.parsed[name][1] for _, name in blobs)
 
     def contains(self, sha: str) -> bool:
@@ -147,7 +146,7 @@ class LiveMainTree(MainTree):
     def of(cls, repo: Repo) -> LiveMainTree:
         loose, packed = Repo.git(
             repo.checkout, 'rev-parse', '--path-format=absolute',
-            '--git-path', f'refs/remotes/origin/{cls.branch}', '--git-path', 'packed-refs',
+            '--git-path', f'refs/remotes/{repo.remote}/{cls.branch}', '--git-path', 'packed-refs',
         ).splitlines()
         references = (Path(loose), Path(packed))
         revisions = tuple(FileRevision.capture(path) for path in references)
@@ -223,12 +222,23 @@ class PlanReading:
         default_factory=dict, compare=False, repr=False
     )
 
+    @contextmanager
+    def source(self, evidence: PhaseEvidence) -> Iterator[None]:
+        """One failure boundary for acquiring and observing the evidence's source."""
+        try:
+            yield
+        except (GitCommandError, OSError, TimeoutExpired, UnreadableEvidenceError) as error:
+            self.reads[evidence] = EvidenceUnread(str(error))
+
+    def prepare(self, evidence: PhaseEvidence) -> None:
+        if evidence not in self.reads:
+            with self.source(evidence):
+                evidence.prepare(self)
+
     def read(self, evidence: PhaseEvidence) -> EvidenceRead:
         if evidence not in self.reads:
-            try:
+            with self.source(evidence):
                 self.reads[evidence] = EvidenceFound(evidence.holds(self))
-            except UnreadableEvidenceError as error:
-                self.reads[evidence] = EvidenceUnread(str(error))
         return self.reads[evidence]
 
     def following(self, todos: tuple[Todo, ...]) -> PlanReading:
@@ -251,13 +261,23 @@ class PlanReadings:
     def observed(self, repo: Repo, todos: tuple[Todo, ...]) -> PlanReading:
         return PlanReading(todos, MainTree.of(repo))
 
-    def read(self, repo: Repo, todos: tuple[Todo, ...],
-             evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+    def prepare_reading(self, repo: Repo, todos: tuple[Todo, ...],
+                evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+        """Capture the main cut and acquire inputs without evaluating the plan."""
         reading = self.observed(repo, todos)
+        for declared in evidence:
+            reading.prepare(declared)
+        return reading
+
+    def observe_reading(self, reading: PlanReading, evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
         for declared in evidence:
             declared.recorded(reading)
         self.retain(reading)
         return reading
+
+    def read(self, repo: Repo, todos: tuple[Todo, ...],
+             evidence: tuple[PhaseEvidence, ...]) -> PlanReading:
+        return self.observe_reading(self.prepare_reading(repo, todos, evidence), evidence)
 
     def retain(self, reading: PlanReading) -> None:
         """An ordinary command releases its reading when its caller does."""
@@ -288,6 +308,9 @@ class RetainedPlanReadings(PlanReadings):
 
 
 class PhaseEvidence(ABC):
+    def prepare(self, reading: PlanReading) -> None:
+        """Most evidence needs only the selected local tree."""
+
     def recorded(self, reading: PlanReading) -> None:
         reading.read(self)
 
@@ -326,6 +349,10 @@ class MainEvidence(PhaseEvidence):
 @dataclass(frozen=True)
 class CommitMerged(MainEvidence):
     sha: str
+
+    def prepare(self, reading: PlanReading) -> None:
+        Repo.require_commits(reading.main.repo.checkout, reading.main.repo.remote,
+                             self.sha, reading.main.commit)
 
     def read(self, main: MainTree) -> bool:
         return main.contains(self.sha)
@@ -389,6 +416,21 @@ class PatternPresent(PatternEvidence):
 
 
 @dataclass(frozen=True)
+class AuditPatternPresent(PatternPresent):
+    """A pattern in the audit package of the installed NominalRefactorAdvisor: code this
+    repository runs from that repository, which main's lock pins by commit."""
+
+    def read(self, main: MainTree) -> bool:
+        package = Path(audit.__path__[0])
+        found = re.compile(self.pattern, re.MULTILINE)
+        return self.satisfied(sum(len(found.findall(module.read_text(encoding="utf-8")))
+                                  for module in package.rglob("*.py")))
+
+    def describe(self) -> str:
+        return f"{self.pattern!r} in the installed NominalRefactorAdvisor audit package"
+
+
+@dataclass(frozen=True)
 class DocumentPatternPresent(PatternPresent):
     """A recorded document fact, rather than executable Python source."""
 
@@ -408,7 +450,7 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
     def read(self, main: MainTree) -> bool:
         scan = type(self)()
         for module in main.modules(("src",)):
-            scan.visit(module.tree)
+            scan.visit(module.module)
         return not scan.found
 
     def describe(self) -> str:
@@ -461,6 +503,10 @@ class BusStorageAbsent(MainEvidence, ast.NodeVisitor):
 @dataclass(frozen=True)
 class AllEvidence(PhaseEvidence):
     parts: tuple[PhaseEvidence, ...]
+
+    def prepare(self, reading: PlanReading) -> None:
+        for part in self.parts:
+            reading.prepare(part)
 
     def recorded(self, reading: PlanReading) -> None:
         for part in self.parts:
@@ -631,7 +677,7 @@ class NoExactCopies(MainEvidence):
         shapes = [
             ErasedBody.of(function)
             for module in main.present_modules(self.paths)
-            for function in NamedFunctions.of(self.names, module.tree)
+            for function in NamedFunctions.of(self.names, module.module)
         ]
         return len(shapes) == len(set(shapes))
 
@@ -650,12 +696,12 @@ class NoGodFunction(MainEvidence):
         return not any(
             found
             for module in main.present_modules((self.path,))
-            for function in NamedFunctions.of((self.name,), module.tree)
+            for function in NamedFunctions.of((self.name,), module.module)
             for found in GodFunction.from_node(function, module)
         )
 
     def describe(self) -> str:
-        return f"{self.name} in {self.path} at most {GodFunction.threshold} lines on main"
+        return f"{self.name} in {self.path} at most {GodFunction.threshold()} lines on main"
 
 
 @dataclass(frozen=True)
@@ -668,9 +714,9 @@ class NoAbsenceProbes(MainEvidence):
     def read(self, main: MainTree) -> bool:
         """Every node is offered to the probe, whose own pattern decides what it counts."""
         return not any(
-            ForeignAbsenceProbe.count(node)
+            ForeignAbsenceProbe.occurrences(node)
             for module in main.present_modules(self.paths)
-            for node in ast.walk(module.tree)
+            for node in ast.walk(module.module)
         )
 
     def describe(self) -> str:
@@ -700,7 +746,7 @@ class ClassFlagsAbsent(MainEvidence):
             statements = (
                 (path, statement.lineno)
                 for path in {path for path, _ in matched}
-                for declared in Classes.of((main.module(path).tree,))
+                for declared in Classes.of((main.module(path).module,))
                 for statement in declared.body
             )
         return not any(statement in matched for statement in statements)
@@ -879,8 +925,8 @@ class OwnClassChecksAbsent(MainEvidence):
     def checks(main: MainTree) -> ClassChecks:
         checks = ClassChecks()
         for module in main.modules(("src",)):
-            checks.path = module.path
-            checks.visit(module.tree)
+            checks.path = module.file_path
+            checks.visit(module.module)
         return checks
 
     def describe(self) -> str:
@@ -901,13 +947,13 @@ class ParentsShared(MainEvidence):
             *(
                 declared.name
                 for declared in Classes.of(
-                    module.tree for module in main.present_modules(self.paths)
+                    module.module for module in main.present_modules(self.paths)
                 )
             ),
         }
         members = Counter(
             base
-            for member in Classes.of(module.tree for module in main.modules(("src",)))
+            for member in Classes.of(module.module for module in main.modules(("src",)))
             for base in NamedClasses.of(member.bases) & declared
         )
         return all(members[name] >= 2 for name in declared)
@@ -1076,10 +1122,10 @@ class DeclaredScopes:
         self.modules: dict[QualifiedName, ModuleBindings] = {}
         self.module_of: dict[str, QualifiedName] = {}
         for module in main.modules(paths):
-            name, package = self.dotted(module.path, paths)
-            bindings = self.modules[name] = ModuleBindings(self, module.path, name, package)
-            bindings.visit(module.tree)
-            self.module_of[module.path] = name
+            name, package = self.dotted(module.file_path, paths)
+            bindings = self.modules[name] = ModuleBindings(self, module.file_path, name, package)
+            bindings.visit(module.module)
+            self.module_of[module.file_path] = name
 
     @staticmethod
     def dotted(path: str, roots: tuple[str, ...]) -> tuple[QualifiedName, QualifiedName]:

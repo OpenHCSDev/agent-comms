@@ -55,7 +55,9 @@ def main() -> None:
     prepared = FieldCodec.decode(PreparedInstall, FieldCodec.parse(sys.stdin.read()))
     try:
         with LaunchRoot.from_path(prepared.request.root).selected():
-            print(json.dumps(FieldCodec.encode(prepared.request.run(prepared.runtime)), indent=2))
+            result = prepared.request.run(prepared.runtime)
+            result.write_phases(sys.stderr)
+            print(json.dumps(FieldCodec.encode(result), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(str(error))
 

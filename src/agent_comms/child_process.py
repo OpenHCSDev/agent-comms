@@ -35,6 +35,7 @@ from contextlib import (
     nullcontext,
     suppress,
 )
+from contextvars import copy_context
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -1647,7 +1648,60 @@ async def _exec_error(fd: int, command: str) -> None:
         loop.remove_reader(fd)
 
 
-async def join_retirement(task: asyncio.Future):
+class DroppableRead[Result](Future[Result], threading.Thread):
+    """Read-only work may leave with its process instead of holding its shutdown.
+
+    Unlike the default executor, a daemon reader is not joined by asyncio.run or
+    Python's executor shutdown. Its future still receives completion safely if the
+    loop has already closed. Only a declared read capability may use this owner.
+    """
+
+    def __init__(self, operation: Callable[[], Result]) -> None:
+        Future.__init__(self)
+        threading.Thread.__init__(self, daemon=True, name="droppable-read")
+        self.operation = operation
+
+    def run(self) -> None:
+        if not self.set_running_or_notify_cancel():
+            return
+        try:
+            result = self.operation()
+        except BaseException as error:
+            self.set_exception(error)
+        else:
+            self.set_result(result)
+
+    async def answer(self) -> Result:
+        self.start()
+        return await asyncio.wrap_future(self)
+
+
+class AsyncWork:
+    """Accepted work finishes before its caller releases the operation's resources."""
+
+    @classmethod
+    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
+        return await join_retirement(asyncio.create_task(asyncio.to_thread(operation)))
+
+    @classmethod
+    def cancel_on_shutdown[Result](cls, pending: asyncio.Future[Result]) -> None:
+        """A mutation must finish, even if its worker has not started yet."""
+
+
+class ReadWork(AsyncWork):
+    """Declared read-only work can leave with its process without joining its thread."""
+
+    @classmethod
+    async def run_async[Result](cls, operation: Callable[[], Result]) -> Result:
+        context = copy_context()
+        return await DroppableRead(lambda: context.run(operation)).answer()
+
+    @classmethod
+    def cancel_on_shutdown[Result](cls, pending: asyncio.Future[Result]) -> None:
+        pending.cancel()
+
+
+async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
     """Join owned cleanup through repeated cancellation, then propagate it."""
     interrupted = None
     try:

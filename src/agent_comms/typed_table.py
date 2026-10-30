@@ -70,7 +70,6 @@ from .locked_store import (
     DeclaredFile,
     DurableFile,
     FilesRequest,
-    LiveFilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
     RootFile,
@@ -83,6 +82,7 @@ from .locked_store import (
 from .maintenance_barrier import HolderWrittenFile, MaintenanceBarrier, MaintenanceHolder
 from .package_stamp import STAMP
 from .projection_source import ProducedRow, ProjectionOutputs, ProjectionSource
+from .private_path import PrivateDirectoryRole
 from .store_files import (
     BorrowedStoreLock,
     ExclusiveAtomicFile,
@@ -2591,12 +2591,10 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
     @classmethod
     @cache
     def _producer_digest(cls) -> str:
-        # slots dataclasses recreate a class; its declaration contributes once.
+        # Readers beside a producer change neither its columns nor its output contract.
         source = "\0".join(sorted({
-            f"{owner.__module__}.{owner.__qualname__}\0{getsource(owner)}"
-            for owner in cls.producer_owners()
-        } | {
-            f"{owner.__module__}.{owner.__qualname__}\0{member}"
+            f"{owner.__module__}.{owner.__qualname__}\0"
+            f"{tuple((base.__module__, base.__qualname__) for base in owner.__mro__)}\0{member}"
             for owner, members in cls.producer_members()
             for member in members
         }))
@@ -2621,23 +2619,30 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
 
     @classmethod
     def producer_members(cls) -> tuple[tuple[type, tuple[str, ...]], ...]:
-        """A writer's own statements redefining production members, not its other mechanisms.
+        """Column declarations and implementations of the declared output capabilities.
 
-        A send-time check on a message kind produces no route row, so editing it
-        must not rebuild every routed history row.
+        Tables contribute columns, not adjacent queries. Output capabilities supply the
+        names their inherited implementations override; column representations contribute
+        their encoding declarations. Every owner uses the same statement filter.
         """
-        members: list[tuple[type, tuple[str, ...]]] = []
+        columns = {column.name for column in cls._columns}
+        owners = cls.producer_owners()
+        production = {owner: set(columns) for owner in owners if owner in cls.__mro__}
         for lineage in cls.producer_lineage():
-            production = {
+            names = {
                 name for owner in lineage if owner.produces_whole() for name in vars(owner)
             }
             for owner in lineage:
-                if not owner.produces_whole():
-                    declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
-                    members.append((owner, tuple(
-                        ast.unparse(statement) for statement in declaration.body
-                        if production & cls.bound_names(ast.unparse(statement))
-                    )))
+                production.setdefault(owner, set()).update(names)
+        for owner in owners:
+            production.setdefault(owner, set(vars(owner)))
+        members: list[tuple[type, tuple[str, ...]]] = []
+        for owner, names in production.items():
+            declaration = cast(ast.ClassDef, ast.parse(dedent(getsource(owner))).body[0])
+            members.append((owner, tuple(
+                ast.unparse(statement) for statement in declaration.body
+                if names & cls.bound_names(ast.unparse(statement))
+            )))
         return tuple(members)
 
     @staticmethod
@@ -2827,11 +2832,13 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
         """A file with no stored schema has no opening to practise."""
 
     @staticmethod
-    def practice_openings(root: Path, excluding: tuple[type[ExternalStore], ...] = ()) -> None:
-        stores = set(ExternalStore.members_with(ExternalStore)) - set(excluding)
-        with TemporaryDirectory() as directory:
+    def practice_openings(
+        files: FilesRequest, *, scratch: Path, stores: tuple[type[ExternalStore], ...],
+    ) -> None:
+        PrivateDirectoryRole.make_parents(scratch)
+        with TemporaryDirectory(dir=scratch) as directory:
             for store in stores:
-                store.practice_opening(LiveFilesRequest(root), Path(directory))
+                store.practice_opening(files, Path(directory))
 
     @classmethod
     @abstractmethod

@@ -466,7 +466,6 @@ class HeadVerdictVerb(VerdictVerb, declared_name=None):
         return UnquotedHeadReview.of(todo, self.head_evidence())
 
     def act(self, ctx: order.Commander) -> None:
-        self.gate(ctx)
         self.subject(ctx).run(self, ctx)
 
     def head_evidence(self) -> tuple[FileLine, ...]:
@@ -688,7 +687,7 @@ class SlopBackVerb(BackVerb):
     """A slop send-back: the defect is a fact restated outside its declaration, so it carries
     the formal statement. `back` parses its options; it has no subcommand of its own."""
     pattern: Annotated[str, Argument(flags=("--slop",), options={
-        "help": "slop only: pattern ID from the pinned refactor-audit catalog"})]
+        "help": "slop only: pattern ID from the NRA pattern catalog"})]
     fact: Annotated[str, Argument(options={
         "help": "slop only: the required fact, 4+ words"})]
     derive: Annotated[str, Argument(options={

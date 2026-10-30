@@ -72,7 +72,7 @@ from agent_comms.order_tools import (
     TodoList,
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.phase_evidence import PlanReading, PlanReadings
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.presentation import AllOutcomes, MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
@@ -118,7 +118,7 @@ from agent_comms.todos import (
     VoidStrikeTodo,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import CommanderForkCaller, NoThreadCaller
+from agent_comms.tool_caller import CommanderForkCaller, CommanderPeerCaller, NoThreadCaller
 from agent_comms.typed_table import RowNotFoundError
 
 
@@ -341,7 +341,7 @@ class CommanderContext(BaseModel):
     root: Path
 
     actor: Annotated[
-        InstanceOf[CommanderForkCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
+        InstanceOf[CommanderForkCaller] | InstanceOf[CommanderPeerCaller] | InstanceOf[NoThreadCaller], Field(exclude=True)
     ] = NoThreadCaller()
     _comms: Comms = PrivateAttr()
 
@@ -368,7 +368,7 @@ class CommanderContext(BaseModel):
     @property
     def commander(self) -> str:
         snapshot = self.comms.registry.snapshot()
-        (thread,) = snapshot.commander_project.require().commanders(snapshot)
+        (thread,) = snapshot.commander_project.require().leads(snapshot)
         return thread.name
 
     @property
@@ -385,7 +385,8 @@ class CommanderContext(BaseModel):
 
     def plan_reading(self, todos: tuple[Todo, ...]) -> PlanReading:
         repository = Repo.declaring(self.repos, PlanPhase.__module__)
-        return PlanReading(todos, MainTree.of(repository))
+        return PlanReadings().prepare_reading(repository, todos, tuple(
+            phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)))
 
     @boundary_decoder
     def model_copy(self, *, update: Mapping[str, object] | None = None,
@@ -825,7 +826,18 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
             flags=("--fork",), options={"type": CommanderForkCaller, "help": "the acting thread's name"}
         ),
     ] = NoThreadCaller()
+    acting_as: Annotated[
+        CommanderPeerCaller | NoThreadCaller,
+        Normalize(FieldCodec.encode),
+        Argument(flags=("--as",), options={
+            "type": CommanderPeerCaller,
+            "help": "another commander in #commanders acting under its own name"}),
+    ] = NoThreadCaller()
 
+    @property
+    def actor(self) -> CommanderForkCaller | CommanderPeerCaller | NoThreadCaller:
+        """A fork acts for the commander; a peer commander acts as itself."""
+        return self.fork.acting_caller(self.acting_as)
 
     def __post_init__(self) -> None:
         if problems := self.argument_problems():
@@ -839,18 +851,12 @@ class CommanderVerb(ClearingVerb, affix="Verb"):
         return ctx.actor_name
 
     def apply(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(ctx.commander).require_commander()
-        self.fork.commanding(ctx.comms, ctx.commander)
-        ctx = ctx.model_copy(update={'actor': self.fork})
+        self.actor.commanding(ctx.comms, ctx.commander)
+        ctx = ctx.model_copy(update={'actor': self.actor})
         self.act(ctx)
 
     def act(self, ctx: Commander) -> None:
-        """Gate, then run."""
-        self.gate(ctx)
         self.run(ctx)
-
-    def gate(self, ctx: Commander) -> None:
-        ctx.comms.registry.require(self.who(ctx)).require_commander()
 
 
 
@@ -1135,6 +1141,9 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
+        if not source.holds(todo):
+            sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
+                     f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
             todo, source.checkout, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
@@ -1152,7 +1161,7 @@ class ExistingPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
-        link = PullRequestLink.existing(todo.repo, self.number)
+        link = PullRequestLink.existing(source.github, self.number)
         ctx.comms.goals.todos.apply(todo.id, RecordPullRequest(
             todo.revision, ctx.incarnation, link, todo.held().generation))
         return link.url
@@ -1160,7 +1169,8 @@ class ExistingPullRequestSelection(PullRequestSelection):
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = "create or adopt a PR and record its GitHub identity on this order"
+    help = ("create a PR in the order's repository, or adopt an existing one in it or a "
+            "registered companion, and record its GitHub identity on this order")
     pid: Annotated[str, Argument(flags=("pid",))]
     title: Annotated[str, Argument(flags=("--title",))] = ""
     body_file: Annotated[str, Argument(flags=("--body-file",))] = ""
@@ -1184,9 +1194,6 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         storage = ctx.comms.registry.storage_rule
         if not storage.owns_checkout(holder, source.checkout, source.github):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
-        if not source.holds(todo):
-            sys.exit(f'Refused: current checkout belongs to {source.github.to_wire()}, '
-                     f'not {todo.repo.to_wire()}.')
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 
@@ -1280,7 +1287,20 @@ class JoinVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetireVerb(OrderVerb):
+class EndsForkVerb(OrderVerb):
+    """Ends a fork the registry already declared. Declaring a fork only to end it held the
+    registry write lock for a whole registration, past every unit's 5 s lock budget."""
+
+    def apply(self, ctx: Commander) -> None:
+        ctx = ctx.model_copy(update={'actor': self.actor})
+        if ctx.actor_name not in ctx.comms.registry:
+            print(f'{ctx.actor_name} never joined; nothing to end')
+            return
+        self.act(ctx)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RetireVerb(EndsForkVerb):
     help = "stop and archive a commander fork without discarding its open orders"
 
     def run(self, ctx: Commander) -> None:
@@ -1289,7 +1309,7 @@ class RetireVerb(OrderVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class EndVerb(OrderVerb):
+class EndVerb(EndsForkVerb):
     help = "archive a commander fork that has stopped, reporting the work it left unrecorded"
 
     def run(self, ctx: Commander) -> None:

@@ -156,9 +156,13 @@ class UnitObservation:
         )
 
     def require_read(self) -> None:
+        for progress in self.pulls.progress(self.todos, self.comms.registry).values():
+            progress.require_read()
+        for todo in self.todos:
+            reader = self.pulls.checkout(todo.order.checked().check.directory).branches
+            for pull in self.pulls.open_for(todo):
+                pull.require_comparison(reader)
         if self.todos:
-            for path in self.thread.home_checkouts:
-                self.pulls.branch_difference(path)
             for path in self.comms.registry.storage_rule.checkout_paths(self.thread):
                 self.pulls.checkout(path).require_read()
         for source in self.sources:
@@ -206,6 +210,7 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def read(cls, source: UnitObservation) -> UnitState:
         try:
+            source.require_read()
             return next(state for member in cls.worst_first() for state in member.derive(source))
         except (
             OSError,
@@ -324,8 +329,7 @@ class Unreadable(NeedsCommanderAttention, UnitState):
 
     @classmethod
     def derive(cls, source: UnitObservation) -> Iterator[Self]:
-        # Validate the checkout reads before a higher-level label can hide a failure.
-        source.require_read()
+        # UnitState.read validates once before selecting any card.
         return iter(())
 
     def readable_units(self) -> tuple[ThreadIncarnation, ...]:

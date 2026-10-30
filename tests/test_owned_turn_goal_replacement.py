@@ -1,6 +1,5 @@
 """A replaced order keeps the running turn's authority, so following input joins that turn; a new original captures the current goal."""
 
-from agent_comms.repo import Checkout
 import asyncio
 import os
 from contextlib import AsyncExitStack
@@ -24,12 +23,13 @@ from agent_comms.owned_send import OwnedSend
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput, QueuedInput
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.repo import Checkout
 from agent_comms.repository_name import RepositoryName
 from agent_comms.reservation_rules import ReservationViolationError
 from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from compaction_loopback import LoopbackProvider
-from conftest import installed_comms
+from conftest import answer_rules, declare_fleet, installed_comms
 from native_backend_fixture import native_backend_fixture, wait_for
 from source_revision_fixture import SourceRepository
 from test_todos import order
@@ -55,10 +55,11 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
         async with saved.open_owner(native_options=()) as (agent, session_id):
             comms = agent._comms
             worker = agent.sessions.require(session_id)
-            comms.registry.declare(Thread(
+            declare_fleet(comms, Thread(
                 'lead', frozenset(), Checkout(saved.project),
                 process_identity=ProcessIdentity.capture(os.getpid()),
             ))
+            answer_rules(comms, worker)
             request = comms.goals.todos.add_request(
                 comms.registry.require('lead').incarnation, 'Repair following input').id
             comms.goals.update_goal(worker, CreateProblemGoalAction(

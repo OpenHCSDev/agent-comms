@@ -13,9 +13,7 @@ from datetime import datetime, timezone
 from textwrap import shorten
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.bus_publication import AgentOrigin
 from agent_comms.channel_targets import ThreadTarget
-
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
@@ -24,21 +22,21 @@ from agent_comms.field_codec import FieldCodec, OrderId
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
-    CommanderUpdatePosition, ConversationRole, InfoKind, Message, MessageRole, NoticeRole,
+    CommanderUpdatePosition, ConversationRole, Message, MessageRole, NoticeRole,
 )
 from agent_comms.projection_source import ProducedRow
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
-from agent_comms.task_sources import TaskAttachment
+from agent_comms.task_attachments.owner_notices import OwnerNotice
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.ui_model.message_category import HeartbeatCategory, MessageCategory
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms_hooks.board import BoardEntry
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
-    from agent_comms.bus import BusReader
     from agent_comms.cli_bridges.claude import ClaudeBridge
     from agent_comms.cli_bridges.shared import CliBridge
     from agent_comms.comms import Comms
@@ -178,7 +176,7 @@ class UnitPing(Ping):
 
 
 @dataclass(frozen=True)
-class CommanderUpdate(TaskAttachment, declared_name=None):
+class CommanderUpdate(OwnerNotice, declared_name=None):
     commander: ThreadIncarnation
     handled: tuple[Ping, ...]
     not_applied: tuple[str, ...] = field(default=(), kw_only=True)
@@ -193,6 +191,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
 
     def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         return (self,) if self.commander == commander else ()
+
+    def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
+        """A board packet speaks in the owner's voice yet is not his words: its own category."""
+        return HeartbeatCategory
 
     def changed_from(self, handled: tuple[Ping, ...], not_applied: tuple[str, ...]) -> bool:
         """A complete read that differs from this packet clears what it no longer holds."""
@@ -211,11 +213,11 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
             "Expand in Toad: F2 or /commander · units: original orders, story, commits, activity · board: every alert",
         ))
 
-    def board(self, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """This packet's lines the commander disposes of, through the same recorded actions the
-        gate reads: a verdict drops its line on the next read, not the next packet."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
+    def board(self, comms: Comms) -> tuple[BoardEntry, ...]:
+        """This packet's lines a commander disposes of, through the same recorded actions the
+        gate reads: any commander's verdict drops its line on the next read, not the next
+        packet."""
+        history = CommanderHistory.read(comms, CommanderService.actors(comms.registry.snapshot()))
         return tuple(ping.board_entry() for ping in self.handled
                      if ping.on_board(history))
 
@@ -226,16 +228,9 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
     async def wake(self, bridge: ClaudeBridge, message: Message) -> type[Outcome]:
         """What reaches the session itself once its bridge has put this packet on its board."""
 
-    def undisposed(self, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
+    def undisposed(self, history: CommanderHistory, cut: float) -> tuple[Ping, ...]:
         """Lines older than ``cut`` that no recorded action on their subjects has disposed of."""
-        actors = CommanderService.actors(comms.registry.snapshot(), commander)
-        history = CommanderHistory.read(comms, actors)
         return tuple(ping for ping in self.handled if ping.undisposed(history, cut))
-
-    def require_publication(self, sender: str, registry: RegistrySnapshot,
-                            original_source: BusReader) -> None:
-        if registry.require(sender).incarnation != registry.require(CommanderService.sender).incarnation:
-            raise RelationViolationError("Only the commander heartbeat publishes its observations")
 
     def require_target(self, target: str, registry: RegistrySnapshot) -> None:
         if registry.require(target).incarnation != self.commander:
@@ -251,16 +246,10 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
                      for packet in message.task.commander_update(commander))
 
     @classmethod
-    def owed(cls, comms: Comms, commander: str, cut: float) -> tuple[Ping, ...]:
-        """The newest packet's lines still undisposed past ``cut``."""
-        return tuple(ping for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for ping in latest.undisposed(comms, commander, cut))
-
-    @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
         """The newest packet's board, derived at the moment of asking."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
-                     for entry in latest.board(comms, commander))
+                     for entry in latest.board(comms))
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
@@ -308,16 +297,7 @@ class CommanderUpdate(TaskAttachment, declared_name=None):
         ),)
 
     def send(self, comms: Comms, now: float, brief: tuple[str, ...]) -> Message:
-        from agent_comms.commander_heartbeat import CommanderHeartbeat
-
-        message = Message(
-            sender=CommanderHeartbeat.sender, target=self.commander.name,
-            body=self.body(now, brief),
-            type=InfoKind, role=self.role, task=self,
-        )
-        return comms.bus.publisher.publish_ordinary(
-            message, origin=AgentOrigin(), destination=ThreadTarget(self.commander.name),
-        )
+        return self.publish(comms.messaging, ThreadTarget(self.commander.name), self.body(now, brief))
 
 
 @dataclass(frozen=True)

@@ -30,6 +30,16 @@ class ClaudeJsonLines(JsonLines):
     def decode_line(self, raw: bytes, position: int) -> ClaudeRecord:
         return self.records.validate_python({**json.loads(raw), 'position': position})
 
+    def opening_before(self, stream: BinaryIO, boundary: int) -> int:
+        """Recover the actual opening, including every prompt folded into that occurrence."""
+        opening = boundary
+        for offset, raw in self.reverse_lines(stream, boundary):
+            record = self.decode_line(raw, offset)
+            if record.ends_turn():
+                break
+            opening = record.opening_position(opening)
+        return opening
+
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from state.located(record.cwd)

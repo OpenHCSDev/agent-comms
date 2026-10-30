@@ -12,10 +12,10 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
-from agent_comms.channel_targets import CommsTag
 from agent_comms import commander
 from agent_comms.commander.questions import UnansweredUnitAsks
 from agent_comms.commander_service import CommanderService
+from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.comms import Comms
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.goal_actions import ReissuedOrderGoalAction
@@ -30,12 +30,10 @@ from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.interpreter_operation import LauncherPhase
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
-from agent_comms.message_page import MessageReadRequest
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
@@ -58,6 +56,7 @@ from agent_comms.todos import (
     Assignment,
     OwnerRequest,
     PullRequests,
+    ProgressRead,
     UnmergedListedPullRequest,
     RestoreHolderTodo,
     Todo,
@@ -126,21 +125,30 @@ class InstallDue(UndatedStandingRule, FamilyScan):
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[InstallDue, ...]:
         return cls.due(comms, frame.pulls)
 
+    @staticmethod
+    def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+        return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
+                     if any(repo.github == record.repository for record in installed.commits))
+
+    @classmethod
+    def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
+                pulls: ProgressRead) -> None:
+        """Fetching changes Git state, so the heartbeat joins it before observation."""
+        for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
+            repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
+
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
-        runtime_repos = tuple(repo for repo in repos
-                              if any(repo.github == record.repository for record in installed.commits))
+        runtime_repos = cls.repositories(comms, installed)
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
-        for repo in runtime_repos:
-            repo.git(repo.checkout, "fetch", "-q", "origin", "main")
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
-        target = core.git(core.checkout, "rev-parse", "origin/main").strip()
+        target = core.git(core.checkout, "rev-parse", f"{core.remote}/main").strip()
         for repo in runtime_repos:
-            main = repo.git(repo.checkout, "rev-parse", "origin/main").strip()
+            main = repo.git(repo.checkout, "rev-parse", f"{repo.remote}/main").strip()
             recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.
             merges = UninstalledMerge.read(repo, recorded.commit, main)
@@ -242,20 +250,6 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     def line(self) -> str:
         return (f"ADVANCE request {self.request.id.value} ({self.request.text}) has no order serving it."
                 " is anyone on it, or did we forget? -> order its next step or mark it done")
-
-
-@dataclass(frozen=True)
-class AnswersTo(MessageReadRequest[tuple[Message, ...]]):
-    """The newest reply to an original from the requested participants."""
-
-    scope: RepliesDisplayScope
-    since: float
-    empty: ClassVar[tuple[Message, ...]] = ()
-
-    def read_opened(self, source: BusReader) -> tuple[Message, ...]:
-        return source.latest_answer(
-            self.scope, since=self.since,
-        )
 
 
 class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
@@ -616,9 +610,9 @@ class UnownedObservation:
 
 
 class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
-    """Observe released work and its checkouts before entering the bus to assign it."""
+    """Keep dispatch preparation joined; only individually audited readers can be dropped."""
 
-    def observe(self, comms: Comms) -> tuple[UnownedObservation, ...]:
+    def observe(self, comms: Comms, prepared: None) -> tuple[UnownedObservation, ...]:
         available = comms.goals.todos.reassignable()
         observed: list[UnownedObservation] = []
         pulls = PullRequests(available)
@@ -679,7 +673,7 @@ class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, de
 @dataclass(frozen=True)
 class MissedHeartbeat(HeartbeatSilent):
     def line(self) -> str:
-        return (f"FIX no completed heartbeat pass since "
+        return (f"FIX Tristan has been silent: no completed pass since "
                 f"{RecordedEventTime(self.since - self.seconds).clock()}, silent past "
                 f"{RecordedEventTime(self.since).clock()}. I have to tell you it's hung? why?"
                 " -> read the connector journal for the failing pass and fix its owner")
@@ -690,9 +684,9 @@ class HeartbeatNotStarted(HeartbeatSilent):
     request: OwnerRequestId
 
     def line(self) -> str:
-        return (f"START request {self.request.value} has had no heartbeat, overdue since "
+        return (f"START request {self.request.value} has not heard from Tristan, overdue since "
                 f"{RecordedEventTime(self.since).clock()}. why isn't it running?"
-                " -> start the connector heartbeat and fix its failing pass")
+                " -> start the connector's Tristan pass and fix its failure")
 
 
 @dataclass(frozen=True)
@@ -734,8 +728,7 @@ class CommanderDeaf(InboxUnavailable):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """The commander's own inbox is the dead path, so #comms hears it instead."""
-        comms.messaging.send(
-            CommanderService.sender, CommsTag.channel(), f"{commander}: {self.line()}")
+        FleetNotice().announce(comms.messaging, f"{commander}: {self.line()}")
 
 
 @dataclass(frozen=True)

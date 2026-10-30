@@ -70,21 +70,27 @@ class CarryChain:
         return cls(tuple(emitted))
 
     @staticmethod
-    def retired_boundary(checkout: Path, current: str, target: str) -> str:
-        """Skip source history wholly cancelled before this bus installs it.
+    def effective_revisions(checkout: Path, current: str, target: str) -> frozenset[str]:
+        """Retain source transitions outside completely cancelled intervals.
 
-        The newest first-parent commit with the installed revision's complete
-        tree closes that interval; it does not change the installed revision.
+        Equal complete trees close an interval anywhere after the installed
+        state, not only when the final tree equals that installed state.
+        The ordered tree path retains each transition's original revision.
         """
         current_tree: str = Repo.git(checkout, "rev-parse", f"{current}^{{tree}}").strip()
         commits: list[str] = Repo.git(
-            checkout, "log", "--first-parent", "--format=%H %T", f"{current}..{target}",
+            checkout, "log", "--first-parent", "--reverse", "--format=%H %T",
+            f"{current}..{target}",
         ).splitlines()
+        effective = {current_tree: current}
         for entry in commits:
             revision, tree = entry.split()
-            if tree == current_tree:
-                return revision
-        return current
+            if tree in effective:
+                while next(reversed(effective)) != tree:
+                    effective.popitem()
+            else:
+                effective[tree] = revision
+        return frozenset(effective.values())
 
     @staticmethod
     def require_crossed(checkout: Path, root: Path, target: str) -> None:
@@ -96,15 +102,16 @@ class CarryChain:
         current = RuntimeResolution.at(RootRuntimeStore.at(root).read().prefix).core_commit
         held = set(Repo.git(checkout, "ls-tree", "-r", "--name-only", current, "--",
                             str(STEPS)).split())
-        boundary: str = CarryChain.retired_boundary(checkout, current, target)
+        effective = CarryChain.effective_revisions(checkout, current, target)
         deleted = Repo.git(
             checkout, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=D",
-            "--name-only", "--format=%x00%H", f"{boundary}..{target}", "--",
+            "--name-only", "--format=%x00%H", f"{current}..{target}", "--",
             f"{STEPS}/*.py",
         ).split("\x00")[1:]
         skipped = tuple(
             f"{path} (deleted by {commit[:12]}; install {commit[:12]}^ first)"
             for commit, *paths in (entry.split() for entry in deleted)
+            if commit in effective
             for path in paths if path not in held
         )
         if skipped:
