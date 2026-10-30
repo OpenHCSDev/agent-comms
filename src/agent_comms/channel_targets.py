@@ -599,8 +599,9 @@ class ChannelTarget(NamedTarget):
         require_channel: Callable[[str], Channel],
     ) -> tuple[NamedTarget, Message, list[str]]:
         channel = require_channel(self.name)
-        names = [thread.name for thread in snapshot.channel_audience()
-                 if thread.name != sender and channel.matches(thread.tags)]
+        names = [recipient.name for thread in snapshot.channel_audience()
+                 for recipient in thread.execution.channel_recipients(thread)
+                 if recipient.name != sender and channel.matches(recipient.tags)]
         return self, message, names
 
     def display_scope(

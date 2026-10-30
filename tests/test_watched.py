@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import GoalId, GoalWaitId
+from agent_comms.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
@@ -321,3 +321,12 @@ def test_synchronous_backlog_invalidates_admitted_sources(tmp_path):
         for index in range(8192):
             (tmp_path / str(index)).write_text("unrelated")
         assert changes.changed_paths() == frozenset((path,))
+
+
+def test_every_revision_source_resolves_its_paths(watched_bus):
+    """Each declared revision source runs against a live root: a name its path rule reads must
+    resolve where the rule runs, or the observation process dies on its first watch."""
+    _, comms = watched_bus
+    paths = WireRevision.source_paths(comms.views)
+    assert set(paths) == {plan.name for plan in FieldCodec.field_plans(WireRevision)
+                          if WatchPaths.single(plan.annotation)}

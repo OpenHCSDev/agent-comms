@@ -185,7 +185,7 @@ def test_group_selection_hydrates_only_selected_threads_on_its_captured_cut(
         entry = groups[group_type].entries[target]
         assert entry.available and entry.person.require_present().thread is registry.require(target)
     selected = {person.thread.name for group in groups.values()
-                for entry in group.entries.values() for person in entry.person.present()}
+                for entry in group.entries.values() for person in entry.person.views()}
     assert selected == {"origin", "child", "peer"}
     assert inputs.orders == original_orders and inputs.sent == original_sent
     assert all(selected.order is order for group in groups.values() for selected in group.selectable())
@@ -254,7 +254,7 @@ def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
 
     missing = collaboration_rows(comms)[0]
     assert missing.target == "peer", "Deleted identity must remain copyable"
-    assert missing.available is False and missing.person.present() == ()
+    assert missing.available is False and missing.person.views() == ()
     snapshot = comms.relationships.snapshot("owner")
     assert FieldCodec.decode(type(snapshot), FieldCodec.encode(snapshot)) == snapshot
     assert missing.detail == original.note
@@ -301,7 +301,7 @@ def test_reused_peer_name_does_not_rebind_or_overwrite_historical_work(tmp_path)
     )
 
     row = collaboration_rows(comms)[0]
-    assert row.target == "peer" and row.person.present() == () and not row.available
+    assert row.target == "peer" and row.person.views() == () and not row.available
     for action in ("add", "update"):
         with pytest.raises(ValueError):
             comms.relationships.edit(
@@ -392,7 +392,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
     unavailable = collaboration_rows(comms)[0]
     assert unavailable.target == "renamed-peer"
     assert unavailable.sources == ("explicit", "goal_mention")
-    assert not unavailable.available and unavailable.person.present() == ()
+    assert not unavailable.available and unavailable.person.views() == ()
     assert "Retained explicit contact" in unavailable.detail
 
 

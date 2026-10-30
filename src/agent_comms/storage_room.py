@@ -20,6 +20,7 @@ from .activity import ActivityState
 from .child_process import ProcessIdentity, ResidentMemory
 from .declared_family import DeclaredFamily
 from .field_codec import RoomTicket
+from .locked_store import PublishedProperty
 from .store_files import StoreContention
 from .thread_identity import ThreadIncarnation
 from .typed_table import (
@@ -250,8 +251,8 @@ class RoomAllocation:
     # freed by jobs outside Core, which cannot notify this ledger.
     room_refresh_seconds = 1.0
 
-    @property
-    def room_ledger(self):
+    @PublishedProperty
+    def room_ledger(self) -> RoomLedger:
         return RoomLedger(self.volume / '.cache' / 'agent-comms')
 
     def free_room(self):

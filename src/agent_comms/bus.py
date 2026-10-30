@@ -49,8 +49,9 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
-from agent_comms.locked_store import BusFile, FileStore, SQLiteFile, StoreCommittedError
+from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
@@ -164,9 +165,7 @@ class BusReader(RouteCounts, ABC):
     """One query implementation for individual reads and a held read snapshot."""
 
     @abstractmethod
-    def observing(
-        self, *, check_same_thread: bool = True,
-    ) -> AbstractContextManager[sqlite3.Connection]:
+    def observing(self) -> AbstractContextManager[sqlite3.Connection]:
         """Borrow one read snapshot through the reader's declared lifetime."""
 
     def answering(self, references: tuple[MessageReference, ...], route: NamedTarget,
@@ -176,10 +175,14 @@ class BusReader(RouteCounts, ABC):
             return MessageIdentitySource.answering(connection, references, route, snapshot)
 
     @contextmanager
-    def reading(self, *, check_same_thread: bool = True) -> Iterator[BusSnapshot]:
+    def reading(self) -> Iterator[BusSnapshot]:
         """Keep queries and their physical identity on one held snapshot."""
-        with self.observing(check_same_thread=check_same_thread) as db:
+        with self.observing() as db:
             yield BusSnapshot.from_connection(db)
+
+    @abstractmethod
+    def captured_reading(self) -> AbstractContextManager[BusSnapshot]:
+        """Retain a cut independently of ordinary reads on the acquiring thread."""
 
     def revision(self) -> int:
         with self.observing() as db:
@@ -513,18 +516,21 @@ class BusReader(RouteCounts, ABC):
             )
 
 
-class StoredBusReader(BusReader):
+class StoredBusReader(BusReader, SQLiteReader):
     """File-backed readers use SQLite snapshots; held snapshots need no connection."""
 
-    @property
-    @abstractmethod
-    def path(self) -> Path:
-        """The file named by this reader's owning declaration."""
+    @contextmanager
+    def observing(self) -> Iterator[sqlite3.Connection]:
+        with self.reader_snapshot() as db:
+            yield db
 
     @contextmanager
-    def observing(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
-        with SQLiteFile.opened_reader(self.path, check_same_thread=check_same_thread) as db:
-            yield db
+    def captured_reading(self) -> Iterator[BusSnapshot]:
+        # Unlike a nested ordinary read, a presentation outlives this worker's
+        # next request. Its transaction must never enter the thread-local pool.
+        with CoordinationReadUnavailable.checking():
+            with closing(self.read_snapshot(self.path, check_same_thread=False)) as db:
+                yield BusSnapshot.from_connection(db)
 
 
 class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, BusFile, Watched):
@@ -676,10 +682,14 @@ class BusSnapshot(PresentPath, BusReader):
         return cls(identity=FileIdentity.from_stat(path.stat()), path=path, _connection=connection)
 
     @contextmanager
-    def observing(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+    def observing(self) -> Iterator[sqlite3.Connection]:
         """The held snapshot is already attached, so it takes no lock."""
         yield self._connection
 
     @contextmanager
-    def reading(self, *, check_same_thread: bool = True) -> Iterator[BusSnapshot]:
+    def reading(self) -> Iterator[BusSnapshot]:
+        yield self
+
+    @contextmanager
+    def captured_reading(self) -> Iterator[BusSnapshot]:
         yield self

@@ -22,7 +22,7 @@ from inspect import get_annotations
 from itertools import accumulate
 from typing import (
     TYPE_CHECKING, Annotated, ClassVar, Self, Type, cast, dataclass_transform,
-    get_origin, get_type_hints,
+    get_origin,
 )
 
 from agent_comms.response_policy import (
@@ -375,7 +375,7 @@ class _CapabilityTable(ProjectionSource):
 
     @cache
     def for_class(self, owner: type[BusCapability]) -> type[CapabilityRow]:
-        hints = get_type_hints(owner, include_extras=True)
+        hints = FieldCodec._types(owner)
         return make_dataclass(
             BusTables.__name__.removesuffix("Tables") + owner.__name__ + "Row",
             [*((item.name, hints[item.name], item) for item in BusCapability.declared_fields(owner)),

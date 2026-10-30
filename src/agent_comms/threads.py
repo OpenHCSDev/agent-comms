@@ -263,6 +263,10 @@ class GoalOwner(ThreadBirthRecord):
 class Thread(ThreadProvenance, GoalOwner, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
 
+    def answering_thread(self, reader: Thread) -> Thread:
+        """A live declaration answers what it owes in its own transcript, whoever reads the debt."""
+        return self
+
     parent: ThreadParent = field(default_factory=NoParent)
     work_state: Annotated[
         ThreadWorkState, RegistrationPolicy(InheritPrevious), WireOmitDefault()

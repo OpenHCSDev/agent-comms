@@ -261,8 +261,8 @@ class RelationshipEntry:
             return False
         return all(
             any(person.thread.incarnation == previous.thread.incarnation
-                for person in self.person.present())
-            for previous in earlier.person.present()
+                for person in self.person.views())
+            for previous in earlier.person.views()
         )
 
 
@@ -505,7 +505,7 @@ class MutualEntrySource(RelationshipEntrySource):
 
     def entry(self, context: RelationshipContext) -> RelationshipEntry:
         person = context.people.get(self.name, presentation.NoThreadView())
-        available = any(view.thread.incarnation == self.identity for view in person.present())
+        available = any(view.thread.incarnation == self.identity for view in person.views())
         first, *remaining = self.relations
         entry = first.entry(self.identity, person, available, None)
         for relation in remaining:

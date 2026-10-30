@@ -1172,3 +1172,23 @@ def test_represented_value_projects_as_its_record_only_when_its_record_is_its_wi
     assert FieldCodec.encode(member) == {"name": "kept", "token": "secret"}
     assert FieldCodec.project(member, SnapshotExclude) == {"name": "kept"}
     assert FieldCodec.project(CountWire(3), SnapshotExclude) == "count=3"
+
+
+def test_an_annotation_lambda_sees_the_module_that_declared_it():
+    """get_type_hints evaluated class annotations with the class dict as globals, so a lambda in
+    one could not see its own module: WireRevision.goal_execution raised NameError on
+    GoalWakeFile and every Toad observer died (2026-10-30)."""
+    import sys
+    import types
+    module = types.ModuleType("annotation_lambda_module")
+    sys.modules[module.__name__] = module
+    exec(
+        "from __future__ import annotations\n"
+        "from typing import Annotated\n"
+        "import os\n"
+        "class Declared:\n"
+        "    sep: Annotated[int, (lambda: os.sep)]\n",
+        module.__dict__,
+    )
+    hint = FieldCodec._types(module.Declared)["sep"]
+    assert hint.__metadata__[0]() == __import__("os").sep

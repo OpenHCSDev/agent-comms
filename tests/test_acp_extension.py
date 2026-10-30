@@ -39,7 +39,7 @@ from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.field_codec import AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
+from agent_comms.field_codec import AcpSessionId, AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement
@@ -57,7 +57,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     read = comms.transcripts.capture_page_read("pilot")
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
     queue_scope = LiveQueueScope(
-        session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1),
+        session_id=AcpSessionId("pilot"), claimed_identity=owner, owner=ProcessIdentity(123, 1),
     )
     from agent_comms.acp_extension import NativeOutputCommittedUpdate, NativeRoundCommittedUpdate
     from agent_comms.native_output import AssistantOutput, NativeRecordLocation
@@ -86,7 +86,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         CursorAdvancedUpdate(
             CursorEnvelope(
                 LiveCursorScope(
-                    session_id="pilot",
+                    session_id=AcpSessionId("pilot"),
                     wire_root_id=RootId("a" * 32),
                     claimed_identity=owner,
                     owner=ProcessIdentity(123, 1),
@@ -188,7 +188,7 @@ def test_request_family_strict_boundary():
 
 def test_only_an_unidentified_start_without_a_live_queue_posts_itself():
     owner = ClaimedIdentity(RecordedThreadIncarnation("pilot", 1.0), 1)
-    live = LiveQueueScope(session_id="pilot", claimed_identity=owner, owner=ProcessIdentity(123, 1))
+    live = LiveQueueScope(session_id=AcpSessionId("pilot"), claimed_identity=owner, owner=ProcessIdentity(123, 1))
     native, input_id = InputId.mint(), InputId.mint()
     posted = []
     for update in (

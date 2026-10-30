@@ -16,10 +16,10 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.field_codec import AcpSessionId, MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.private_path import PrivateSocketRole
-from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
@@ -37,10 +37,10 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
     session_file.chmod(0o600)
     thread = Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=RegistrySessionLocation.from_path(str(session_file), comms.root))
     comms.registry.declare(thread)
-    await owner.sessions.bind_owned(thread, thread.name)
+    await owner.sessions.bind_owned(thread, AcpSessionId(thread.name))
     database = comms.root / "coordination.sqlite3"
     CoordinationStore(database).close()
-    proxy = RuntimeProxy(client, thread.name, socket_path(comms.root, os.getpid()))
+    proxy = client._create_runtime_proxy(thread, AcpSessionId(thread.name))
     holder = sqlite3.connect(database, isolation_level=None)
     try:
         with caplog.at_level(logging.ERROR, logger="agent_comms.runtime"):
@@ -119,7 +119,7 @@ async def test_subscription_rejects_invalid_ready_and_closes_socket(
     with PrivateSocketRole.address(path) as address:
         server = await asyncio.start_unix_server(reply, path=address)
     client = CommsAgent(comms, auto_wake=False)
-    proxy = RuntimeProxy(client, "owner", path)
+    proxy = client._create_runtime_proxy(comms.registry.require("owner"), AcpSessionId("owner"))
     try:
         async with asyncio.timeout(3):
             with pytest.raises(MalformedRecord):

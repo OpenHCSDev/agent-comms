@@ -554,6 +554,52 @@ def test_a_read_rule_is_answered_before_the_next_unread_file_opens(capsys, dealt
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # the rest stay unread
 
 
+def test_a_parallel_batch_opens_one_unanswered_rule_and_refuses_the_next(capsys, dealt_session):
+    """A batch's reads are each judged before any one completes: the first rule opens, the
+    second waits for its answer instead of slipping through before the first is recorded."""
+    transcript, start = dealt_session
+    for paper in CommanderPackage.paper():
+        read_whole(transcript, paper.resolve())
+    rules = CommanderReader.rules()
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+    # The rule whose read is in flight stays open; answering it opens the next.
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[0].path)}))
+    start.audit.write_text(answered_audit(CommanderReader, rules[:1]))
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(rules[1].path)}))
+
+
+def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session):
+    """On 2026-10-30 a session opened the indictment and two rules first and never read the
+    papers: the next dealt file opens, any later one is refused and named the next to read."""
+    transcript, _ = dealt_session
+    dealt = CommanderReader.sources()
+    assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
+    papers = CommanderPackage.paper()
+    for later in (CommanderPackage.indictment(), CommanderReader.rules()[0].path, papers[1]):
+        call = gated(transcript, "Read", {"file_path": str(later.resolve())})
+        call.judge()
+        reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
+        assert reason["permissionDecision"] == "deny"
+        assert f"Next: {papers[0].resolve()}" in reason["permissionDecisionReason"]
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}))
+    read_whole(transcript, papers[0].resolve())
+    assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[1].resolve())}))
+
+
+def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session):
+    transcript, start = dealt_session
+    rules = CommanderReader.rules()
+    for rule in rules[:2]:
+        read_whole(transcript, rule.path.resolve())
+    wrong = [{**engaged(rule.name, rule.path), "quote": "no rule file holds this line"}
+             for rule in rules[:2]]
+    start.audit.write_text(json.dumps({"rules": wrong, "owner_words": []}))
+    gated(transcript, "Read", {"file_path": str(rules[2].path)}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert all(f"entry for {rule.path.stem}" in reason for rule in rules[:2])
+
+
 @pytest.mark.parametrize("change, says", [
     ({"quote": "no rule file holds this line"}, "not verbatim"),
     ({"quote": "   "}, "blank"),
@@ -758,7 +804,7 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     assert start.audit.exists()
     assert start.current().read_by(start) == (first,)
     assert session_start(transcript, "compact").returncode == 0
-    assert start.audit.exists()  # a compaction drops the reads, never the answers
+    assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
     assert start.current().read_by(start) == ()
 
 

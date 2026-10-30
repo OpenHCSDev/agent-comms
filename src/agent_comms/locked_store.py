@@ -14,10 +14,12 @@ from collections import defaultdict
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import AbstractContextManager, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field
-from functools import cache
+from functools import cache, cached_property, partial
 from importlib import import_module
 from pathlib import Path
 from pkgutil import walk_packages
+from threading import local
+from weakref import finalize
 from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 
 from pydantic import JsonValue
@@ -708,11 +710,33 @@ class WireWakeFile(RootFile):
         )
 
 
-class RegistryFile(RollbackRetained, WireWakeFile):
+class GoalWakeFile(WireWakeFile):
+    """Coarse publication signals, never a fingerprint of every live execution input."""
+
+    __slots__ = ()
+
+    @classmethod
+    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
+        return cls.source_paths(root)
+
+    @classmethod
+    def execution_paths_in(cls, root: Path) -> frozenset[Path]:
+        return frozenset(
+            path for owner, directory in cls.declarations_in(root)
+            for path in owner.execution_paths(directory)
+        )
+
+
+class RegistryFile(RollbackRetained, GoalWakeFile):
     """Registry location usable by record types without importing their decoder."""
 
     __slots__ = ()
     filename = "registry.json"
+
+    @classmethod
+    def execution_paths(cls, root: Path) -> tuple[Path, ...]:
+        # Its captured owner declaration selects the session; a phase edit does not.
+        return ()
 
     @classmethod
     def copy_group(cls, source: Path, target: Path) -> frozenset[Path]:
@@ -731,6 +755,49 @@ class RegistryFile(RollbackRetained, WireWakeFile):
         return copied
 
 
+
+
+class SQLiteReadConnection:
+    """A thread's read handle, retired with its store or when the file is replaced."""
+
+    def borrowed(self) -> tuple[sqlite3.Connection, ...]:
+        return ()
+
+    def acquire(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> OpenSQLiteReadConnection:
+        return OpenSQLiteReadConnection(source, revision, contention)
+
+
+class OpenSQLiteReadConnection(SQLiteReadConnection):
+    def __init__(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> None:
+        self.pid = os.getpid()
+        self.identity = revision.file_identity()
+        # Queries remain thread-local. Finalization may run in the store owner's
+        # retirement thread, so closing the handle is not thread-affine.
+        self.db = source._open_reader(source.path, contention, check_same_thread=False)
+        self.retire = finalize(self, self.db.close)
+        if FileRevision.capture(source.path).file_identity() != self.identity:
+            self.retire()
+            raise RelationViolationError(f"SQLite file replaced while opening {source.path}")
+
+    def borrowed(self) -> tuple[sqlite3.Connection, ...]:
+        return (self.db,) if self.pid == os.getpid() and self.db.in_transaction else ()
+
+    def acquire(
+        self, source: SQLiteReader, revision: FileObservation, contention: StoreContention,
+    ) -> OpenSQLiteReadConnection:
+        if self.pid == os.getpid() and self.identity == revision.file_identity():
+            return self
+        self.retire()
+        return super().acquire(source, revision, contention)
+
+
+class SQLiteReaders(local):
+    def __init__(self) -> None:
+        self.connection: SQLiteReadConnection = SQLiteReadConnection()
 
 
 class SQLiteStorage(RootFile, SqliteStore):
@@ -817,30 +884,6 @@ class SQLiteStorage(RootFile, SqliteStore):
         return cls._acquire_snapshot(cls._configure_reader(cls.writer(uri, uri=True)))
 
     @classmethod
-    @contextmanager
-    def opened_reader(
-        cls, path: Path, contention: StoreContention = DEFAULT_STORE_CONTENTION,
-        *, check_same_thread: bool = True,
-    ) -> Iterator[sqlite3.Connection]:
-        """Read existing committed data without initializing storage or permitting writes."""
-        with CoordinationReadUnavailable.checking():
-            try:
-                with closing(cls.read_snapshot(path, contention,
-                                               check_same_thread=check_same_thread)) as db:
-                    try:
-                        yield db
-                    finally:
-                        if db.in_transaction:
-                            db.execute("ROLLBACK")
-            except sqlite3.OperationalError as error:
-                error.add_note(
-                    f"SQLite observation store: {path}; "
-                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
-                )
-                raise
-
-
-    @classmethod
     def files(cls, path: Path) -> tuple[Path, ...]:
         return (path, cls.wal_path(path),
                 *(path.with_name(path.name + suffix) for suffix in cls.transient_suffixes))
@@ -887,6 +930,66 @@ class SQLiteStorage(RootFile, SqliteStore):
             if connection.in_transaction:
                 connection.execute("ROLLBACK")
             raise
+
+
+class PublishedProperty[Value](cached_property[Value]):
+    """Publish a resource once into the slot Python binds to its declaration."""
+
+    def __set_name__(self, owner: type[object], name: str) -> None:
+        super().__set_name__(owner, name)
+        self.func = partial(self._published, name, self.func)
+
+    def _published(
+        self, name: str, create: Callable[[object], Value], source: object,
+    ) -> Value:
+        value: Value = source.__dict__.setdefault(name, create(source))
+        return value
+
+
+class SQLiteReader(SQLiteStorage):
+    """A physical instance owns readers; class-only file policies do not."""
+
+    @property
+    @abstractmethod
+    def path(self) -> Path:
+        """The physical file whose connection lifetime this instance owns."""
+
+    def require_path(self) -> None:
+        """Physical stores can require their existing path/privacy contract."""
+
+    @PublishedProperty
+    def readers(self) -> SQLiteReaders:
+        """One lazy resource owner per store, with distinct handles in each thread."""
+        return SQLiteReaders()
+
+    @contextmanager
+    def reader_snapshot(
+        self, contention: StoreContention = DEFAULT_STORE_CONTENTION,
+    ) -> Iterator[sqlite3.Connection]:
+        for borrowed in self.readers.connection.borrowed():
+            yield borrowed
+            return
+        self.require_path()
+        revision = FileRevision.capture(self.path)
+        revision.require(FileNotFoundError(self.path))
+        with CoordinationReadUnavailable.checking():
+            try:
+                held = self.readers.connection.acquire(self, revision, contention)
+                self.readers.connection = held
+                db = held.db
+                try:
+                    contention.configure(db)
+                    self.begin_snapshot(db)
+                    yield db
+                finally:
+                    if db.in_transaction:
+                        db.execute("ROLLBACK")
+            except sqlite3.OperationalError as error:
+                error.add_note(
+                    f"SQLite observation store: {self.path}; "
+                    f"SQLite error: {error.sqlite_errorname} ({error.sqlite_errorcode})"
+                )
+                raise
 
 
 class SQLiteFile(SQLiteStorage):

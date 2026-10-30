@@ -24,14 +24,14 @@ from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import GoalId, TurnId, compile_decoder
+from agent_comms.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.restart_scope import OwnersNamed
-from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.session_file import NoSessionFile
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
@@ -54,8 +54,8 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
     comms = wire(native_workers.root)
     declared = Thread('worker', frozenset(), Checkout(tmp_path), task=GivenThreadText('retained task'))
     comms.registry.declare(declared)
-    first = await Coordination.run_worker(partial(
-        comms.owners.start, "worker", agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
+    (first,) = await Coordination.run_worker(partial(
+        comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"), agent_args=GivenArguments(()),
     ))
     owner = comms.registry.require("worker")
     try:
@@ -64,7 +64,7 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             assert owner.process_alive, "Actual worker exited before runtime attach"
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             await asyncio.sleep(0.02)
-        assert (await Coordination.run_worker(partial(comms.owners.start, "worker"))).pid == owner.require_process().pid
+        assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
         from agent_comms.owner_cutover import PreserveOwnerRuntime
@@ -354,7 +354,7 @@ async def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_pa
             async with asyncio.timeout(20), AsyncExitStack() as lifetime:
                 client = canonical_agent(comms, auto_wake=False)
                 lifetime.push_async_callback(client.shutdown)
-                proxy = RuntimeProxy(client, owner.name, socket_path(comms.root, owner.require_process().pid))
+                proxy = client._create_runtime_proxy(owner, AcpSessionId(owner.name))
                 lifetime.push_async_callback(proxy.close)
                 await proxy.subscribe()
 
