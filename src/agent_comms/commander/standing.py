@@ -14,6 +14,7 @@ from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.bus import BusReader
 from agent_comms import commander
 from agent_comms.commander.questions import UnansweredUnitAsks
+from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.commander_service import CommanderService
 from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.comms import Comms
@@ -645,7 +646,8 @@ class WaitingUnownedWheelSpin(UnownedWheelSpin):
 class HeartbeatSilent(IndependentStandingRule, DatedStandingRule, FamilyScan, declared_name=None):
     """A missing or stale successful pass, independent of whether a DM needed sending."""
 
-    seconds: ClassVar[int] = 180
+    seconds: ClassVar[float] = CommanderHeartbeat.completion_ceiling()
+    """A pass, the loop's sleep and a pass of slack: the heartbeat declares how long it takes."""
     since: float
     commander: RecordedThreadIncarnation
 
