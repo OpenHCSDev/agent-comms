@@ -3,7 +3,6 @@
 
 from agent_comms.repo import Checkout
 import subprocess
-import sys
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -27,6 +26,7 @@ from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, G
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
 from agent_comms.installer.logs import InstallLogs
 from agent_comms.launch_runtime import LaunchRuntime
+from conftest import record_installed_runtime
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
@@ -71,8 +71,8 @@ class ProofBuildCheckout:
 def proof_build_checkouts(
     tmp_path: Path, durable_home: Path
 ) -> tuple[ProofBuildCheckout, ...]:
-    """Own each package's distinct commit graph and the installed manifest."""
-    home = durable_home
+    """Own each package's distinct commit graph and the installed manifest; durable_home is the
+    HOME the installation records under."""
     checkouts = []
     packages = {}
     for package in RuntimePackage.members_with(RuntimePackage):
@@ -112,13 +112,8 @@ def proof_build_checkouts(
     packages[CorePackage.distribution] = PackageRecord(
         version="1", source=ArchiveRecord(url="file:///owned/core-wheel.whl")
     )
-    runtime = tmp_path / "runtime"
-    (runtime / "bin").mkdir(parents=True)
-    (runtime / "bin/python").symlink_to(sys.executable)
-    RuntimeResolution(core_commit=core.installed, packages=packages).save(runtime)
-    current = home / ".local/share/agent-comms/current"
-    current.parent.mkdir(parents=True)
-    current.symlink_to(runtime, target_is_directory=True)
+    record_installed_runtime(
+        tmp_path / "runtime", RuntimeResolution(core_commit=core.installed, packages=packages))
     return tuple(checkouts)
 
 

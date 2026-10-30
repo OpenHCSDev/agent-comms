@@ -103,8 +103,10 @@ def board_read(tool, comms, caller, thread="lead"):
 
 
 @pytest.fixture
-def held_bus(comms, tmp_path, source_repository, configured_repository):
-    """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy."""
+def held_bus(comms, tmp_path, source_repository, configured_repository, installed_runtime):
+    """One setup owner: real declarations, checked orders, UNKNOWN row, then a copy.
+
+    Its standing rules read the installed build, so the held bus owns an installed runtime."""
     source = source_repository
     scope = source.scope()
     # Two order holders never share one worktree, so the outsider has its own checkout.
@@ -303,7 +305,7 @@ def test_an_active_goal_with_an_unresolved_attempt_is_reported_never_retried(hel
 
 
 def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_every_reader(
-    held_bus, installed_runtime,
+    held_bus,
 ):
     """One registry split owns orphaned holds: the heartbeat's standing read names each one
     with what clears it, and the fleet story, todo list and edit counts read the same split."""
@@ -792,7 +794,7 @@ def test_send_and_check_accept_a_deletion_check_on_fresh_main(
     print('Deletion expected 0, remote main reads 4: send and check accepted; stale dirty tree unchanged.')
 
 
-def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_runtime):
+def test_one_state_per_unit_even_when_blocked_and_detached(held_bus):
     held_bus.registry.register(held_bus.registry.require("worker"), StoppedThreadStatus())
     detached, = state_cards(held_bus, Detached)
     assert detached.unit.name == "worker" and set(detached.orders) == {"P1", "P2"}
@@ -805,7 +807,7 @@ def test_one_state_per_unit_even_when_blocked_and_detached(held_bus, installed_r
         held_bus, "lead", observed=states, frame=frame)
 
 
-def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus, installed_runtime):
+def test_startup_heartbeat_enforces_and_publishes_both_new_rule_lines(held_bus):
     blocked_holder(held_bus)
     question = publish(held_bus, "worker", "lead", time.time() - 901)
     expected = tuple(rule.line() for rule in (
@@ -857,7 +859,7 @@ def test_successful_pass_health_does_not_depend_on_messages(held_bus, monkeypatc
     assert held_bus.bus.bus.revision() == before
 
 
-def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus, installed_runtime):
+def test_pass_missing_a_restarting_commander_keeps_its_completion(held_bus):
     """An install leaves the commander's process dead for one pass, which retires nothing."""
     commander = held_bus.registry.require("lead")
     alive = replace(commander, process_identity=ProcessIdentity.capture(os.getpid()))
