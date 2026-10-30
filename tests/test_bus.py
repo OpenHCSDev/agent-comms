@@ -124,8 +124,8 @@ def edit_inside(
     module = ast.parse(path.read_text())
     declaration, = (node for node in module.body
                      if isinstance(node, ast.ClassDef) and node.name == owner.__name__)
-    statement, = (node for node in declaration.body
-                   if member in ProducedTable.bound_names(ast.unparse(node)))
+    statement = next(node for node in reversed(declaration.body)
+                     if member in ProducedTable.bound_names(ast.unparse(node)))
     change(statement)
     path.write_text(ast.unparse(ast.fix_missing_locations(module)) + "\n")
 
@@ -133,6 +133,11 @@ def edit_inside(
 def return_no_rows(statement: ast.stmt) -> None:
     assert isinstance(statement, ast.FunctionDef)
     statement.body = [ast.Return(value=ast.Tuple(elts=[], ctx=ast.Load()))]
+
+
+def return_inherited_routes(statement: ast.stmt) -> None:
+    assert isinstance(statement, ast.FunctionDef)
+    statement.body = ast.parse("return super().route_rows(message)").body
 
 
 def widen_spelling(statement: ast.stmt) -> None:
@@ -247,12 +252,15 @@ def test_projection_digest_tracks_actual_delivery_production(projection_source: 
     assert after[CommanderUpdatePosition.declared_name] == before[CommanderUpdatePosition.declared_name]
 
 
-@pytest.mark.parametrize("owner", (MessageRoutes, ClaimNoticeKind))
+@pytest.mark.parametrize("owner, change", (
+    (MessageRoutes, return_no_rows),
+    (ClaimNoticeKind, return_inherited_routes),
+))
 def test_projection_digest_tracks_inherited_routing(
-    projection_source: Path, owner: type,
+    projection_source: Path, owner: type, change: Callable[[ast.stmt], None],
 ) -> None:
     before = json.loads(projection_source_digest(projection_source))
-    edit_inside(projection_source, owner, "route_rows", return_no_rows)
+    edit_inside(projection_source, owner, "route_rows", change)
     after = json.loads(projection_source_digest(projection_source))
     assert after[BusRouteCounts.declared_name] != before[BusRouteCounts.declared_name]
     assert after[AnsweredSource.declared_name] == before[AnsweredSource.declared_name]
@@ -451,8 +459,11 @@ def test_record_family_rebuild_and_history_install_preserve_scope(bus, declarati
     assert bus.lookup_message(record.message_id) == record
     assert bus.page(record.seq + 1, 10) == (record, original)
     scope = RepliesDisplayScope(frozenset({"author"}), frozenset({"worker"}))
+    history = scope.history(bus, limit=2)
+    assert history == (original, record)
+    assert tuple(type(item) for item in history) == (type(original), declaration)
     copied = Bus.install(
-        Bus.path_in(tmp_path / "selected-history"), history=scope.history(bus, limit=2),
+        Bus.path_in(tmp_path / "selected-history"), history=history,
     )
     kept = copied.lookup(record.seq)
     assert kept == record.history_record

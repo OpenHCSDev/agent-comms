@@ -307,7 +307,7 @@ if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
-    from .messages import Message, MessageKind
+    from .messages import BusRecord, Message, MessageKind
     from .presentation import BusPresentation
     from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
@@ -877,20 +877,23 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
         return source.scoped_page(predicate, parameters, lower=lower, upper=upper,
                                   descending=descending, limit=limit, kinds=kinds)
 
-    def history(self, source: BusReader, *, limit: int) -> tuple[Message, ...]:
-        """A bounded recent selection closed over its answers, without crossing this scope.
+    def history(self, source: BusReader, *, limit: int) -> tuple[BusRecord, ...]:
+        """Full copy records selected by this scope, closed over their disclosed answers.
 
-        A copied message keeps only the answers this scope discloses: a reference to a message
-        outside it would name that message, and its original stays on the source bus."""
-        selected: dict[int, Message] = {}
+        Display pages stay lightweight. A copy acquires each original record on the held
+        reader so its declared history_record retains deliveries and removes claims.
+        References outside this scope stay on the source bus.
+        """
+        selected: dict[int, BusRecord] = {}
         with source.reading() as reader:
             for message in self.records(reader, descending=True, limit=limit):
-                added: dict[int, Message] = {}
+                added: dict[int, BusRecord] = {}
                 pending = [message]
                 while pending and len(selected) + len(added) <= limit:
-                    answer = pending.pop()
-                    if answer.seq in selected or answer.seq in added:
+                    candidate = pending.pop()
+                    if candidate.seq in selected or candidate.seq in added:
                         continue
+                    answer = reader.lookup(candidate.seq)
                     disclosed = tuple(original for original in
                                       reader.messages_for_references(answer.answers)
                                       if self.includes(original))

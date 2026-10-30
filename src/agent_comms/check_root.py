@@ -96,9 +96,9 @@ class CheckRoot:
         )
         scope = NamedActivityDisplayScope("#check", targets, participants=selected | aliases)
         with self.source.bus.bus.reading() as source:
-            messages = scope.history(source, limit=self.max_records)
+            history = scope.history(source, limit=self.max_records)
         copied.registry.store.prepare_native_root()
-        Bus.install(Bus.path_in(copied.root), history=messages)
+        Bus.install(Bus.path_in(copied.root), history=history)
         copied.channels.catalog.replace(catalog)
         declarations = {}
         for name in names:
@@ -131,7 +131,7 @@ class CheckRoot:
                     edit.document.advance_claim(name)
                     edit.document.owners.advance(name)
             edit.commit()
-        if messages:
+        if history:
             # Imported history is displayable, not fresh input for this root.
             # Position acceptance itself; human read markers own a different fact.
             privacy = copied.registry.store.privacy()
@@ -141,7 +141,7 @@ class CheckRoot:
                         AcceptanceFrontier(
                             wire_root_id=privacy.namespace,
                             recipient_lookup=thread.incarnation.require_recorded().lookup,
-                            through_seq=messages[-1].seq,
+                            through_seq=history[-1].seq,
                         ).advance(db)
 
     def _session(self, original: Thread, root: Path, slot: str, project: Path) -> str:
