@@ -100,20 +100,30 @@ native transcripts and `read_ledger.json` retain the history and read positions.
 
 ## Compaction
 
-Pi's own compaction engine is the only one. Its `CompactionSettings` payload
-budget owns Core's immutable 300,000-token retained-context threshold as well
-as `reserveTokens` and `keepRecentTokens`. A per-thread
-`compaction.enabled: false` cannot disable that Core threshold. Models keep
-their real advertised context windows; Pi compacts at the smaller of the
-model-safe threshold and 300,000 tokens. That same threshold bounds each
-summarizer request. An oversized pre-existing span is summarized in order
-through bounded updates instead of being sent as one request that the
-summarizer cannot accept.
+Pi's own `SettingsManager` owns automatic compaction: `compaction.enabled`
+(default `true`), `reserveTokens` (default `16384`) and `keepRecentTokens`
+(default `20000`). Pi compacts when its estimated context exceeds the selected
+model's `contextWindow - reserveTokens`; there is no separate Core 300k cap.
+For a 1,000,000-token model with the default reserve, the threshold is 983,616.
+`compaction.enabled: false` disables automatic compaction, not manual `/compact`.
 
-Threshold compaction runs before a model request at a completed user/tool
-boundary or after a completed response, never while a tool is running.
-A completed response crossing either threshold uses Pi's standard threshold
-reason. Overflow recovery is reserved for an interrupted provider request: it
+These are ordinary Pi settings in `settings.json`: standalone Pi reads
+`~/.pi/agent/settings.json` and trusted project `.pi/settings.json`; a Comms-managed
+agent uses its native session's `.native-pi-agent/settings.json` instead of the
+standalone global file, plus trusted project settings. For example:
+
+```json
+{"compaction": {"enabled": true, "reserveTokens": 16384, "keepRecentTokens": 20000}}
+```
+
+The same model-safe input budget bounds each summarizer request. An oversized
+pre-existing span is summarized in order through bounded updates, retaining the
+previous summary between chunks.
+
+Threshold compaction runs before the next model request at a completed input/tool
+boundary, never while a tool is running. A completed answer settles before
+threshold compaction rather than waiting for summary generation.
+Overflow recovery is reserved for an interrupted provider request: it
 compacts once, then continues the same context. Context size is Pi's estimate,
 reported through `get_session_stats`. A manual compaction is
 Pi's `compact` RPC. The thread's task brief (`PI_TASK`) is passed to every
