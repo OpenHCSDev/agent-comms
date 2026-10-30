@@ -23,6 +23,7 @@ from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
+    AuditPatternPresent,
     BusStorageAbsent,
     ClassFlagsAbsent,
     QualifiedName,
@@ -551,7 +552,7 @@ class PlainStrIdRatchetPhase(Id128NominalPhase):
     """2: no file gains a plain ``str`` annotation on an id-named field or parameter."""
 
     after = (NominalIdTypePhase,)
-    evidence = PatternPresent(r"^class PlainStrIdAnnotation\(", ("tools/debt_ratchet.py",))
+    evidence = AuditPatternPresent(r"^class PlainStrIdAnnotation\(")
 
 
 class ClaimIdsPhase(Id128NominalPhase):
@@ -1019,7 +1020,7 @@ class MaintenanceInWritePhase(StoreGuardsPhase):
 class LockCensusPhase(StoreGuardsPhase):
     """5: the debt ratchet counts lock calls outside the store owners and refuses growth."""
 
-    evidence = PatternPresent(r"^class StoreLockCalls\(", ("tools/debt_ratchet.py",))
+    evidence = AuditPatternPresent(r"^class StoreLockCalls\(")
 
 
 class ScopedReadsPhase(StoreGuardsPhase):
