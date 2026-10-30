@@ -26,7 +26,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import InputId
+from .field_codec import AcpSessionId, InputId
 from .image_input import ImageInput
 from .pi_counts import PiCount
 from .pi_vocabulary import CompactionReason, ThinkingLevelField
@@ -42,6 +42,8 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .launch_runtime import LaunchRuntime
     from .owned_turn import TurnDelivery
+    from .pi_commands import NativeQuery
+    from .pi_payloads import PiResponseData
     from .threads import Thread
     from .transcript_sources import TranscriptSource
     from .turn_runner import TurnRunner
@@ -402,6 +404,10 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
     async def close_idle(self) -> None:
         """A backend without a retained process has nothing to retire."""
 
+    async def inspect(self, thread: Thread, request: NativeQuery) -> PiResponseData:
+        """A runtime without native queries refuses this capability explicitly."""
+        raise BackendDeclarationError(f"{type(self).__name__} does not support native inspection")
+
     def __init_subclass__(cls, **options: str | None) -> None:
         if AgentBackend._sealed:
             raise BackendDeclarationError(
@@ -412,7 +418,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
 
     @classmethod
     @abstractmethod
-    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId) -> Self:
         """An instance holding this runtime for one thread session in this worker."""
 
     @classmethod

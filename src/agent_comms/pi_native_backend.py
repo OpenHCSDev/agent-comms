@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
-from agent_comms.pi_payloads import PiOmitted
+from agent_comms.pi_payloads import PiOmitted, PiResponseData
 
 from .agent_backend import (
     CompactionOutcome,
@@ -33,6 +33,7 @@ from .agent_backend import (
     RuntimeLocation,
 )
 from .coordinator import Coordination
+from .field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_failures import NativePiUnavailable
@@ -43,7 +44,7 @@ from .native_fork import (
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
-from .pi_commands import Compact
+from .pi_commands import Compact, NativeQuery
 from .selected_session import SavedSelectedSession
 from .session_revision import (
     SessionObservation,
@@ -217,7 +218,7 @@ class PiNativeBackend(
         self.observe = observe
 
     @classmethod
-    def for_worker(cls, runner: TurnRunner, session_id: str) -> Self:
+    def for_worker(cls, runner: TurnRunner, session_id: AcpSessionId) -> Self:
         return cls(
             runner.inputs.state(session_id).owned().configuration, runner.comms,
             partial(runner.observe_selected_preparation, session_id),
@@ -260,7 +261,7 @@ class PiNativeBackend(
             observe=partial(self.observe, thread),
         )
 
-    async def inspect(self, thread: Thread, request):
+    async def inspect(self, thread: Thread, request: NativeQuery) -> PiResponseData:
         """Answer one Pi query on the idle child, preparing it first when needed."""
         return await self.child_state.inspect(self, partial(self.prepare, thread), request)
 

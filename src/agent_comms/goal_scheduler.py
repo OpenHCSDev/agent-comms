@@ -33,12 +33,12 @@ from .goal_presentation import GoalPublicationSnapshot, UnpublishedGoalSnapshot
 from .locked_store import GoalWakeFile
 from .goal_scope import OneGoal
 from .goals import Goal, GoalDeclaration, GoalRevision
+from .registry_document import RegistryDocument, RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 
 if TYPE_CHECKING:
-    from .registry_document import RegistryDocument, RegistrySnapshot
     from .threads import Thread
     from .comms import Comms
     from .input_drain import InputDrain

@@ -408,14 +408,14 @@ class SessionLifecycle:
         snapshot = GoalChangedUpdate.from_snapshot(self.comms.goals.goal_snapshot(thread_name))
         return self.comms.configuration.answer(thread_name), snapshot
 
-    async def metadata(self, thread_name: str, *, session_id: AcpSessionId | None = None) -> dict[str, JsonValue]:
+    async def metadata(self, thread_name: str, *, session_id: AcpSessionId) -> dict[str, JsonValue]:
         configuration = await Coordination.run_worker(partial(
             self.configuration_updates, thread_name,
         ))
         return encode_updates(
             *configuration,
-            await self.effects.inputs.queue_state(session_id or thread_name),
-            *await self.effects.cursors.trusted_metadata(thread_name, session_id or thread_name),
+            await self.effects.inputs.queue_state(session_id),
+            *await self.effects.cursors.trusted_metadata(thread_name, session_id),
         )
 
     async def retire_proxy(self, session_id: AcpSessionId) -> None:

@@ -71,7 +71,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
             is ReservedInput)
     state = next(
         f
-        for f in decode_updates((await agent.sessions.metadata("beta", session_id="beta")))
+        for f in decode_updates((await agent.sessions.metadata("beta", session_id=AcpSessionId("beta"))))
         if isinstance(f, QueueChangedUpdate)
     )
     assert state.scope.claimed_identity.incarnation.name == "beta"
