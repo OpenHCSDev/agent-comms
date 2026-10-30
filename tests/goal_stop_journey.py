@@ -41,7 +41,7 @@ async def stopped_goal_journey(
             text="Continue the synthetic stopped-goal journey."))
         # The real lifecycle registers the private participant before launch.
         # Running worker directly would bypass that required source owner.
-        await asyncio.to_thread(comms.owners.start, "stop-copy",
+        await asyncio.to_thread(comms.owners.start_many, ("stop-copy",),
                                 agent_args=GivenArguments(fixture.native_arguments()))
         try:
             await wait_for(lambda: fixture.provider.posts > 0)
@@ -61,7 +61,7 @@ async def stopped_goal_journey(
                 attempt = AttemptRecord.one(db, attempt_id=original.attempt_id)
             assert attempt is not None and isinstance(attempt.phase, FailedAttempt)
             # A fresh continuation, not a resend of the interrupted input.
-            await asyncio.to_thread(comms.owners.start, "stop-copy",
+            await asyncio.to_thread(comms.owners.start_many, ("stop-copy",),
                                     agent_args=GivenArguments(fixture.native_arguments()))
             await wait_for(lambda: fixture.provider.posts >= 2)
             resumed = store.snapshot(stopped.goal.require().id)

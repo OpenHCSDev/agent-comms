@@ -432,7 +432,7 @@ async def test_sigterm_group_preserves_active_goal_and_never_reissues_orders(
         unresolved = InputDispositions(held_bus.root).lookup(UNRESOLVED_INPUT_KEY)
         with LaunchRoot.from_path(held_bus.root).selected():
             await Coordination.run_worker(partial(
-                held_bus.owners.start, "worker", agent_bin=GivenBinary("pi")))
+                held_bus.owners.start_many, ("worker",), agent_bin=GivenBinary("pi")))
             try:
                 await wait_for(lambda: fixture.provider.posts == 1)
                 assert held_bus.registry.require("worker").executing
@@ -646,9 +646,11 @@ def test_commander_say_answers_an_unanswered_unit_message(held_bus, target, body
     with pytest.raises(RecordProblems, match=unknown):
         SayVerb(units="worker", body_file=str(reply), answers=(unknown,)).apply(ctx)
     assert held_bus.bus.bus.revision() == revision
-    # An already answered original exists, but opens no new ask.
-    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
-    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
+    # An already answered original opens no new ask, so naming it refuses without publishing.
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match="not an open ask"):
+        SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
 
 
 def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, tmp_path):
@@ -662,9 +664,11 @@ def test_an_unanswered_unit_message_gates_send_until_a_say_answers_it(held_bus, 
     SayVerb(units="worker", body_file=str(reply)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (question.reference,)
     assert unanswered(held_bus) == ()
-    # Naming it again after it was answered names nothing open, so it answers nothing.
-    SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
-    assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
+    # Naming it again after it was answered names nothing open, so it refuses without publishing.
+    revision = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match="not an open ask"):
+        SayVerb(units="worker", body_file=str(reply), answers=(question.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == revision
 
 
 def test_answering_one_owed_message_leaves_another_owed(held_bus, tmp_path, capsys):
