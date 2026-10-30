@@ -71,6 +71,10 @@ class ChannelDisplayReference(DisplayReference):
         return self.target
 
 
+_NAME_START = re.compile(r"(?<![\w@/\\.#:-])@?(?=\S)")
+_NAME_END = re.compile(r"[\w/\\@:-]|\.\w")
+
+
 @dataclass(frozen=True)
 class DisplayReferenceMatch:
     reference: DisplayReference
@@ -173,17 +177,30 @@ class DisplayReferences(RootedReferences):
         })
 
     @cached_property
-    def pattern(self):
-        # Escape declared names, not a second grammar for thread/channel names.
-        names = "|".join(re.escape(name) for name in sorted(self.targets, key=len, reverse=True))
-        return re.compile(r"(?<![\w@/\\.#:-])@?(?:" + names + r")(?![\w/\\@:-]|\.\w)")
+    def name_lengths(self) -> tuple[int, ...]:
+        """Longest first: a name wins over any shorter name it starts with."""
+        return tuple(sorted({len(name) for name in self.targets}, reverse=True))
+
+    def name_at(self, text: str, start: int) -> int | None:
+        """Where the longest declared name beginning at start ends, if one does."""
+        for length in self.name_lengths:
+            end = start + length
+            if text[start:end] in self.targets and not _NAME_END.match(text, end):
+                return end
+        return None
 
     def find(self, text: str) -> tuple[DisplayReferenceMatch, ...]:
-        if not self.targets:
-            return ()
-        return tuple(DisplayReferenceMatch(self.targets[match.group().removeprefix('@')],
-                                           match.start(), match.end())
-                     for match in self.pattern.finditer(text))
+        """Names are looked up where one can start: thousands of threads never become a regex."""
+        found = []
+        position = 0
+        while self.targets and (candidate := _NAME_START.search(text, position)):
+            end = self.name_at(text, candidate.end())
+            if end is None:
+                position = max(candidate.end(), candidate.start() + 1)
+            else:
+                found.append(DisplayReferenceMatch(self.targets[text[candidate.end():end]], candidate.start(), end))
+                position = end
+        return tuple(found)
 
     def accepts_history(self, root):
         return self.root == root
