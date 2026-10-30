@@ -8,7 +8,6 @@ transaction.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,21 +19,6 @@ from .launch_root import LaunchRoot
 from .recorded_bus import RecordedBusIdentity
 
 
-def current_root() -> Path:
-    """Resolve the explicit override or the validated default Comms route."""
-    return resolve_comms_route().observe_root()
-
-
-def root_is_current(root: str | Path) -> bool:
-    """Fail closed if a client's root is no longer the current route."""
-    return current_root() == Path(root).expanduser().resolve()
-
-
-def child_root(env: Mapping[str, str], cwd: str | Path) -> Path:
-    """The explicit process launch selects its child; HOME never supplies a route."""
-    return LaunchRoot.current().path
-
-
 @dataclass(frozen=True)
 class RouteSelection:
     route: CommsRoute
@@ -42,18 +26,20 @@ class RouteSelection:
     bus_identity: RecordedBusIdentity
 
     @classmethod
-    def capture(cls, source: str | Path | None = None) -> RouteSelection:
-        route = resolve_comms_route()
-        root = route.observe_root()
-        selection = cls(route, root, RecordedBusIdentity.capture(Bus.path_in(root)))
-        if source is not None and Path(source).expanduser().resolve() != selection.root:
-            raise errors.RouteChangedError(errors.RouteChangedError.reader_sentence)
-        return selection
-
-    @classmethod
-    def for_child(cls, env: Mapping[str, str], cwd: str | Path) -> RouteSelection:
-        """Capture the explicit process selection before launching its child."""
-        root = child_root(env, cwd)
+    def of(cls, root: LaunchRoot) -> RouteSelection:
+        """Resolve the root held by this client, independent of the process default."""
+        route = resolve_comms_route(root.path)
+        selected_root = route.observe_root()
         return cls(
-            resolve_comms_route(root), root, RecordedBusIdentity.capture(Bus.path_in(root))
+            route, selected_root, RecordedBusIdentity.capture(Bus.path_in(selected_root))
         )
+
+    def root_is_current(self, source: str | Path) -> bool:
+        """Whether a source belongs to this selection, not the process default."""
+        return Path(source).expanduser().resolve() == self.root
+
+    def require_source(self, source: str | Path) -> RouteSelection:
+        """Refuse a foreign source before using this client's selection."""
+        if not self.root_is_current(source):
+            raise errors.RouteChangedError(errors.RouteChangedError.reader_sentence)
+        return self
