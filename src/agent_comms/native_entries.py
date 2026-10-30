@@ -12,7 +12,7 @@ from itertools import repeat
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
 from .locked_store import DurableFile
 from .native_pi import (
@@ -176,7 +176,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return cls
 
     @classmethod
-    def read(cls, raw: bytes) -> NativeEntry:
+    def read(cls, raw: bytes) -> Self:
         return cls.from_wire(FieldCodec.parse(raw))
 
     @classmethod
@@ -641,6 +641,12 @@ class MessageEntry(NativeEntry):
     def input_id(self) -> InputId | None:
         # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
         return self.message.input_id.value_or(None)
+
+    def require_input_id(self) -> InputId:
+        """A tracked user message names the input it carries; anything else is malformed."""
+        for input_id in self.message.input_id.present():
+            return input_id
+        raise MalformedRecord("Native publication requires a tracked input ID")
 
     @property
     def tracked_user(self) -> MessageEntry | None:

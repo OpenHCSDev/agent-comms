@@ -11,6 +11,8 @@ from itertools import batched
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar
 
+from pydantic import JsonValue
+
 from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec, MalformedRecord, MessageId, NullMember, RecordMember,
@@ -52,7 +54,7 @@ class RecipientLimit(SingleFieldValue):
             raise ValueError(f"Recipient limit must be between {self.minimum} and {self.maximum}")
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "integer", "minimum": cls.minimum, "maximum": cls.maximum}
 
 

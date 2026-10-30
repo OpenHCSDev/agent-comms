@@ -29,7 +29,8 @@ from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository
 from fixture_git import ENVIRONMENT, SETTINGS
-from debt_ratchet import ClientTypeErrors, compare
+from agent_comms_project import AgentCommsProject, ClientTypeErrors
+from agent_comms.pinned_audit import audit
 from module_layers import MaterializedClients, Package
 
 pytest_plugins = ("github_fixture", "test_holder_standing_rules", "integration_source_fixture")
@@ -372,8 +373,9 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
     source = inputs.source(pair.core.github)
     head = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     clients = materialized_clients(pair.output, inputs)
-    assert len(ClientTypeErrors.parts(pair.core.checkout, source.baseline.commit, head,
-                                     {"src/agent_comms/api.py"}, "src/", clients)) == 2
+    project = AgentCommsProject(pair.core.checkout, clients=clients)
+    assert len(ClientTypeErrors.parts(project, source.baseline.commit, head,
+                                     {"src/agent_comms/api.py"}, "src/")) == 2
     for side in (BaseSide, HeadSide):
         client, = clients.at(pair.core.checkout, source.baseline.commit, head, side)
         assert client.import_paths == tuple(str(client.checkout / path) for path in ("src", "tools"))
@@ -387,8 +389,8 @@ def test_real_client_checker_compares_the_matched_tuple_in_its_one_interpreter(
         assert entry.returncode == 0, entry.stdout + entry.stderr
     # Both namespace files are selected under --explicit-package-bases: a duplicate
     # performance/tools.performance identity aborts the real checker, not a zero count.
-    result = compare(pair.core.checkout, source.baseline.commit, head, "src", 1,
-                     measured=(ClientTypeErrors,), clients=clients)
+    result = audit.ratchet.compare(project, source.baseline.commit, head, "src", 1,
+                                   (ClientTypeErrors,))
     assert not result.failed
     assert all(value == 0 for value in result.delta.values())
 
