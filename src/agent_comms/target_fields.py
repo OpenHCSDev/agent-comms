@@ -146,10 +146,8 @@ class UnsuppliedTargetField(TargetField):
     def _unchosen_selection(self, value: None) -> field_codec.MemberSelection:
         return field_codec.UnchosenMember()
 
-    @boundary_decoder
     def argument(self, value: object) -> Mapping[str, object]:
-        """Decode the optional control's raw presence once, not the field's wire value."""
-        return {} if value is None else super().argument(value)
+        return self.editor_selection(value).argument(self.name, value, self.editor_argument)
 
 
 @dataclass(frozen=True)

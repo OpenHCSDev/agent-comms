@@ -966,7 +966,7 @@ class DecoderPlan(ABC):
         return ScalarEditorMember(declared)
 
     def selected_editor_member(self, value: object) -> EditorMember:
-        raise TypeError(f'{self.target} does not declare a union editor')
+        return self.editor_member(self)
 
     def project_editor(self, native: object, wire: Callable[[], object]) -> object:
         return self.format_editor(wire())
@@ -1030,6 +1030,11 @@ class MemberDraftFactory[Draft](ABC):
 
 
 class MemberSelection(ABC):
+    def argument(
+        self, key: str, value: object, decode: Callable[[object], object],
+    ) -> Mapping[str, object]:
+        return {key: decode(value)}
+
     @property
     @abstractmethod
     def declaration(self) -> object: ...
@@ -1044,6 +1049,11 @@ class MemberSelection(ABC):
 
 @dataclass(frozen=True)
 class UnchosenMember(MemberSelection):
+    def argument(
+        self, key: str, value: object, decode: Callable[[object], object],
+    ) -> Mapping[str, object]:
+        return {}
+
     @property
     def declaration(self) -> object:
         return type(self)
