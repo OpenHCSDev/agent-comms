@@ -2555,6 +2555,15 @@ class FieldCodec(MroDispatch, Sealed):
         return hashlib.sha256(cls.compact(compared, sort_keys=True).encode()).hexdigest()
 
     @classmethod
+    def compared_fields(cls, record: type) -> tuple[FieldPlan, ...]:
+        """Construct comparison plans at the codec's declared-record boundary."""
+        return tuple(
+            cls._field_plan(item, annotation)(declared=item, _annotation=annotation)
+            for item in fields(record) if item.compare
+            for annotation in (cls.field_annotation(record, item.name),)
+        )
+
+    @classmethod
     def compile_comparison(cls, record: type) -> None:
         """Prepare the same declared field view that record comparisons execute."""
         _member_decoder(record).compile_comparison(set())
@@ -3616,11 +3625,7 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     def compared_fields(self) -> tuple[FieldPlan, ...]:
         """The compiled decoder owns the compared-only view's lifetime. Class metadata
         and excluded context never enter this view; FieldPlan owns its value decoders."""
-        return tuple(
-            FieldCodec._field_plan(item, annotation)(declared=item, _annotation=annotation)
-            for item in fields(self.target) if item.compare
-            for annotation in (FieldCodec.field_annotation(self.target, item.name),)
-        )
+        return FieldCodec.compared_fields(self.target)
 
     def fits_wire(self, data: object) -> TypeGuard[dict[str, object]]:
         if not isinstance(data, dict):

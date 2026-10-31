@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
     from .threads import Thread
@@ -411,7 +411,7 @@ class ThreadTarget(NamedTarget):
     ) -> int:
         return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedTarget:
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedThread:
         return snapshot.resolve_thread(self.selected_name(snapshot))
 
     def validate(self, message: Message) -> None:
@@ -550,7 +550,7 @@ class ChannelTarget(NamedTarget):
     ) -> int:
         return require_channel(self.name).pending_count(counts)
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedTarget:
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedChannel:
         return snapshot.resolve_channel(require_channel(self.name))
 
     def validate(self, sender: Message | None = None):
