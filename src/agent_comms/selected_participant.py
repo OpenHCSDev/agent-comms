@@ -64,7 +64,7 @@ class SelectedParticipant(MroDispatch):
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal))
+        self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal.authority))
 
     @handles(CompactionEvent)
     async def publish_compaction(self, event: CompactionEvent) -> None:

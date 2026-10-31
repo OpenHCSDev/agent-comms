@@ -41,7 +41,7 @@ class RegistryOwner:
 
     @property
     def goal_permission(self) -> GoalPermission:
-        return OwnerGoalPermission(self.thread.goal)
+        return OwnerGoalPermission(self.thread.goal.authority)
 
     @property
     def turn_lease(self) -> TurnLeaseFence:
@@ -63,7 +63,7 @@ class RegistryOwner:
                 expected=expected, actual=self.thread,
                 expected_claim=claim_scope, claim_generation=self.claimed_generation,
                 process=ProcessIdentity.capture(os.getpid()),
-                goal_permission=OwnerGoalPermission(expected.goal),
+                goal_permission=OwnerGoalPermission(expected.goal.authority),
             ).require_valid()
         except ReservationViolationError as error:
             raise RelationViolationError(f"live owner changed before turn claim: {error}") from error

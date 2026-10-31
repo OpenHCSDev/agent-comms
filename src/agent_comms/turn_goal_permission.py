@@ -7,13 +7,14 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import GoalId
+from .goal_authority import GoalTurnAuthority
 from .ordinary_turn_rules import OrdinaryGoalRule
 from .reservation_rules import ReservationViolationError
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .goal_waits import GoalWait
-    from .goals import Goal, GoalDeclaration
+    from .goals import GoalDeclaration
     from .turn_input_source import InputDependency
 
 
@@ -30,10 +31,10 @@ class GoalPermission(ABC):
 
 @dataclass(frozen=True)
 class OwnerGoalPermission(GoalPermission):
-    goal: GoalDeclaration
+    authority: GoalTurnAuthority
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return self.goal.authority.keeps_turn_under(current.authority)
+        return self.authority.keeps_turn_under(current.authority)
 
 
 class PublishedGoalPermission(OwnerGoalPermission):
@@ -48,10 +49,10 @@ class PublishedGoalPermission(OwnerGoalPermission):
 
 @dataclass(frozen=True)
 class ContinuationGoalPermission(GoalPermission):
-    goal: Goal
+    goal_id: GoalId
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return current.active().accepts_observation(self.goal.id, 0)
+        return current.active().accepts_observation(self.goal_id, 0)
 
 
 class InactiveGoalPermission(GoalPermission):
@@ -93,4 +94,4 @@ class TurnGoalPermission(GoalPermission):
             raise SelectedToolDenied(str(ReservationViolationError(OrdinaryGoalRule())))
 
     def published(self, goal: GoalDeclaration) -> None:
-        self.captured = PublishedGoalPermission(goal)
+        self.captured = PublishedGoalPermission(goal.authority)

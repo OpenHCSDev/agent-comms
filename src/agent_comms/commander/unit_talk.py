@@ -24,11 +24,12 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
+from agent_comms.ui_model.unit_state import UnitObservation
 
 if TYPE_CHECKING:
     from agent_comms.bus_publication import Delivered
     from agent_comms.heartbeat_frame import HeartbeatFrame
-    from agent_comms.ui_model.unit_state import UnitObservation, UnitState
+    from agent_comms.ui_model.unit_state import UnitState
 
 
 @dataclass(frozen=True)

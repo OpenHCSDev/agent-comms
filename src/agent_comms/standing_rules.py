@@ -49,6 +49,7 @@ from agent_comms.todos import (
     ProgressRead,
     ProgressSource,
     StoredHeadReview,
+    Todo,
 )
 from agent_comms.work_branches import (
     BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
@@ -65,7 +66,6 @@ if TYPE_CHECKING:
         OwnerRequest,
         PresentCheckout,
         PullRequest,
-        Todo,
         TodoStore,
     )
     from agent_comms.ui_model.unit_state import UnitObservation, UnitState

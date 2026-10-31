@@ -273,7 +273,7 @@ class OwnedTurn:
         """Acquire the original durable input before opening loop capabilities."""
         goal = self.runner.comms.registry.require(self.thread_name).goal
         if self.original_owner_input:
-            permission = OwnerGoalPermission(goal)
+            permission = OwnerGoalPermission(goal.authority)
         else:
             permission = goal.active().following_permission()
         if self.original_owner_input:

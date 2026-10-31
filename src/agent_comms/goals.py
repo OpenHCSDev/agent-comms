@@ -41,6 +41,7 @@ from .field_codec import (
     TurnId,
 )
 from .goal_states import ActiveGoal, GoalState
+from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
@@ -534,26 +535,6 @@ class ProblemGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
-class GoalAuthority:
-    """What an owner input was granted: this goal in this state.
-
-    Assigning or replacing a problem order revises the goal but keeps its authority, and an
-    order or retry that makes the same goal active keeps a running turn; pausing, completing,
-    blocking, clearing or replacing the goal ends it.
-    """
-
-    goal_id: GoalId
-    state: GoalState
-
-    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
-        """Whether a turn granted this authority may keep working under the current goal."""
-        return current.continues(self)
-
-    def continues(self, captured: GoalAuthority) -> bool:
-        return self.goal_id == captured.goal_id and self.state.continues_turn_from(captured.state)
-
-
-@dataclass(frozen=True)
 class GoalPeerChange:
     goal: GoalRevision | NoGoal
     state: type[GoalState] | NoGoal
@@ -581,7 +562,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     @property
     @abstractmethod
-    def authority(self) -> GoalAuthority | NoGoal: ...
+    def authority(self) -> GoalTurnAuthority: ...
 
     @abstractmethod
     def task_scope(self, scope: TaskScope) -> TaskScope: ...
@@ -712,14 +693,8 @@ class NoGoal(NullMember, GoalDeclaration):
         return InactiveGoalPermission()
 
     @property
-    def authority(self) -> NoGoal:
-        return self
-
-    def keeps_turn_under(self, current: GoalAuthority | NoGoal) -> bool:
-        return current == self
-
-    def continues(self, captured: GoalAuthority) -> bool:
-        return False
+    def authority(self) -> NoGoalAuthority:
+        return NoGoalAuthority()
 
     def task_scope(self, scope: TaskScope) -> TaskScope:
         return scope
@@ -804,7 +779,7 @@ class Goal(RecordMember, GoalDeclaration):
         return bool(self.progress)
 
     def following_permission(self) -> GoalPermission:
-        return ContinuationGoalPermission(self)
+        return ContinuationGoalPermission(self.id)
 
     @property
     def authority(self) -> GoalAuthority:

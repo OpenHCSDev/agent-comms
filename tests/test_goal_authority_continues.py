@@ -2,7 +2,8 @@
 
 from agent_comms.field_codec import GoalId
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, PausedGoal
-from agent_comms.goals import GoalAuthority, NoGoal
+from agent_comms.goal_authority import GoalAuthority
+from agent_comms.goals import NoGoal
 
 
 def test_reactivated_goal_keeps_the_running_turn():
@@ -22,5 +23,5 @@ def test_another_goal_ends_the_running_turn():
     h_goal_id = GoalId.mint()
     assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(GoalAuthority(h_goal_id,
         ActiveGoal()))
-    assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(NoGoal())
-    assert not NoGoal().keeps_turn_under(GoalAuthority(g_goal_id, ActiveGoal()))
+    assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(NoGoal().authority)
+    assert not NoGoal().authority.keeps_turn_under(GoalAuthority(g_goal_id, ActiveGoal()))
