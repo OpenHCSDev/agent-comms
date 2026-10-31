@@ -228,12 +228,6 @@ class CurrentTargets(Mapping[str, DisplayReference]):
     def __len__(self) -> int:
         return len(self.members) + len(set(self.channels) - self.members.keys())
 
-    def __eq__(self, other: object) -> bool:
-        if isinstance(other, CurrentTargets):
-            return ((self.root, self.members, frozenset(self.channels))
-                    == (other.root, other.members, frozenset(other.channels)))
-        return super().__eq__(other)
-
 
 @dataclass(frozen=True)
 class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
@@ -244,7 +238,7 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     Recorded catalogs share name recognition but cannot resolve a live target.
     """
 
-    targets: Mapping[str, DisplayReference] = field(init=False)
+    targets: Mapping[str, DisplayReference] = field(init=False, compare=False)
     members: Annotated[Mapping[str, ThreadIncarnation], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict, repr=False)
     channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
