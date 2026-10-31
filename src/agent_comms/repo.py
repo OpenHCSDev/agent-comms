@@ -840,6 +840,10 @@ class RepositoryReads:
         return self.history_for(Checkout(path)).repository
 
     def history_for(self, checkout: Checkout) -> CheckoutHistory:
+        """One cut per common directory, shared by every worktree it listed. A worktree added
+        after that cut is in none of its listings, so it reads a cut of its own: on 2026-10-30
+        every new order's worktree (claude-nra--P1067) killed the heartbeat pass that saw it
+        mid-read, because head_for found no HEAD for it in the stale listing."""
         checkout = checkout.resolved()
         if checkout.path not in self._worktree_histories:
             common = checkout.common_dir
@@ -847,6 +851,8 @@ class RepositoryReads:
                 self._histories[common] = checkout.read()
             history = self._histories[common]
             self._worktree_histories.update((path, history) for path in history.heads)
+            if checkout.path not in history.heads:
+                history = checkout.read()
             self._worktree_histories[checkout.path] = history
         return self._worktree_histories[checkout.path]
 
