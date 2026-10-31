@@ -4246,11 +4246,16 @@ class HeadVerdict(HeadReview, declared_name=None):
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
 
     @classmethod
-    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
-        """Source review cannot authorize even the owner's direct merge path."""
+    def require_ok(cls, request: PullRequestHead) -> None:
+        """The commander's admin merge needs this exact head's recorded ok, nothing more."""
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
+
+    @classmethod
+    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
+        """The queue merges only a promoted combined carrier of ok sources."""
+        cls.require_ok(request)
         MergeHeadReview.require_merge(request, repositories)
 
     @contextmanager
