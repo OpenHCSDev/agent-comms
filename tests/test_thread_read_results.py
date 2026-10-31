@@ -195,7 +195,7 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
 
     from conftest import publish_initial
     from test_coordinated_runtime import _root
-    from agent_comms.transcripts import AcquiredThreadPresentation
+    from agent_comms.transcripts import AcquiredThreadPresentation, NotifiedThreadPresentation
     from agent_comms.thread_presentation import ThreadPresentation
 
     _path, _root_id, comms, initial, _people = _root(private_directory, direct=True)
@@ -216,7 +216,7 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
     assert type(retained) is AcquiredThreadPresentation
     assert retained.incoming_references
     outgoing = first.results['beta'].presentation
-    assert type(outgoing) is ThreadPresentation
+    assert type(outgoing) is NotifiedThreadPresentation
     assert outgoing == retained.published()
     assert outgoing.status_display() == retained.status_display()
     assert outgoing.read_identity is retained.read_identity
@@ -237,4 +237,4 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
     # value is reachable from neither.
     assert status.rows._published == status.rows.rows
     assert not ACQUIRED_EVIDENCE & reachable_types(status.rows)
-    assert type(status.rows.rows['beta'].presentation) is ThreadPresentation
+    assert type(status.rows.rows['beta'].presentation) is NotifiedThreadPresentation

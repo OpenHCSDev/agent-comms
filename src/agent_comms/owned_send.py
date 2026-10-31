@@ -34,8 +34,8 @@ from .turn_input_source import (
 
 from .reservation_rules import RuleCheck
 from .goal_waits import GoalWait
+from agent_comms.channel_coding_tools import OrdinaryContextCheck
 if TYPE_CHECKING:
-    from agent_comms.channel_coding_tools import OrdinaryContextCheck
     from .registry_document import RegistrySnapshot
     from .turn_goal_permission import TurnGoalPermission
 

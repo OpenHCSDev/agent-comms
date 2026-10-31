@@ -7,7 +7,8 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
-from .agent_activity import RecordedRecipientActivity
+from .agent_activity import AgentActivity, RecordedRecipientActivity
+from .read_ledger import ReadLedger
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
 from .nominal.field_codec import ThreadLookup
@@ -28,10 +29,9 @@ from typing import ClassVar
 from .revision_views import NotificationEvidenceView
 from .messages import Message
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity, RecipientActivity
+    from .agent_activity import RecipientActivity
     from .bus import Bus
     from .bus_publication import Delivered
-    from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_provenance import RegistryProvenance
     from .comms import Comms
