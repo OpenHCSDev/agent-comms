@@ -267,8 +267,13 @@ def test_the_commander_verb_names_a_lead_and_removes_a_commander_at_runtime(priv
     assert project == recorded.named(comms.registry.require("new-lead").incarnation, KeptRepos())
     assert project.repos == recorded.repos
     assert named.leads == ("new-lead",) and "old-lead" not in named.commanders
+    before = comms.registry.store.path.read_bytes()
     with pytest.raises(RelationViolationError):
         CommanderCliCommand(remove=frozenset({"new-lead"})).apply(comms)
+    with pytest.raises(RelationViolationError):
+        CommanderCliCommand(lead=NamedCommander("peer"),
+                            remove=frozenset({"peer", "new-lead"})).apply(comms)
+    assert comms.registry.store.path.read_bytes() == before
     removed = CommanderCliCommand(remove=frozenset({"peer"})).apply(comms)
     assert removed.commanders == ("new-lead",)
     assert "commanders" not in comms.registry.require("peer").tags

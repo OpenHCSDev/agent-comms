@@ -9,8 +9,7 @@ from agent_comms.commander.config import KeptCommander
 from agent_comms.commander.config import KeptRepos
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Normalize
+from agent_comms.nominal.field_codec import Argument, Normalize
 from dataclasses import dataclass
 from typing import Annotated
 
@@ -35,12 +34,16 @@ class CommanderCliCommand(CliCommand):
     def apply(self, ctx: Comms) -> CommandersResult:
         snapshot = ctx.registry.snapshot()
         project = self.lead.configured(snapshot.commander_project, KeptRepos(), snapshot)
+        leads = frozenset(thread.incarnation for thread in project.leads(snapshot))
+        removed = tuple(snapshot.require(name) for name in self.remove)
+        for thread in removed:
+            if thread.incarnation in leads:
+                raise RelationViolationError(
+                    f"{thread.name} is the lead commander; name another lead with --lead")
         if project != snapshot.commander_project:
             ctx.registry.set_commander_project(project)
-        for name in self.remove:
-            if project.by_role(ctx.registry.require(name).incarnation, commander=True, commanded=False):
-                raise RelationViolationError(f"{name} is the lead commander; name another lead with --lead")
-            ctx.channels.update_tags(name, remove=frozenset({CommandersTag.declared_name}))
+        for thread in removed:
+            ctx.channels.update_tags(thread.name, remove=frozenset({CommandersTag.declared_name}))
         snapshot = ctx.registry.snapshot()
         project = snapshot.commander_project
         return CommandersResult(
