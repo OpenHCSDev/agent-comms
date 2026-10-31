@@ -453,6 +453,10 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         """The inputs that owe a carrier's member proof; an ordinary source owes its head's ok."""
         return ()
 
+    def pinned_sources(self, repository: RepositoryName) -> tuple[IntegrationSource, ...]:
+        """The sources whose main must still be current: an ordinary PR tests its own repository."""
+        return (self.source(repository),)
+
     def write_workflow_output(self, path: Path, repository: RepositoryName) -> None:
         """GitHub consumes these derived values, not another payload or branch-name rule."""
         with path.open("a") as output:
@@ -528,6 +532,9 @@ class CombinedInput(IntegrationInput):
 
     def carriers(self) -> tuple[IntegrationInput, ...]:
         return (self,)
+
+    def pinned_sources(self, repository: RepositoryName) -> tuple[IntegrationSource, ...]:
+        return self.sources
 
     def __post_init__(self) -> None:
         super().__post_init__()

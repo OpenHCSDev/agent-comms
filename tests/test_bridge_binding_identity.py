@@ -1,5 +1,5 @@
 
-from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim, WatchRecord
 from agent_comms.repo import Checkout
 """An enrolled address becomes a registered reader without changing its journal."""
 from dataclasses import replace
@@ -71,3 +71,10 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         with pytest.raises(UnregisteredThreadError, match='lookup .* is not registered'):
             renamed.recipient(comms)
         assert comms.bus.pending_count('renamed-reader') == 1
+
+
+def test_a_record_naming_an_unregistered_thread_commands_nothing(comms, tmp_path):
+    """2026-10-30: a connect that crashed before registering left this record, and every hook of
+    that session raised UnregisteredThreadError at watch.py."""
+    record = WatchRecord('never-registered', str(comms.root), ('watch',), tmp_path / 'inbox')
+    assert not LiveWatch(WatchClaim('session'), record).commands()

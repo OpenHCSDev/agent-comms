@@ -17,7 +17,9 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from contextvars import copy_context
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
@@ -1125,6 +1127,12 @@ class PullRequests(RepositoryReads):
         self.rows(repo, numbers)
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
+
+    def read_open(self, repos: Iterable[RepositoryName]) -> None:
+        """Each repository's forge round side by side: every call waits on the network and writes
+        only its own repository's keys, so one after another only adds their waits."""
+        with ThreadPoolExecutor() as calls:
+            tuple(calls.map(lambda repo: copy_context().run(self.open, repo), repos))
 
     def worktrees(self, repository: Repo) -> Mapping[str, tuple[str, ...]]:
         """One canonical local checkout's retained listing, not its forge namesake's."""

@@ -23,7 +23,14 @@ from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
+from agent_comms.heartbeat_subjects import (
+    CommanderHistory,
+    HeadSubject,
+    HeartbeatSubject,
+    PassSubject,
+    PhaseSubject,
+    RequestSubject,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
@@ -35,7 +42,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -244,14 +251,6 @@ class DiedInstallDue(RunInstallDue):
 
 
 @dataclass(frozen=True)
-class RequestSubject(HeartbeatSubject):
-    """Tristan's open request. An order serving it, or marking it done, ends the stalled line's
-    condition itself, so no separate action record answers it before then."""
-
-    request: OwnerRequestId
-
-
-@dataclass(frozen=True)
 class RequestStalled(IndependentStandingRule, UndatedStandingRule):
     """Tristan's own request with nothing serving it: his lines lead the board and wake the
     commander every beat until an order serves it, never sit under WATCHING."""
@@ -287,16 +286,6 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def found(cls, reading: PlanReading) -> tuple[Self, ...]: ...
-
-
-@dataclass(frozen=True)
-class PhaseSubject(HeartbeatSubject):
-    """An order serving this phase answers its ready-without-an-owner line."""
-
-    phase: type[PlanPhase]
-
-    def disposed(self, history: CommanderHistory, since: float) -> bool:
-        return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)
 
 
 @dataclass(frozen=True)

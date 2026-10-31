@@ -231,7 +231,10 @@ class RecordedWatch(WatchState):
         return (self.record,)
 
     def commands(self) -> bool:
+        """A saved enrollment may predate registration; only a registered recipient has a role."""
         snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
+        if not snapshot.taken(self.record.bus):
+            return False
         return snapshot.commander_project.by_role(
             snapshot.require(self.record.bus), commander=True, commanded=False)
 

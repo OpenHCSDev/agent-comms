@@ -82,6 +82,7 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert workflow_output.read_text() == f"base={local.baseline.commit}\ncombined=true\n"
     assert IntegrationInput.at(output) == inputs
     assert inputs.carrier.pr == carrier.pr != pair.core.number
+    assert inputs.pinned_sources(pair.core.github) == inputs.sources
     assert local.heads == (PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit),)
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
     for source in inputs.sources:
@@ -134,6 +135,7 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert core.baseline.commit == baseline
     assert core.heads == (PullRequestHead(pair.core.github, pair.core.number, head),)
     assert client.heads == () and client.baseline.commit == pair.client.main_commit
+    assert inputs.pinned_sources(pair.core.github) == (core,)
     resource = materialized_clients(output, inputs)
     base = BaseSide.require_materialized(output, core)
     candidate = HeadSide.require_materialized(output, core)
