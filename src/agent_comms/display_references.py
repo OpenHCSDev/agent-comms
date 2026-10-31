@@ -5,7 +5,7 @@ Finding a reference never creates a delivery mention or changes recipients.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 import re
@@ -206,6 +206,35 @@ class DisplayReferences(RootedReferences):
         return self.targets.get(reference.name) == reference
 
 
+@dataclass(frozen=True, eq=False)
+class CurrentTargets(Mapping[str, DisplayReference]):
+    """Each target is built when its name is asked for; a channel wins a name it shares with a member."""
+
+    root: str
+    members: Mapping[str, ThreadIncarnation] = field(repr=False)
+    channels: tuple[str, ...]
+
+    def __getitem__(self, name: str) -> DisplayReference:
+        if name in self.channels:
+            return ChannelDisplayReference(self.root, name)
+        return ThreadDisplayReference(self.root, self.members[name])
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.members or name in self.channels
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(dict.fromkeys((*self.members, *self.channels)))
+
+    def __len__(self) -> int:
+        return len(self.members) + len(set(self.channels) - self.members.keys())
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, CurrentTargets):
+            return ((self.root, self.members, frozenset(self.channels))
+                    == (other.root, other.members, frozenset(other.channels)))
+        return super().__eq__(other)
+
+
 @dataclass(frozen=True)
 class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     """Current targets keep each member's current incarnation by name, read once from the
@@ -219,22 +248,22 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     members: Annotated[Mapping[str, ThreadIncarnation], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict, repr=False)
     channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
-    current: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
 
     @classmethod
     def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
         return cls(root, {name: thread.incarnation for name, thread in registry.named_members()}, channels)
 
     def __post_init__(self) -> None:
-        """The target and lookup views of the one stored member map."""
+        """Restoring a packet copies the member map; lookups derive from it when asked."""
         object.__setattr__(self, "members", MappingRowsSlice.freeze(self.members))
-        object.__setattr__(self, "current", MappingProxyType({
-            incarnation.require_recorded().lookup: incarnation for incarnation in self.members.values()}))
-        targets: dict[str, DisplayReference] = {
-            name: ThreadDisplayReference(self.root, incarnation) for name, incarnation in self.members.items()}
-        targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
-        object.__setattr__(self, "targets", MappingProxyType(targets))
+        object.__setattr__(self, "targets", CurrentTargets(self.root, self.members, self.channels))
+
+    @cached_property
+    def current(self) -> Mapping[float, ThreadIncarnation]:
+        """Each member's incarnation by its recorded birth."""
+        return MappingProxyType({
+            incarnation.require_recorded().wire_birth: incarnation for incarnation in self.members.values()})
 
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""
-        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().lookup])
+        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().wire_birth])
