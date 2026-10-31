@@ -151,6 +151,27 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
+def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: Comms):
+    """RepositoryName equality is casefolded, so the CLI's spelling and the registered one name
+    the same allocation, and an existing lowercase checkout stays where it is."""
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    thread = comms.registry.require('worker')
+    home = rule.checkout_base / 'worker'
+    typed = RepositoryName('OpenHCSDev', 'Agent-Comms')
+    registered = RepositoryName.from_wire('openhcsdev/agent-comms')
+    assert typed == registered
+    path = rule.repository_checkout(rule.roots_of(thread), 'P1', typed)
+    assert path == rule.checkout_base / 'worker--P1--agent-comms'
+    assert path == rule.repository_checkout(rule.roots_of(thread), 'P1', registered)
+    start = DetachedStart('HEAD')
+    StorageProjection(rule, thread, comms).check((
+        CreateCheckoutStorageEffect(path, Repo.of(home), start),))
+    Checkout.add(home, path, start)
+    assert rule.owns_present_checkout(thread, path)
+    assert path in rule.checkouts_of(thread)
+
+
 def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(checkout_comms: Comms):
     """unit-fieldplan is registered at $HOME: its audit path, which the rule gate requires, sat
     inside its project and was refused as source it does not hold, so nothing could run."""

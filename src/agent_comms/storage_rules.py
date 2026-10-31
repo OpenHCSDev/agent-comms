@@ -366,7 +366,8 @@ class StorageRule(RoomAllocation, DurableFile):
                             repository: RepositoryName) -> Path:
         """The same problem's checkout of another repository, changed in lockstep with it."""
         checkout = self.order_checkout(roots, problem)
-        return checkout.with_name(f'{checkout.name}{self.checkout_separator}{repository.name}')
+        _, name = repository.key
+        return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
