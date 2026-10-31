@@ -88,14 +88,15 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         return tuple(instance for member in cls.members_with(cls) for instance in member.running())
 
     @classmethod
-    def start_enabled(cls) -> None:
-        """Start every service this host enables, each by its own name, so one the install
-        found already dead serves again; a member nothing enables starts nothing."""
-        for member in cls.members_with(cls):
-            member.start_enabled_unit()
+    def start_enabled(cls) -> tuple[HostService, ...]:
+        """Start and retain every enabled instance, including ones discovery found dead.
+        The install verifies these same instances with ``running_on`` before reporting."""
+        return tuple(instance for member in cls.members_with(cls)
+                     for instance in member.start_enabled_unit())
 
     @classmethod
-    def start_enabled_unit(cls) -> None: ...
+    def start_enabled_unit(cls) -> tuple[Self, ...]:
+        return ()
 
     def start_onto(self, installed: Path) -> RestartedService:
         self.start()
@@ -170,18 +171,26 @@ class SystemdUserService(SystemdUnit, HostService, declared_name=None):
         return ResidentManager.current().main_pid(name, cls.unit_file(Path.home()))
 
     @classmethod
-    def start_enabled_unit(cls) -> None:
-        """``render_unit`` installs into ``default.target``, so enabling links it there.
+    def start_enabled_unit(cls) -> tuple[Self, ...]:
+        """``render_unit`` enables instances through this home's ``default.target``.
 
-        Systemd enables a template's instances (``name@session.service``), never the
-        template itself, so a template matches each named instance link and not the bare
-        ``name@.service``. Only a link this home's definition loads is started."""
+        A template matches its named instance links, never the bare template. A successful
+        start must supply the instance it promised; an empty discovery is a failure, not
+        permission to omit that enabled service from the install's runtime verification."""
         manager = ResidentManager.current()
         definition = cls.unit_file(Path.home())
+        instances: list[Self] = []
         for enabled in sorted((definition.parent / "default.target.wants").glob(
                 cls.unit.replace("@.", "@?*."))):
             if manager.loads(enabled.name, definition):
                 manager.control("start", enabled.name)
+                matches = tuple(instance for instance in cls.running()
+                                if instance.unit_name() == enabled.name)
+                if len(matches) != 1:
+                    raise ServiceNotServingError(
+                        f"Enabled {enabled.name} started without one running instance: {len(matches)}")
+                instances.extend(matches)
+        return tuple(instances)
 
     def pid(self) -> int:
         return self._pid_for(self.unit_name())

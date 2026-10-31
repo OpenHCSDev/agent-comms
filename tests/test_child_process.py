@@ -33,7 +33,6 @@ from agent_comms.child_process import (
     STOP_GRACE_SECONDS,
     SpawnedProcess,
     SynchronousProcess,
-    SystemdUserManager,
     TimedOutOutcome,
 )
 from agent_comms.nominal.field_codec import FieldCodec
@@ -471,7 +470,7 @@ Path(sys.argv[1]).write_text(json.dumps([FieldCodec.encode(c) for c in (plain, r
 """
 
 
-@pytest.mark.skipif(ResidentManager.current() is not SystemdUserManager,
+@pytest.mark.skipif(not ResidentManager.current().required_units(),
                     reason="the cgroup a unit kills exists only under a user manager")
 @pytest.mark.asyncio
 async def test_ended_unit_takes_its_plain_child_and_leaves_its_resident(tmp_path: Path) -> None:

@@ -1006,73 +1006,70 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
     """
 
     @staticmethod
-    def current() -> type[ResidentManager]:
-        """The user manager belongs to the UID and serves the UID's own home. A home that
-        swapped HOME (a test, a private install) still inherits the XDG_RUNTIME_DIR that
-        reaches the real manager, so the socket alone never decides it."""
-        runtime = os.environ.get("XDG_RUNTIME_DIR")
-        if (runtime and Path(runtime, "systemd", "private").is_socket()
-                and Path.home().resolve() == Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()):
-            return SystemdUserManager
-        return NoResidentManager
+    def current(environment: Mapping[str, str] = os.environ) -> ResidentManager:
+        """Admit the UID's own home before discovering its manager. Explicit runtime
+        directories are never replaced; only an absent address uses the UID's standard
+        directory. Both the directory and manager socket must belong to that UID."""
+        uid = os.getuid()
+        home = Path(pwd.getpwuid(uid).pw_dir).resolve()
+        if Path(environment.get("HOME", str(home))).resolve() != home:
+            return NoResidentManager()
+        runtime = Path(environment.get("XDG_RUNTIME_DIR", f"/run/user/{uid}")).resolve()
+        try:
+            directory = runtime.stat()
+            socket = (runtime / "systemd/private").stat()
+        except (FileNotFoundError, NotADirectoryError, PermissionError):
+            return NoResidentManager()
+        if directory.st_uid == uid and socket.st_uid == uid and stat.S_ISSOCK(socket.st_mode):
+            return SystemdUserManager(runtime)
+        return NoResidentManager()
 
-    @classmethod
-    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+    def command(self, command: tuple[str, ...]) -> tuple[str, ...]:
         """A host with no manager owns the resident only through its process tree."""
         return command
 
-    @classmethod
-    def handoff_environment(cls, environment: Mapping[str, str]) -> dict[str, str]:
+    def handoff_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
         """Keep the environment required to reach the selected resident manager."""
         return dict(environment)
 
-    @classmethod
-    def activity(cls, unit: str) -> type[UnitActivity]:
+    def activity(self, unit: str) -> type[UnitActivity]:
         """No manager runs a unit for this home."""
         return InactiveUnit
 
-    @classmethod
-    def loads(cls, unit: str, definition: Path) -> bool:
+    def loads(self, unit: str, definition: Path) -> bool:
         """Whether the manager runs ``unit`` from this home's own ``definition``."""
         return False
 
-    @classmethod
-    def main_pid(cls, unit: str, definition: Path) -> int:
+    def main_pid(self, unit: str, definition: Path) -> int:
         """The process of the unit loaded from ``definition``; zero for any other."""
         return 0
 
-    @classmethod
-    def listed(cls, pattern: str) -> tuple[str, ...]:
+    def listed(self, pattern: str) -> tuple[str, ...]:
         """The names of the active units matching ``pattern``."""
         return ()
 
-    @classmethod
-    def reload(cls) -> None:
+    def reload(self) -> None:
         """Load this home's unit definitions; no manager reads a home it does not serve."""
 
-    @classmethod
-    def install(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+    def install(self, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
                 home: Path) -> None:
         """Publish a unit and its declared prerequisites, then load them together."""
-        if cls.write_unit(unit, arguments, home=home):
-            cls.reload()
+        if self.write_unit(unit, arguments, home=home):
+            self.reload()
 
-    @classmethod
-    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+    def required_units(self) -> tuple[type[SystemdUnit], ...]:
         return ()
 
-    @classmethod
-    def prepare_units(cls, *, home: Path) -> None:
+    def prepare_units(self, *, home: Path) -> None:
         """Install the manager's declared launch prerequisites before releasing a child."""
-        for required in cls.required_units():
-            cls.install(required, home=home)
+        for required in self.required_units():
+            self.install(required, home=home)
 
-    @classmethod
-    def write_unit(cls, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
+    def write_unit(self, unit: type[SystemdUnit], arguments: tuple[str, ...] = (), *,
                    home: Path) -> bool:
         changed = False
         for required in unit.required_units():
-            changed |= cls.write_unit(required, home=home)
+            changed |= self.write_unit(required, home=home)
         destination = unit.unit_file(home)
         definition = unit.unit_text(arguments)
         if not destination.is_file() or destination.read_text(encoding="utf-8") != definition:
@@ -1081,15 +1078,13 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
             changed = True
         return changed
 
-    @classmethod
-    def control(cls, *arguments: str) -> None:
+    def control(self, *arguments: str) -> None:
         """Start, stop, enable or disable the manager's units."""
         raise UnmanagedHomeError(
             f"{Path.home()} is not the user's own home, so no user manager belongs to it; "
             f"refused systemctl {' '.join(arguments)}")
 
-    @classmethod
-    def transient(cls, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
+    def transient(self, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
                   stdout: Path, stderr: Path, inherited: tuple[str, ...],
                   assigned: Mapping[str, str], wait: bool) -> None:
         """Run ``command`` as ``unit``, so stopping its caller cannot cut it short; ``wait``
@@ -1109,69 +1104,65 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
             raise subprocess.CalledProcessError(returncode, command)
 
 
+@dataclass(frozen=True)
 class NoResidentManager(ResidentManager): ...
 
 
+@dataclass(frozen=True)
 class SystemdUserManager(ResidentManager):
-    """The user manager owns each resident in its own transient scope; ``systemd-run
-    --scope`` execs in place, so the gate's handed-off PID is the resident's."""
+    """The admitted connection, retained for every command and resident handoff. The user
+    manager owns each resident in its own scope; ``systemd-run --scope`` execs in place."""
 
-    @classmethod
-    def command(cls, command: tuple[str, ...]) -> tuple[str, ...]:
+    runtime_directory: Path
+
+    def command(self, command: tuple[str, ...]) -> tuple[str, ...]:
         return (*AgentsSlice.run_prefix(), "--scope",
                 f"--unit=agent-comms-resident-{Id128.mint()}", "--", *command)
 
-    @classmethod
-    def handoff_environment(cls, environment: Mapping[str, str]) -> dict[str, str]:
-        return {**environment, "XDG_RUNTIME_DIR": os.environ["XDG_RUNTIME_DIR"]}
+    def handoff_environment(self, environment: Mapping[str, str]) -> dict[str, str]:
+        return {**environment, "XDG_RUNTIME_DIR": str(self.runtime_directory),
+                "DBUS_SESSION_BUS_ADDRESS": f"unix:path={self.runtime_directory}/bus"}
 
-    @classmethod
-    def required_units(cls) -> tuple[type[SystemdUnit], ...]:
+    def required_units(self) -> tuple[type[SystemdUnit], ...]:
         return (AgentsSlice,)
 
-    @staticmethod
-    def shown(unit: str, name: str) -> str:
+    def shown(self, unit: str, name: str) -> str:
         return subprocess.check_output(
             ("systemctl", "--user", "show", "-p", name, "--value", unit), text=True,
+            env=self.handoff_environment(os.environ),
         ).strip()
 
-    @classmethod
-    def activity(cls, unit: str) -> type[UnitActivity]:
-        return UnitActivity.member_named(cls.shown(unit, "ActiveState"))
+    def activity(self, unit: str) -> type[UnitActivity]:
+        return UnitActivity.member_named(self.shown(unit, "ActiveState"))
 
-    @classmethod
-    def loads(cls, unit: str, definition: Path) -> bool:
+    def loads(self, unit: str, definition: Path) -> bool:
         """The manager belongs to the UID, not HOME; the same name loaded from another
         directory is not this home's unit."""
         return (definition.is_file()
-                and Path(cls.shown(unit, "FragmentPath")).resolve() == definition.resolve())
+                and Path(self.shown(unit, "FragmentPath")).resolve() == definition.resolve())
 
-    @classmethod
-    def main_pid(cls, unit: str, definition: Path) -> int:
-        return int(cls.shown(unit, "MainPID")) if cls.loads(unit, definition) else 0
+    def main_pid(self, unit: str, definition: Path) -> int:
+        return int(self.shown(unit, "MainPID")) if self.loads(unit, definition) else 0
 
-    @classmethod
-    def listed(cls, pattern: str) -> tuple[str, ...]:
+    def listed(self, pattern: str) -> tuple[str, ...]:
         listed = subprocess.check_output(
             ("systemctl", "--user", "list-units", pattern, "--state=active", "--plain",
-             "--no-legend"), text=True)
+             "--no-legend"), text=True, env=self.handoff_environment(os.environ))
         return tuple(line.split()[0] for line in listed.splitlines() if line.strip())
 
-    @classmethod
-    def reload(cls) -> None:
-        cls.control("daemon-reload")
+    def reload(self) -> None:
+        self.control("daemon-reload")
 
-    @classmethod
-    def control(cls, *arguments: str) -> None:
-        subprocess.run(("systemctl", "--user", *arguments), check=True)
+    def control(self, *arguments: str) -> None:
+        subprocess.run(("systemctl", "--user", *arguments), check=True,
+                       env=self.handoff_environment(os.environ))
 
-    @classmethod
-    def transient(cls, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
+    def transient(self, unit: str, command: tuple[str, ...], *, cwd: Path, stdin: Path,
                   stdout: Path, stderr: Path, inherited: tuple[str, ...],
                   assigned: Mapping[str, str], wait: bool) -> None:
-        """systemd-run copies each inherited value itself, so none is spelled on a command
-        line."""
-        cls.prepare_units(home=Path.home())
+        """systemd-run copies each inherited value from this connection's environment,
+        including a runtime directory discovered without an ambient XDG value."""
+        self.prepare_units(home=Path.home())
         subprocess.run(
             (*AgentsSlice.run_prefix(), *(("--wait",) if wait else ()),
              f"--unit={unit}", f"--working-directory={cwd}",
@@ -1180,7 +1171,7 @@ class SystemdUserManager(ResidentManager):
              f"--property=StandardError=file:{stderr}",
              *(f"--setenv={name}" for name in inherited),
              *(f"--setenv={name}={value}" for name, value in assigned.items()), *command),
-            check=True,
+            check=True, env=self.handoff_environment(os.environ),
         )
 
 

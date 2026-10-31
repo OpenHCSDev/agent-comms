@@ -9,7 +9,6 @@ import pwd
 import socket
 import subprocess
 import sys
-import tempfile
 import urllib.request
 from contextlib import contextmanager
 from pathlib import Path
@@ -38,7 +37,6 @@ from agent_comms.nominal.field_codec import Id128
 from agent_comms.harness_install import CodexHarness
 from agent_comms.host_services import (
     HostService,
-    RestartedService,
     ServiceNotServingError,
 )
 from agent_comms.host_services.codex_inbox import CodexInboxService
@@ -111,27 +109,50 @@ def test_the_connector_is_a_declared_service():
 
 
 @pytest.fixture
-def reachable_manager(monkeypatch):
-    """The real manager's socket stays reachable, as a test's ``{**os.environ, "HOME": ...}``
-    leaves XDG_RUNTIME_DIR; any systemd command that runs fails the test."""
-    with tempfile.TemporaryDirectory(dir="/tmp") as runtime, socket.socket(socket.AF_UNIX) as bound:
-        (Path(runtime) / "systemd").mkdir()
-        bound.bind(str(Path(runtime) / "systemd/private"))
-        monkeypatch.setenv("XDG_RUNTIME_DIR", runtime)
+def reachable_manager(manager_socket, monkeypatch):
+    """A real, owned socket tests admission without ever invoking a real manager."""
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(manager_socket))
 
-        def reached(command, *arguments, **options):
-            raise AssertionError(f"reached the user manager: {command}")
+    def reached(command, *arguments, **options):
+        raise AssertionError(f"reached the user manager: {command}")
 
-        monkeypatch.setattr(subprocess, "run", reached)
-        monkeypatch.setattr(subprocess, "check_output", reached)
-        yield
+    monkeypatch.setattr(subprocess, "run", reached)
+    monkeypatch.setattr(subprocess, "check_output", reached)
+    return manager_socket
 
 
 def test_only_the_users_own_home_has_the_user_manager(reachable_manager, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)
-    assert ResidentManager.current() is SystemdUserManager
+    manager = ResidentManager.current()
+    assert manager == SystemdUserManager(reachable_manager)
+    monkeypatch.delenv("XDG_RUNTIME_DIR")
+    assert manager.handoff_environment({})["XDG_RUNTIME_DIR"] == str(reachable_manager)
+
+    def shown(argv, *, text, env):
+        assert env["XDG_RUNTIME_DIR"] == str(reachable_manager)
+        assert env["DBUS_SESSION_BUS_ADDRESS"] == f"unix:path={reachable_manager}/bus"
+        return "active"
+
+    monkeypatch.setattr(subprocess, "check_output", shown)
+    assert manager.activity("owned.service").serving()
     monkeypatch.setenv("HOME", str(tmp_path))
-    assert ResidentManager.current() is NoResidentManager
+    assert ResidentManager.current() == NoResidentManager()
+
+
+def test_an_explicit_invalid_runtime_never_falls_back_to_the_real_manager(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)
+    for directory in ("", str(tmp_path / "missing"), str(tmp_path)):
+        monkeypatch.setenv("XDG_RUNTIME_DIR", directory)
+        assert ResidentManager.current() == NoResidentManager()
+
+
+def test_a_foreign_uid_cannot_admit_another_users_socket(manager_socket, monkeypatch):
+    account = pwd.getpwuid(os.getuid())
+    monkeypatch.setenv("HOME", account.pw_dir)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(manager_socket))
+    monkeypatch.setattr(os, "getuid", lambda: account.pw_uid + 1)
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: account)
+    assert ResidentManager.current() == NoResidentManager()
 
 
 INBOX = CodexInboxService("private-session")
@@ -150,6 +171,30 @@ def test_a_private_home_cannot_change_the_users_units(reachable_manager, tmp_pat
     monkeypatch.setenv("HOME", str(tmp_path))
     with pytest.raises(UnmanagedHomeError, match="not the user's own home|no user manager"):
         verb()
+
+
+def test_an_enabled_start_without_its_promised_instance_is_not_success(
+        tmp_path, monkeypatch, user_manager):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    definition = SystemdConnectorService.unit_file(tmp_path)
+    definition.parent.mkdir(parents=True, exist_ok=True)
+    definition.write_text("[Unit]\n")
+    wants = definition.parent / "default.target.wants"
+    wants.mkdir()
+    (wants / SystemdConnectorService.unit).touch()
+
+    def output(argv, *, text, env):
+        assert env["XDG_RUNTIME_DIR"] == str(user_manager.runtime_directory)
+        return str(definition) if argv[4] == "FragmentPath" else "0"
+
+    def start(argv, *, check, env):
+        assert argv == ("systemctl", "--user", "start", SystemdConnectorService.unit)
+        return subprocess.CompletedProcess(argv, 0)
+
+    monkeypatch.setattr(subprocess, "check_output", output)
+    monkeypatch.setattr(subprocess, "run", start)
+    with pytest.raises(ServiceNotServingError, match="started without one running instance"):
+        HostService.start_enabled()
 
 
 def test_a_private_home_does_not_discover_or_reload_the_real_user_service(
@@ -177,54 +222,62 @@ def test_a_private_home_does_not_discover_or_reload_the_real_user_service(
     pytest.param((), (), (), id="nothing-enabled"),
 ))
 def test_start_enabled_starts_each_enabled_stopped_instance_its_home_defines(
-        tmp_path, monkeypatch, user_manager, enabled, foreign, started):
+        tmp_path, monkeypatch, connector_service, enabled, foreign, started):
     """Systemd enables a template's instances, never the template: an install starts every
     enabled instance this home defines. A disabled sibling (no link), the bare template
     link and a unit loaded from another home's definition stay stopped."""
-    monkeypatch.setenv("HOME", str(tmp_path))
+    home = Path.home()
+    pid = connector_service.pid()
     for service in (CodexInboxService, SystemdConnectorService):
-        service.unit_file(tmp_path).parent.mkdir(parents=True, exist_ok=True)
-        service.unit_file(tmp_path).write_text("[Unit]\n")
-    wants = tmp_path / ".config/systemd/user/default.target.wants"
+        service.unit_file(home).parent.mkdir(parents=True, exist_ok=True)
+        service.unit_file(home).write_text("[Unit]\n")
+    wants = home / ".config/systemd/user/default.target.wants"
     wants.mkdir()
     for name in enabled:
         (wants / name).touch()
     elsewhere = tmp_path / "other-home" / CodexInboxService.unit
     starts: list[str] = []
 
-    def control(command: tuple[str, ...], *, check: bool) -> subprocess.CompletedProcess[bytes]:
+    def control(command: tuple[str, ...], *, check: bool, env) -> subprocess.CompletedProcess[bytes]:
         assert check and command[:3] == ("systemctl", "--user", "start")
         starts.extend(command[3:])
         return subprocess.CompletedProcess(command, 0)
 
-    def output(command: tuple[str, ...], *, text: bool) -> str:
-        assert text and command[:-1] == ("systemctl", "--user", "show", "-p", "FragmentPath", "--value")
+    def output(command: tuple[str, ...], *, text: bool, env) -> str:
+        assert text
+        if command[2] == "list-units":
+            return "\n".join(name for name in starts if "@" in name)
         name = command[-1]
-        definition = (elsewhere if name in foreign else CodexInboxService.unit_file(tmp_path)
-                      if "@" in name else SystemdConnectorService.unit_file(tmp_path))
+        field = command[4]
+        if field == "MainPID":
+            return str(pid if name in starts else 0)
+        assert field == "FragmentPath"
+        definition = (elsewhere if name in foreign else CodexInboxService.unit_file(home)
+                      if "@" in name else SystemdConnectorService.unit_file(home))
         return f"{definition}\n"
 
     monkeypatch.setattr(subprocess, "run", control)
     monkeypatch.setattr(subprocess, "check_output", output)
-    HostService.start_enabled()
+    instances = HostService.start_enabled()
     assert sorted(starts) == sorted(started)
+    assert sorted(instance.unit_name() for instance in instances) == sorted(started)
 
 
-def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeypatch, user_manager):
+def test_codex_inbox_template_publication_reloads_each_launcher_home_change(tmp_path, monkeypatch, user_manager):
     monkeypatch.setenv("HOME", str(tmp_path / "ambient-home"))
     home = tmp_path / "harness-home"
     template = CodexInboxService.unit_file(home)
-    runtime = tmp_path / "old-runtime"
+    runtime = LaunchRuntime.current_pointer()
+    previous = runtime
     loaded: list[str] = []
 
-    def run(command, *, check):
+    def run(command, *, check, env):
         assert check is True
         assert command == ("systemctl", "--user", "daemon-reload")
         loaded.append(template.read_text())
         return subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(subprocess, "run", run)
-    monkeypatch.setattr(LaunchRuntime, "current_pointer", classmethod(lambda cls: runtime))
 
     assert CodexHarness(home).configure() == (template,)
     assert not CodexInboxService.unit_file(Path.home()).exists()
@@ -234,16 +287,17 @@ def test_codex_inbox_template_publication_reloads_each_rewrite(tmp_path, monkeyp
     assert "Type=simple" in loaded[0]
     assert "NotifyAccess=main" not in loaded[0]
 
-    runtime = tmp_path / "new-runtime"
+    monkeypatch.setenv("HOME", str(tmp_path / "relocated-home"))
+    runtime = LaunchRuntime.current_pointer()
     ResidentManager.current().install(CodexInboxService, home=home)
     assert len(loaded) == 2
     assert str(runtime / "bin/agent-comms-codex-bridge") in loaded[1]
-    assert "old-runtime" not in loaded[1]
+    assert str(previous) not in loaded[1]
     assert loaded[1] == template.read_text()
 
 
 @pytest.fixture
-def connector_service(comms, tmp_path, monkeypatch, pinned_native):
+def connector_service(comms, tmp_path, monkeypatch, pinned_native, user_manager):
     """A real supervisor on a copied bus; only systemd's process control is replaced."""
     for name in ("claude-ai", "worker"):
         comms.registry.declare(Thread(name, frozenset(), Checkout(comms.root)))
@@ -287,24 +341,48 @@ def connector_service(comms, tmp_path, monkeypatch, pinned_native):
         readiness.wait(process, port)
         return process
 
-    class ManagedConnector(SystemdConnectorService, declared_name=None):
-        @classmethod
-        def _pid_for(cls, name: str) -> int:
-            return next((process.pid for process in children if process.poll() is None), 0)
+    service = SystemdConnectorService(launch=LaunchRoot.from_path(copied), port=port)
+    definition = service.unit_file(home)
+    definition.parent.mkdir(parents=True, exist_ok=True)
+    definition.write_text(service.unit_text(service.exec_arguments("")))
+    original_run = subprocess.run
+    original_output = subprocess.check_output
 
-        @classmethod
-        def stop_all(cls, instances: tuple[SystemdConnectorService, ...]) -> None:
-            for instance in instances:
-                previous = next(process for process in children if process.pid == instance.pid())
-                previous.terminate()
-                previous.wait(timeout=5)
+    def control(argv, *, check, env=None, **options):
+        if argv[:2] != ("systemctl", "--user"):
+            return original_run(argv, check=check, env=env, **options)
+        assert env["XDG_RUNTIME_DIR"] == str(user_manager.runtime_directory)
+        assert argv[3:] == (service.unit_name(),)
+        if argv[2] == "stop":
+            for process in children:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=5)
+        else:
+            assert argv[2] == "start"
+            if not any(process.poll() is None for process in children):
+                start()
+        return subprocess.CompletedProcess(argv, 0)
 
-        def start(self) -> None:
-            start()
+    def output(argv, *, text, env=None, **options):
+        if argv[:2] != ("systemctl", "--user"):
+            return original_output(argv, text=text, env=env, **options)
+        assert env["XDG_RUNTIME_DIR"] == str(user_manager.runtime_directory)
+        assert argv[-1] == service.unit_name()
+        field = argv[4]
+        if field == "FragmentPath":
+            return str(definition)
+        pid = next((process.pid for process in children if process.poll() is None), 0)
+        if field == "MainPID":
+            return str(pid)
+        assert field == "ActiveState"
+        return "active" if pid else "inactive"
 
+    monkeypatch.setattr(subprocess, "run", control)
+    monkeypatch.setattr(subprocess, "check_output", output)
     try:
         start()
-        yield ManagedConnector.running()[0]
+        yield SystemdConnectorService.running()[0]
     finally:
         for process in children:
             if process.poll() is None:
@@ -332,7 +410,7 @@ def test_restart_proves_a_healthy_connector_on_its_installed_runtime(connector_s
 @pytest.mark.parametrize("stop_interrupted", [False, True], ids=["owner-start", "stop-call"])
 def test_failure_restores_stopped_services_once(
     connector_service: SystemdConnectorService, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    stop_interrupted: bool, user_manager: type,
+    stop_interrupted: bool,
 ) -> None:
     """A failure after the stop, or one raised inside the stop call once systemd has stopped
     the unit (the SIGTERM an installer inside that unit receives), starts it again once."""
@@ -341,51 +419,24 @@ def test_failure_restores_stopped_services_once(
     unit.parent.mkdir(parents=True, exist_ok=True)
     unit.touch()
     starts: list[str] = []
-    restores: list[Stack] = []
     failure = OSError("owner start failed")
     original_run = subprocess.run
-    original_output = subprocess.check_output
 
     def control(
-        command: tuple[str, ...], *, check: bool,
+        command: tuple[str, ...], *, check: bool, env=None, **options,
     ) -> subprocess.CompletedProcess[bytes]:
-        if command[:3] == ("systemctl", "--user", "stop"):
-            assert command[3:] == (service.unit_name(),)
-            type(service).stop_all((service,))
-            if stop_interrupted:
-                raise failure
-        elif command == ("systemctl", "--user", "start", service.unit_name()):
+        result = original_run(command, check=check, env=env, **options)
+        if command[:3] == ("systemctl", "--user", "stop") and stop_interrupted:
+            raise failure
+        if command == ("systemctl", "--user", "start", service.unit_name()):
             starts.append(service.unit_name())
-            service.start()
-        else:
-            return original_run(command, check=check)
-        return subprocess.CompletedProcess(command, 0)
-
-    def output(command: tuple[str, ...], *, text: bool) -> str:
-        assert text
-        if command == (
-            "systemctl", "--user", "show", "-p", "FragmentPath", "--value", service.unit_name(),
-        ):
-            return f"{unit}\n"
-        if command == (
-            "systemctl", "--user", "show", "-p", "MainPID", "--value", service.unit_name(),
-        ):
-            return f"{service.pid()}\n"
-        return original_output(command, text=True)
+        return result
 
     monkeypatch.setattr(subprocess, "run", control)
-    monkeypatch.setattr(subprocess, "check_output", output)
-
-    class RestoreStack(Stack):
-        def start_services(
-            self, stopped: tuple[HostService, ...],
-        ) -> tuple[RestartedService, ...]:
-            restores.append(self)
-            return super().start_services(stopped)
 
     with InstallCommands() as commands:
         runtime = LaunchRuntime.running()
-        installed = RestoreStack(tmp_path, commands, Path.home(), runtime)
+        installed = Stack(tmp_path, commands, Path.home(), runtime)
         staged = Stack(tmp_path, commands, Path.home(), runtime)
         with (
             pytest.raises(OSError) as raised,
@@ -396,7 +447,6 @@ def test_failure_restores_stopped_services_once(
             assert service.pid() == 0
             raise failure
         assert raised.value is failure
-        assert restores == [installed]
         assert starts == [service.unit_name()]
         assert service.pid() != 0
         service.serves()
@@ -421,10 +471,6 @@ def test_round_trip_refuses_a_different_requested_bus(connector_service, tmp_pat
     service = connector_service
     other = tmp_path / "other-requested-bus"
     StoreBackup.copy_tree(service.launch.path, other)
-    monkeypatch.setattr(
-        SystemdConnectorService, "running", classmethod(lambda cls: (service,))
-    )
-
     refused = RoundTripVerb(root=other, port=service.port).apply(service.store)
     assert isinstance(refused, str)
     assert str(Bus.path_in(service.launch.path)) in refused
@@ -496,7 +542,7 @@ def test_restart_refuses_a_connector_with_an_undecodable_store(connector_service
 def test_services_of_every_member_stop_in_one_call(tmp_path, monkeypatch, user_manager):
     stops: list[tuple[str, ...]] = []
 
-    def run(command: tuple[str, ...], *, check: bool) -> subprocess.CompletedProcess[bytes]:
+    def run(command: tuple[str, ...], *, check: bool, env) -> subprocess.CompletedProcess[bytes]:
         stops.append(command)
         return subprocess.CompletedProcess(command, 0)
 

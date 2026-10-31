@@ -12,6 +12,7 @@ import tempfile
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 
+from agent_comms.child_process import ResidentManager
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -195,6 +196,7 @@ class RuntimeStack(Extendable):
         """Use the artifact's packages; ``paths`` are searched first, in order (the target
         tree's carry steps, or its source for a native build)."""
         environment = {**self.runtime.environment(os.environ), "HOME": str(self.home)}
+        environment = ResidentManager.current(environment).handoff_environment(environment)
         configuration = RestartEnvironment.inherit(environment)
         for path in reversed(paths):
             configuration = configuration.with_import_root(path)
