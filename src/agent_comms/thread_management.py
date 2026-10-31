@@ -64,6 +64,7 @@ from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
 from .thread_catalog import ThreadCatalog
 from .threads import KeptModel, ModelChoice, NextTurnConfiguration, Thread
+from .heartbeat_delivery import HeartbeatDelivery
 from .tool_declaration import NativeRequestTools
 from .native_session_reopen import PiSessionId
 from .tool_result import ToolResult
@@ -420,6 +421,11 @@ class ThreadManagement:
 
     def heartbeat(self, name: str) -> None:
         self.registry.heartbeat(name)
+
+    def set_heartbeat_delivery(self, name: str, delivery: type[HeartbeatDelivery]) -> Thread:
+        """Apply immediately without changing membership, process, goal or model settings."""
+        return self.registry.update_thread(
+            name, lambda thread: replace(thread, heartbeat_delivery=delivery))
 
     def set_thread_configuration(
         self, original: Thread, configuration: NextTurnConfiguration,
