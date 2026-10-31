@@ -234,13 +234,13 @@ def test_checkout_add_allocates_a_declared_sibling_repository_before_it_exists(
     assert result.returncode == 0, result.stderr
     assert destination.name == "worker--P1--toad"
     assert Repo.of(destination).github == sibling.github
-    assert destination in rule.checkouts_of(worker)
+    assert destination in rule.checkouts_of(worker, RepositoryReads())
     repaired = core_process(*command, "add", "P1", sibling.github.to_wire())
     assert repaired.returncode == 0, repaired.stderr
     retired = core_process(*command, "remove", "P1", sibling.github.to_wire())
     assert retired.returncode == 0, retired.stderr
     assert not destination.exists()
-    assert destination not in rule.checkouts_of(worker)
+    assert destination not in rule.checkouts_of(worker, RepositoryReads())
 
 
 @pytest.mark.parametrize("verb,arguments", (
