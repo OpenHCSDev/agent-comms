@@ -101,7 +101,7 @@ class ClaudeTranscriptHook(ClaudeHook):
     """A hook that reads the session's transcript, which Claude Code names on every event."""
 
     transcript_path: str
-    window: ClassVar[int] = 1_000_000
+    window: ClassVar[int] = 6_000_000  # saved request records are huge: 1 MB can hold no turn's end
     """Transcript bytes read from the end."""
 
     @staticmethod
