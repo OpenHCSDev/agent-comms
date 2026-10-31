@@ -63,7 +63,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
     from agent_comms.native_output import AssistantOutput, NativeRecordLocation
     from agent_comms.native_session_reopen import PiSessionId
     from agent_comms.turn_item import NativeItemId
-    from agent_comms.transcript_sources import AssignedSourceIdentity
+    from agent_comms.sent_message import AssignedSourceIdentity
     from agent_comms.transcripts import NativeCommittedPrefix
     from agent_comms.native_transcript import PresentSessionCut
     from agent_comms.private_path import FileRevision

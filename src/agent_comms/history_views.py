@@ -27,7 +27,7 @@ from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .transcript_sources import AssignedSourceIdentity
+from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:

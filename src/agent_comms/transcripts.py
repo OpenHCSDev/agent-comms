@@ -37,12 +37,12 @@ from .recorded_bus import RecordedBusIdentity
 from .registration import Registration
 from .registry_store import RegistryStore
 from .routing import TurnRouting
+from .sent_message import AssignedSourceIdentity
 from .threads import Thread, ThreadProvenance
 from .transcript_events import ForkOriginTranscript, ForkTaskTranscript, TranscriptEvent
 from .transcript_routes import TranscriptRoutes
 from .transcript_sources import (
     AssignedSourceCursor,
-    AssignedSourceIdentity,
     AssignedTranscriptSource,
     EarlierTranscript,
     LaterTranscript,
