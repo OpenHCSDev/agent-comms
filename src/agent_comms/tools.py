@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
@@ -42,7 +42,7 @@ from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
+from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal

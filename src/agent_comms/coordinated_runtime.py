@@ -7,7 +7,7 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import RootId
+from agent_comms.nominal.field_codec import RootId
 
 
 import threading

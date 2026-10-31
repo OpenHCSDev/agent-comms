@@ -7,7 +7,7 @@ import subprocess
 from dataclasses import dataclass
 from typing import ClassVar
 
-from .field_codec import MalformedRecord, WireValue
+from .nominal.field_codec import MalformedRecord, WireValue
 
 
 @dataclass(frozen=True, slots=True, eq=False)

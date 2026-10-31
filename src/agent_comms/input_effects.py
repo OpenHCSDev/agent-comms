@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import AcpSessionId, RootId
+from agent_comms.nominal.field_codec import AcpSessionId, RootId
 
 if TYPE_CHECKING:
     from .cursor_publication import CursorPublication

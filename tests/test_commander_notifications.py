@@ -34,7 +34,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ProgressRead, UnitOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.order_tools import CommanderUnitRead
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import invoke_tool
@@ -461,7 +461,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
-    from agent_comms.field_codec import OrderId
+    from agent_comms.nominal.field_codec import OrderId
     from agent_comms.thread_identity import RecordedThreadIncarnation
     from agent_comms.ui_model.unit_state import Idle, IdleGroup, NoPendingClock, PendingClock, Stuck
 
@@ -728,7 +728,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     import json
     from datetime import datetime
     from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
         "rateLimits": {"primary": {
@@ -871,7 +871,7 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.task_attachments.commander_pings import PublishedFacts, UnpublishedFacts
 
     comms = notification_bus

@@ -16,9 +16,9 @@ from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .child_process import Platform
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import NullMember, RecordMember, SubclassUnion
+from .nominal.field_codec import NullMember, RecordMember, SubclassUnion
 
 
 @dataclass(frozen=True, slots=True)

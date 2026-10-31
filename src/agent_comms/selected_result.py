@@ -5,12 +5,12 @@ from __future__ import annotations
 from typing import Annotated
 from dataclasses import dataclass
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .assignment_states import AssignmentState
 from .coordination_tables.publications import PublicationEvidence
 from .diagnostics import record_terminal_failure
-from .field_codec import AssignmentId, FieldCodec, InputId
+from .nominal.field_codec import AssignmentId, FieldCodec, InputId
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .turn_failure import BackendFailed

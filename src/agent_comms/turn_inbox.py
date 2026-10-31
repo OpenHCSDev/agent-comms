@@ -8,8 +8,8 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
-from .field_codec import InputId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import InputId
 from .image_input import ImageInput
 from .pi_vocabulary import ThinkingLevelField
 from .thread_model import ThreadModel

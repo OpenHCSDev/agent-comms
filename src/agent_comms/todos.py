@@ -68,14 +68,14 @@ from agent_comms.child_process import (
 from agent_comms.command import Command
 from agent_comms.commander.rule_file import RuleAudience, RuleFile
 from agent_comms.coordination_session import NativeCapture
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
     MissingSourceLine,
     RejectedEnforcementError,
     TodoConflict,
     TodoError,
 )
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     DefaultNonNull,
     Description,
     DisclosedRecord,

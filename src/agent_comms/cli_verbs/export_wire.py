@@ -12,9 +12,9 @@ from agent_comms.exporting import ScopeFlag
 from agent_comms.exporting import SelectableWireExportFormat
 from agent_comms.exporting import UnsetLimitFlag
 from agent_comms.exporting import UnsetScopeFlag
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Editor
-from agent_comms.field_codec import NamedArgumentGroup
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Editor
+from agent_comms.nominal.field_codec import NamedArgumentGroup
 from agent_comms.target_fields import ChoiceTargetField
 from dataclasses import dataclass
 from typing import Annotated

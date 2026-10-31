@@ -17,7 +17,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec, TurnId, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId, GoalId
 from agent_comms.goals import Goal
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.messages import HandoffKind, InfoKind, Message

@@ -14,7 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.runtime_updates import ThreadOutput
-from agent_comms.field_codec import AcpSessionId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.goal_actions import EditGoalAction, SetGoalAction, StandbyGoalAction
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError
 from agent_comms.goal_presentation import StandbyExecution

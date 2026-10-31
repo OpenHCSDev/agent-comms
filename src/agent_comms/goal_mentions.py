@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .goals import (
     GoalMentionBinding,
     GoalMentionSource,

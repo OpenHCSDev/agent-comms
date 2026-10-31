@@ -26,7 +26,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaims,
 )
 from agent_comms.errors import CommittedMessageError
-from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.locked_store import RegistryFile, StoreCommittedError
 from agent_comms.messages import (
     BusCapability,
@@ -129,7 +129,7 @@ def test_existing_owner_allocates_nothing_and_never_invokes_builder(claims: Clai
     with claims.bus.reading() as reader:
         assert reader.resource_owner(resource) == owner
         assert dict(reader.claim_projection()) == {resource: owner}
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.retained_task_facts import ClaimTaskFact
 
     record = claims.bus.lookup(owner.seq)

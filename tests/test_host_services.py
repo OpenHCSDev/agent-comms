@@ -34,7 +34,7 @@ from agent_comms.child_process import (
 from agent_comms.comms import client_wire
 from agent_comms.connector import ConnectorVerb, SystemdSite
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.field_codec import Id128
+from agent_comms.nominal.field_codec import Id128
 from agent_comms.harness_install import CodexHarness
 from agent_comms.host_services import (
     HostService,

@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from agent_comms.change_report import FileLine, MainRevision
 from agent_comms.channel_targets import CommandersTag
 from agent_comms.commander.order import Commander

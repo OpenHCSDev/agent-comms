@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 pytestmark = pytest.mark.refactor_guard
-OWNER = "agent_comms.field_codec"
+OWNER = "agent_comms.nominal.field_codec"
 
 
 def codec_subclasses(sources: dict[str, str]) -> set[str]:
@@ -120,7 +120,7 @@ def test_no_field_codec_subclasses_outside_its_owner():
 
 
 def test_codec_owner_rejects_subclasses_even_through_an_alias():
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     alias = FieldCodec
     with pytest.raises(TypeError):
@@ -132,20 +132,20 @@ def test_guard_follows_aliases_qualified_imports_and_inherited_reexports():
     sources = {
         OWNER: "class FieldCodec: pass\nclass Shared(FieldCodec): pass",
         "agent_comms.a": (
-            "from .field_codec import FieldCodec as F\n"
+            "from .nominal.field_codec import FieldCodec as F\n"
             "Alias = F\nclass Bad(Alias): pass"
         ),
-        "agent_comms.b": "import agent_comms.field_codec as fc\nclass Bad(fc.FieldCodec): pass",
+        "agent_comms.b": "import agent_comms.nominal.field_codec as fc\nclass Bad(fc.FieldCodec): pass",
         "agent_comms.c": "from .a import Bad as Imported\nclass Worse(Imported): pass",
         "agent_comms.d": (
-            "import agent_comms.field_codec\n"
-            "class Bad(agent_comms.field_codec.Shared): pass"
+            "import agent_comms.nominal.field_codec\n"
+            "class Bad(agent_comms.nominal.field_codec.Shared): pass"
         ),
         "agent_comms.e": (
-            "import agent_comms.field_codec as fc\n"
+            "import agent_comms.nominal.field_codec as fc\n"
             "class Bad(fc.FieldCodec): pass"
         ),
-        "agent_comms.f": "from .field_codec import *\nclass Bad(Shared): pass",
+        "agent_comms.f": "from .nominal.field_codec import *\nclass Bad(Shared): pass",
         "agent_comms.safe": "class FieldCodec: pass\nclass Fine(FieldCodec): pass",
     }
     assert codec_subclasses(sources) == {

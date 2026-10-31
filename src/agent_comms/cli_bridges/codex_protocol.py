@@ -21,9 +21,9 @@ from pydantic import (
 )
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire
-from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
+from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.external_transcript import EarlierPage, NoEarlierPage
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MessageId,
     ToolCallId,

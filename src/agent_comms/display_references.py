@@ -12,8 +12,8 @@ import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import SlicePolicy
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.registry_document import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
 from agent_comms.thread_identity import ThreadIncarnation
 

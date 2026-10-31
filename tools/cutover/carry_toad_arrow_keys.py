@@ -11,9 +11,9 @@ from typing import ClassVar
 from pydantic import JsonValue
 from textual.keys import DownKey, LeftKey, NavigationKey, RightKey, UpKey
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, NominalSpelling, NominalText
+from agent_comms.nominal.field_codec import FieldCodec, NominalSpelling, NominalText
 from cutover.carry_toad_key_mode import ToadSettingsCarry
 from toad.key_modes import KeyMode
 from toad.keymap import KeyInvocationId, Keymap, KeyRemap

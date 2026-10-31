@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from .child_process import BoundedRun, ChildResult
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestartEnvironment
 from .native_package import VerifiedNativePackage
 

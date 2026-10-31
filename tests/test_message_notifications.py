@@ -4,7 +4,7 @@ from agent_comms.repo import Checkout
 from dataclasses import replace
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from conftest import installed_comms
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.threads import Thread
 
 

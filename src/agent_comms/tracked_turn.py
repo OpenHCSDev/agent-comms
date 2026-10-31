@@ -20,7 +20,7 @@ from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .external_transcript import DraftPublication, DraftRow
-from .field_codec import InputId, MalformedRecord
+from .nominal.field_codec import InputId, MalformedRecord
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .native_arguments import SelectedModel

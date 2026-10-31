@@ -4,7 +4,7 @@ import re
 from abc import ABC, abstractmethod
 
 from .coordination_contracts import MAX_IDENTIFIER_CHARS
-from .field_codec import MalformedRecord, ThreadLookup
+from .nominal.field_codec import MalformedRecord, ThreadLookup
 
 
 class ParticipantIdentity(ABC):

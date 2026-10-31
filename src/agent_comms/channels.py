@@ -13,10 +13,10 @@ from typing import TYPE_CHECKING, ClassVar, Annotated
 from .projection_source import ProjectionSource
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, CatalogExclude
+from .nominal.field_codec import FieldCodec, CatalogExclude
 from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .messages import MembershipTransition
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope

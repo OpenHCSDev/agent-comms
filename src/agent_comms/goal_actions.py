@@ -8,8 +8,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
-from agent_comms import field_codec
+from agent_comms.nominal.field_codec import GoalId, GoalWaitId, MessageId, RetryDecisionId
+from agent_comms.nominal import field_codec
 from agent_comms.goals import (
     Goal,
     GoalChangedError,
@@ -22,7 +22,7 @@ from agent_comms.goals import (
     UnorderedGoalOrder,
 )
 
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 from .input_key import InputKey, InputKeyText
 from agent_comms.todos import (
     ExpectedProblem, PendingProblemOrder, RecordOrderHeadVerdict, SendBackVerdict, Todo,
@@ -32,7 +32,7 @@ from agent_comms.todos import (
 from .change_report import FileLine, NoSourceReference
 from .child_process import ProcessIdentity
 from .command import Command
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_scope import AllGoals, OneGoal

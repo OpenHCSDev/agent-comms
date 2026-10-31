@@ -44,8 +44,8 @@ from mypy.config_parser import parse_config_file
 from mypy.options import Options
 from nominal_refactor_advisor import audit
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import boundary_decoder
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput, Side
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.runtime_resolution import CorePackage, ProjectMetadata, StackSources

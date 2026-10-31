@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent_comms.child_process import Platform
-from .field_codec import FieldCodec, RecordedTimestamp
+from .nominal.field_codec import FieldCodec, RecordedTimestamp
 from .native_entries import SessionEntry
 from .pi_payloads import ReportedText
 from .native_failures import NativePiUnavailable

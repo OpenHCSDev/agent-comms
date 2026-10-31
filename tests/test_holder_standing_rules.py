@@ -43,7 +43,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,

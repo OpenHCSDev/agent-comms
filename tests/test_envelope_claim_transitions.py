@@ -21,7 +21,7 @@ from agent_comms.envelope_claim_transitions import (
     WakeClaim,
     WakeClaims,
 )
-from agent_comms.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
+from agent_comms.nominal.field_codec import AssignmentId, ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind, Message
 
 G1 = ClaimId("a" * 32)

@@ -14,7 +14,7 @@ from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
 from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.field_codec import RecordProblems
+from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread

@@ -15,7 +15,7 @@ from agent_comms.cli_bridges.session_watch import (
     WatchRecord,
 )
 from agent_comms.cli_bridges.shared import BridgeLog
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():

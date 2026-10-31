@@ -15,7 +15,7 @@ from typing import Annotated, TYPE_CHECKING
 
 
 from .cli_result import CliResult
-from .field_codec import FieldCodec, WireName
+from .nominal.field_codec import FieldCodec, WireName
 from .harness_install import Harness
 from .thread_text import NoThreadText, ThreadText
 from .transcript_events import ImportedInput, ImportedMessage, NoRetainedRequest

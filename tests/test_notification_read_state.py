@@ -10,7 +10,7 @@ import pytest
 from agent_comms.bus_read import BusRead, UiRead
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import StaleRevision
-from agent_comms.field_codec import FieldCodec, MessageId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.history_views import HistoryViews
 from agent_comms.message_reference import MessageReference
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
@@ -36,7 +36,7 @@ from agent_comms.tools import CommsMessageOutcomesTool
 from agent_comms.acp_extension import GoalSnapshotReply, TranscriptSnapshotUpdate
 from agent_comms.bus_read import OwnerLiveRead
 from agent_comms.commander_hud import CommanderUnitDetail
-from agent_comms.field_codec import OrderId
+from agent_comms.nominal.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
 from agent_comms.ui_model.observation import (

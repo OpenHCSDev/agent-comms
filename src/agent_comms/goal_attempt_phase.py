@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .attempt_resolution import AttemptResolution
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import UnresolvedAttemptError
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Failed, Terminal

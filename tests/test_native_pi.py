@@ -11,8 +11,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.coordination_errors import IdentityConflict
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, InputId
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.native_arguments import SelectedModel
 from agent_comms.native_entries import NativeEntry, NativeInputEvidenceRead
 from agent_comms.native_failures import NativePiUnavailable

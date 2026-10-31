@@ -16,7 +16,7 @@ from agent_comms.participant_identity import ParticipantIdentity
 from .native_session_reopen import NativeSessionIdentity
 from agent_comms.native_pi import _session_location
 from agent_comms.native_failures import NativePiUnavailable
-from .field_codec import boundary_decoder
+from .nominal.field_codec import boundary_decoder
 from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice

@@ -12,8 +12,8 @@ from typing import BinaryIO
 from abc import abstractmethod
 
 from .compaction_notices import CompactionNotice, IgnoredCompactionDeal, StartedRuleReading
-from .declared_family import DeclaredFamily
-from .field_codec import boundary_decoder
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import boundary_decoder
 from .store_files import StoreGuard
 
 class GateNotices(DeclaredFamily):

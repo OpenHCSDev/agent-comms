@@ -9,7 +9,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .bus import Bus
 from .bus_tables import MessageIdentitySource
@@ -17,7 +17,7 @@ from .channel_targets import CommandTarget
 from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .errors import RelationViolationError
-from .field_codec import GoalId, InputId, RootId, TurnId
+from .nominal.field_codec import GoalId, InputId, RootId, TurnId
 from .harness_delivery_states import Outcome, UnconfirmedOutcome
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,

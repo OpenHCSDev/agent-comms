@@ -7,7 +7,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
     from .turn_context import ContextSpan

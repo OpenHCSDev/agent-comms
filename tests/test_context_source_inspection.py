@@ -9,7 +9,7 @@ import json
 import pytest
 
 from agent_comms.session_file import NoSessionFile
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextManifestData
 from agent_comms.pi_payloads import NativeContextData
@@ -333,7 +333,7 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
                                          NextContextTurn(), (contributor,)))
     result = subprocess.run([sys.executable, "-c", '''
 import hashlib, json, sys
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.turn_context import ContextSegment, SegmentManifest, TurnContext
 assert "agent_comms.context_segments.awareness" not in sys.modules
 preview = FieldCodec.decode(TurnContext, json.load(sys.stdin))

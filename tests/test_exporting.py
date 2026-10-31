@@ -28,7 +28,7 @@ from agent_comms.exporting import (
 )
 from agent_comms.bus import Bus, ClaimRecord
 from agent_comms.envelope_claim_transitions import UnscopedClaims
-from agent_comms.field_codec import ClaimId
+from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.messages import ClaimNoticeKind, Message, InfoKind
 from agent_comms.threads import Thread
 

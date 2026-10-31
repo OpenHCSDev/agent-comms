@@ -10,7 +10,7 @@ from agent_comms.turn_inbox import SendNow, TurnInbox
 from agent_comms.backend import EventFinishSignal, FinishSignal, NoFinishSignal
 from agent_comms.change_report import FileLine, NoSourceReference
 from agent_comms.errors import TodoError
-from agent_comms.field_codec import AcpSessionId, FieldCodec, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.input_drain import DrainedSession
 from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_session_reopen import SessionRetention

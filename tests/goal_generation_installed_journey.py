@@ -21,7 +21,7 @@ from toad.app import ToadApp
 from toad.goal_interaction import ToggleInteraction
 from toad.widgets.goal_bar import GoalControl
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from agent_comms.goal_management import Goals
 from agent_comms.goal_states import BlockedGoal, CompletedGoal

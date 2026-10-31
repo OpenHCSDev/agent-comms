@@ -17,7 +17,7 @@ from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.field_codec import AcpSessionId, FieldCodec, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.native_child import PiSessionChild

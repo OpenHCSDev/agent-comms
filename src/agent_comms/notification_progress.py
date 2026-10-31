@@ -5,7 +5,7 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredOrder
+from .nominal.declared_family import DeclaredOrder
 from .notification_evidence import AnsweredResponse, AssignmentResponse, UnansweredResponse
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 

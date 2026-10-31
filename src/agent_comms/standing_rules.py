@@ -18,10 +18,10 @@ from pathlib import Path
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
-from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,

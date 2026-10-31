@@ -9,8 +9,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,

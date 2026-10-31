@@ -1,6 +1,6 @@
 """Declared CLI and tool replies share their JSON behavior."""
 
-from .field_codec import DisclosedRecord, FieldCodec
+from .nominal.field_codec import DisclosedRecord, FieldCodec
 
 
 class DeclaredReply(DisclosedRecord):

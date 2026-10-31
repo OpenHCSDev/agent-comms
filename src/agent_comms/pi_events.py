@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     FieldPlan,

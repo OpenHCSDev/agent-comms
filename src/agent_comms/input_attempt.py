@@ -6,9 +6,9 @@ from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     GoalId,
     InputId,

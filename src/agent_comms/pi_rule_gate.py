@@ -23,7 +23,7 @@ from agent_comms_hooks.skill import (
 )
 
 from .bus_publication import Delivered
-from .field_codec import ThreadLookup
+from .nominal.field_codec import ThreadLookup
 from .rule_deal import DealTrigger, DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 

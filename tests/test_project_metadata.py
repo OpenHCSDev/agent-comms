@@ -14,7 +14,7 @@ import tomli_w
 from agent_comms.head_review import BaseSide, HeadSide, IntegrationInput
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.runtime_resolution import PrivateUvProject, ProjectMetadata, StackSources
 from agent_comms.repository_name import RepositoryName
 from github_fixture import GitHubFixture

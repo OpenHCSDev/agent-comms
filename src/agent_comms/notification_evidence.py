@@ -13,9 +13,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from pydantic import JsonValue
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .frozen_recipient import FrozenRecipient
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     MessageId,

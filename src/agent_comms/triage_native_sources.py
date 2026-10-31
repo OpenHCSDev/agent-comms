@@ -8,7 +8,7 @@ ordered like ``ExecutionAssignmentLink``. It contains no handling state.
 from dataclasses import dataclass
 from typing import Annotated
 
-from .field_codec import AssignmentId, InputId
+from .nominal.field_codec import AssignmentId, InputId
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from .typed_table import (
     Column,

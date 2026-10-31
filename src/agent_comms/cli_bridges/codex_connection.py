@@ -10,7 +10,7 @@ from typing import AsyncIterator, ClassVar
 import aiohttp
 from pydantic import JsonValue
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from .codex_protocol import (
     Capabilities, ClientInfo, Initialize, InitializeResponse, Initialized, Request,
     RPC_RESPONSE, RateLimits, RateLimitsResponse, ReadRateLimits, RequestParams, RpcNotification, RpcReply,

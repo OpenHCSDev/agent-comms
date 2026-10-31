@@ -56,7 +56,7 @@ from .private_path import (
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord, ScratchName, ThreadLookup
+from .nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration

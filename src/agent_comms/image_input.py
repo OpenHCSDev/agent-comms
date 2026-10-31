@@ -7,7 +7,7 @@ import binascii
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
-from . import field_codec
+from .nominal import field_codec
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024

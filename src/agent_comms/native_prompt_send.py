@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from agent_comms.errors import RelationViolationError
 
 from .coordination_errors import CoordinationError
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 from .native_entries import NativeEvidenceScope
 from .native_input_proof import NativeContextProof
 from .publication_measurements import PublicationMeasurements

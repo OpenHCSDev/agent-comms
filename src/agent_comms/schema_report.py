@@ -8,8 +8,8 @@ from pathlib import Path
 
 from .cli_result import CliResult
 from .locked_store import SQLiteFile
-from .declared_family import UnknownFamilyMember
-from .field_codec import FieldCodec
+from .nominal.declared_family import UnknownFamilyMember
+from .nominal.field_codec import FieldCodec
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, SQLiteTableName, TypedTable
 
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from pydantic import JsonValue
 from typing import cast
 
-from agent_comms import field_codec
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.field_codec import FieldCodec
 from collections.abc import Callable
 from dataclasses import dataclass
 from dataclasses import replace

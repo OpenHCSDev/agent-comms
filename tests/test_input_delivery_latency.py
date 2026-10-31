@@ -12,7 +12,7 @@ from agent_comms import backend
 from agent_comms.turn_inbox import SteerInputPolicy
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.native_package import VerifiedNativePackage

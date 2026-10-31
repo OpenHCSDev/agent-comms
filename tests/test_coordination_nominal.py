@@ -19,7 +19,7 @@ from agent_comms.execution_states import (
     ExecutionState,
     PendingExecution,
 )
-from agent_comms.field_codec import AssignmentId, FieldCodec, MessageId
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.lifecycle_capability import Failed
 from agent_comms.obligation_states import PublishedResponse, ResponseState, SilentResponse
 from agent_comms.reason_codes import NoReasonCode
