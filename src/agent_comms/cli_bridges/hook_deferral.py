@@ -18,6 +18,7 @@ from typing import (
 
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 
+from .session_watch import WatchClaim
 from .shared import Binding
 from ..comms import Comms
 from ..declared_family import DeclaredFamily
@@ -210,16 +211,17 @@ class StopHook(ClaudeTranscriptHook):
         snapshot = self.comms.registry.snapshot()
         selected = snapshot.commander_project.by_role(
             snapshot.born(self.binding.owner.require_recorded().lookup),
-            commander=self.judge_reply, commanded=lambda: None)
-        selected()
+            commander=self.deferred, commanded=lambda: ())
+        deaf = tuple(watch.line() for watch in WatchClaim(self.session_id).deaf())
+        if reasons := (*deaf, *selected()):
+            self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
-    def judge_reply(self) -> None:
+    def deferred(self) -> tuple[str, ...]:
+        """Only a commander answers for deferring work; every bound role must keep its Monitor."""
         reply = self.reply()
-        reasons = tuple(
+        return tuple(
             reason
             for shape in Deferral.__subclasses__()
             if (deferred := tuple(shape.found(reply)))
             for reason in shape.reasons(deferred, self)
         )
-        if reasons:
-            self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))

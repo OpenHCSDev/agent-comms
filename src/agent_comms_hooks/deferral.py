@@ -1,4 +1,4 @@
-"""The resident commander-session owner judges the model's stop."""
+"""The resident session owner judges the model's stop."""
 
 from .watch import SessionHookProgram
 

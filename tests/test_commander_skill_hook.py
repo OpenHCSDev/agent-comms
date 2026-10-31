@@ -212,15 +212,20 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
     assert [hook.take(commander_bus, commander_binding, hook.count_call()) for _ in range(SliceReminder.every)][-1] == (slices[0],)
 
 
-def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_path, commanding_session, commander_bus, commander_binding):
+@pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
+def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(
+        tmp_path: Path, commanding_session, commander_bus: Comms, actor: str):
+    """Both fleet and commander readers retain the common re-arm behavior."""
+    binding = admitted_binding(commander_bus, actor)
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
     deaf = DeafWatch("now (no Monitor holds its reader claim)").line()
-    assert deaf not in hook.take(commander_bus, commander_binding, hook.count_call())  # the bound bridge is not running: nothing to re-arm
+    assert deaf not in hook.take(commander_bus, binding, hook.count_call())
     with claim.claim.claimed():
-        assert deaf in hook.take(commander_bus, commander_binding, hook.count_call()) and deaf in hook.take(commander_bus, commander_binding, hook.count_call())
+        assert deaf in hook.take(commander_bus, binding, hook.count_call())
+        assert deaf in hook.take(commander_bus, binding, hook.count_call())
         with claim.reader_held():
-            assert deaf not in hook.take(commander_bus, commander_binding, hook.count_call())
+            assert deaf not in hook.take(commander_bus, binding, hook.count_call())
 
 
 def test_an_unbound_session_is_never_told_to_rearm_a_commander_watch(tmp_path, monkeypatch, capsys):
