@@ -130,6 +130,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "coordination",
         "commander-self-correction",
         "deadlines",
+        "beat-the-greentext",
         "ally",
     )
     closing: ClassVar[frozenset[str]] = frozenset({"ally"})
