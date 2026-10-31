@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import BinaryIO, Self
 
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 from agent_comms.thread_text import NoThreadText, ThreadText
 
+from ..session_receipts import SessionReceipts
 from ..wire_models import WireModel
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession
 from .history import (
@@ -29,6 +30,17 @@ class ClaudeJsonLines(JsonLines):
 
     def decode_line(self, raw: bytes, position: int) -> ClaudeRecord:
         return self.records.validate_python({**json.loads(raw), 'position': position})
+
+    def receipts(self, lines: Iterable[bytes]) -> SessionReceipts:
+        """What these whole transcript lines show the session did, oldest first."""
+        receipts = SessionReceipts()
+        for position, raw in enumerate(lines):
+            record = self.decode_line(raw, position)
+            record.tally(receipts)
+            if record.ends_turn():
+                receipts.turn_ended()
+        receipts.turn_ended()
+        return receipts
 
     def opening_before(self, stream: BinaryIO, boundary: int) -> int:
         """Recover the actual opening, including every prompt folded into that occurrence."""

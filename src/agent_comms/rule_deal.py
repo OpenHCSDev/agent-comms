@@ -28,6 +28,7 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .session_receipts import SessionReceipts
 from .nominal.declared_family import DeclaredFamily
 from .instruction_deck import DealtCalls
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
@@ -213,7 +214,7 @@ class Speaking(Voice):
             fresh = answered - meant.asked
             if not fresh:
                 return DocumentChange.to(meant)
-            line = SessionAudit.read(deal.audit).his_question()
+            line = SessionAudit.read(deal.audit).his_question(deal.receipts())
             return DocumentChange.to(meant.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
@@ -322,14 +323,15 @@ class SessionAudit:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
         return ""
 
-    def his_question(self) -> str:
-        """His question carries the newest thing the session said it does, the way he asks it
-        in person; an audit that says nothing hears the question alone."""
-        for entry in reversed(self.rules):
-            for line in entry.does.splitlines():
-                if line.strip():
-                    return f"> {line.strip()[:200]}\n\nyou wrote that. {MeantRecord.question}"
-        return MeantRecord.question
+    def his_question(self, receipts: SessionReceipts) -> str:
+        """His question carries the newest thing the session said it does beside what its
+        transcript shows it did, the way he asks it in person; an audit that says nothing and a
+        session with no record hear the question alone."""
+        said = next((f"> {line.strip()[:200]}\n\nyou wrote that."
+                     for entry in reversed(self.rules) for line in entry.does.splitlines()
+                     if line.strip()), "")
+        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), MeantRecord.question)
+                           if part)
 
     def entry(self, rule: str) -> RuleAudit:
         """What this audit says about one rule; a rule it skips has said nothing."""
@@ -769,6 +771,7 @@ class Unmeant(Owed):
 
     question: Asked
     read: tuple[Path, ...]
+    asking: str
 
     before: ClassVar[str] = "answering Tristan"
 
@@ -785,7 +788,8 @@ class Unmeant(Owed):
             deal.meant.update(lambda now: DocumentChange.to(
                 now.settled() if now.open == meant.open else now))
             return
-        yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened))
+        yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
+                  SessionAudit.read(deal.audit).his_question(deal.receipts()))
 
     @property
     def reason(self) -> str:
@@ -793,7 +797,7 @@ class Unmeant(Owed):
         so a yes beside the call may not be on record yet. On 2026-10-30 claude-board wrote
         "Yes." with its next call, was refused as if it had not, and ended its turn sure the gate
         was stuck. A yes or no counts from the next call on."""
-        return (f"Tristan is asking you:\n\n{SessionAudit.read(self.audit).his_question()}\n\n"
+        return (f"Tristan is asking you:\n\n{self.asking}\n\n"
                 "Compare it with what you are doing right now and tell him the truth. No is a"
                 " real answer. A word alone does not answer him: say yes or no, then what you"
                 " are doing about it. What you send beside a call counts from your next call.")
@@ -921,6 +925,10 @@ class RuleDeal(State, DealtCalls):
     def words_end(self) -> int:
         """Where the session's record of its own words ends now."""
         return 0
+
+    def receipts(self) -> SessionReceipts:
+        """What the session's own record shows it just did; a backend with no record has none."""
+        return SessionReceipts()
 
     def said_since(self, offset: int) -> tuple[str, ...]:
         """The session's own words after `offset` in its backend's record of them. A mute
