@@ -2,11 +2,15 @@
 
 from pathlib import Path
 
+import pytest
+
 from agent_comms.cli_bridges.claude_protocol import (
     CLAUDE_RECORD,
     BridgeStatus,
     ClaudeSession,
+    Relocated,
     SystemRecord,
+    WorktreeState,
 )
 
 
@@ -23,5 +27,19 @@ def test_bridge_status_system_record():
             url='https://claude.ai/code/session_bridge_status_fixture',
         ),
     )
+    assert record.updates(ClaudeSession()) == ()
+    assert not record.begins_history()
+
+
+@pytest.mark.parametrize(('fields', 'kind'), (
+    ({'type': 'relocated', 'sessionId': 'session', 'relocatedCwd': '/workspace/worktree'}, Relocated),
+    ({'type': 'worktree-state', 'sessionId': 'session'}, WorktreeState),
+))
+def test_entering_a_worktree_leaves_records_the_bridge_reads(fields, kind):
+    """2026-10-30: EnterWorktree's records stopped the bridge at every reconnect, for good,
+    because they stay in the transcript."""
+    record = CLAUDE_RECORD.validate_python({**fields, 'position': 0})
+
+    assert isinstance(record, kind)
     assert record.updates(ClaudeSession()) == ()
     assert not record.begins_history()
