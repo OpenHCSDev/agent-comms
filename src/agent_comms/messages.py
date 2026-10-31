@@ -35,6 +35,7 @@ from agent_comms.typed_table import (
 
 from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
 from .channel_targets import CommandTarget, ThreadTarget
+from .history_result import HistoryEntry
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
@@ -931,7 +932,7 @@ class MessageInput(Timestamped, Addressed, BusCapability):
 
 
 @dataclass(frozen=True, slots=True)
-class Message(MessageInput, TurnOrigin):
+class Message(MessageInput, TurnOrigin, HistoryEntry):
     """Declares one inter-thread message.
 
     The bus assigns ``seq`` (a monotonically increasing log position) at send
