@@ -20,6 +20,9 @@ import pytest
 from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.codex import CodexBridge
+from agent_comms.cli_bridges.opencode import OpenCodeBridge
 from agent_comms.cli_bridges.monitor import BoardReply, OwnerSaidReply, ReadBoard, ReadOwnerSaid, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
@@ -817,6 +820,14 @@ def test_the_bridge_answers_his_last_prompt_over_the_session_socket(tmp_path, mo
                 reply = OwnerSaidReply(("the new order",))
                 stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
             assert said.result(timeout=5) == ("the new order",)
+
+
+def test_every_bridge_stays_constructible_with_the_owner_said_request():
+    """Only a line-monitor bridge serves ReadOwnerSaid; declaring it above that made the Codex
+    and OpenCode bridges abstract, and no check noticed."""
+    assert not (CodexBridge.__abstractmethods__ | OpenCodeBridge.__abstractmethods__
+                | ClaudeBridge.__abstractmethods__)
+    assert not hasattr(CodexBridge, "owner_said") and not hasattr(OpenCodeBridge, "owner_said")
 
 
 def test_a_refusal_lands_when_the_bridge_is_swapping(tmp_path, monkeypatch):
