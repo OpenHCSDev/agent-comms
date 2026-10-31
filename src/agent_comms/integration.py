@@ -374,7 +374,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         self, inputs: IntegrationInput, repositories: tuple[Repo, ...]
     ) -> None:
         mains = self.main_commits(inputs)
-        for source in inputs.sources:
+        for source in inputs.pinned_sources(self.repository.github):
             repository = Repo.selected(repositories, source.repository.to_wire())
             if IntegrationSource.main_head(repository) != mains[source.repository]:
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
