@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import pickle
-import sqlite3
 import time
 from contextlib import contextmanager, nullcontext
 from collections.abc import Iterator
@@ -26,7 +25,7 @@ from agent_comms.commander_hud import (
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, CommanderUpdateStore, PublishedFacts, RulePing
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -924,7 +923,7 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     assert isinstance(first.task, CommanderNotice)
     assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
     comms.registry.register_child("quiet-fork", "lead", CommanderForkExecution, comms.goals)
-    with refused_publication(comms), pytest.raises(sqlite3.IntegrityError):
+    with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms)
     owner = comms.registry.require("lead").incarnation
     unsent = CommanderFrame.at(comms.root, owner).read()
@@ -957,7 +956,7 @@ def test_unsent_new_alert_remains_new_on_retry_without_resetting_its_age(notific
     rule = ServicePassFailing(
         watch="unsent-new-alert", since=time.time(), error="a source failed", failed_at=time.time(),
     )
-    with refused_publication(comms), pytest.raises(sqlite3.IntegrityError):
+    with refused_publication(comms), pytest.raises(HumanSendRefusedError):
         beat(comms, (rule,))
     owner = comms.registry.require("lead").incarnation
     observed, = CommanderUpdate.latest(comms, owner)

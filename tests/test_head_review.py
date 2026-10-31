@@ -457,8 +457,10 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
     head = source.git(source.checkout, "rev-parse", "HEAD").strip()
     source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
     moved = opened(github, source, request.pr, head)
-    assert request.change_identity(WorkBranches(source.checkout), "main") == moved.change_identity(
-        WorkBranches(source.checkout), "main")
+    branches = WorkBranches(source.checkout)
+    branches.prepare_pull_request("main", request.head)
+    branches.prepare_pull_request("main", moved.head)
+    assert request.change_identity(branches, "main") == moved.change_identity(branches, "main")
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
