@@ -775,14 +775,16 @@ def test_the_full_audit_opens_the_gate(capsys, tmp_path, commanding_session):
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
 
 
-def test_the_template_shows_no_answer_to_copy_and_asks_only_for_the_three_fields(capsys, dealt_session):
-    transcript, start = dealt_session
-    gated(transcript, "Bash", {}).judge()
-    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
-    assert '"does": "It' not in reason
-    template = json.loads(reason[reason.index("{\n"):])
-    assert set(template) == {"rules"}
-    assert set(template["rules"][0]) == {"rule", "quote", "does", "why"}
+def test_the_template_shows_no_answer_to_copy_and_asks_only_for_the_three_fields(
+        tmp_path, commanding_session):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    said = DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    template = next(part for part in said if "{\n" in part)
+    assert '"does": "It' not in template
+    written = json.loads(template[template.index("{\n"):])
+    assert set(written) == {"rules"}
+    assert set(written["rules"][0]) == {"rule", "quote", "does", "why"}
 
 
 def test_a_refusal_quotes_what_the_bridge_says_he_said_last(tmp_path, capsys, monkeypatch):
@@ -856,6 +858,17 @@ def test_an_audit_written_before_owner_words_and_broke_left_still_answers(tmp_pa
         "rules": [{"rule": "voice", "broke": ["x"], "quote": "> q", "does": "d", "why": "w"}],
         "owner_words": [{"words": "w", "doing": "d"}]}))
     assert SessionAudit.read(audit) == SessionAudit((RuleAudit("voice", "> q", "d", "w"),))
+
+
+def test_the_deal_prints_the_template_once(tmp_path, capsys, commanding_session):
+    """The hook's order prints the one template; the first refusal does not print it again."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    said = DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    template = next(part for part in said if "{\n" in part)
+    assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
+    gated(transcript, "Bash", {}).judge()
+    assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(

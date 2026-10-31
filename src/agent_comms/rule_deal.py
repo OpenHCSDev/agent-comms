@@ -411,8 +411,8 @@ class UnstampedCompactionDeal(CompactionDeal):
 
 
 @dataclass(frozen=True)
-class ClearedDeal(DealTrigger):
-    """The session was cleared and starts from nothing."""
+class ClearedDeal(StartedDeal):
+    """The session was cleared and starts from nothing, as a first start does."""
 
     def reason(self) -> str:
         return "Re-dealt because this session was cleared: its context is empty."
@@ -722,7 +722,7 @@ class RuleDeal(State):
         except FileExistsError:
             return (
                 f"{due.reminder(self.owner_said(due))}\n\n"
-                f"The audit's template was in your first refusal; it goes in {self.audit}."
+                f"The audit's template was shown once already; it goes in {self.audit}."
             )
         return f"{due.reminder(self.owner_said(due))}\n\n{due.template(self.audit)}"
 

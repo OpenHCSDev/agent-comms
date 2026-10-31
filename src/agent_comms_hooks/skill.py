@@ -393,14 +393,11 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
-            " a time, and answer those in the audit: greentext lines it holds quoted verbatim, what they did, and why"
-            " it holds. That audit is not optional: every tool but Read, the bus, your watch, and"
-            f" Write or Edit of {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "quote": WHOLE GREENTEXT LINES OF IT VERBATIM, "does": what they did,'
-            ' "why": why it holds}, one entry for every rule you were dealt]}.'
-            " This order is given once per session start or"
-            " compaction; a short slice of them comes back inline every few tool calls.\n"
+            " a time, and answer those in the audit. Every tool but Read, the bus, your watch, and"
+            f" Write or Edit of {self.audit}, is refused until it answers. This order is given once per session"
+            " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
+            self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self),
         )
