@@ -224,8 +224,8 @@ class WatchState(ABC):
     """The claim state owns connection, shutdown, enrolment and discovery."""
 
     @abstractmethod
-    def rearm(self, launch: Callable[[], None]) -> None:
-        """Whether this state needs the enrolled session's existing launcher."""
+    def rearm(self, launch: Callable[[], None]) -> bool:
+        """Whether this state needed the enrolled session's existing launcher, and ran it."""
 
     def connect(self, serve: Callable[[], Serve],
                 request: Callable[[Serve], SessionRequest]) -> None:
@@ -275,7 +275,7 @@ class WatchState(ABC):
 
 
 class UnclaimedWatch(WatchState):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         raise SessionCommandError('Enroll this session before starting its Monitor')
 
 
@@ -283,8 +283,8 @@ class ClaimingWatch(WatchState):
     """A bridge holds the claim and is publishing its first record: it is serving, so it is
     neither relaunched nor announced as down, and it has no binding to report yet."""
 
-    def rearm(self, launch: Callable[[], None]) -> None:
-        return
+    def rearm(self, launch: Callable[[], None]) -> bool:
+        return False
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         return False
@@ -335,9 +335,9 @@ class RecordedWatch(WatchState):
 
 
 class LiveWatch(RecordedWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         """The kernel-held bridge is already serving; do not launch another."""
-        return
+        return False
 
     def board(self) -> tuple[str, ...]:
         """The bridge derives the current board. A held claim's absent socket is an install's
@@ -377,8 +377,9 @@ class LiveWatch(RecordedWatch):
 
 
 class LapsedWatch(RecordedWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         launch()
+        return True
 
 
 class CommanderSession(ClaudeTranscriptHook):

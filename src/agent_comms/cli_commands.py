@@ -10,22 +10,18 @@ from agent_comms import cli_command
 
 
 import argparse
-import asyncio
 import dataclasses
-import os
 import re
 import shlex
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Mapping
-from contextlib import aclosing
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, TextIO, TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 
 from .activity import ActivityState
 from .child_process import NoProcess, ProcessState
-from agent_comms.cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .comms import Comms
 from .declared_family import DeclaredFamily
@@ -35,12 +31,7 @@ from .goals import Goal
 from .lifecycle_capability import Complete
 from .importing import ThreadImported
 from .input_origin import InputProvenance
-from .maintenance_barrier import MaintenanceHeldError
 from .message_reference import MessageReference
-from .read_basis import LineOutput
-from .messages import (
-    Message,
-)
 from .owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import ThreadRecord, ThreadView
@@ -59,7 +50,6 @@ from agent_comms.session_file import SessionFile
 
 if TYPE_CHECKING:
     from agent_comms.cli_support.prepared_checkout import PreparedCheckoutCliCommand
-    from agent_comms.cli_verbs.watch import WatchCliCommand
 
 
 def _duration_seconds(value: str) -> float:
@@ -372,37 +362,6 @@ class ThreadArgument:
 @dataclass(frozen=True, kw_only=True)
 class WorktreeArgument:
     worktree: Annotated[Checkout, Argument(flags=("--worktree",))]
-
-
-@dataclass(frozen=True)
-class WatchStream(CliResult):
-    """Unread and arriving messages, written as JSON lines for as long as the watch lasts."""
-
-    comms: Comms
-    watch: WatchCliCommand
-
-    def messages(self) -> AsyncIterator[Message]:
-        return self.comms.watch(self.watch.thread, after=self.watch.after)
-
-    def write(self, output: TextIO) -> int:
-        emit = LineOutput(output).write
-        async def stream() -> None:
-            async with aclosing(self.messages()) as messages:
-                async for message in messages:
-                    emit(ArrivedMessage(message=message).model_dump_json())
-
-        async def watch() -> None:
-            source = self.comms.history_source(self.watch.thread)
-            async with asyncio.TaskGroup() as tasks:
-                tasks.create_task(stream())
-                tasks.create_task(source.watch_requests(
-                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
-
-        try:
-            asyncio.run(watch())
-        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
-            raise held.exceptions[0] from None
-        return self.exit_code()
 
 
 @dataclass(frozen=True)

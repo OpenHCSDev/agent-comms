@@ -6,11 +6,13 @@ from agent_comms.repo import Checkout
 import json
 import os
 import select
+import signal
 import socket
 import subprocess
 import sys
 import time
 from contextlib import ExitStack, contextmanager
+from html import escape
 from pathlib import Path
 
 import pytest
@@ -26,6 +28,8 @@ from agent_comms.cli_bridges.shared import (
     ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
 )
 from conftest import installed_comms
+from agent_comms.comms import wire
+from transcript_record_fixture import transcript_record
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
@@ -116,8 +120,9 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
              'from agent_comms.cli_bridges.shared import '
              'MonitorBridgeStopped, MonitorBridgeSwapping; '
              'from agent_comms_hooks.watch import WatchClaim; '
+             'from agent_comms.cli_bridges.shared import Serve; '
              'asyncio.run(read_monitor(WatchClaim("copied-session"), '
-             'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
+             'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         cleanup.callback(stop, monitor)
@@ -138,6 +143,90 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
         assert second.session == first.session
         assert second.token != first.token
         assert monitor.poll() is None
+
+def confirm(transcript, line, record):
+    """The session's transcript records the Monitor event, as Claude writes it."""
+    with transcript.open('a') as output:
+        output.write(json.dumps(dict(
+            type='user', uuid=transcript_record(record), timestamp='2026-10-16T16:40:05.123Z',
+            sessionId=transcript.stem, promptId='prompt', origin=dict(kind='task-notification'),
+            message=dict(content='<task-notification><event>' + escape(line)
+                         + '</event></task-notification>'))) + '\n')
+
+
+def test_a_sigkilled_bridge_comes_back_through_its_claim_with_no_repeat(
+        tmp_path, bridge_home, monkeypatch):
+    built = SourcePrograms.create(tmp_path / 'built')
+    with (
+        session_bridge(tmp_path, bridge_home, (str(built.script(claude.main)),), runtime=built.runtime)
+        as (home, claim, observed, child, log, env),
+        ExitStack() as cleanup,
+    ):
+        current = home / LaunchRuntime.current_pointer().relative_to(Path.home())
+        current.parent.mkdir(parents=True)
+        current.symlink_to(built.prefix.absolute(), target_is_directory=True)
+        monitor = subprocess.Popen(
+            (sys.executable, '-c',
+             'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+             'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping, Serve; '
+             'from agent_comms_hooks.watch import WatchClaim; '
+             f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
+             'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        cleanup.callback(stop, monitor)
+        comms = wire(tmp_path / 'bus')
+        comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
+
+        first = probe(monitor)
+        confirm(observed.transcript, first.model_dump_json(), 'first-probe')
+        comms.messaging.send('peer', 'bridge-copy', 'uncertain when the bridge dies')
+        delivered = frame(monitor)
+        assert 'uncertain when the bridge dies' in delivered.model_dump_json()
+
+        os.kill(child.pid, signal.SIGKILL)
+        child.wait(timeout=15)
+        assert claim.socket_path.exists()
+
+        # Nothing announced an outage and nothing was replayed: the next line is a fresh probe.
+        second = probe(monitor)
+        assert second.token != first.token
+        resumed = InspectSession().information(claim.socket_path)
+        assert resumed.process != observed.process
+        cleanup.callback(os.kill, resumed.process.pid, signal.SIGTERM)
+        assert isinstance(claim.state(), LiveWatch)
+        confirm(observed.transcript, second.model_dump_json(), 'second-probe')
+        comms.messaging.send('peer', 'bridge-copy', 'sent after the kill')
+        after = frame(monitor)
+        assert 'sent after the kill' in after.model_dump_json()
+        assert 'uncertain when the bridge dies' not in after.model_dump_json()
+        assert not [row for row in Path(f'/proc/{resumed.process.pid}/task').iterdir()
+                    for grandchild in (row / 'children').read_text().split()
+                    if b'watch' in Path(f'/proc/{grandchild}/cmdline').read_bytes()]
+
+
+def test_a_bridge_that_stopped_itself_is_announced_and_not_relaunched(tmp_path, bridge_home):
+    """No socket file is left behind, so the reader says the outage instead of restarting it."""
+    with (
+        session_bridge(tmp_path, bridge_home) as (home, claim, _, child, log, env),
+        ExitStack() as cleanup,
+    ):
+        monitor = subprocess.Popen(
+            (sys.executable, '-c',
+             'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
+             'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping, Serve; '
+             'from agent_comms_hooks.watch import WatchClaim; '
+             f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
+             'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
+            env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        cleanup.callback(stop, monitor)
+        probe(monitor)
+        child.terminate()
+        child.wait(timeout=15)
+        assert isinstance(frame(monitor), MonitorBridgeStopped)
+        assert isinstance(claim.state(), LapsedWatch)
+
 
 @pytest.mark.parametrize('wrong_identity', ('owner', 'process'))
 def test_wrong_pause_identity_cannot_stop_the_real_session_bridge(
@@ -266,8 +355,9 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
                      'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
                      'from agent_comms_hooks.watch import WatchClaim; '
+                     'from agent_comms.cli_bridges.shared import Serve; '
                      f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
-                     'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce))'),
+                     'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
                     env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                 )
                 cleanup.callback(stop, monitor)

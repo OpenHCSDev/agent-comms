@@ -12,9 +12,6 @@ from typing import Annotated, ClassVar, Self, Union
 from pydantic import (
     Discriminator,
     GetCoreSchemaHandler,
-    InstanceOf,
-    PlainSerializer,
-    PlainValidator,
     Tag,
     computed_field,
     field_validator,
@@ -24,11 +21,10 @@ from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily, UnknownFamilyMember
+from .declared_family import UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
 from .field_codec import TimestampText
 from .maintenance_barrier import MaintenanceHeldError
-from .messages import Message
 from .recorded_time import UnrecordedTimeError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
@@ -124,7 +120,7 @@ class OpenWire(TaggedWire, ABC, declared_name=None):
 
 
 class WatchLine(TaggedWire, affix=""):
-    """One declared line of the agent-comms watch command's output."""
+    """One declared line a Core command writes for its caller to decode."""
 
 
 class CoreError(WatchLine, declared_name=None):
@@ -159,18 +155,6 @@ class HeldCoreError(CoreError, declared_name="held"):
 
 class FailedCoreError(CoreError, declared_name="failed"):
     exception_type = BaseException
-
-
-class ArrivedMessage(WatchLine, declared_name="message"):
-    """One decoded message; its journal retains canonical Message wire."""
-
-    message: InstanceOf[
-        Annotated[
-            Message,
-            PlainValidator(Message.from_wire),
-            PlainSerializer(lambda message: message.to_wire()),
-        ]
-    ]
 
 
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):

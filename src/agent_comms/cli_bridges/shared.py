@@ -618,6 +618,11 @@ class Serve(Watch):
             lambda operation: VerifySession(owner=operation.owner),
         )
 
+    @classmethod
+    def relaunch(cls, claim: WatchClaim, session: SessionInformation) -> None:
+        """The reader's way back from a dead bridge: the session it last saw, through launch."""
+        cls.launch(claim, lambda: session.owner, session.transcript)
+
     def launch_record(self, claim: WatchClaim, record: WatchRecord,
                       request: SessionRequest) -> None:
         runtime = LaunchRuntime.installed()
@@ -1182,7 +1187,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             raise held.exceptions[0] from None
 
     async def read_messages(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
-        with core_watch_failure():
+        with core_watch_failure(lines):
             arrived = self.comms.watch(self.binding.bus, after=await self.resume_after())
             async with aclosing(arrived) as messages:
                 async for message in messages:
@@ -1190,7 +1195,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
                     await lines.join()
 
     async def read_requests(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
-        with core_watch_failure():
+        with core_watch_failure(lines):
             source = await Coordination.run_worker(
                 partial(self.comms.history_source, self.binding.bus))
             await source.watch_requests(lambda row: lines.put_nowait(
@@ -1226,16 +1231,23 @@ class CoreWatchEnded(OSError):
     """The bus read stopped for a reason other than maintenance; no message was retried."""
 
 
+async def raised(error: Exception) -> None:
+    raise error
+
+
 @contextmanager
-def core_watch_failure() -> Iterator[None]:
-    """A hold passes through to the bus's own wait; every other read failure stops the bridge
-    loudly through its one report, whatever its type, and delivery errors never come here."""
+def core_watch_failure(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> Iterator[None]:
+    """A read failure takes its turn in the delivery line, so a delivery under way finishes
+    before the group stops. A hold reaches the bus's own wait; every other failure stops the
+    bridge loudly through its one report, whatever its type."""
     try:
         yield
-    except MaintenanceHeldError:
-        raise
+    except MaintenanceHeldError as held:
+        lines.put_nowait(partial(raised, held))
     except Exception as error:
-        raise CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}') from error
+        ended = CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}')
+        ended.__cause__ = error
+        lines.put_nowait(partial(raised, ended))
 
 
 class BridgeDeliveryStore(WriterOwnedStore):
@@ -1622,7 +1634,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def watch_operation(self, operation: Watch) -> None:
         await read_monitor(
             WatchClaim(self.binding.thread), MonitorBridgeStopped.announce,
-            MonitorBridgeSwapping.announce,
+            MonitorBridgeSwapping.announce, Serve.relaunch,
         )
 
     async def accept(self, message: messages.Message) -> None:

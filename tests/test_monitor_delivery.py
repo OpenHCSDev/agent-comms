@@ -1206,10 +1206,28 @@ async def test_a_maintenance_hold_waits_and_resumes_without_loss_or_repeat(bridg
         assert [row.reference for row in rows] == [before.reference, after.reference]
 
 
-def test_a_read_failure_stops_the_bridge_loudly_and_a_hold_passes_through():
-    with pytest.raises(CoreWatchEnded, match='not a declared failure'):
-        with core_watch_failure():
-            raise LookupError('not a declared failure')
-    with pytest.raises(MaintenanceHeldError):
-        with core_watch_failure():
-            raise MaintenanceHeldError('held')
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure, stops', (
+    (LookupError('not a declared failure'), CoreWatchEnded),
+    (MaintenanceHeldError('held'), MaintenanceHeldError),
+))
+async def test_a_read_failure_stops_only_after_the_delivery_under_way_finishes(failure, stops):
+    lines = asyncio.Queue()
+    release = asyncio.Event()
+    finished = []
+
+    async def delivery():
+        await release.wait()
+        finished.append('delivered')
+
+    lines.put_nowait(delivery)
+    delivering = asyncio.create_task(ClaudeBridge.deliver_lines(lines))
+    await asyncio.sleep(0)
+    with core_watch_failure(lines):
+        raise failure
+    await asyncio.sleep(0)
+    assert not delivering.done() and not finished
+    release.set()
+    with pytest.raises(stops):
+        await delivering
+    assert finished == ['delivered']
