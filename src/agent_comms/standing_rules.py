@@ -233,8 +233,16 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         verbs = dict.fromkeys(member for parent in type(self).__mro__
                               for family in vars(parent).get("clearing_verbs", ())
                               for member in family.members_with(family))
-        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
-                           for command in verb.commands(values))
+        # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
+        # not the same arguments once per verb.
+        alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+        for verb in verbs:
+            if self.review_allowed(verb):
+                for command in verb.commands(values):
+                    tool, name, *arguments = command.split(" ")
+                    alike.setdefault((tool, tuple(arguments)), []).append(name)
+        return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
+                           for (tool, arguments), names in alike.items())
 
     def attention(self) -> bool:
         return True
@@ -367,10 +375,12 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = frame.holders
-        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held),
+                             frame.pulls)
 
     @classmethod
-    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation],
+                  reads: ProgressRead) -> tuple[Self, ...]:
         registry = comms.registry
         snapshot = registry.snapshot()
         members = cls.members_with(cls)
@@ -379,7 +389,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
             thread = snapshot.require(unit.name)
             if thread.incarnation != unit:
                 raise ValueError("Observed unit incarnation changed")
-            storage = UnitStorage.read(registry.storage_rule, thread)
+            storage = UnitStorage.read(registry.storage_rule, thread, reads)
             found.extend(member(storage) for member in members if member.violated(storage))
         return tuple(found)
 
@@ -1260,7 +1270,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         """One debt whoever reads it: the request's commander answering clears it for every
         peer and fork that inherits the request, and any of them may answer it themselves."""
         reader = snapshot.require(commander)
-        names = snapshot.names_for(commander)
+        names = snapshot.names_for(commander) | frozenset(
+            thread.name for thread in snapshot.commanders_channel())
         return tuple(
             cls(message=original, request=request.id, directive=directive,
                 answerer=snapshot.participant(request.commander.name).answering_thread(reader))

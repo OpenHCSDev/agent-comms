@@ -48,10 +48,11 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
-    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
@@ -92,14 +93,19 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import (
-    HeldClaim, NoSessionBridge, SessionCommandError, SessionConnectionClosed,
-    SessionFailure, SessionRequestTimeout, WatchClaim, WatchRecord,
-)
 
+from .session_watch import (
+    HeldClaim,
+    SessionConnectionClosed,
+    SessionFailure,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
+)
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
+    BRIDGE_FAILURES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -240,10 +246,10 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
+        root = FieldCodec.record_key(BindingAddress, 'root')
         defaults: dict[str, object] = (FieldCodec.encode_fields(stored[0].address()) if stored else {
-            'start': FieldCodec.encode(Binding.bus_head(
-                self.given[FieldCodec.record_key(BindingAddress, 'root')])),
-        })
+            'start': FieldCodec.encode(Binding.bus_head(self.given[root])),
+        } if root in self.given else {})
         return FieldCodec.decode_record(BindingAddress, {**defaults, **self.given})
 
 
@@ -420,7 +426,7 @@ class Options:
         commands = parser.add_subparsers(required=True)
         for operation in Operation.offered(bridge_type):
             command = commands.add_parser(
-                operation.__name__.lower(), parents=[common],
+                operation.command_name(), parents=[common],
                 help=operation.help, description=operation.help)
             Binding.add_arguments(command, operation.binding_session, operation.binding_request)
             operation.add_arguments(command)
@@ -445,6 +451,10 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
     binding_session: ClassVar[type[BindingSession]] = EnvironmentSession
     binding_request: ClassVar[type[GivenBinding]] = ResolvedBinding
+
+    @classmethod
+    def command_name(cls) -> str:
+        return cls.__name__.lower()
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -596,7 +606,7 @@ class Serve(Watch):
     def command(self, record: WatchRecord, runtime: LaunchRuntime) -> tuple[str, ...]:
         return (
             str(runtime.interpreter.with_name(Path(record.command[0]).name)),
-            type(self).__name__.lower(), *record.command[2:], *self.arguments(),
+            self.command_name(), *record.command[2:], *self.arguments(),
         )
 
     def arguments(self) -> tuple[str, ...]:
@@ -1031,7 +1041,9 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return ProcessIdentity.capture(os.getpid())
 
     async def session_worktree(self) -> Checkout:
-        return self.comms.registry.require(self.binding.bus).worktree
+        """Only a thread not yet registered asks, before any binding exists: the session runs
+        where its bridge was started."""
+        return Checkout(Path.cwd())
 
     async def registered_watch(self, operation: Inbox) -> None:
         with ExitStack() as endpoint:
@@ -1195,7 +1207,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             await self.options.operation.execute(self)
         except* (BlockingIOError, SessionFailure):
             raise
-        except* (OSError, ValueError, CoordinationError) as group:
+        except* BRIDGE_FAILURES as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
@@ -1583,7 +1595,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
-        command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
+        command = (str(Path(sys.argv[0]).absolute()), Watch.command_name(),
                    '--state', str(self.options.state.absolute()))
         return WatchRecord(binding.bus, binding.root, command, self.options.base_state)
 

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from typing import Annotated, Literal
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from agent_comms.todos import (
@@ -45,7 +46,6 @@ from .bus_read import OwnerLiveRead, UiRead
 from .commander_hud import CommanderFrame, CommanderHud, CommanderLoad, CommanderUnitDetail
 from .comms import Comms
 from .coordinator import Coordination
-from .errors import ToolRefusedError
 from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck

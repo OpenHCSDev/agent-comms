@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
+
 
 if TYPE_CHECKING:
     from agent_comms.todos import MergedProblemOrder, Todo

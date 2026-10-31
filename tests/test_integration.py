@@ -13,7 +13,7 @@ import pytest
 import tomli_w
 
 from agent_comms import integration
-from agent_comms.errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo, UnavailableCommitError
@@ -82,6 +82,7 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert workflow_output.read_text() == f"base={local.baseline.commit}\ncombined=true\n"
     assert IntegrationInput.at(output) == inputs
     assert inputs.carrier.pr == carrier.pr != pair.core.number
+    assert inputs.pinned_sources(pair.core.github) == inputs.sources
     assert local.heads == (PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit),)
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
     for source in inputs.sources:
@@ -134,24 +135,25 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert core.baseline.commit == baseline
     assert core.heads == (PullRequestHead(pair.core.github, pair.core.number, head),)
     assert client.heads == () and client.baseline.commit == pair.client.main_commit
+    assert inputs.pinned_sources(pair.core.github) == (core,)
     resource = materialized_clients(output, inputs)
     base = BaseSide.require_materialized(output, core)
     candidate = HeadSide.require_materialized(output, core)
     assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
     assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
     assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
-    refused = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                              str(tmp_path / "refused-individual")), cwd=checkout.path,
-                             env=environment, capture_output=True, text=True, timeout=120)
-    assert refused.returncode != 0 and "individual source" in refused.stderr
+    ordinary = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+                               str(tmp_path / "ordinary")), cwd=checkout.path,
+                              env=environment, capture_output=True, text=True, timeout=120)
+    assert ordinary.returncode == 0 and "combined=False" in ordinary.stdout, ordinary.stderr
     document.write_text(json.dumps({"merge_group": {
         "head_sha": tested, "base_sha": baseline,
         "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{pair.core.number}-{head}"}}))
     queued = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                             str(tmp_path / "refused-ordinary-queue")), cwd=checkout.path,
+                             str(tmp_path / "ordinary-queue")), cwd=checkout.path,
                             env={**environment, "GITHUB_EVENT_NAME": "merge_group"},
                             capture_output=True, text=True, timeout=120)
-    assert queued.returncode != 0 and "individual source" in queued.stderr
+    assert queued.returncode == 0 and "combined=False" in queued.stdout, queued.stderr
     assert not HeadReview.accepted(pair.core.github, tested)
     assert not MergeHeadReview.accepted(pair.core.github, tested)
 

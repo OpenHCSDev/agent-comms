@@ -314,12 +314,6 @@ class WorkBranches:
     checkout: Path
     reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
                                    kw_only=True)
-    _remote_heads: dict[str, dict[str, str]] = field(
-        default_factory=dict,
-        init=False,
-        repr=False,
-        compare=False,
-    )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
 
@@ -356,6 +350,10 @@ query($owner: String!, $name: String!, $after: String) {
 
     def _git(self, *arguments: str, input: str = "") -> str:
         return Repo.git(self.checkout, *arguments, timeout=self.timeout, input=input)
+
+    @cached_property
+    def _remote_heads(self) -> dict[str, dict[str, str]]:
+        return self.reads.remote_cuts(Checkout(self.checkout))
 
     @cached_property
     def history(self) -> CheckoutHistory:
@@ -400,7 +398,8 @@ query($owner: String!, $name: String!, $after: String) {
         return bool(self.uncommitted()) or bool(self.history.unpublished(self.head.revision()))
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
-        """One complete published-ref cut per remote for this reader, not one call per branch."""
+        """One complete published-ref cut per remote for this pass's repository, not one call per
+        worktree or branch."""
         if remote in self._remote_heads:
             return self.selected_heads(remote, reference)
         with Repo.acquiring():
@@ -548,7 +547,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def repository(self) -> tuple[str, str]:
-        repository = Repo.of(self.checkout).github
+        repository = self.reads.repository(self.checkout).github
         return repository.owner, repository.name
 
     @cached_property

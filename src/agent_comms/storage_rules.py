@@ -23,7 +23,7 @@ from agent_comms.field_codec import (
 from agent_comms.locked_store import DurableFile
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.problem_number import ProblemNumber
-from agent_comms.repo import Checkout, GitCommandError, Repo
+from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_room import RoomAllocation
 from agent_comms.thread_identity import ThreadIncarnation
@@ -95,11 +95,12 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
              suffix: str) -> Iterator[CheckoutAllocation]: ...
 
     @abstractmethod
-    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool: ...
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
+                     reads: RepositoryReads) -> bool: ...
 
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName) -> bool:
-        return self.owns_present(rule, owner, path)
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
+        return self.owns_present(rule, owner, path, reads)
 
     @classmethod
     def for_work(cls, rule: StorageRule, owner: Thread, problem: str,
@@ -121,7 +122,7 @@ class CheckoutAllocation(DeclaredFamily, affix="CheckoutAllocation"):
         return False
 
     def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
-                      store: TodoStore) -> frozenset[Path]:
+                      store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
         return frozenset()
 
 
@@ -133,7 +134,8 @@ class HomeCheckoutAllocation(CheckoutAllocation):
         if path == owner.project_path:
             yield cls()
 
-    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
+                     reads: RepositoryReads) -> bool:
         return path in owner.home_checkouts
 
 
@@ -144,10 +146,10 @@ class EditableCheckoutAllocation(CheckoutAllocation):
         return True
 
     def edit_boundary(self, rule: StorageRule, owner: Thread, path: Path,
-                      store: TodoStore) -> frozenset[Path]:
+                      store: TodoStore, reads: RepositoryReads) -> frozenset[Path]:
         try:
-            repository = Repo.of(path).github
-            if not self.owns_declared(rule, owner, path, repository):
+            repository = reads.repository(path).github
+            if not self.owns_declared(rule, owner, path, repository, reads):
                 return frozenset()
             return frozenset(root for root in self.editable_roots(rule, owner, store, repository)
                              if root == path)
@@ -204,7 +206,8 @@ class OrderCheckoutAllocation(ProblemCheckoutAllocation):
                  generation: GoalId) -> tuple[Path, ...]:
         return (rule.order_checkout(rule.roots_of(owner), problem),)
 
-    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
+                     reads: RepositoryReads) -> bool:
         return path == rule.order_checkout(rule.roots_of(owner), self.problem)
 
 
@@ -215,15 +218,16 @@ class RepositoryAllocation(CheckoutAllocation):
 
     @abstractmethod
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName) -> bool: ...
+                      repository: RepositoryName, reads: RepositoryReads) -> bool: ...
 
-    def owns_present(self, rule: StorageRule, owner: Thread, path: Path) -> bool:
+    def owns_present(self, rule: StorageRule, owner: Thread, path: Path,
+                     reads: RepositoryReads) -> bool:
         try:
-            repository = Repo.of(path).github
+            repository = reads.repository(path).github
         except GitCommandError as error:
             raise StorageDenied(
                 f'Cannot read repository {self.suffix} of checkout {path}: {error}') from error
-        return self.owns_declared(rule, owner, path, repository)
+        return self.owns_declared(rule, owner, path, repository, reads)
 
 
 @dataclass(frozen=True)
@@ -250,7 +254,7 @@ class RepositoryCheckoutAllocation(ProblemCheckoutAllocation, RepositoryAllocati
             yield cls(problem, suffix)
 
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName) -> bool:
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
         return path == rule.repository_checkout(rule.roots_of(owner), self.problem, repository)
 
 
@@ -300,7 +304,7 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
         yield cls(goal, suffix)
 
     def owns_declared(self, rule: StorageRule, owner: Thread, path: Path,
-                      repository: RepositoryName) -> bool:
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
         return path == rule.repository_checkout(rule.roots_of(owner), self.goal, repository)
 
 
@@ -366,7 +370,8 @@ class StorageRule(RoomAllocation, DurableFile):
                             repository: RepositoryName) -> Path:
         """The same problem's checkout of another repository, changed in lockstep with it."""
         checkout = self.order_checkout(roots, problem)
-        return checkout.with_name(f'{checkout.name}{self.checkout_separator}{repository.name}')
+        _, name = repository.key
+        return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
@@ -398,7 +403,7 @@ class StorageRule(RoomAllocation, DurableFile):
                 present.append(path)
             if not present:
                 continue
-            storage = UnitStorage.read(self, owner)
+            storage = UnitStorage.read(self, owner, RepositoryReads())
             for path in present:
                 if not storage.owns(Checkout(path)):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
@@ -408,14 +413,14 @@ class StorageRule(RoomAllocation, DurableFile):
         return tuple(found)
 
     def owns_checkout(self, owner: Thread, path: Path,
-                      repository: RepositoryName) -> bool:
+                      repository: RepositoryName, reads: RepositoryReads) -> bool:
         """Ownership follows the declared repository allocation, before its checkout exists."""
-        return any(allocation.owns_declared(self, owner, path, repository)
+        return any(allocation.owns_declared(self, owner, path, repository, reads)
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
-    def owns_present_checkout(self, owner: Thread, path: Path) -> bool:
-        """Only a repository-suffixed allocation needs its existing Git origin read."""
-        return any(allocation.owns_present(self, owner, path)
+    def owns_present_checkout(self, owner: Thread, path: Path, reads: RepositoryReads) -> bool:
+        """Only a repository-suffixed allocation needs this pass's captured origin."""
+        return any(allocation.owns_present(self, owner, path, reads)
                    for allocation in CheckoutAllocation.for_path(self, owner, path))
 
     def require_completed_transfer(self, owner: Thread, source: Path, destination: Path,
@@ -429,43 +434,45 @@ class StorageRule(RoomAllocation, DurableFile):
     def require_transfer_source(self, owner: Thread, source: Path,
                                 threads: Iterable[Thread], repository: Repo) -> None:
         """Relocation ownership is not permission to edit the old order."""
+        reads = RepositoryReads()
         if source.is_symlink() or source != source.resolve() or source.parent != self.checkout_base:
             self.deny(f'{source} is not a physical checkout in {self.checkout_base}')
         if source == repository.checkout.resolve():
             self.deny(f'{source} is the registered repository checkout, not an isolated allocation')
-        if not (self.owns_present_checkout(owner, source) or owner.ran_in(Checkout(source))):
+        if not (self.owns_present_checkout(owner, source, reads) or owner.ran_in(Checkout(source))):
             self.deny(f'{source} is not a current or historical checkout of {owner.name}')
         owners = tuple(thread for thread in threads
                        if thread.incarnation != owner.incarnation
-                       and self.owns_present_checkout(thread, source))
+                       and self.owns_present_checkout(thread, source, reads))
         if owners:
             self.deny(f'{source} has foreign or ambiguous checkout owners: '
                       + ', '.join(thread.name for thread in owners))
-        if Repo.of(source).github != repository.github:
+        if reads.repository(source).github != repository.github:
             self.deny(f'{source} is not a checkout of {repository.github}')
         if not (source / '.git').is_file():
             self.deny(f'{source} is a shared main/home checkout, not a linked worktree')
 
-    def checkout_paths(self, owner: Thread) -> tuple[Path, ...]:
+    def checkout_paths(self, owner: Thread, reads: RepositoryReads) -> tuple[Path, ...]:
         """Declared home and work allocations; Git metadata supplies their branches."""
         ordered = self.order_checkout(self.roots_of(owner), '*')
         return tuple(path for path in (owner.project_path,
                                        *sorted(ordered.parent.glob(ordered.name)))
-                     if path.is_dir() and self.owns_present_checkout(owner, path))
+                     if path.is_dir() and self.owns_present_checkout(owner, path, reads))
 
-    def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
-        """Read each repository now; directories and names do not register ownership."""
+    def checkouts_of(self, thread: Thread, reads: RepositoryReads) -> tuple[Path, ...]:
+        """Read each repository through the caller's cut; directories and names do not register
+        ownership."""
         home = thread.project_path
-        candidates = (home, *self.checkout_paths(thread))
+        candidates = (home, *self.checkout_paths(thread, reads))
         checkouts = {home}
         listed: set[Path] = set()
         for repository in Checkout.git_roots(*candidates):
             if repository in listed:
                 continue
-            entries = WorkBranches(repository).read_checkout().worktrees()
+            entries = WorkBranches(repository, reads=reads).read_checkout().worktrees()
             listed.update(entries)
             checkouts.update(path for path in entries
-                             if path.is_dir() and self.owns_present_checkout(thread, path))
+                             if path.is_dir() and self.owns_present_checkout(thread, path, reads))
         return (home, *sorted(checkouts - {home}))
 
     def deny(self, reason):
@@ -582,8 +589,8 @@ class UnitStorage:
     extra_checkouts: tuple[Checkout, ...]
 
     @classmethod
-    def read(cls, rule: StorageRule, thread: Thread) -> UnitStorage:
-        home, *extras = rule.checkouts_of(thread)
+    def read(cls, rule: StorageRule, thread: Thread, reads: RepositoryReads) -> UnitStorage:
+        home, *extras = rule.checkouts_of(thread, reads)
         return cls(rule, thread.incarnation, rule.roots_of(thread), Checkout(home),
                    tuple(Checkout(path) for path in extras))
 
@@ -626,8 +633,12 @@ class StorageProjection:
         return self.comms.registry.snapshot()
 
     @cached_property
+    def reads(self) -> RepositoryReads:
+        return RepositoryReads()
+
+    @cached_property
     def storage(self) -> UnitStorage:
-        return UnitStorage.read(self.rule, self.thread)
+        return UnitStorage.read(self.rule, self.thread, self.reads)
 
     def require_write(self, path: Path) -> None:
         self.rule.require_destination(self.thread, path)
@@ -640,7 +651,7 @@ class StorageProjection:
         store = self.comms.goals.todos
         allowed = frozenset(boundary for root in sources
                             for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
-                            for boundary in allocation.edit_boundary(self.rule, owner, root, store))
+                            for boundary in allocation.edit_boundary(self.rule, owner, root, store, self.reads))
         # A thread registered at a directory holding its scratch (unit-fieldplan at $HOME) still
         # owns that scratch: the rule gate's audit lives there, and refusing it deadlocked the unit.
         in_project = (resolved.is_relative_to(owner.project_path.resolve())
@@ -770,7 +781,7 @@ class EditWorkplaces:
             for source in readable:
                 if source.is_absolute() and Checkout(source).resolved().path == source:
                     try:
-                        repository = Repo.of(source)
+                        repository = pulls.repository(source)
                         if repository.github in registered:
                             # A declared source can be a separate clone. Qualify its own
                             # worktree facts within the same per-source failure boundary.
@@ -794,7 +805,7 @@ class EditWorkplaces:
                 for allocation in CheckoutAllocation.for_path(rule, owner, path)
                 if actual[path].github in allocation.source_repositories(
                     prepared.orders[problem].repo, declared[problem])
-                and allocation.owns_declared(rule, owner, path, actual[path].github))
+                and allocation.owns_declared(rule, owner, path, actual[path].github, pulls))
             for path, problems in prepared.allocated.items()
         }
         workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}

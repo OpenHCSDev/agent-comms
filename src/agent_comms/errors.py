@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.coordination_errors import DrainUnavailable
+from agent_comms_hooks import ToolRefusedError
+
 
 if TYPE_CHECKING:
     from agent_comms.messages import BusRecord
@@ -18,10 +20,6 @@ class RejectedEnforcementError(ValueError):
 
     def explanation(self) -> str:
         return self.reason
-
-
-class ToolRefusedError(ValueError):
-    """An intentional refusal safe to return as a tool answer, not a transport failure."""
 
 
 class TodoError(ToolRefusedError):

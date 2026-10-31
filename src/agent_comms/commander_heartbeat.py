@@ -89,7 +89,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                     ))
 
     def prepare(self, comms: Comms) -> Mapping[Thread, CommanderInputs]:
-        return {thread: CommanderInputs.prepare(comms, thread.name, ProgressRead(), self)
+        pulls = ProgressRead()
+        return {thread: CommanderInputs.prepare(comms, thread.name, pulls, self)
                 for thread in self.boards(comms.registry, comms.goals)}
 
     def observe(self, comms: Comms, prepared: Mapping[Thread, CommanderInputs]) -> tuple[CommanderObservation, ...]:

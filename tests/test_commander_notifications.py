@@ -45,7 +45,7 @@ from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, Standi
 from agent_comms.ui_model.unit_state import (
     Spinning, UnitState, UrgentGroup,
 )
-from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget
@@ -737,7 +737,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     }'''))
     usage = CodexUsage(reply.rate_limits)
     reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
-    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert usage.line() == f'Codex usage 37% weekly, resets {reset}'
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
     refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))

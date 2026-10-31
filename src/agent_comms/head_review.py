@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from agent_comms_hooks import ToolRefusedError
 from nominal_refactor_advisor import audit
 
 from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import PrivateUvProject, StackSources
 from .repo import Checkout, GitCommandError, Repo
@@ -464,6 +464,14 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
     def combined(self) -> bool:
         return False
 
+    def carriers(self) -> tuple[IntegrationInput, ...]:
+        """The inputs that owe a carrier's member proof; an ordinary source owes its head's ok."""
+        return ()
+
+    def pinned_sources(self, repository: RepositoryName) -> tuple[IntegrationSource, ...]:
+        """The sources whose main must still be current: an ordinary PR tests its own repository."""
+        return (self.source(repository),)
+
     def write_workflow_output(self, path: Path, repository: RepositoryName) -> None:
         """GitHub consumes these derived values, not another payload or branch-name rule."""
         with path.open("a") as output:
@@ -524,7 +532,7 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
 
 @dataclass(frozen=True)
 class OrdinaryInput(IntegrationInput):
-    """One source can be compared, but never substitutes for combined merge authority."""
+    """One source merges on its own head's recorded ok; it never promotes a combined carrier."""
 
 
 @dataclass(frozen=True)
@@ -536,6 +544,12 @@ class CombinedInput(IntegrationInput):
     @property
     def combined(self) -> bool:
         return True
+
+    def carriers(self) -> tuple[IntegrationInput, ...]:
+        return (self,)
+
+    def pinned_sources(self, repository: RepositoryName) -> tuple[IntegrationSource, ...]:
+        return self.sources
 
     def __post_init__(self) -> None:
         super().__post_init__()

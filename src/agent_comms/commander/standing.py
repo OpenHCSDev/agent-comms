@@ -23,7 +23,14 @@ from agent_comms.goal_actions import ReissuedOrderGoalAction
 from agent_comms.field_codec import GoalId
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_frame import HeartbeatFrame
-from agent_comms.heartbeat_subjects import CommanderHistory, HeadSubject, HeartbeatSubject, PassSubject
+from agent_comms.heartbeat_subjects import (
+    CommanderHistory,
+    HeadSubject,
+    HeartbeatSubject,
+    PassSubject,
+    PhaseSubject,
+    RequestSubject,
+)
 from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit
@@ -35,7 +42,7 @@ from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import PlanPhase
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -65,7 +72,9 @@ from agent_comms.todos import (
 from agent_comms.turn_digests import TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms_hooks.watch import DeafWatch
+
+from ..cli_bridges.session_watch import DeafWatch
+
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import CommanderVerb
@@ -243,7 +252,16 @@ class DiedInstallDue(RunInstallDue):
 
 @dataclass(frozen=True)
 class RequestStalled(IndependentStandingRule, UndatedStandingRule):
+    """Tristan's own request with nothing serving it: his lines lead the board and wake the
+    commander every beat until an order serves it, never sit under WATCHING."""
+
+    owner_flagged: ClassVar[bool] = True
+    urgent: ClassVar[bool] = True
+
     request: OwnerRequest
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (RequestSubject(self.request.id),)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
@@ -268,16 +286,6 @@ class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     @abstractmethod
     def found(cls, reading: PlanReading) -> tuple[Self, ...]: ...
-
-
-@dataclass(frozen=True)
-class PhaseSubject(HeartbeatSubject):
-    """An order serving this phase answers its ready-without-an-owner line."""
-
-    phase: type[PlanPhase]
-
-    def disposed(self, history: CommanderHistory, since: float) -> bool:
-        return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)
 
 
 @dataclass(frozen=True)
@@ -495,6 +503,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     todo: Todo
 
     recent: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
+        """A fresh read and an already captured frame share the same idle selection."""
+        actor = comms.registry.require_lookup(commander.require_recorded().lookup)
+        return cls.idle(comms, actor.name, HeldOrders.read(comms, actor.name))
 
     @classmethod
     def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:

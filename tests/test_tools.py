@@ -7,12 +7,12 @@ import pytest
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.connector_caller import DirectorCaller
-from agent_comms.errors import ToolRefusedError
 from agent_comms.presentation import MessageNotification, SentMessageSummary
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tools import invoke_tool
+from agent_comms_hooks import ToolRefusedError
 
 
 class TestToolCatalog:

@@ -13,7 +13,10 @@ from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
-from agent_comms.errors import TodoConflict, TodoError, ToolRefusedError
+from agent_comms.errors import (
+    TodoConflict,
+    TodoError,
+)
 from agent_comms.field_codec import (
     FieldCodec,
     GoalId,
@@ -40,6 +43,7 @@ from agent_comms.slop import (
     Slop,
 )
 from agent_comms.todos import (
+    TriageScope,
     CheckedProblemOrder,
     ClaimedProblemOrder,
     ClaimOrder,
@@ -61,6 +65,7 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsHistoryTool
+from agent_comms_hooks import ToolRefusedError
 from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
@@ -587,6 +592,18 @@ def test_say_without_answers_answers_the_target_units_open_asks(held_commander, 
     history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
     assert [message.answers for message in history.messages
             if message.sender == ctx.commander][:2] == [(unnamed.reference,), (named.reference,)]
+
+
+def test_a_measuring_order_owes_no_restated_fact(held_commander, cited_source):
+    """2026-10-30: Tristan's Toad profiling request sat with no order because the recurrence gate
+    asked a measurement for the fact it was being sent to find."""
+    store = held_commander.comms.goals.todos
+    fix = replace(store.get("P1").order.checked(), id=OrderId.mint())
+    where = fix.owner
+    with pytest.raises(TodoError):
+        store.require_recurrence_declaration(fix, where, cited_source.checkout, (), 20)
+    store.require_recurrence_declaration(
+        replace(fix, scope=TriageScope()), where, cited_source.checkout, (), 20)
 
 
 def test_recurrence_refusal_names_accepted_derivations(held_commander, cited_source):

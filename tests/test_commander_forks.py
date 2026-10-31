@@ -1,9 +1,18 @@
 """Commander forks use registered identity and the original Todo assignment."""
 
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.hook_forks import SessionSubagents
+from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
+from types import SimpleNamespace
+
+from agent_comms.commander.order import Commander, MessageNotification
+from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.repo import Checkout
 import asyncio
 import io
+from collections.abc import Iterator
 from contextlib import nullcontext
+from functools import partial
 import json
 import os
 import subprocess
@@ -16,7 +25,6 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
 from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.channel_targets import CommandersTag
@@ -25,7 +33,7 @@ from agent_comms.commander.standing import Unjudged
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.ui_model.unit_state import UnitState
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError, TodoConflict, TodoError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import (
@@ -80,12 +88,12 @@ from agent_comms.todos import (
 )
 from agent_comms.tool_caller import CommanderForkCaller, SubagentCaller
 from agent_comms.activity import ActivityState
-from agent_comms_hooks import read_gate
 from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.transcript_events import ToolStartTranscript
 from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.typed_table import HeldBusFile
 from agent_comms_hooks import forks
+from hook_session_fixture import resident_hook, resident_session, resident_stdout
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 from agent_comms.thread_execution import CommanderForkExecution
@@ -954,47 +962,37 @@ def test_fork_superseded_verdict_reads_its_commanders_orders(fork_bus):
 
 
 @pytest.fixture
-def subagent_hook(fork_bus, tmp_path, monkeypatch, capsys):
-    """Runs a hook program as Claude Code does, against this bus through the real command."""
-    comms = fork_bus[0]
-    scripts = tmp_path / "commander-bin"
-    scripts.mkdir()
-    script = scripts / "agent-comms-commander"
-    script.write_text(f"#!/bin/sh\nexec {sys.executable} -c 'from agent_comms.commander.cli"
-                      f" import main; main()' --root {comms.root} \"$@\"\n")
-    script.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{scripts}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
-    transcript = tmp_path / "commander.jsonl"
+def subagent_bridge(durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder],
+                    tmp_path: Path) -> Iterator[ClaudeBridge]:
+    """Own a real binding; a shell wrapper must not hide a resident callback's wrong bus."""
+    with resident_session(fork_bus[0], tmp_path / "state", "lead", "commander") as bridge:
+        yield bridge
 
-    def run(program, event, **stop):
-        record = {"session_id": "commander", "hook_event_name": event,
-                  "transcript_path": str(transcript), "agent_id": "a1",
-                  "agent_type": "general-purpose", **stop}
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
-        program()
-        return capsys.readouterr().out
 
-    return comms, run
+@pytest.fixture
+def subagent_hook(subagent_bridge: ClaudeBridge, tmp_path: Path) -> "tuple[Comms, partial[str]]":
+    return subagent_bridge.comms, partial(
+        resident_stdout, subagent_bridge, transcript=tmp_path / "commander.jsonl",
+        agent_id="a1", agent_type="general-purpose")
 
 
 def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_thread(
         subagent_hook, tmp_path):
     comms, run = subagent_hook
-    told = json.loads(run(forks.started, "SubagentStart"))["hookSpecificOutput"]
+    told = json.loads(run(SubagentStartRequest))["hookSpecificOutput"]
     assert "--fork claude-a1" in told["additionalContext"]
     fork = comms.registry.require("claude-a1")
     assert fork.parent.named("lead") and comms.registry.status("claude-a1").receiving
     assert comms.agents.activity.current(fork.name).state is ActivityState.THINKING
-    assert run(read_gate.main, "PreToolUse", tool_name="Bash", tool_input={"command": "pwd"}) == ""
+    assert run(ReadGateRequest, tool_name="Bash", tool_input={"command": "pwd"}) == ""
     activity = comms.agents.activity.current(fork.name)
     assert (activity.state, activity.detail) == (ActivityState.WORKING, "Bash")
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
+    assert run(SubagentStopRequest, stop_hook_active=False) == ""
     assert comms.agents.activity.current(fork.name).state is ActivityState.IDLE
-    run(forks.started, "SubagentStart")
+    run(SubagentStartRequest)
     assert comms.registry.require("claude-a1").incarnation == fork.incarnation
     assert comms.registry.status("claude-a1").receiving
 
@@ -1025,100 +1023,113 @@ def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_
 def test_a_subagent_stop_is_refused_until_its_fork_records_then_archives_it(
         subagent_hook, tmp_path):
     comms, run = subagent_hook
-    run(forks.started, "SubagentStart")
-    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
+    run(SubagentStartRequest)
+    assert json.loads(run(SubagentStopRequest, stop_hook_active=False))["decision"] == "block"
     assert comms.registry.status("claude-a1").receiving
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     assert command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a1").returncode == 0
-    assert run(forks.stopped, "SubagentStop", stop_hook_active=False) == ""
+    assert run(SubagentStopRequest, stop_hook_active=False) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
 
 
 def test_a_sent_back_stop_ends_a_fork_that_recorded_nothing_and_reports_it_missing(subagent_hook):
     """Claude Code ends the fork on the stop after a send-back; it must not stay subscribed."""
     comms, run = subagent_hook
-    run(forks.started, "SubagentStart")
-    assert json.loads(run(forks.stopped, "SubagentStop", stop_hook_active=False))["decision"] == "block"
-    assert run(forks.stopped, "SubagentStop", stop_hook_active=True) == ""
+    run(SubagentStartRequest)
+    assert json.loads(run(SubagentStopRequest, stop_hook_active=False))["decision"] == "block"
+    assert run(SubagentStopRequest, stop_hook_active=True) == ""
     assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
     report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
     assert "stopped without recording what it found" in report.body
 
 
-def test_a_commander_session_end_ends_each_subagent_core_still_has(subagent_hook, tmp_path):
+def test_a_commander_session_end_ends_each_subagent_core_still_has(subagent_hook, subagent_bridge, tmp_path):
     """A subagent killed without a SubagentStop ends with its session, once."""
     comms, run = subagent_hook
-    run(forks.started, "SubagentStart")
+    run(SubagentStartRequest)
     subagents = tmp_path / "commander" / "subagents"
     subagents.mkdir(parents=True)
     for agent in ("a1", "never-joined"):
         (subagents / f"agent-{agent}.jsonl").write_text("")
-    session = forks.SessionSubagents.decode({
+    session = SessionSubagents.decode({
         "session_id": "commander", "hook_event_name": "SessionEnd",
         "transcript_path": str(tmp_path / "commander.jsonl")})
     for _ in range(2):
-        assert session.end_subagents() == ()
+        assert session.end_subagents(comms, subagent_bridge.binding) == ()
         assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
     assert "claude-never-joined" not in comms.registry
     report, = comms.bus.bus.latest_addressed(frozenset({"claude-a1"}), frozenset({"lead"}))
     assert "its work is missing" in report.body
 
 
-def test_a_unit_sessions_subagents_take_role_slots_and_an_unbound_sessions_take_none(
-        fork_bus, tmp_path, monkeypatch, capsys):
-    """A subagent of a bound session that is not commander sits in the first vacant slot of
-    its role under that session's thread, never a commander fork; a slot it leaves keeps its
-    thread and history for the next occupant. A session bound to nothing has no bus to join."""
+def test_an_unbound_subagent_has_no_bus_to_join(
+        durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder],
+        tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    record = {"session_id": "unit", "hook_event_name": "SubagentStart",
+              "transcript_path": str(tmp_path / "unit.jsonl"),
+              "agent_id": "a2", "agent_type": "Explore"}
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
+    forks.SubagentStartProgram.main()
+    assert capsys.readouterr().out == ""
+    assert not fork_bus[0].registry.snapshot().children("worker")
+
+
+def test_a_unit_sessions_subagents_take_role_slots(
+        durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder], tmp_path: Path):
+    """A role slot retains its thread/history for its next occupant, never a commander fork."""
     comms = fork_bus[0]
-    monkeypatch.setenv("PYTHONPATH", str(Path(__file__).parents[1] / "src"))
     transcript = tmp_path / "unit.jsonl"
+    with resident_session(comms, tmp_path / "state", "worker", "unit") as bridge:
+        run = partial(resident_stdout, bridge, transcript=transcript,
+                      agent_type="Explore", stop_hook_active=False)
+        told = json.loads(run(SubagentStartRequest, agent_id="a2"))["hookSpecificOutput"]
+        assert "slot worker-explore" in told["additionalContext"]
+        slot = comms.registry.require("worker-explore")
+        assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
+        slot.execution.require_subagent()
+        assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
+        assert run(ReadGateRequest, agent_id="a2", tool_name="Read",
+                   tool_input={"file_path": str(transcript)}) == ""
+        activity = comms.agents.activity.current(slot.name)
+        assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")
+        # A long-running tool stays working beyond the activity store's ordinary stale budget.
+        comms.agents.activity.emit(replace(activity, timestamp=1.))
+        snapshot = comms.registry.snapshot()
+        assert comms.agents.activity_of(slot.name, snapshot=snapshot).state is ActivityState.WORKING
+        with pytest.raises(RelationViolationError, match="not a declared commander fork"):
+            slot.execution.require_commander_fork()
+        assert "claude-a2" not in comms.registry
+        run(SubagentStartRequest, agent_id="a3")
+        assert comms.registry.require("worker-explore-2").parent.named("worker")
 
-    def run(program, event, agent_id, **tool):
-        record = {"session_id": "unit", "hook_event_name": event, "transcript_path": str(transcript),
-                  "agent_id": agent_id, "agent_type": "Explore", "stop_hook_active": False, **tool}
-        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
-        program()
-        return capsys.readouterr().out
+        assert run(SubagentStopRequest, agent_id="a2") == ""
+        assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+        assert comms.agents.activity.current(slot.name).state is ActivityState.IDLE
+        assert comms.registry.status("worker-explore-2").receiving
+        run(SubagentStartRequest, agent_id="a4")
+        assert comms.registry.require("worker-explore").incarnation == slot.incarnation
+        assert comms.registry.status("worker-explore").receiving
 
-    assert run(forks.started, "SubagentStart", "a2") == ""
-    assert not comms.registry.snapshot().children("worker")
-    WatchClaim("unit").enrol(WatchRecord("worker", str(comms.root), (), tmp_path / "state"))
+        session = SessionSubagents.decode({
+            "session_id": "unit", "hook_event_name": "SessionEnd", "transcript_path": str(transcript)})
+        assert session.end_subagents(comms, bridge.binding) == ()
+        assert isinstance(comms.registry.status("worker-explore-2"), ArchivedThreadStatus)
+        assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
+        assert not any(session.seats.iterdir())
 
-    told = json.loads(run(forks.started, "SubagentStart", "a2"))["hookSpecificOutput"]
-    assert "slot worker-explore" in told["additionalContext"]
-    slot = comms.registry.require("worker-explore")
-    assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
-    slot.execution.require_subagent()
-    assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
-    assert run(read_gate.main, "PreToolUse", "a2", tool_name="Read",
-               tool_input={"file_path": str(transcript)}) == ""
-    activity = comms.agents.activity.current(slot.name)
-    assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")
-    # A long-running tool stays working beyond the activity store's ordinary stale budget.
-    comms.agents.activity.emit(replace(activity, timestamp=1.))
-    snapshot = comms.registry.snapshot()
-    assert comms.agents.activity_of(slot.name, snapshot=snapshot).state is ActivityState.WORKING
-    with pytest.raises(RelationViolationError, match="not a declared commander fork"):
-        slot.execution.require_commander_fork()
-    assert "claude-a2" not in comms.registry
-    run(forks.started, "SubagentStart", "a3")
-    assert comms.registry.require("worker-explore-2").parent.named("worker")
 
-    assert run(forks.stopped, "SubagentStop", "a2") == ""
-    assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
-    assert comms.agents.activity.current(slot.name).state is ActivityState.IDLE
-    assert comms.registry.status("worker-explore-2").receiving
-    run(forks.started, "SubagentStart", "a4")
-    assert comms.registry.require("worker-explore").incarnation == slot.incarnation
-    assert comms.registry.status("worker-explore").receiving
-
-    session = forks.SessionSubagents.decode({
-        "session_id": "unit", "hook_event_name": "SessionEnd", "transcript_path": str(transcript)})
-    assert session.end_subagents() == ()  # a3 never stopped: its session's end vacates it
-    assert isinstance(comms.registry.status("worker-explore-2"), ArchivedThreadStatus)
-    assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
-    assert not any(session.seats.iterdir())
+def test_a_bound_subagent_stop_without_a_start_is_an_intentional_failure(
+        durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder], tmp_path: Path):
+    comms = fork_bus[0]
+    with resident_session(comms, tmp_path / "state", "worker", "unit") as bridge:
+        result = resident_hook(
+            bridge, SubagentStopRequest, tmp_path / "unit.jsonl",
+            agent_id="never-started", agent_type="Explore", stop_hook_active=False)
+        assert result.status == 1
+        assert result.stdout == ""
+        assert "stopped without a seat" in result.stderr
+        assert not comms.registry.snapshot().children("worker")
 
 
 def test_a_subagent_role_names_its_slots_in_thread_name_characters():
@@ -1140,3 +1151,13 @@ def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_
                                   parent=ForkedParent("other")), status=StoppedThreadStatus())
     with pytest.raises(RelationViolationError, match="not a declared subagent"):
         comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)
+
+
+def test_a_sent_message_is_not_refused_when_its_delivery_read_is_busy(monkeypatch):
+    def busy(*_args, **_kwargs):
+        raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
+
+    monkeypatch.setattr(MessageNotification, "references", busy)
+    comms = SimpleNamespace(root=None, registry=None, bus=SimpleNamespace(bus=None))
+    reported = Commander.delivery(SimpleNamespace(comms=comms), None)
+    assert reported == f"delivery unread: {CoordinationReadUnavailable.busy_message}"

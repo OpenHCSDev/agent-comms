@@ -16,9 +16,9 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.errors import ToolRefusedError
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms_hooks import ToolRefusedError
 from test_locked_store import event, process
 from agent_comms.threads import Thread
 

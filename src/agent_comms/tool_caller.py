@@ -5,12 +5,12 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks import ToolRefusedError
+from agent_comms.cli_bridges.session_watch import WatchClaim
 
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .errors import ToolRefusedError
 from .field_codec import WireForm
 from .launch_root import LaunchRoot
 from .read_basis import OperatorOutcomes, ReadAuthority
@@ -260,6 +260,14 @@ class CommanderForkCaller(ActsForCommander, SubagentCaller):
         fork = comms.registry.require(self.name)
         parent, = fork.parent.names()
         return comms.registry.require(parent)
+
+    @staticmethod
+    def end_session(comms: Comms, callers: tuple[CommanderForkCaller, ...]) -> tuple[CommanderForkCaller, ...]:
+        """Only children that joined this bus can be ended; every entry uses the same owner."""
+        registered = tuple(caller for caller in callers if caller.name in comms.registry)
+        for caller in registered:
+            caller.end(comms)
+        return registered
 
     def recorded(self, comms: Comms) -> bool:
         """A fork's record in Core is what it sent on the bus or a head verdict it recorded:

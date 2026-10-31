@@ -36,7 +36,7 @@ from agent_comms.repo import Checkout
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.errors import TodoError, ToolRefusedError
+from agent_comms.errors import TodoError
 from agent_comms.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -50,6 +50,7 @@ from agent_comms.todos import (
     HeadVerdict, HeadReviewed, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
     StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
+from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
 from integration_source_fixture import MutualSources
 from source_revision_fixture import SourceRepository

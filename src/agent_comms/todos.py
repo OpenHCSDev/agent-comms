@@ -17,7 +17,9 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from contextvars import copy_context
 from dataclasses import dataclass, field, fields, replace
 from datetime import UTC, datetime
 from functools import cached_property, partial
@@ -72,7 +74,6 @@ from agent_comms.errors import (
     RejectedEnforcementError,
     TodoConflict,
     TodoError,
-    ToolRefusedError,
 )
 from agent_comms.field_codec import (
     DefaultNonNull,
@@ -174,6 +175,7 @@ from agent_comms.work_branches import (
     WorkBranchError,
     WorkBranches,
 )
+from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
@@ -300,6 +302,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
             UnitStorage.read(
                 comms.registry.storage_rule,
                 comms.registry.require(holder),
+                RepositoryReads(),
             ).require_retired(todo.id)
         if problems:
             raise TodoProblems(problems)
@@ -1126,6 +1129,12 @@ class PullRequests(RepositoryReads):
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
 
+    def read_open(self, repos: Iterable[RepositoryName]) -> None:
+        """Each repository's forge round side by side: every call waits on the network and writes
+        only its own repository's keys, so one after another only adds their waits."""
+        with ThreadPoolExecutor() as calls:
+            tuple(calls.map(lambda repo: copy_context().run(self.open, repo), repos))
+
     def worktrees(self, repository: Repo) -> Mapping[str, tuple[str, ...]]:
         """One canonical local checkout's retained listing, not its forge namesake's."""
         checkout = Checkout(repository.checkout).resolved().path
@@ -1480,7 +1489,7 @@ class PresentCheckout(ProgressCheckout):
     def references(self, storage: StorageRule, owner: Thread) -> tuple[str, ...]:
         owned = tuple(f"refs/heads/{branch}"
                       for branch, paths in self.branches.worktrees().items()
-                      if any(storage.owns_present_checkout(owner, checkout)
+                      if any(storage.owns_present_checkout(owner, checkout, self.reads)
                              for checkout in map(Path, paths)))
         return (*owned, *self.origin_refs)
 
@@ -1653,7 +1662,7 @@ class ProgressSource(PullRequestSource):
     def of(cls, todo: Todo, registry: Registration, pulls: ProgressRead) -> Self:
         owner = registry.require(todo.held().owner)
         storage = registry.storage_rule
-        owned = storage.checkout_paths(owner)
+        owned = storage.checkout_paths(owner, pulls)
         candidates = (todo.order.checked().check.directory, *owned)
         path = next(iter(Checkout.git_roots(*candidates)), next(iter(owned), candidates[0]))
         checkout = pulls.progress_checkout(path)
@@ -2485,6 +2494,12 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """Triage has no implementation declarations to validate."""
 
+    def recurrence_declarations(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+    ) -> tuple[Declaration, ...]:
+        """Triage measures what nobody has diagnosed yet, so it has no restated fact to name."""
+        return ()
+
     @abstractmethod
     def instructions(self, problem: str) -> tuple[str, ...]: ...
 
@@ -2550,6 +2565,11 @@ class FixScope(OrderScope[CheckedDelivery]):
 
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.shape.require_references(roots, revision)
+
+    def recurrence_declarations(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+    ) -> tuple[Declaration, ...]:
+        return (order.owner.declaration(root), where.declaration(root))
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
@@ -3458,13 +3478,17 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
-    """Two different order holders cannot write into the same physical worktree."""
-
-    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
+class TodoRefusal(TodoError, RejectedEnforcementError):
+    """A todo refusal a standing rule reports as not applied, in the refusal's own words."""
 
     def explanation(self) -> str:
         return str(self)
+
+
+class SharedWorktreeRefusal(TodoRefusal):
+    """Two different order holders cannot write into the same physical worktree."""
+
+    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
 
     def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
                  holding_holder: ThreadIncarnation, worktree: Path) -> None:
@@ -3479,14 +3503,18 @@ class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
         )
 
 
-class UnitOccupied(TodoError, RejectedEnforcementError):  # noqa: N818 - domain refusal
+class UnitOccupied(TodoRefusal):  # noqa: N818 - domain refusal
     """The unit holds an open order the incoming work does not own; a standing rule that
     restores work to it reports this refusal instead of applying."""
 
     reason: ClassVar[str] = "the unit already holds other work"
 
-    def explanation(self) -> str:
-        return str(self)
+
+class ForeignRequest(TodoRefusal):  # noqa: N818 - domain refusal
+    """An owner request answers only its own commanders; a standing rule that restores work
+    serving another commander's request reports this refusal instead of ending the pass."""
+
+    reason: ClassVar[str] = "the order serves another commander's request"
 
 
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
@@ -4250,11 +4278,16 @@ class HeadVerdict(HeadReview, declared_name=None):
         return request.current()
 
     @classmethod
-    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
-        """Source review cannot authorize even the owner's direct merge path."""
+    def require_ok(cls, request: PullRequestHead) -> None:
+        """The commander's admin merge needs this exact head's recorded ok, nothing more."""
         if not cls.allows_integration():
             raise TodoError(
                 f"{request.repo.to_wire()}#{request.pr} at {request.head} has no recorded ok verdict.")
+
+    @classmethod
+    def require_merge(cls, request: PullRequestHead, repositories: tuple[Repo, ...]) -> None:
+        """The queue merges only a promoted combined carrier of ok sources."""
+        cls.require_ok(request)
         MergeHeadReview.require_merge(request, repositories)
 
     @contextmanager
@@ -4971,11 +5004,9 @@ class DroppedVerdict(GitSettledVerdict):
         target = Path(self.path)
         if target.is_file() and all(line in target.read_text(errors="replace") for line in lines):
             self.refuse(str(target))
-        refs = Repo.git(checkout, "for-each-ref", "--format=%(objectname)",
-                        "refs/heads", "refs/remotes").splitlines()
-        heads = [entry.removeprefix("HEAD ")
-                 for entry in Repo.git(checkout, "worktree", "list", "--porcelain").splitlines()
-                 if entry.startswith("HEAD ")]
+        history = RepositoryReads().history_for(Checkout(checkout))
+        refs = tuple(reference.commit for reference in history.refs.values())
+        heads = tuple(sha for head in history.heads.values() for sha in head.required())
         patterns = [arg for line in lines for arg in ("-e", line)]
         found = Repo.grep(checkout, "-l", "-F", "--all-match", *patterns,
                                 *sorted({*refs, *heads}), "--", f":(glob)**/{target.name}")
@@ -5488,7 +5519,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
         if not commander.commands(self.commander):
-            raise TodoError(f"Request {self.id.value} belongs to another commander.")
+            raise ForeignRequest(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
         self.require_commander(commander)
@@ -6404,7 +6435,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
         slop: tuple[Slop, ...], now: float,
     ) -> None:
-        declarations = (order.owner.declaration(root), where.declaration(root))
+        declarations = order.scope.recurrence_declarations(order, where, root)
         previous = tuple(line for todo in self.list(Repo.of(root).github)
                          for line in todo.recurrence(declarations, root, now))
         if not previous:

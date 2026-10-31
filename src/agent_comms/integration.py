@@ -18,7 +18,7 @@ from .build_identity import RepositoryCommit
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .commander.order import CommanderContext
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
 from .head_review import (
     BaseSide,
@@ -374,7 +374,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         self, inputs: IntegrationInput, repositories: tuple[Repo, ...]
     ) -> None:
         mains = self.main_commits(inputs)
-        for source in inputs.sources:
+        for source in inputs.pinned_sources(self.repository.github):
             repository = Repo.selected(repositories, source.repository.to_wire())
             if IntegrationSource.main_head(repository) != mains[source.repository]:
                 raise IntegrationFailed(f"{source.repository.to_wire()} main moved; recapture")
@@ -397,19 +397,18 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         repositories = tuple(
             Repo.of(BaseSide.checkout(directory, source.repository)) for source in inputs.sources
         )
-        if self.require_merge_review(repositories) != inputs:
-            raise IntegrationFailed("The hosted input changed after source materialization")
-        try:
-            self.publish_merge_review()
-            if self.require_merge_review(repositories) != inputs:
-                raise IntegrationFailed("The hosted input changed during review publication")
-        except ToolRefusedError, GitCommandError:
-            self.withdraw_merge_review()
-            raise
-        print(
-            f"COMBINED CARRIER #{self.carrier.pr} {self.carrier.head}; inputs {inputs.digest}",
-            flush=True,
-        )
+        for carrier in inputs.carriers():
+            if self.require_merge_review(repositories) != carrier:
+                raise IntegrationFailed("The hosted input changed after source materialization")
+            try:
+                self.publish_merge_review()
+                if self.require_merge_review(repositories) != carrier:
+                    raise IntegrationFailed("The hosted input changed during review publication")
+            except ToolRefusedError, GitCommandError:
+                self.withdraw_merge_review()
+                raise
+        print(f"#{self.carrier.pr} {self.carrier.head} combined={inputs.combined}; "
+              f"inputs {inputs.digest}", flush=True)
         return inputs
 
     def materialize(self, directory: Path) -> IntegrationInput:

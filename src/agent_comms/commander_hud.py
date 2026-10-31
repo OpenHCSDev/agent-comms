@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms_hooks import ToolRefusedError
 from aiohttp import ClientError
 from pydantic import JsonValue
 
@@ -25,7 +26,6 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.disclosure_text import (
     AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
 )
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
 )
@@ -248,7 +248,7 @@ class CodexUsage:
             return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
 
     def line(self) -> str:
-        return self.reading.line()
+        return f"Codex {self.reading.line()}"
 
     def needs_hand(self) -> bool:
         return self.reading.needs_hand()
@@ -427,6 +427,9 @@ class CommanderHud(CommanderLoad):
     def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
         """The heartbeat has no viewport; native readers own their concrete geometry."""
         result = list(self.status_strip(now).splitlines())
+        # What is owed, by how much and for how long, before any row: one line per section.
+        result.extend(("", *(section.digest(now) for section in self.alarms),
+                       "Cards: " + ", ".join(section.heading() for section in self.groups)))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
                        *(line for packet in self.packets for line in packet.not_applied)))
@@ -434,7 +437,7 @@ class CommanderHud(CommanderLoad):
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.plain_lines() for table in section.tables))
+                table.folded_lines() for table in section.tables))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)

@@ -264,8 +264,6 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
     if not row.sent_owner_claimed_generation.matches(claim_scope.owner_claimed_generation):
         raise SelectedToolDenied("Selected tool names another sending claim_scope")
-    if row.reference.recorded or row.verdict.decided:
-        raise SelectedToolDenied("Selected input was already settled")
 
 
 def verify_selected_terminal(
