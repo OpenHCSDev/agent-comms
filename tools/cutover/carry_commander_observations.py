@@ -1,8 +1,8 @@
-"""Seed retained observations once from existing packets, without changing original messages.
+"""Seed observations from the indexed packets that owned the previous heartbeat baseline.
 
-Current HUD frames may be newer than the latest quiet publication, so their packet wins.
-After seeding, only the heartbeat's observation writer advances this state. No load-time
-converter, old-format reader or hand-mapped packet schema remains in the running reader.
+A disposable HUD has no durable capture order and can precede a later failure publication.
+It must not replace that baseline. Existing observation stores are never overwritten, and
+original messages are unchanged; only the heartbeat advances the seeded state afterward.
 """
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from contextlib import closing
 from typing import ClassVar
 
 from agent_comms.bus import Bus
-from agent_comms.commander_hud import CommanderFrame
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import CommanderUpdatePosition
@@ -21,7 +20,7 @@ from agent_comms.task_attachments.commander_pings import CommanderUpdate, Comman
 
 class CommanderObservations(Carry):
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (
-        Bus, CommanderFrame, CommanderUpdateStore,
+        Bus, CommanderUpdateStore,
     )
 
     def carry(self, *, apply: bool) -> Carried:
@@ -36,9 +35,6 @@ class CommanderObservations(Carry):
                     for message in CommanderUpdatePosition.latest(db, lookup):
                         for packet in message.task.commander_update(lookup):
                             packets[lookup] = packet
-        for path in CommanderFrame.matching_in(self.root):
-            for packet in CommanderFrame(path).read().packets:
-                packets[packet.commander.require_recorded().lookup] = packet
         missing = tuple(packet for packet in packets.values()
                         if not CommanderUpdateStore.at(self.root, packet.commander).path.exists())
         if apply:
