@@ -9,6 +9,11 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.coordination_errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+)
+
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.standing import DeliveryAwaitingJudgement, Scrutinize
@@ -167,6 +172,19 @@ def test_claim_verdict_family_on_retained_copy(held_commander):
     assert isinstance(delivered.order, DeliveredProblemOrder)
     assert delivered.order.delivery.delivered == delivered.order.delivery.commit
     assert not delivered.pending
+
+
+def test_a_busy_begin_answers_every_storage_error_handler() -> None:
+    """A store's handlers name sqlite3.Error; the bridge's waits name the coordination class."""
+    raw = sqlite3.OperationalError("database is locked")
+    raw.sqlite_errorcode, raw.sqlite_errorname = sqlite3.SQLITE_BUSY, "SQLITE_BUSY"
+    with pytest.raises(sqlite3.Error) as caught, CoordinationBeginUnavailable.checking():
+        raise raw
+    assert isinstance(caught.value, CoordinationBeginUnavailable)
+    assert caught.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+    # An enclosing read decoder leaves it as it is: its handlers name this exact class.
+    with pytest.raises(CoordinationBeginUnavailable), CoordinationReadUnavailable.checking():
+        raise caught.value
 
 
 def unsent_claim(ctx):
