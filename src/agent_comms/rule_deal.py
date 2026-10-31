@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .instruction_deck import DealtCalls
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, MessageId
 from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
 from .store_files import AtomicFile, DependentStateTier, SingleFileStore
@@ -128,7 +128,7 @@ class Asked:
     """One line the gate said to the session in the owner's voice: its bus message, and how far
     the session's own record of its words ran when it went out."""
 
-    message_id: str
+    message_id: MessageId
     offset: int
 
 
