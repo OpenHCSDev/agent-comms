@@ -1677,7 +1677,7 @@ class RecordMember(WireValue):
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return _member_decoder(cls)
+        return _member_decoders[cls]
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -1732,7 +1732,7 @@ class InlineRecord(WireValue, ExternalJsonShape):
 
     @classmethod
     def wire_structure(cls, structural: DecoderPlan) -> DecoderPlan:
-        return _member_decoder(cls.wire_record())
+        return _member_decoders[cls.wire_record()]
 
     @classmethod
     def schema(cls):
@@ -2566,7 +2566,7 @@ class FieldCodec(MroDispatch, Sealed):
     @classmethod
     def compile_comparison(cls, record: type) -> None:
         """Prepare the same declared field view that record comparisons execute."""
-        _member_decoder(record).compile_comparison(set())
+        _member_decoders[record].compile_comparison(set())
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
@@ -2590,7 +2590,7 @@ class FieldCodec(MroDispatch, Sealed):
     def encode_fields(cls, value: object) -> dict[str, object]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        return _member_decoder(type(value)).encode(value)
+        return _member_decoders[type(value)].encode(value)
 
     @classmethod
     def decode_bound(cls, target: TypeForm[T], data: object, **context: object) -> T:
@@ -2936,10 +2936,10 @@ class _OpaqueRecordDecoder[T](_OpaqueDecoder[T, type[T]]):
     __slots__ = ()
 
     def represented_comparison(self, represented: ValueDecoder[T], value: T) -> object:
-        return _member_decoder(self.target).compared(value)
+        return _member_decoders[self.target].compared(value)
 
     def compile_represented_comparison(self, compiled: set[object]) -> None:
-        _member_decoder(self.target).compile_comparison(compiled)
+        _member_decoders[self.target].compile_comparison(compiled)
 
 
 class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
@@ -3537,7 +3537,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
         return tuple(path for member in self.target.members_with(self.target)
-                     for path in _member_decoder(member).field_paths(key, seen))
+                     for path in _member_decoders[member].field_paths(key, seen))
 
     def tagged(self, data: object) -> TypeGuard[dict[str, object]]:
         """The family form: an object naming its member under the family tag."""
@@ -3547,14 +3547,14 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
         return self.tagged(data)
 
     def encode(self, value: Member) -> dict[str, object]:
-        return {**value.record_tag(), **_member_decoder(type(value)).encode(value)}
+        return {**value.record_tag(), **_member_decoders[type(value)].encode(value)}
 
     def compared(self, value: Member) -> object:
-        return _member_decoder(type(value)).compared(value)
+        return _member_decoders[type(value)].compared(value)
 
     def compile_comparison(self, compiled: set[object]) -> None:
         for member in self.target.members_with(self.target):
-            _member_decoder(member).compile_comparison(compiled)
+            _member_decoders[member].compile_comparison(compiled)
 
     def editor_choices(self):
         return tuple((member.label, {self.target.family_discriminator: member.declared_name})
@@ -3585,7 +3585,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](_ContextDecoder[Member]):
 
     def decode_bound(self, data: object, context: Mapping[str, object]) -> Member:
         member, payload = self.member(data)
-        return cast(Member, _member_decoder(member).decode_bound(payload, context))
+        return cast(Member, _member_decoders[member].decode_bound(payload, context))
 
 
 class _LeafDocumentDecoder(_FamilyRecordDecoder):
@@ -3594,7 +3594,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
     @property
     def leaf(self) -> ValueDecoder[object]:
         """The decoder of the record this document declares directly."""
-        return _member_decoder(self.target)
+        return _member_decoders[self.target]
 
     def fits_wire(self, data: object) -> bool:
         return self.tagged(data) or self.leaf.fits_wire(data)
@@ -3604,7 +3604,7 @@ class _LeafDocumentDecoder(_FamilyRecordDecoder):
         return self.leaf.shape_refusal(data)
 
     def encode_document(self, value: DeclaredFamily) -> object:
-        return _member_decoder(type(value)).encode(value)
+        return _member_decoders[type(value)].encode(value)
 
     def decode_document(self, data: object) -> object:
         return self.leaf.decode_bound(data, {})
@@ -3781,7 +3781,7 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
         )
         plan = _LeafDocumentDecoder if leaf_document else _FamilyRecordDecoder
         return cast(ValueDecoder[object], plan(annotation))
-    return _member_decoder(annotation)
+    return _member_decoders[annotation]
 
 
 @dataclass(frozen=True, slots=True)
@@ -3801,11 +3801,22 @@ class _PydanticDecoder(ValueDecoder[object]):
         return value.model_dump(mode="json", by_alias=True, exclude_none=True)
 
 
-@lru_cache(maxsize=None)
-def _member_decoder(target: object) -> ValueDecoder[object]:
-    """A concrete record, enum or scalar, after any family tag is removed."""
-    if isinstance(target, type) and is_dataclass(target):
-        return _RecordDecoder(target)
-    if isinstance(target, type) and issubclass(target, BaseModel):
-        return _PydanticDecoder(target)
-    raise UnsupportedFieldType(f"Unsupported JSON type: {target}")
+class _MemberDecoders(dict[object, ValueDecoder[object]]):
+    """Concrete declarations own one decoder for this process, after family-tag removal.
+
+    Dictionary lookup retains the declared key/value types as well as the decoder lifetime;
+    a generic record class is not confused with the hashability of its decoded instances.
+    """
+
+    def __missing__(self, target: object) -> ValueDecoder[object]:
+        if isinstance(target, type) and is_dataclass(target):
+            decoder: ValueDecoder[object] = _RecordDecoder(target)
+        elif isinstance(target, type) and issubclass(target, BaseModel):
+            decoder = _PydanticDecoder(target)
+        else:
+            raise UnsupportedFieldType(f"Unsupported JSON type: {target}")
+        self[target] = decoder
+        return decoder
+
+
+_member_decoders = _MemberDecoders()

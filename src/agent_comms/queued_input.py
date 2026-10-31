@@ -33,6 +33,8 @@ from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import AcpSessionId, InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
+from .coordination_tables.assignments import WakeAssignment
+from .messages import Message
 from .image_input import ImageInput
 from .input_attempt import InputAttempt, ReservedInput
 from .input_key import AcpInputKey, InputKey
@@ -50,10 +52,8 @@ if TYPE_CHECKING:
     from .turn_inbox import InputContent, TurnInbox
     from .bus_publication import Delivered
     from .comms import Comms
-    from .coordination_tables.assignments import WakeAssignment
     from .input_drain import DrainedSession, InputDrain
     from .message_bus import MessageBus
-    from .messages import Message
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner
