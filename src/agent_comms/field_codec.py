@@ -62,6 +62,10 @@ T = TypeVar("T")
 
 
 
+class UnsupportedFieldType(TypeError):
+    """A declaration has no codec, distinct from a malformed supported declaration."""
+
+
 class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
     """Data that does not satisfy its declaration.
 
@@ -2548,15 +2552,20 @@ class FieldCodec(MroDispatch, Sealed):
         return hashlib.sha256(cls.compact(compared, sort_keys=True).encode()).hexdigest()
 
     @classmethod
+    @cache
+    def compared_fields(cls, record: type) -> tuple[FieldPlan, ...]:
+        """The comparison view resolves only fields it actually compares, not wire context
+        or unrelated class annotations. FieldPlan still owns their directives and decoders."""
+        return tuple(
+            cls._field_plan(item, annotation)(declared=item, _annotation=annotation)
+            for item in fields(record) if item.compare
+            for annotation in (cls.field_annotation(record, item.name),)
+        )
+
+    @classmethod
     def compile_comparison(cls, record: type) -> None:
-        """Compile everything comparing ``record``'s compared fields reaches, at its
-        declarer's preparation. Each field resolves where it is declared, so class-level
-        names the record never compares need no runtime import."""
-        compiled: set[object] = set()
-        for item in fields(record):
-            if not item.compare:
-                continue
-            compile_decoder(cls.field_annotation(record, item.name)).compile_comparison(compiled)
+        """Prepare the same declared field view that record comparisons execute."""
+        _RecordDecoder(record).compile_comparison(set())
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
@@ -3633,15 +3642,14 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         # Each compared field compares through its declared type. Value decoders
         # compile per field on demand, so excluded live readers never compile.
         return tuple((entry.name, entry.value.comparison(entry.current(value)))
-                     for entry in self.plan.declarations if entry.declared.compare)
+                     for entry in FieldCodec.compared_fields(self.target))
 
     def compile_comparison(self, compiled: set[object]) -> None:
         if self.target in compiled:
             return
         compiled.add(self.target)
-        for entry in self.plan.declarations:
-            if entry.declared.compare:
-                entry.value.compile_comparison(compiled)
+        for entry in FieldCodec.compared_fields(self.target):
+            entry.value.compile_comparison(compiled)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:
         if self.target in seen:
@@ -3793,4 +3801,4 @@ def _member_decoder(target: object) -> ValueDecoder[object]:
         return _RecordDecoder(target)
     if isinstance(target, type) and issubclass(target, BaseModel):
         return _PydanticDecoder(target)
-    raise TypeError(f"Unsupported JSON type: {target}")
+    raise UnsupportedFieldType(f"Unsupported JSON type: {target}")

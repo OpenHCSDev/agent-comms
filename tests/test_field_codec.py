@@ -34,7 +34,9 @@ from agent_comms.field_codec import (
     TimestampText,
     ToolCallId,
     TurnId,
+    UnsupportedFieldType,
     ValueDecoder,
+    compile_decoder,
     WireAbsentNone,
     WireContext,
     WireInline,
@@ -1195,7 +1197,7 @@ def test_an_annotation_lambda_sees_the_module_that_declared_it():
 
 
 def test_every_declared_field_type_resolves() -> None:
-    """Import-visible records must be comparable from their declarations, not runtime guesses."""
+    """Resolve compared records through their codec; live-resource refusals define its domain."""
     import importlib
     import pkgutil
     from dataclasses import fields, is_dataclass
@@ -1219,13 +1221,20 @@ def test_every_declared_field_type_resolves() -> None:
     assert records, "No codec records were discovered"
     failures: list[str] = []
     for record in sorted(records, key=lambda item: (item.__module__, item.__qualname__)):
+        unresolved: list[str] = []
         for item in fields(record):
             if not item.compare:
                 continue
             try:
-                FieldCodec.field_annotation(record, item.name)
+                annotation = FieldCodec.field_annotation(record, item.name)
+                compile_decoder(annotation).compile_comparison(set())
+            except UnsupportedFieldType:
+                # A positive codec refusal excludes this record, not a named-class roster.
+                break
             except (NameError, TypeError) as error:
-                failures.append(f"{record.__module__}.{record.__qualname__}.{item.name}: {error}")
+                unresolved.append(f"{record.__module__}.{record.__qualname__}.{item.name}: {error}")
+        else:
+            failures.extend(unresolved)
     assert not failures, "Unresolved compared field annotations:\n" + "\n".join(failures)
 
 
