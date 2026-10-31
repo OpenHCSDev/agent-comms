@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import asyncio
 import time
 from collections.abc import Iterable
-from contextlib import aclosing
 from dataclasses import dataclass, field, replace
 from typing import Annotated, ClassVar, Self
 
@@ -17,12 +15,12 @@ from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .watched import FileSource, Watched
+from .watched import Watched
 
 
 class CompletedWatch:
-    """A service watch whose ordinary completion an install waits on after a restart; each
-    member declares how long its longest pass takes."""
+    """A service watch whose completion the board judges; each member declares how long its
+    longest pass takes."""
 
     pass_duration: ClassVar[float]
 
@@ -50,11 +48,6 @@ class FailingPass:
     error: str
     failed_at: float
 
-    def failed_since(self, moment: float) -> bool:
-        """Its newest pass failed at or after ``moment``; an older failure is a runtime's that
-        ``moment`` replaced, and the next pass either clears or rewrites it."""
-        return self.failed_at >= moment
-
     def failure_line(self, watch: str) -> str:
         return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}'
                 f' ({max(0, int(time.time() - self.since))}s elapsed):'
@@ -80,10 +73,6 @@ class ServicePasses:
     def heartbeat_current(self, heartbeat: EventTime) -> bool:
         """Only the commander's completion clock determines heartbeat freshness."""
         return heartbeat.since(time.time() - CommanderPass.completion_ceiling())
-
-    def completed_since(self, commander: RecordedThreadIncarnation, since: float) -> bool:
-        """A pass for this commander completed at or after ``since``."""
-        return self.heartbeat_completed_at(commander).since(since)
 
 
 @dataclass(frozen=True)
@@ -130,42 +119,6 @@ class ServicePassStore(SingleFileStore, DurableFile, LockedStore[ServicePasses],
 
     def empty(self) -> ServicePasses:
         return ServicePasses()
-
-    async def wait_completed(
-        self, commanders: tuple[RecordedThreadIncarnation, ...], since: float,
-        watch: type[CompletedWatch],
-    ) -> tuple[RecordedThreadIncarnation, ...]:
-        """Join the first ordinary recorded completion, never run the watch being qualified,
-        and return the commanders it has not reached yet.
-
-        One completed pass after ``since`` is the service running on the new runtime. Which
-        commanders a pass reaches is each commander's own state (a session whose bridge is down
-        gets no delivery), so the rest are reported, never awaited: waiting on them held the
-        2026-10-30 installs 518 s and 376 s on claude-nra's absent bridge. Subscribe before
-        reading, so a completion between the first read and wait cannot disappear. A recorded
-        failure is not acceptance.
-        """
-        pending = commanders
-        timeout = asyncio.timeout(watch.completion_ceiling())
-        name = watch.__name__
-        try:
-            async with timeout:
-                async with aclosing(self.watch_sources(FileSource(self.path))) as changes:
-                    async for _ in changes:
-                        passes = await Coordination.run_worker(self.read)
-                        if name in passes.failing and passes.failing[name].failed_since(since):
-                            raise ToolRefusedError(passes.failing[name].failure_line(name))
-                        pending = tuple(owner for owner in commanders
-                                        if not passes.completed_since(owner, since))
-                        if len(pending) < len(commanders):
-                            return pending
-        except TimeoutError as error:
-            if not timeout.expired():
-                raise
-            raise ToolRefusedError(
-                f"{name} has no ordinary completion since service restart {since} for any of: "
-                + ", ".join(owner.name for owner in pending)
-            ) from error
 
     def failed(self, watch: str, error: BaseException) -> None:
         def change(passes: ServicePasses) -> DocumentChange[ServicePasses, ServicePasses]:
