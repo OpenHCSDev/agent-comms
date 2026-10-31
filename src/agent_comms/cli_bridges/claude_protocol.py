@@ -61,6 +61,8 @@ from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
+    NarrationTranscript,
+    ThinkingTranscript,
     NoticeTranscript,
     TranscriptEvent,
     UserTranscript,
@@ -468,10 +470,13 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         return ()
 
 
-class AssistantBlock(TaggedWire, ABC, affix=""):
+class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
 
-    @abstractmethod
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return ()
 
     def said(self) -> tuple[str, ...]:
         """The words this block shows the reader; a tool call or hidden reasoning shows none."""
@@ -495,14 +500,17 @@ class AssistantText(TextWire, AssistantBlock, TextContent, declared_name='text')
     def said(self) -> tuple[str, ...]:
         return (self.text,)
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),)
 
 
 class RedactedThinking(AssistantBlock, declared_name='redacted_thinking'):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return (ThinkingTranscript('', timestamp=record.timestamp, position=record.position),)
 
 
 class NarrationBlock(RedactedThinking, declared_name='thinking'):
@@ -516,12 +524,8 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
         """Saved reasoning is empty; narration is what the reader saw."""
         return (self.thinking,) if self.thinking else ()
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        activity = super().updates(record, session)
-        if not self.thinking:
-            return activity
-        return (*activity, *session.finished(
-            record.uuid, (AssistantTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return (NarrationTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)
 
 
 class ToolUse(AssistantBlock, declared_name='tool_use'):
@@ -567,8 +571,11 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
         return tuple(words for block in self.message.content for words in block.said())
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (*(update for block in self.message.content for update in block.updates(self, session)),
-                *session.answered(self.message))
+        updates = [update for block in self.message.content for update in block.updates(self, session)]
+        events = tuple(event for block in self.message.content for event in block.events(self))
+        if events:
+            updates.extend(session.finished(self.uuid, events))
+        return (*updates, *session.answered(self.message))
 
 
 class ResultPart(TaggedWire, ABC, affix=""):

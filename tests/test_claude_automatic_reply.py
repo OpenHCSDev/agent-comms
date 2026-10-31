@@ -265,12 +265,22 @@ TURN_INTERRUPTED = decoded_record(dict(
         type='assistant', uuid=transcript_record('thinking-only'), timestamp='2026-10-29T01:00:00Z',
         message=dict(content=[dict(type='thinking', thinking='Still considering the work')]),
     )), TURN_FINISHED), False),
+    ((), (decoded_record(dict(
+        type='assistant', uuid=transcript_record('narration-and-final'), timestamp='2026-10-29T01:00:00Z',
+        message=dict(content=[dict(type='thinking', thinking='Checking the source'),
+                              dict(type='text', text='The requested work is explained')]),
+    )), TURN_FINISHED), True),
     ((), (assistant_record('not-finished', 'An unfinished answer'),), False),
     ((opening_record('directive-turn'), assistant_record('before-directives', 'Already answering something else')),
      (assistant_record('following-directives', 'Finishing that older answer'), TURN_FINISHED), False),
+    ((opening_record('directive-turn'), decoded_record(dict(
+        type='assistant', uuid=transcript_record('hidden-thinking'), timestamp='2026-10-29T01:00:00Z',
+        message=dict(content=[dict(type='redacted_thinking')]),
+    ))), (assistant_record('after-hidden-thinking', 'Answering the older input'), TURN_FINISHED), False),
     ((), (assistant_record('interrupted-output', 'A partial answer'), TURN_INTERRUPTED), False),
     ((), (assistant_record('empty-final', ''), TURN_FINISHED), False),
-), ids=('committed-final', 'thinking-only', 'still-open', 'mid-output', 'interrupted', 'empty-final'))
+), ids=('committed-final', 'thinking-only', 'narration-with-final', 'still-open', 'mid-output',
+        'hidden-thinking-before-input', 'interrupted', 'empty-final'))
 async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     bridge: ClaudeBridge, prefix: tuple[ClaudeRecord, ...], suffix: tuple[ClaudeRecord, ...], cleared: bool,
 ) -> None:
@@ -408,7 +418,7 @@ async def test_original_kind_owns_automatic_answer_without_suppressing_the_turn(
 @pytest.mark.asyncio
 @pytest.mark.parametrize(('transition', 'targets'), (
     (Registration.archive, ()),
-    (Registration.begin_delete, ()),
+    (lambda registry, name: (registry.unregister(name), registry.begin_delete(name)), ()),
     (Registration.status, ('claude-code',)),
 ), ids=('archived', 'deleting', 'visible'))
 async def test_requester_presence_keeps_the_final_and_the_next_delivery(
