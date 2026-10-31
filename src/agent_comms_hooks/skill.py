@@ -91,8 +91,7 @@ class DeckReader(DealtSources):
         """The line after the read order: what the summary cannot be trusted to hold."""
 
     def deaf(self, session: str) -> tuple[str, ...]:
-        """A fleet session is not told to re-arm the commander's watch."""
-        return ()
+        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
 
     def board(self, session: str) -> tuple[str, ...]:
         """A fleet session has no commander board."""
@@ -210,9 +209,6 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
 
     def header(self, start: DeckStart) -> str:
         return start.held()
-
-    def deaf(self, session: str) -> tuple[str, ...]:
-        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
 
     def board(self, session: str) -> tuple[str, ...]:
         return WatchClaim(session).state().board()

@@ -29,6 +29,7 @@ RESULT = {"type": "user", "message": {"content": [{"type": "tool_result", "tool_
 
 def stop(tmp_path: Path, records, *, idle: str, active: bool = False) -> subprocess.CompletedProcess:
     """Run the installed hook module with Core's idle command answered by `idle` (a shell body)."""
+    tmp_path.mkdir(exist_ok=True)
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("".join(json.dumps(record) + "\n" for record in records))
     bin_dir = tmp_path / "bin"
@@ -99,3 +100,19 @@ def test_a_session_that_is_not_commander_stops_freely(tmp_path, monkeypatch, com
     result = stop(tmp_path, DEFERRING, idle="printf 'pi-story-tool\\n'")
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
+
+
+def test_a_stop_with_no_monitor_on_a_running_bridge_is_sent_back_once(tmp_path):
+    """2026-10-30: mainmove-claude and claude-board ended a turn with their watch dead, and
+    nothing could wake them again. The stop says so while the bridge still runs."""
+    quiet = [RESULT, assistant(text("Ordered P362 to pi-story-tool."))]
+    claim = WatchClaim("s")
+    with claim.claim.claimed():
+        decision = json.loads(stop(tmp_path / "deaf", quiet, idle="exit 0").stdout)
+        assert decision["decision"] == "block"
+        assert "RE-ARM this session's watch" in decision["reason"]
+        result = stop(tmp_path / "again", quiet, idle="exit 0", active=True)
+        assert (result.returncode, result.stdout) == (0, "")
+        with claim.reader_held():
+            result = stop(tmp_path / "held", quiet, idle="exit 0")
+            assert (result.returncode, result.stdout) == (0, "")

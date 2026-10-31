@@ -155,6 +155,26 @@ def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(tmp_p
             assert deaf not in hook.take()
 
 
+def test_a_fleet_session_is_told_to_rearm_and_refused_its_stop(tmp_path, monkeypatch, capsys):
+    """A session the registry does not name commander still dies with no Monitor on its bridge."""
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    WatchClaim.directory(tmp_path / "home").mkdir(parents=True)
+    claim = WatchClaim("s")
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    stop = StopHook.decode({"hook_event_name": "Stop", "session_id": "s",
+                            "transcript_path": str(transcript), "stop_hook_active": False})
+    stop.guard()
+    assert capsys.readouterr().out == ""  # no bridge: nothing to re-arm
+    with claim.claim.claimed():
+        assert not stop.commands
+        stop.guard()
+        assert "RE-ARM this session's watch" in json.loads(capsys.readouterr().out)["reason"]
+        with claim.reader_held():
+            stop.guard()
+            assert capsys.readouterr().out == ""
+
+
 def test_an_unbound_session_is_never_told_to_rearm_a_commander_watch(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))

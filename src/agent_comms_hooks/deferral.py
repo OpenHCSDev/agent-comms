@@ -19,7 +19,7 @@ from functools import cached_property
 from typing import ClassVar, Self
 
 from agent_comms_hooks import ClaudeHookProgram, HookRecord
-from agent_comms_hooks.watch import CommanderSession
+from agent_comms_hooks.watch import CommanderSession, WatchClaim
 
 
 class Tagged(HookRecord):
@@ -222,18 +222,26 @@ class StopHook(CommanderSession):
             said.insert(0, record.said())
         return "\n".join(said)
 
-    def guard(self) -> None:
-        """A stop this hook already sent back is let through, so it never loops."""
-        if self.stop_hook_active or not self.commands:
-            return
+    def deferred(self) -> tuple[str, ...]:
+        """Only the registry's commander answers for deferring the fleet's work."""
+        if not self.commands:
+            return ()
         reply = self.reply()
-        reasons = tuple(
+        return tuple(
             reason
             for shape in Deferral.__subclasses__()
             if (deferred := tuple(shape.found(reply)))
             for reason in shape.reasons(deferred, self)
         )
-        if reasons:
+
+    def guard(self) -> None:
+        """A stop this hook already sent back is let through, so it never loops. A session that
+        stops with no Monitor reading its bridge has nothing left to wake it: on 2026-10-30
+        mainmove-claude sat dead from 21:40 and claude-board from 21:47."""
+        if self.stop_hook_active:
+            return
+        deaf = tuple(watch.line() for watch in WatchClaim(self.session_id).deaf())
+        if reasons := (*deaf, *self.deferred()):
             print(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
 
