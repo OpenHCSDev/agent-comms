@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING, Mapping, Self
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import MessageId
 from agent_comms.head_review import PullRequestHead
+from agent_comms.owner_requests import OwnerRequestId
+from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.service_passes import ServicePasses, ServicePassStore
@@ -124,3 +126,21 @@ class AnswerSubject(HeartbeatSubject):
     """A message owed an answer: an action naming it with --answers acts on it."""
 
     message: MessageId
+
+
+@dataclass(frozen=True)
+class RequestSubject(HeartbeatSubject):
+    """Tristan's open request. An order serving it, or marking it done, ends the stalled line's
+    condition itself, so no separate action record answers it before then."""
+
+    request: OwnerRequestId
+
+
+@dataclass(frozen=True)
+class PhaseSubject(HeartbeatSubject):
+    """An order serving this phase answers its ready-without-an-owner line."""
+
+    phase: type[PlanPhase]
+
+    def disposed(self, history: CommanderHistory, since: float) -> bool:
+        return history.phases_checked.get(self.phase, UnrecordedEventTime()).since(since)
