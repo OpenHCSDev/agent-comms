@@ -303,10 +303,14 @@ TURN_INTERRUPTED = decoded_record(dict(
         type='assistant', uuid=transcript_record('hidden-thinking'), timestamp='2026-10-29T01:00:00Z',
         message=dict(content=[dict(type='redacted_thinking')]),
     ))), (assistant_record('after-hidden-thinking', 'Answering the older input'), TURN_FINISHED), False),
+    ((opening_record('directive-turn'), decoded_record(dict(
+        type='assistant', uuid=transcript_record('empty-thinking'), timestamp='2026-10-29T01:00:00Z',
+        message=dict(content=[dict(type='thinking', thinking='')]),
+    ))), (assistant_record('after-empty-thinking', 'Answering the older input'), TURN_FINISHED), False),
     ((), (assistant_record('interrupted-output', 'A partial answer'), TURN_INTERRUPTED), False),
     ((), (assistant_record('empty-final', ''), TURN_FINISHED), False),
 ), ids=('committed-final', 'thinking-only', 'narration-with-final', 'still-open', 'mid-output',
-        'hidden-thinking-before-input', 'interrupted', 'empty-final'))
+        'hidden-thinking-before-input', 'empty-thinking-before-input', 'interrupted', 'empty-final'))
 async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     bridge: ClaudeBridge, prefix: tuple[ClaudeRecord, ...], suffix: tuple[ClaudeRecord, ...], cleared: bool,
 ) -> None:

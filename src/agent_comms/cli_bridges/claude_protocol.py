@@ -525,6 +525,8 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
         return (self.thinking,) if self.thinking else ()
 
     def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        if not self.thinking:
+            return super().events(record)
         return (NarrationTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)
 
 
