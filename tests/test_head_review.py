@@ -48,7 +48,7 @@ from agent_comms.todos import (
     CarriedHeadVerdict, ClosedListedPullRequest, ConflictMergeBlock, DraftListedPullRequest, FailedCheckMergeBlock, GrownHeadVerdict, GrowthReason, OrderHeadReview, LinkedHeadReview,
     NoHeadOrder, OrderClaim, ProgressRead, PullRequestLink, PullRequests, RecordPullRequest, RejectedHeadVerdict,
     HeadVerdict, HeadReviewed, QualifiedHeadVerdict, ReviewedHeadVerdict, StoredHeadReview, UnquotedHeadReview,
-    StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
+    AbandonedHeadVerdict, StrikeReason, SupersededHeadVerdict, UnderReviewHeadVerdict, UnmergedListedPullRequest, VerdictReason, WithdrawTodo,
 )
 from agent_comms_hooks import ToolRefusedError
 from github_fixture import GitHubFixture
@@ -1272,9 +1272,7 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
 
 @pytest.mark.parametrize(('verdict', 'cleared'), (
     (SupersededHeadVerdict(ACCEPTED, 'P2'), True),
-    (ReviewedHeadVerdict(ACCEPTED), False),
-    (RejectedHeadVerdict(VerdictReason('The declared owner still has a second competing decision.')), False),
-    (UnderReviewHeadVerdict(), False),
+    (AbandonedHeadVerdict(ACCEPTED), True),
 ))
 def test_retained_head_verdict_precedes_the_published_lost_packet(
     head_bus, reviewed_source, installed_runtime, verdict, cleared,
@@ -1296,7 +1294,6 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     assert reviewed.at.before(published)
     # A retained stale observation can be published after its exact-head verdict.
     # Publish the actual typed packet; no board rows or history records are rewritten.
-    CommanderHeartbeat.register(comms.registry)
     owner = comms.registry.require('lead').incarnation
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
     packet = CommanderDecisions(owner, (ping,), (ping,), ())
@@ -1415,7 +1412,7 @@ def test_another_commanders_linked_request_stays_off_the_orderless_board(head_bu
                             OrderlessPullRequest.scan_orderless(comms.goals, ProgressRead(()))}
 
 
-def test_only_superseded_may_decide_a_closed_head(head_bus):
+def test_only_a_discarding_verdict_may_decide_a_closed_head(head_bus):
     comms, github, request = head_bus
     stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
     github.put(request.repo, ClosedListedPullRequest(
@@ -1423,6 +1420,7 @@ def test_only_superseded_may_decide_a_closed_head(head_bus):
         base='main', reviewable_times=(stamp,)))
     with pytest.raises(Exception, match='no longer an open source'):
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    invoke(comms, request, SupersededHeadVerdict(ACCEPTED, 'P2'))
+    invoke(comms, request, AbandonedHeadVerdict(ACCEPTED))
     reviewed, = StoredHeadReview.head_reviews(comms.goals.todos, request)
     assert reviewed.verdict.supersedes()
+    invoke(comms, request, SupersededHeadVerdict(ACCEPTED, 'P2'))

@@ -57,6 +57,7 @@ from agent_comms.recorded_time import EventTime
 from agent_comms.slop import Derivation, Slop
 from agent_comms.standing_rules import HeadReviewRule, StandingRule
 from agent_comms.todos import (
+    AbandonedHeadVerdict,
     AcceptedVerdict,
     BluntText,
     DirectiveText,
@@ -633,6 +634,16 @@ class SupersededVerb(ReasonedVerb, HeadVerdictVerb):
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
+
+@dataclass(frozen=True, kw_only=True)
+class AbandonedVerb(ReasonedVerb, HeadOnlyVerb):
+    clears = (ClosedUnmergedPullRequest,)
+    verdict = AbandonedHeadVerdict
+    help = "the exact PR head was given up on purpose and nothing replaces it; record why"
+
+    def head_operation(self) -> HeadVerdict:
+        return self.verdict(VerdictReason(self.why))
+
 
 @dataclass(frozen=True, kw_only=True)
 class DroppedVerb(VerdictVerb):

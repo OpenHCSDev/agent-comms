@@ -166,8 +166,8 @@ class WatchState(SocketWatch, ABC):
     """The claim state owns connection, shutdown, enrolment and discovery."""
 
     @abstractmethod
-    def rearm(self, launch: Callable[[], None]) -> None:
-        """Whether this state needs the enrolled session's existing launcher."""
+    def rearm(self, launch: Callable[[], None]) -> bool:
+        """Whether this state needed the enrolled session's existing launcher, and ran it."""
 
     def connect(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
                 request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:
@@ -207,7 +207,7 @@ class WatchState(SocketWatch, ABC):
         return False
 
 class UnclaimedWatch(WatchState):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         raise SessionCommandError('Enroll this session before starting its Monitor')
 
 
@@ -215,8 +215,8 @@ class ClaimingWatch(WatchState):
     """A bridge holds the claim and is publishing its first record: it is serving, so it is
     neither relaunched nor announced as down, and it has no binding to report yet."""
 
-    def rearm(self, launch: Callable[[], None]) -> None:
-        return
+    def rearm(self, launch: Callable[[], None]) -> bool:
+        return False
 
     def announce_absence(self, announce: Callable[[], None]) -> bool:
         return False
@@ -258,9 +258,9 @@ class RecordedWatch(WatchState):
 
 
 class LiveWatch(RecordedWatch, HeldSocketWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         """The kernel-held bridge is already serving; do not launch another."""
-        return
+        return False
 
     def board(self) -> tuple[str, ...]:
         """Preserve main's install-gap answer; other board failures remain loud."""
@@ -271,7 +271,7 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
                     "so no bridge listens yet; the board returns when the new one does",)
 
     def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
-        raise RuntimeError(
+        raise SessionCommandError(
             'An older watch still owns this session, or an install is replacing it. '
             'No second bridge launched. Stop that Monitor once, then connect.')
 
@@ -292,5 +292,6 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
         return True
 
 class LapsedWatch(RecordedWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
+    def rearm(self, launch: Callable[[], None]) -> bool:
         launch()
+        return True
