@@ -1263,7 +1263,7 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
         RecordPullRequest(todo.revision, held.owner_identity,
                           PullRequestLink(ready.repo, number), held.generation).record(comms.goals, todo.id)
     ordered = (comms.goals.todos.get("P2"),)
-    found = {rule.request.pr: rule.line()
+    found = {rule.request.pr: rule.facts()
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")
