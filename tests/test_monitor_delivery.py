@@ -2,6 +2,9 @@
 from pathlib import Path
 from agent_comms.repo import Checkout
 from contextlib import asynccontextmanager, suppress
+import threading
+from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
 import os
 import shutil
@@ -96,7 +99,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 await monitor_reader.readline()  # SessionReady, followed by the real probe.
                 probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
                 await probe.confirm(selected, ObservedMonitor(transcript_record('probe'), 1.))
-                watching = asyncio.create_task(selected.watch_child())
+                watching = asyncio.create_task(selected.watch_bus())
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
@@ -1147,3 +1150,66 @@ def test_a_gap_at_the_terminator_number_makes_no_line_count():
     observed = ReadResultObserved('export', '1\t"x"\n3\t',
                                   ObservedMonitor(transcript_record('read'), 1.), frozenset())
     assert observed.rows() == ()
+
+
+async def delivered_line(selected, reader, record):
+    """The real monitor receives one line and confirms it, as the session would."""
+    line = (await reader.readline()).decode().rstrip('\n')
+    for update in notification(line, record_id=transcript_record(record)).updates(ClaudeSession()):
+        await update.observed(selected)
+    return line
+
+
+async def stopped(task):
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_the_bus_read_runs_in_the_bridge_and_survives_a_restart_without_repeats(bridge):
+    async with attached_monitor(bridge) as reader:
+        first = bridge.comms.messaging.send('peer', 'viewer', 'arrives before the read').message
+        watching = asyncio.create_task(bridge.watch_bus())
+        await delivered_line(bridge, reader, 'first')
+        children = Path(f'/proc/{os.getpid()}/task/{threading.get_native_id()}/children').read_text()
+        assert not any(b'watch' in Path(f'/proc/{child}/cmdline').read_bytes() for child in children.split())
+        during = bridge.comms.messaging.send('peer', 'viewer', 'arrives during the read').message
+        await delivered_line(bridge, reader, 'during')
+        await stopped(watching)
+        after = bridge.comms.messaging.send('peer', 'viewer', 'arrives while it is down').message
+        watching = asyncio.create_task(bridge.watch_bus())
+        await delivered_line(bridge, reader, 'after')
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [first.reference, during.reference, after.reference]
+
+
+@pytest.mark.asyncio
+async def test_a_maintenance_hold_waits_and_resumes_without_loss_or_repeat(bridge):
+    async with attached_monitor(bridge) as reader:
+        before = bridge.comms.messaging.send('peer', 'viewer', 'before the hold').message
+        barrier = MaintenanceBarrier(bridge.comms.registry.store.path)
+        held = barrier.begin(MaintenanceOperator.current())
+        watching = None
+        try:
+            watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
+            await asyncio.sleep(0.2)
+            assert not watching.done()
+        finally:
+            barrier.clear(held)
+        await delivered_line(bridge, reader, 'before-hold')
+        after = bridge.comms.messaging.send('peer', 'viewer', 'after the hold').message
+        await delivered_line(bridge, reader, 'after-hold')
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [before.reference, after.reference]
+
+
+def test_a_read_failure_stops_the_bridge_loudly_and_a_hold_passes_through():
+    with pytest.raises(CoreWatchEnded, match='not a declared failure'):
+        with core_watch_failure():
+            raise LookupError('not a declared failure')
+    with pytest.raises(MaintenanceHeldError):
+        with core_watch_failure():
+            raise MaintenanceHeldError('held')

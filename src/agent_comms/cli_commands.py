@@ -392,9 +392,7 @@ class WatchStream(CliResult):
                     emit(ArrivedMessage(message=message).model_dump_json())
 
         async def watch() -> None:
-            with Comms.client(self.comms.route) as comms:
-                thread = comms.registry.require(self.watch.thread)
-                source = thread.runtime.history_source(comms.root, thread.incarnation)
+            source = self.comms.history_source(self.watch.thread)
             async with asyncio.TaskGroup() as tasks:
                 tasks.create_task(stream())
                 tasks.create_task(source.watch_requests(

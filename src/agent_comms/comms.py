@@ -68,25 +68,37 @@ class Comms(ActivityClient):
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),
     ) -> AsyncIterator[Message]:
-        """Wait unlocked; each inbox read owns one client call, and streaming records nothing."""
-        with Comms.client(self.route) as comms:
-            reader = comms.registry.require(name).incarnation
+        """Wait unlocked; each inbox read owns one client call on a worker, so the caller's loop
+        keeps serving, and streaming records nothing."""
+        reader = await Coordination.run_worker(partial(self.watched_reader, name))
         maintenance = MaintenanceBarrier(self.registry.store.path)
         async with aclosing(self.bus.bus.watch(FileSource(maintenance.state_path))) as changes:
             async for _ in changes:
                 while True:
-                    with Comms.client(self.route) as comms:
-                        snapshot = comms.registry.snapshot()
-                        batch = await Coordination.run_worker(partial(
-                            comms.bus.inbox_at, name, snapshot, after=after,
-                        ))
-                        if not reader.current(comms.registry.snapshot()):
-                            raise UnregisteredThreadError("Watched thread was removed or replaced")
+                    batch = await Coordination.run_worker(
+                        partial(self.watched_batch, name, reader, after))
                     for message in batch.page.messages:
                         yield message
                         after = after.advanced(message.reference)
                     if not batch.remaining:
                         break
+
+    def watched_reader(self, name: str):
+        with Comms.client(self.route) as comms:
+            return comms.registry.require(name).incarnation
+
+    def watched_batch(self, name: str, reader, after: InboxStart):
+        with Comms.client(self.route) as comms:
+            batch = comms.bus.inbox_at(name, comms.registry.snapshot(), after=after)
+            if not reader.current(comms.registry.snapshot()):
+                raise UnregisteredThreadError("Watched thread was removed or replaced")
+            return batch
+
+    def history_source(self, name: str):
+        """The named thread's transcript source, whose requests a watch follows."""
+        with Comms.client(self.route) as comms:
+            thread = comms.registry.require(name)
+            return thread.runtime.history_source(comms.root, thread.incarnation)
 
 
 def wire(root: Path | str | None = None) -> Comms:

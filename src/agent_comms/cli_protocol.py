@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import builtins
-from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Mapping
+from abc import ABC
+from collections.abc import Mapping
 from graphlib import TopologicalSorter
 from itertools import groupby
-from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, Union
+from typing import Annotated, ClassVar, Self, Union
 
 from pydantic import (
     Discriminator,
@@ -32,17 +32,6 @@ from .messages import Message
 from .recorded_time import UnrecordedTimeError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
-
-if TYPE_CHECKING:
-    from .child_process import AttachedChild
-    from .cli_bridges.shared import CliBridge
-
-
-async def raise_child_exit(child: AttachedChild, reason: str) -> NoReturn:
-    await child.wait()
-    tail = await child.stderr_tail(max_bytes=8192)
-    raise ChildProcessError(f"Core watch ended, exit {child.returncode}\n{reason}\n{tail}")
-
 
 class TimestampedWire(WireModel):
     """A source record's original ISO timestamp, decoded before making any events."""
@@ -135,15 +124,7 @@ class OpenWire(TaggedWire, ABC, declared_name=None):
 
 
 class WatchLine(TaggedWire, affix=""):
-    """One declared line from a Core watch child."""
-
-    @abstractmethod
-    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None: ...
-
-    @staticmethod
-    async def stream(child: AttachedChild) -> AsyncIterator[WatchLine]:
-        async for line in child.stdout:
-            yield WATCH_LINE.validate_json(line)
+    """One declared line of the agent-comms watch command's output."""
 
 
 class CoreError(WatchLine, declared_name=None):
@@ -165,22 +146,15 @@ class CoreError(WatchLine, declared_name=None):
                 return members[declaration](error=message)
         raise TypeError("No declared Core error handles this exception")
 
-    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
-        await raise_child_exit(child, self.error)
-
 
 class UnavailableCoreError(CoreError, declared_name="unavailable"):
     exception_type = CoordinationReadUnavailable
 
 
 class HeldCoreError(CoreError, declared_name="held"):
-    """The bus went into maintenance: the child has closed, and the bridge resumes it."""
+    """The bus went into maintenance."""
 
     exception_type = MaintenanceHeldError
-
-    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
-        await child.wait()
-        raise MaintenanceHeldError(self.error)
 
 
 class FailedCoreError(CoreError, declared_name="failed"):
@@ -198,9 +172,6 @@ class ArrivedMessage(WatchLine, declared_name="message"):
         ]
     ]
 
-    async def handle(self, bridge: CliBridge, child: AttachedChild) -> None:
-        await bridge.accept(self.message)
-
 
 class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
     """The pager's outstanding continuation, handled only by its socket-owning bridge."""
@@ -212,7 +183,7 @@ class EarlierItems(WatchLine, TurnItem, declared_name="earlier-items"):
     def from_row(cls, row):
         return cls(turn_id=row.turn_id, item_id=row.item_id, request=row.earlier)
 
-    async def handle(self, bridge, child: AttachedChild) -> None:
+    async def handle(self, bridge) -> None:
         await bridge.earlier(self)
 
 
