@@ -3508,6 +3508,16 @@ class UnitOccupied(TodoError, RejectedEnforcementError):  # noqa: N818 - domain 
         return str(self)
 
 
+class ForeignRequest(TodoError, RejectedEnforcementError):  # noqa: N818 - domain refusal
+    """An owner request answers only its own commanders; a standing rule that restores work
+    serving another commander's request reports this refusal instead of ending the pass."""
+
+    reason: ClassVar[str] = "the order serves another commander's request"
+
+    def explanation(self) -> str:
+        return str(self)
+
+
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
 
@@ -5502,7 +5512,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
         if not commander.commands(self.commander):
-            raise TodoError(f"Request {self.id.value} belongs to another commander.")
+            raise ForeignRequest(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
         self.require_commander(commander)
