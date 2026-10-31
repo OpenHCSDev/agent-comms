@@ -1,8 +1,10 @@
 """Required checks and the commander's head verdict protect merges.
 
-The owner's admin bypass stays. A commander-session admin or API merge needs
-Core's recorded ok verdict on the explicitly pinned head. Other hook sessions cannot
-bypass the checks. claude-ai's separate owner path is unchanged.
+The owner's admin bypass stays. A commander session may bypass only with the head
+pinned: one repository, one PR, the exact head. An admin merge owes no recorded
+verdict, since --admin is the merger saying it reviewed the head; an API merge still
+needs Core's recorded ok verdict on it. Other hook sessions cannot bypass the checks.
+claude-ai's separate owner path is unchanged.
 
 Ordinary Bash calls stay standard-library-only; only a merge invokes Core's reader.
 """
@@ -121,6 +123,10 @@ class QueueBypass(ABC):
     @abstractmethod
     def target(self) -> MergeTarget: ...
 
+    def owes_verdict(self, target: MergeTarget) -> tuple[MergeTarget, ...]:
+        """The pinned heads that need Core's recorded ok before this bypass runs."""
+        return (target,)
+
     @classmethod
     def matching(cls, command: ShellCommand) -> tuple[QueueBypass, ...]:
         if not GH.runs(command):
@@ -162,6 +168,13 @@ class AdminMerge(QueueBypass):
             raise MergeTargetUnreadable("Admin merge requires one PR number.")
         return MergeTarget(repository=self.options.one(self.repo_flag),
                            number=int(self.selectors[0]), head=self.options.one(self.head_flag))
+
+    def owes_verdict(self, target: MergeTarget) -> tuple[MergeTarget, ...]:
+        """None: --admin is the review. Tristan, 2026-10-30: "--admin needs no review --admin
+        implies someone reviewed". The head stays pinned, since merging a head nobody named is
+        a real failure; the recorded-verdict demand made the hotfix door slower than the queue
+        (bus 48379)."""
+        return ()
 
 
 class ApiMerge(QueueBypass):
