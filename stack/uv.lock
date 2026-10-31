@@ -5,6 +5,7 @@ requires-python = ">=3.14.8, <3.15"
 [manifest]
 overrides = [
     { name = "agent-comms", editable = "../" },
+    { name = "formbridge", git = "https://github.com/OpenHCSDev/formbridge.git?branch=main" },
     { name = "metaclass-registry", git = "https://github.com/OpenHCSDev/metaclass-registry?branch=main" },
     { name = "textual", extras = ["syntax"], git = "https://github.com/OpenHCSDev/textual.git?branch=main" },
     { name = "ui-theme", git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main" },
@@ -32,6 +33,7 @@ dependencies = [
     { name = "nominal-refactor-advisor" },
     { name = "packaging" },
     { name = "pydantic" },
+    { name = "python-introspect" },
 ]
 
 [package.metadata]
@@ -49,7 +51,9 @@ requires-dist = [
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.3" },
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
+    { name = "python-introspect", git = "https://github.com/OpenHCSDev/python-introspect?rev=main" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
+    { name = "tomli-w", marker = "extra == 'dev'", specifier = "==1.2.0" },
     { name = "uv", marker = "extra == 'dev'", specifier = "==0.13.1" },
 ]
 provides-extras = ["dev"]
@@ -333,8 +337,9 @@ wheels = [
 [[package]]
 name = "formbridge"
 version = "0.2.0"
-source = { git = "https://github.com/OpenHCSDev/formbridge.git?rev=ebe2fa9173428e2bd7154a0de23698757677c3c2#ebe2fa9173428e2bd7154a0de23698757677c3c2" }
+source = { git = "https://github.com/OpenHCSDev/formbridge.git?branch=main#b67c97e5c3ad1eda5c06a464fdc578038d01e3e8" }
 dependencies = [
+    { name = "annotated-types" },
     { name = "docutils" },
     { name = "metaclass-registry" },
     { name = "objectstate" },
@@ -900,14 +905,10 @@ wheels = [
 [[package]]
 name = "python-introspect"
 version = "0.3.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/OpenHCSDev/python-introspect?rev=main#f2876b9ee089c65789607284949e11a9f58283fe" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6d/71/55abd50b3f5da2560950c17de878021012f1c033618ad08187916a6f23fe/python_introspect-0.3.0.tar.gz", hash = "sha256:1b305b7976c5620b137edcb013a7a97356031d1abb0eec552a467e85633a7534", size = 62345, upload-time = "2026-10-12T21:00:11.236Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9e/09/59afdbb10c00e3df9ed3f537a5d657a7b1df7189b7542dc9df5ba7d0810b/python_introspect-0.3.0-py3-none-any.whl", hash = "sha256:95155269ea563a5486e0c3851c868fdf0e15065097cd894efad949c69b69b777", size = 46792, upload-time = "2026-10-12T21:00:09.755Z" },
 ]
 
 [[package]]
@@ -997,7 +998,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#79a8a6d69eed1d3300b54b12c490bc7d3753ee9c" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#9a0501c98c8494999a7f031508e6e2dc6d1e7e0d" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
