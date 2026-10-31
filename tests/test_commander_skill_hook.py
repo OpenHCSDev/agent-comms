@@ -787,7 +787,6 @@ def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(tmp_path, capsy
     spine = next(rule for rule in CommanderReader.rules() if rule.name == example.rule)
     assert example.unengaged(spine.path) == ""
     assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
-    assert StartedDeal().breaks() in template
     gated(transcript, "Bash", {}).judge()
     assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
 
@@ -967,6 +966,3 @@ def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, commanding_ses
     at = datetime(2026, 10, 30, 17, 29, 4, 391000, UTC).astimezone().isoformat(timespec="seconds")
     assert said[0].startswith(CompactedDeal(at).reason())
     assert start.current().trigger == CompactedDeal(at)
-    # The window since a compaction holds only refused calls; broke is asked of the summary's record.
-    assert CompactedDeal(at).breaks() in "\n".join(said)
-    assert StartedDeal().breaks() not in "\n".join(said)

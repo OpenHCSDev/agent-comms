@@ -31,13 +31,14 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal, RuleDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
     StartedDeal, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
-from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook
 from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.read_gate import TranscriptWords
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
@@ -287,7 +288,7 @@ class LightPrime(Prime, declared_name="light"):
 
 
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook, RuleDeal):
+class DealtDeck(TranscriptWords):
     """The deal and the slices the session start hook dealt beside the transcript."""
 
     def deck(self, reader: DeckReader) -> Path:
@@ -393,13 +394,12 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
-            " a time, and answer those in the audit. Fix every break the audit finds: reading alone"
-            " is passive, the audit is what finds the breaks (on 2026-10-27 one reread found six"
-            " broken rules in one session). Every tool but Read, and Write or Edit of"
+            " a time, and answer those in the audit: reading alone is passive. Every tool but"
+            " Read, and Write or Edit of"
             f" {self.audit}, is refused until it answers. This order is given once per session"
             " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
-            self.template_once(self.current()),
+            self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self),
         )

@@ -7,6 +7,11 @@ only after a tool completes, records a Read that covered a whole dealt file; a f
 Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
 it may not write the main agent's audit, and it reports its tool activity through its seat.
+
+A completed audit edit asks, in Tristan's voice over the session's bus seat, whether the answers
+were meant; the session's words are read from its own transcript after the question went out.
+Only that path imports the transcript decoder and the bus client, so no ordinary call pays for
+them.
 """
 
 from __future__ import annotations
@@ -18,9 +23,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, ReadSpan
+from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, ReadSpan, RuleDeal, Speaking, Voice
 from agent_comms.turn_phase import ToolRunningPhase
-from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, HookRecord
+from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms_hooks.seats import SeatedSubagent
 
 
@@ -78,18 +83,72 @@ class ReadTool(ToolMeaning, declared_name="Read"):
 
 
 class WriteTool(ToolMeaning, declared_name="Write"):
-    """Writing the audit itself is the way through the gate; any other write waits."""
+    """Writing the audit itself is the way through the gate; any other write waits. A completed
+    audit write is followed by the question whether it was meant."""
 
     def judge(self, call: GatedCall) -> None:
         call.judge_write(call.tool_name, WriteInput.decode(call.tool_input).file_path.resolve())
+
+    def completed(self, call: GatedCall) -> None:
+        if WriteInput.decode(call.tool_input).file_path.resolve() == call.audit.resolve():
+            call.audit_written()
 
 
 class EditTool(WriteTool, declared_name="Edit"):
     """Answering one rule edits the audit in place; an edit is judged like a write."""
 
 
+class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
+    """A Claude deal reads its session's own words from the transcript beside it: the one
+    record of what the model said, written before each tool call it makes."""
+
+    def words_end(self) -> int:
+        return self.stem.stat().st_size
+
+    def complete_lines(self, offset: int) -> list[tuple[int, bytes]]:
+        """Every whole line after `offset` with its position; a line still being written waits."""
+        with self.stem.open("rb") as stream:
+            stream.seek(offset)
+            raw = stream.read()
+        lines, position = [], offset
+        for line in raw.splitlines(keepends=True):
+            if line.endswith(b"\n"):
+                lines.append((position, line))
+            position += len(line)
+        return lines
+
+    def said_since(self, offset: int) -> tuple[str, ...]:
+        from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+
+        decoder = ClaudeJsonLines()
+        return tuple(words for position, line in self.complete_lines(offset)
+                     for words in decoder.decode_line(line, position).said())
+
+    def delivered(self, asked: Asked) -> bool:
+        return any(asked.message_id.encode() in line for _, line in self.complete_lines(asked.offset))
+
+
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, DealtRuleGate):
+class OwnerVoice(Speaking):
+    """Tristan's voice over the session's bus seat: an owner notice to its own thread, which
+    its bridge delivers mid-turn like any line of his."""
+
+    thread: str
+    root: str
+
+    def say(self, line: str, deal: RuleDeal) -> Asked:
+        from agent_comms.channel_targets import ThreadTarget
+        from agent_comms.comms import client_wire
+        from agent_comms.task_attachments.owner_notices import MeantNotice
+
+        offset = deal.words_end()
+        with client_wire(self.root) as comms:
+            message = MeantNotice().publish(comms.messaging, ThreadTarget(self.thread), line)
+        return Asked(str(message.message_id), offset)
+
+
+@dataclass(frozen=True)
+class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate):
     """One tool call of the session's own agent, judged before it runs and seen after it
     completes. Its deal lives beside the transcript, and a refusal is a PreToolUse denial."""
 
@@ -108,6 +167,13 @@ class GatedCall(ClaudeToolHook, DealtRuleGate):
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
 
+    def voice(self) -> Voice:
+        """The bus seat this session is bound to speaks for Tristan; an unbound one is mute."""
+        from agent_comms_hooks.watch import WatchClaim
+
+        return next((OwnerVoice(record.bus, record.root)
+                     for record in WatchClaim(self.session_id).state().bindings()), Mute())
+
 
 @dataclass(frozen=True)
 class SubagentCall(GatedCall, SeatedSubagent):
@@ -118,6 +184,11 @@ class SubagentCall(GatedCall, SeatedSubagent):
     def judge(self) -> None:
         self.enter(ToolRunningPhase(self.tool_name))
         super().judge()
+
+    def voice(self) -> Voice:
+        """The session's bus seat belongs to the main agent: a question sent there would land
+        in its turn, not the subagent's."""
+        return Mute()
 
     def judge_write(self, tool: str, path: Path) -> None:
         """The main agent's audit is never a subagent's to write, whatever its context says."""
