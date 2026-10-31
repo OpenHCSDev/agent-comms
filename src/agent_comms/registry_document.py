@@ -1164,6 +1164,10 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
         """Deleted declarations keep their generation without exposing its store."""
         return tuple(name for name in self._claimed_generations if name not in self.threads)
 
+    def commanders_channel(self) -> tuple[Thread, ...]:
+        """Every member of #commanders, forks included: each may answer for any commander."""
+        return tuple(ChannelMemberIndex(self.threads.values())[CommandersTag.declared_name])
+
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return (
             (self.threads[self.canonical_name(incarnation.name)],)
