@@ -18,11 +18,13 @@ from typing import (
 
 from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 
+from .claude_transcript import ClaudeJsonLines
 from .session_watch import WatchClaim
 from .shared import Binding
 from ..comms import Comms
 from ..nominal.declared_family import DeclaredFamily
 from ..commander.standing import UnownedWheelSpin
+from ..rule_deal import MeantStore, RuleDeal, SessionAudit
 
 
 class Tagged(HookRecord, DeclaredFamily):
@@ -190,6 +192,8 @@ class StopHook(ClaudeTranscriptHook):
     comms: Comms = field(kw_only=True, compare=False, repr=False)
     binding: Binding = field(kw_only=True, compare=False, repr=False)
 
+    idle_turns_asked: ClassVar[int] = 3
+
     @cached_property
     def idle(self) -> ReadIdle:
         return ReadIdle.read(self.comms, self.binding)
@@ -219,9 +223,24 @@ class StopHook(ClaudeTranscriptHook):
     def deferred(self) -> tuple[str, ...]:
         """Only a commander answers for deferring work; every bound role must keep its Monitor."""
         reply = self.reply()
-        return tuple(
+        return (*(
             reason
             for shape in Deferral.__subclasses__()
             if (deferred := tuple(shape.found(reply)))
             for reason in shape.reasons(deferred, self)
-        )
+        ), *self.unkept_word())
+
+    def unkept_word(self) -> Iterator[str]:
+        """A yes opens the deal, because a session mid-deal can only read and could never prove
+        one. The proof comes at the turn's end: turns in a row that changed nothing are held up
+        against what the session wrote, and he asks again. stop_hook_active lets the next stop
+        through, so this asks once per stop and never loops. A question still open is the
+        session answering, not idling."""
+        if MeantStore(self.stem.with_suffix(".meant")).read().open:
+            return
+        receipts = ClaudeJsonLines().receipts(self.tail())
+        if receipts.idle_turns() >= self.idle_turns_asked:
+            asked = SessionAudit.read(RuleDeal.audit_beside(self.stem)).his_question(receipts)
+            yield (f"Tristan is asking you:\n\n{asked}\n\nYour last {receipts.idle_turns()} turns"
+                   " ran nothing but reads. Compare that with what you wrote and tell him the"
+                   " truth, then change something. No is a real answer.")

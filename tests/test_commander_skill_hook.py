@@ -1054,3 +1054,35 @@ def test_a_compaction_deal_opens_with_when_it_compacted(tmp_path, commanding_ses
     at = datetime(2026, 10, 30, 17, 29, 4, 391000, UTC).astimezone().isoformat(timespec="seconds")
     assert said[0].startswith(CompactedDeal(at).reason())
     assert start.current().trigger == CompactedDeal(at)
+
+
+def test_turns_that_changed_nothing_are_held_up_against_what_the_session_wrote(
+        tmp_path, capsys, commander_bus, commander_binding):
+    """A yes opens the deal; the proof comes at the turn's end, with the session's own endings
+    and what it wrote read back as Tristan asking, once per stop."""
+    record = {"uuid": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-31T04:00:00.000Z", "cwd": "/w", "version": "1"}
+    ended = json.dumps({**record, "type": "system", "subtype": "turn_duration", "durationMs": 1})
+    said = lambda words: json.dumps({**record, "type": "assistant", "message": {
+        "role": "assistant", "content": [{"type": "text", "text": words}]}})
+    called = lambda tool: json.dumps({**record, "type": "assistant", "message": {
+        "role": "assistant", "content": [{"type": "tool_use", "id": "toolu_1", "name": tool, "input": {}}]}})
+    result = json.dumps({**record, "type": "user", "promptId": "p", "message": {"role": "user", "content": [
+        {"type": "tool_result", "tool_use_id": "toolu_1", "content": [{"type": "text", "text": "r"}]}]}})
+    transcript = tmp_path / "session.jsonl"
+    transcript.with_suffix(".audit.json").write_text(json.dumps({"rules": [
+        {"rule": "spine", "does": "I clear his board first."}], "owner_words": []}))
+
+    def stopped(*lines, active=False):
+        transcript.write_text("\n".join(lines) + "\n")
+        StopHook.decode({"hook_event_name": "Stop", "session_id": "s", "transcript_path": str(transcript),
+                         "stop_hook_active": active}, comms=commander_bus, binding=commander_binding).guard()
+        return capsys.readouterr().out
+
+    idle = (said("Skipped"), ended) * 3
+    asked = json.loads(stopped(*idle))["reason"]
+    assert "Tristan is asking you:" in asked and "> I clear his board first." in asked
+    assert "> Skipped" in asked and "did you mean it?" in asked
+    assert stopped(*idle, active=True) == ""  # never loops
+    assert stopped(said("Skipped"), ended, said("Skipped"), ended) == ""  # two is not a pattern
+    assert stopped(said("Skipped"), ended, called("Bash"), result, said("done"), ended,
+                   said("Skipped"), ended, said("Skipped"), ended) == ""  # a call ran

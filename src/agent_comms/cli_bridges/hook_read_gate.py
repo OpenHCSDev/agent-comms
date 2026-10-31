@@ -23,6 +23,7 @@ from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, Owed, ReadSpan, Ru
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.session_receipts import SessionReceipts
 from agent_comms.cli_bridges.shared import Binding, Watch
 import time
 from agent_comms.turn_phase import ToolRunningPhase
@@ -140,6 +141,10 @@ class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
                 lines.append((position, line))
             position += len(line)
         return lines
+
+    def receipts(self) -> SessionReceipts:
+        """The transcript's recent past: a gate hook runs often, so it never reads more of it."""
+        return ClaudeJsonLines().receipts(self.tail())
 
     def said_since(self, offset: int) -> tuple[str, ...]:
         decoder = ClaudeJsonLines()
