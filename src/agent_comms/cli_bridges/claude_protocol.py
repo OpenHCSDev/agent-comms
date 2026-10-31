@@ -70,6 +70,7 @@ from agent_comms.transcript_events import (
 from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
+from ..session_receipts import SessionReceipts
 from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
@@ -469,6 +470,9 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the model said to its reader in this record; most records carry none."""
         return ()
 
+    def tally(self, receipts: SessionReceipts) -> None:
+        """What this record adds to the session's receipts; most records add nothing."""
+
 
 class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
 
@@ -481,6 +485,9 @@ class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
     def said(self) -> tuple[str, ...]:
         """The words this block shows the reader; a tool call or hidden reasoning shows none."""
         return ()
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.said(self.said())
 
 
 class TextContent(WireModel):
@@ -535,6 +542,9 @@ class ToolUse(AssistantBlock, declared_name='tool_use'):
     name: str
     input: dict[str, JsonValue]
 
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.called(str(self.id), self.name)
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
         return session.started(ClaudeToolDraft(
@@ -571,6 +581,10 @@ class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
 
     def said(self) -> tuple[str, ...]:
         return tuple(words for block in self.message.content for words in block.said())
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        for block in self.message.content:
+            block.tally(receipts)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         updates = [update for block in self.message.content for update in block.updates(self, session)]
@@ -698,6 +712,9 @@ class UserBlock(TaggedWire, ABC, affix=""):
 
     def ends_turn(self) -> bool:
         return False
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        """A prompt's words are not the session's."""
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
@@ -837,6 +854,9 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     content: list[Declared[ResultPart]]
     is_error: bool = False
 
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.resulted(str(self.tool_use_id), self.is_error)
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.tool_result(
             self.tool_use_id, '\n'.join(part.result_text() for part in self.content),
@@ -880,6 +900,10 @@ class UserRecord(PromptRecord, Originated, declared_name='user'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.origin.owner_words(self.message.text())
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        for block in self.message.content:
+            block.tally(receipts)
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
