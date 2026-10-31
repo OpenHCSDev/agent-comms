@@ -19,11 +19,8 @@ from agent_comms.tracked_turn import (
 )
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-from agent_comms.turn_input_source import (
-    AcceptedFollowingInput,
-    AcceptedTurn,
-    DeliveredFollowingInput,
-)
+from agent_comms.queued_input import AcceptedTurn
+from agent_comms.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_usage import UsageAccount
 from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog

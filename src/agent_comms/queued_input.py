@@ -45,8 +45,12 @@ from .thread_identity import ClaimedIdentity, ClaimScoped
 from .threads import Thread
 from .turn_context import TurnContext
 from .turn_goal_permission import AcceptedGoalPermission, TurnGoalPermission
-from .turn_input_source import AcceptedFollowingInput, AcceptedTurn, DeliveredFollowingInput
+from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 
+from .acp_extension import InputStartedUpdate
+from .ordinary_turn_rules import MissingAcceptedInputCheck
+from .reservation_rules import ReservationRule, RuleCheck
+from agent_comms.turn_input_source import TurnAcceptance
 if TYPE_CHECKING:
     from .acp_extension import QueueItem, QueueScope
     from .turn_inbox import InputContent, TurnInbox
@@ -57,6 +61,83 @@ if TYPE_CHECKING:
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner
+    from .runtime import RuntimeServer
+
+
+@dataclass(frozen=True, kw_only=True)
+class AcceptedInputCheck(RuleCheck):
+    acknowledgement: QueuedInput
+    current: Thread
+    claim_generation: int
+    input_id: InputId
+    keys: tuple[InputKey, ...]
+    source_live: bool
+
+
+class AcceptedInputAuthorityRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The live input's accepted owner or goal authority changed."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return not check.acknowledgement.current(check.current, check.claim_generation)
+
+
+class AcceptedInputKeyRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The input does not name its exact accepted ACP acknowledgement."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return (check.input_id, check.keys) != (check.acknowledgement.input_id, (check.acknowledgement.key,))
+
+
+class AcceptedInputSourceRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The captured accepted input source is no longer live."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return not check.source_live
+
+
+@dataclass(frozen=True)
+class AcceptedTurn(TurnAcceptance):
+    input_id: InputId
+
+    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
+        return state.queued[self.input_id].controller
+
+    def require_current(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+        current: Thread, claim_generation: int,
+    ) -> None:
+        try:
+            accepted = inputs.state(session_id).queued[self.input_id]
+        except KeyError:
+            for row in inputs.dispositions.read(source.keys).rows.values():
+                row.require_not_cleared()
+            MissingAcceptedInputCheck().require_valid()
+            raise
+        AcceptedInputCheck(
+            acknowledgement=accepted, current=current, claim_generation=claim_generation,
+            input_id=self.input_id, keys=source.keys,
+            source_live=accepted.is_live(inputs, session_id),
+        ).require_valid()
+
+    async def accepted_start(
+        self, update: InputStartedUpdate, inputs: InputDrain, session_id: AcpSessionId,
+    ) -> InputStartedUpdate:
+        queued = inputs.state(session_id).queued
+        if self.input_id in queued:
+            update = replace(update, text=await queued[self.input_id].started(inputs))
+        return update.identified(self.input_id)
+
+    def require_following_source(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+    ) -> None:
+        if inputs.state(session_id).following.get(self.input_id) is not source:
+            raise RelationViolationError("Following context outlived its actual accepted input")
+
+    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
+        inputs.state(session_id).queued.pop(self.input_id, None)
 
 
 class InputHandoffRefused(RelationViolationError):

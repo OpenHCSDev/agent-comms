@@ -50,14 +50,7 @@ from .goal_attempt_phase import (
     ResolvedAttempt,
     SucceededAttempt,
 )
-from .goal_failure_observation import (
-    FailedTurnEvidence,
-    FailedTurnObservation,
-    GoalFailureEvidence,
-    GoalLedgerTable,
-    NoFailedTurnEvidence,
-    record_observation,
-)
+from .goal_failure_observation import FailedTurnEvidence, GoalFailureEvidence, GoalLedgerTable, NoFailedTurnEvidence, record_observation
 from .goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -94,11 +87,55 @@ from .typed_table import (
 )
 
 from .reservation_rules import ReservationRule, RuleCheck
+from .turn_failure import TurnFailure
+from .field_codec import TurnId
 if TYPE_CHECKING:
     from .goal_scope import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
+    from .goals import Goal
+    from .turn_lease import TurnLeaseFence
+
+
+@dataclass(frozen=True)
+class FailedTurnObservation:
+    reservation: Reservation = field(repr=False)
+    evidence: FailedTurnEvidence
+
+    @classmethod
+    def from_terminal(
+        cls,
+        reservation: Reservation,
+        *,
+        owner: Thread,
+        goal: Goal,
+        lease: TurnLeaseFence,
+        turn_id: TurnId,
+        claim_scope: int,
+        current_owner: Thread | None,
+        current_claim: int | None,
+        failure: type[TurnFailure],
+    ) -> FailedTurnObservation | None:
+        # Observation is passive: a changed owner, goal or lease yields no
+        # observation. The evidence is built from already-trusted values, so a
+        # construction error is a defect and raises.
+        evidence = FailedTurnEvidence(
+            reservation.attempt_id, reservation.goal_id, reservation.generation,
+            owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
+            lease.identity.generation, goal.revision, turn_id, failure,
+        )
+        if owner.goal != goal or reservation.goal_id != goal.id:
+            return None
+        if lease != evidence.turn:
+            return None
+        if current_owner is None:
+            return None
+        if current_owner.process_identity != owner.process_identity:
+            return None
+        if not evidence.matches_owner(current_owner, current_claim):
+            return None
+        return cls(reservation, evidence)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -508,6 +545,17 @@ class LaunchPermit(GoalTurnPermit):
 
     def check_grant(self, store: GoalAttemptStore) -> None:
         OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
+
+    def failure_observation(
+        self, *, owner: Thread, goal: Goal, lease: TurnLeaseFence, turn_id: TurnId,
+        claim_scope: int, current_owner: Thread | None, current_claim: int | None,
+        failure: type[TurnFailure],
+    ) -> FailedTurnObservation | None:
+        return FailedTurnObservation.from_terminal(
+            self.reservation, owner=owner, goal=goal, lease=lease, turn_id=turn_id,
+            claim_scope=claim_scope, current_owner=current_owner, current_claim=current_claim,
+            failure=failure,
+        )
 
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         """Read the original attempt, even after its successor generation advances."""

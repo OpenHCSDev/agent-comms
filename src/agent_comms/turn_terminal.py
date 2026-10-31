@@ -6,12 +6,10 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .goal_failure_observation import FailedTurnObservation
 from .turn_failure import BackendFailed, TurnFailure
 
 if TYPE_CHECKING:
     from .agent_events import Done
-    from .goal_attempts import LaunchPermit
     from .maintenance_barrier import MaintenanceBarrier
     from .turn_goal_account import TurnGoalAccount
     from .turn_progress import TurnProgress
@@ -58,8 +56,7 @@ class FailedGoalTurn(TurnTerminal):
 
     def failure_observation(self, account, permit, captured):
         snapshot = account.comms.registry.snapshot()
-        return FailedTurnObservation.from_terminal(
-            permit.reservation,
+        return permit.failure_observation(
             owner=account.owner,
             goal=captured,
             lease=account.lease,

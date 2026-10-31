@@ -225,13 +225,8 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
     from agent_comms.input_key import BusInputKey
     from agent_comms.text_digest import TextDigest
     from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
-    from agent_comms.turn_input_source import (
-        AcceptedTurn,
-        NoInputDependency,
-        NoTurnAcceptance,
-        OwnerOriginalInput,
-        RoutedOriginalInput,
-    )
+    from agent_comms.queued_input import AcceptedTurn
+    from agent_comms.turn_input_source import NoInputDependency, NoTurnAcceptance, OwnerOriginalInput, RoutedOriginalInput
 
     _, agent, incarnation, generation = _owner(tmp_path)
     input_id, native_id = InputId.mint(), InputId.mint()

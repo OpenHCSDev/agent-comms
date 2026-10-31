@@ -19,7 +19,7 @@ from .field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
-from .ordinary_turn_rules import MissingAcceptedInputCheck, UnboundOrdinaryInputRule, UnconsumedDependencyRule
+from .ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from .reservation_rules import ReservationViolationError
 from .routing import NoTurnRouting, TurnRouting
 from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
@@ -40,7 +40,6 @@ if TYPE_CHECKING:
     from .owned_send import OwnedSend
     from .runtime import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation
-    from .queued_input import QueuedInput
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -113,41 +112,6 @@ class OrdinaryTurnRule(ReservationRule):
         )
 
 
-@dataclass(frozen=True, kw_only=True)
-class AcceptedInputCheck(RuleCheck):
-    acknowledgement: QueuedInput
-    current: Thread
-    claim_generation: int
-    input_id: InputId
-    keys: tuple[InputKey, ...]
-    inputs: InputDrain
-    session_id: str
-
-
-class AcceptedInputAuthorityRule(ReservationRule):
-    check_type = AcceptedInputCheck
-    explanation = "The live input's accepted owner or goal authority changed."
-
-    def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.acknowledgement.current(check.current, check.claim_generation)
-
-
-class AcceptedInputKeyRule(ReservationRule):
-    check_type = AcceptedInputCheck
-    explanation = "The input does not name its exact accepted ACP acknowledgement."
-
-    def violated(self, check: AcceptedInputCheck) -> bool:
-        return (check.input_id, check.keys) != (check.acknowledgement.input_id, (check.acknowledgement.key,))
-
-
-class AcceptedInputSourceRule(ReservationRule):
-    check_type = AcceptedInputCheck
-    explanation = "The captured accepted input source is no longer live."
-
-    def violated(self, check: AcceptedInputCheck) -> bool:
-        return not check.acknowledgement.is_live(check.inputs, check.session_id)
-
-
 class TurnAcceptance(ABC):
     """The live ACP acknowledgement, when this turn has one."""
 
@@ -198,47 +162,6 @@ class NoTurnAcceptance(TurnAcceptance):
 
     def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         return
-
-
-@dataclass(frozen=True)
-class AcceptedTurn(TurnAcceptance):
-    input_id: InputId
-
-    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
-        return state.queued[self.input_id].controller
-
-    def require_current(
-        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
-        current: Thread, claim_generation: int,
-    ) -> None:
-        try:
-            accepted = inputs.state(session_id).queued[self.input_id]
-        except KeyError:
-            for row in inputs.dispositions.read(source.keys).rows.values():
-                row.require_not_cleared()
-            MissingAcceptedInputCheck().require_valid()
-            raise
-        AcceptedInputCheck(
-            acknowledgement=accepted, current=current, claim_generation=claim_generation,
-            input_id=self.input_id, keys=source.keys, inputs=inputs, session_id=session_id,
-        ).require_valid()
-
-    async def accepted_start(
-        self, update: InputStartedUpdate, inputs: InputDrain, session_id: AcpSessionId,
-    ) -> InputStartedUpdate:
-        queued = inputs.state(session_id).queued
-        if self.input_id in queued:
-            update = replace(update, text=await queued[self.input_id].started(inputs))
-        return update.identified(self.input_id)
-
-    def require_following_source(
-        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
-    ) -> None:
-        if inputs.state(session_id).following.get(self.input_id) is not source:
-            raise RelationViolationError("Following context outlived its actual accepted input")
-
-    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
-        inputs.state(session_id).queued.pop(self.input_id, None)
 
 
 @dataclass(frozen=True, kw_only=True)
