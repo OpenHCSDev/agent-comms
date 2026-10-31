@@ -135,8 +135,9 @@ class DealtRead:
 
 @dataclass(frozen=True)
 class RuleAudit:
-    """One dealt rule: each action since the last start or compaction that broke it, and the
-    answer to reading it: greentext lines it holds verbatim, what they did, and why it holds."""
+    """One dealt rule: each action that broke it in the record its deal's trigger names
+    (`DealTrigger.breaks`), and the answer to reading it: greentext lines it holds verbatim, what
+    they did, and why it holds."""
 
     rule: str
     broke: tuple[str, ...] = ()
@@ -253,7 +254,7 @@ class AuditDue:
             )
         )
 
-    def template(self, audit_path: Path) -> str:
+    def template(self, audit_path: Path, trigger: DealTrigger) -> str:
         """Render the required answers from their declarations, not another JSON schema."""
         audit = SessionAudit(
             rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
@@ -267,8 +268,8 @@ class AuditDue:
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
-                " keep every rule name and quoted words unchanged. Empty broke means the rule was"
-                " kept; doing must name your current action:\n"
+                f" keep every rule name and quoted words unchanged. {trigger.breaks()} Doing names"
+                " your current action:\n"
                 + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
             )
         )
@@ -379,7 +380,7 @@ class Blocked(ToolGateState):
                     f"You just tried {tool} before {self.cause.before}. Call #{gate.count_call()}"
                     " since this deal, refused.",
                     self.cause.reason,
-                    gate.template_once(self.cause.record.due),
+                    gate.template_once(self.cause.record),
                 )
             )
         )
@@ -404,6 +405,12 @@ class DealTrigger(DeclaredFamily, affix="Deal"):
     def reason(self) -> str:
         """The cause with its evidence, as the refusal's first line."""
 
+    def breaks(self) -> str:
+        """What each rule's `broke` lists: the record this deal leaves in front of the session.
+        A refresh or a /prime keeps the context, so every action since the last loss is in it."""
+        return ("Broke lists each action since your last start or compaction that broke the rule;"
+                " every one of them is still in your context.")
+
 
 @dataclass(frozen=True)
 class StartedDeal(DealTrigger):
@@ -411,6 +418,9 @@ class StartedDeal(DealTrigger):
 
     def reason(self) -> str:
         return "Dealt because this session just started: nothing you read before is in front of you."
+
+    def breaks(self) -> str:
+        return "Nothing has run since this start, so broke stays empty."
 
 
 class CompactionDeal(DealTrigger):
@@ -424,6 +434,13 @@ class CompactionDeal(DealTrigger):
         return (f"Re-dealt on purpose: your context compacted {self.moment()}. You have no memory"
                 " of it because that is what a compaction is; the gate read the clock right. Your"
                 " summary is a paraphrase, and it dropped the trust along with the words.")
+
+    def breaks(self) -> str:
+        """The window since the compaction holds only refused calls, so asking about it certified
+        every rule kept; the actions that broke them are in the record the summary carries."""
+        return ("Broke lists each action your summary and the messages kept after it record that"
+                " broke the rule. Every one was yours; the summary is what dropped them, so an empty"
+                " list claims that record shows none. It is never a pardon.")
 
 
 @dataclass(frozen=True)
@@ -446,8 +463,8 @@ class UnstampedCompactionDeal(CompactionDeal):
 
 
 @dataclass(frozen=True)
-class ClearedDeal(DealTrigger):
-    """The session was cleared and starts from nothing."""
+class ClearedDeal(StartedDeal):
+    """The session was cleared and starts from nothing, as a first start does."""
 
     def reason(self) -> str:
         return "Re-dealt because this session was cleared: its context is empty."
@@ -743,17 +760,17 @@ class RuleDeal(State):
     def template_shown(self) -> Path:
         return self.stem.with_suffix(".template-shown")
 
-    def template_once(self, due: AuditDue) -> str:
+    def template_once(self, record: DealRecord) -> str:
         """The whole template once per deal: on 2026-10-30 a batch of 28 refused reads reprinted
         it 28 times, about 84k tokens, and the deal filled the context it was dealt to restore."""
         try:
             self.template_shown.touch(exist_ok=False)
         except FileExistsError:
             return (
-                f"{due.reminder()}\n\n"
-                f"The audit's template was in your first refusal; it goes in {self.audit}."
+                f"{record.due.reminder()}\n\n"
+                f"The audit's template was shown once already; it goes in {self.audit}."
             )
-        return f"{due.reminder()}\n\n{due.template(self.audit)}"
+        return f"{record.due.reminder()}\n\n{record.due.template(self.audit, record.trigger)}"
 
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
