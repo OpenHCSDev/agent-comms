@@ -806,6 +806,11 @@ class RepositoryReads:
     def __init__(self) -> None:
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
+        self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
+
+    def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
+        """Each remote's published refs: worktrees of one repository share their remotes."""
+        return self._remote_cuts.setdefault(checkout.resolved().common_dir, {})
 
     def repository(self, path: Path) -> Repo:
         """The common directory's identity, acquired once within this pass."""
