@@ -35,6 +35,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
+from .goal_records import GoalRecords
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
@@ -108,7 +109,7 @@ class GoalPrecondition:
 
 @dataclass(frozen=True)
 class GoalActionContext:
-    goals: Goals
+    goals: GoalRecords
     thread: Thread
     actor: type = RuntimeInvocable
 
