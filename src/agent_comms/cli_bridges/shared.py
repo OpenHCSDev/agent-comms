@@ -1115,6 +1115,18 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
                 return operation(db)
         return await self.comms.bus.when_open(read)
 
+    async def once_available[Result](
+        self, waiting: str, attempt: Callable[[], Awaitable[Result]],
+    ) -> Result:
+        """The bridge's one wait on a busy store: no write began and no snapshot was acquired,
+        so the attempt is whole and runs again. A write that began keeps its own error."""
+        while True:
+            try:
+                return await attempt()
+            except CoordinationReadUnavailable as error:
+                self.log(f'{waiting} waits for the store: {error}')
+                await asyncio.sleep(Platform.current().store_lock_interval)
+
     async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=type(self), recipient_lookup=self.recipient_lookup, message_id=message_id)))
@@ -1163,16 +1175,13 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        while True:
+
+        async def begin() -> bool:
             # A detached reader creates no attempt for a message it has not reached.
             await self.prepare_delivery()
-            try:
-                begun = await self.coordinator_write(self.attempt(message, outcome).begin)
-                break
-            except CoordinationBeginUnavailable as error:
-                self.log(f'Message {message.message_id} waits for the coordinator: {error}')
-                await asyncio.sleep(Platform.current().store_lock_interval)
-        if not begun:
+            return await self.coordinator_write(self.attempt(message, outcome).begin)
+
+        if not await self.once_available(f'Message {message.message_id}', begin):
             return
         with self.uncertain_on_contention(message.message_id):
             result = await message.task.delivered_by(self, message) if conversation else outcome
@@ -1197,19 +1206,29 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             raise held.exceptions[0] from None
 
     async def read_messages(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
-        with core_watch_failure(lines):
+        """A busy store repeats the whole subscription: every message already read has its
+        attempt, because the next read waits for its delivery, so the resume position skips it."""
+        async def subscription() -> None:
             arrived = self.comms.watch(self.binding.bus, after=await self.resume_after())
             async with aclosing(arrived) as messages:
                 async for message in messages:
                     lines.put_nowait(partial(self.accept, message))
                     await lines.join()
 
-    async def read_requests(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
         with core_watch_failure(lines):
+            await self.once_available('Watch read', subscription)
+            # Nothing else would say so: delivery alone would keep the session deaf and silent.
+            raise CoreWatchEnded('The bus read ended on its own')
+
+    async def read_requests(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        async def subscription() -> None:
             source = await Coordination.run_worker(
                 partial(self.comms.history_source, self.binding.bus))
             await source.watch_requests(lambda row: lines.put_nowait(
                 partial(EarlierItems.from_row(row).handle, self)))
+
+        with core_watch_failure(lines):
+            await self.once_available('Watch requests', subscription)
 
     @staticmethod
     async def deliver_lines(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
@@ -1349,7 +1368,8 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
-        await comms.bus.when_open(output.transcript.end_turn)
+        await self.once_available('Transcript start', partial(
+            comms.bus.when_open, output.transcript.end_turn))
         # Each CLI reports its own initial state. Disk writes never stop the
         # event reader from receiving a newer whole draft of the same item.
         queue: asyncio.Queue[RuntimeUpdate] = asyncio.Queue()
@@ -1370,7 +1390,8 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                     break
                 while not queue.empty():
                     pending.append(queue.get_nowait())
-                await comms.bus.when_open(partial(output.publish_batch, pending))
+                await self.once_available('Transcript update', partial(
+                    comms.bus.when_open, partial(output.publish_batch, pending)))
 
 
 class MonitorFrame(TaggedWire, ABC, affix=""):

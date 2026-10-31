@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Self
 from agent_comms.bus import StoredBusReader
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
-    CoordinationBeginUnavailable,
     CoordinationReadUnavailable,
     IntegrityViolationError,
 )
@@ -145,8 +144,7 @@ class CoordinationSession(CoordinationStore):
         """Retire existing rollback-journal readers before changing any state."""
         if connection.in_transaction:
             raise IntegrityViolationError("nested coordinator transaction is not allowed")
-        with CoordinationBeginUnavailable.checking():
-            connection.execute("BEGIN EXCLUSIVE")
+        connection.execute("BEGIN EXCLUSIVE")
 
     @contextmanager
     def settlement(

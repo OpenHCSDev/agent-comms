@@ -218,9 +218,28 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
 async def begin_waits(capsys, message):
     """The bridge's own log names the held message once the store's declared wait expires."""
     seen = ''
-    while f'Message {message.message_id} waits for the coordinator' not in seen:
+    while f'Message {message.message_id} waits for the store' not in seen:
         await asyncio.sleep(.01)
         seen += capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_busy_read_holds_the_watch_resume_until_the_store_frees(bridge, capsys):
+    """Real contention on the read that opens the core watch: the wait keeps the bridge up."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    with closing(sqlite3.connect(path, isolation_level=None)) as held:
+        held.execute('BEGIN EXCLUSIVE')
+        resuming = asyncio.create_task(bridge.once_available('Watch resume', bridge.resume_after))
+        seen = ''
+        async with asyncio.timeout(60):
+            while 'Watch resume waits for the store' not in seen:
+                await asyncio.sleep(.01)
+                seen += capsys.readouterr().err
+        assert not resuming.done()
+        held.execute('ROLLBACK')
+    assert await asyncio.wait_for(resuming, 30) == bridge.binding.start
 
 
 @pytest.mark.asyncio
@@ -1239,3 +1258,26 @@ def test_a_failure_outside_the_reported_family_crashes_instead_of_queueing():
         with core_watch_failure(lines):
             raise LookupError('a defect')
     assert lines.empty()
+
+
+@pytest.mark.asyncio
+async def test_a_held_store_during_the_read_keeps_the_bridge_up_and_delivers_once(bridge, capsys):
+    """Real contention on the store a busy read reports: it waits, it does not end the watch."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    async with attached_monitor(bridge, timeout=120) as reader:
+        sent = bridge.comms.messaging.send('peer', 'viewer', 'read while the store is held').message
+        with closing(sqlite3.connect(path, isolation_level=None)) as held:
+            held.execute('BEGIN EXCLUSIVE')
+            watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
+            seen = ''
+            async with asyncio.timeout(60):
+                while 'Watch read waits for the store' not in seen:
+                    await asyncio.sleep(.01)
+                    seen += capsys.readouterr().err
+            assert not watching.done(), seen
+            held.execute('ROLLBACK')
+        await delivered_line(bridge, reader, 'held-store')
+        assert not watching.done()
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [sent.reference]

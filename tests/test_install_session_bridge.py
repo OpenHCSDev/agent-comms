@@ -15,18 +15,24 @@ import os
 import select
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import time
 from contextlib import ExitStack, contextmanager
 from functools import partial
 from html import escape
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
 from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import ProcessIdentity, SpawnedProcess
+from agent_comms.activity import ActivityStore
+from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_digests import LastTurns
+from agent_comms.comms import wire
 from agent_comms.cli_bridges.monitor import (
     ClaimedReplacement, InspectSession, PauseSession, SessionInformation,
 )
@@ -113,6 +119,48 @@ def probe(child):
     value = frame(child)
     assert isinstance(value, MonitorProbe)
     return value
+
+
+@pytest.mark.timeout(180)
+def test_real_bridge_outlives_a_held_activity_store_and_publishes_once(tmp_path, bridge_home):
+    """A real serve process, a real transcript line and a real write lock held past the store's
+    busy timeout: the process stays up, and on release the update lands exactly once."""
+    with session_bridge(tmp_path, bridge_home) as (_home, _claim, _observed, child, log, _env):
+        comms = wire(tmp_path / 'bus')
+        activity = ActivityStore(comms.root)
+        with activity.writing():
+            pass
+        transcript = tmp_path / 'copied-session.jsonl'
+        record = dict(sessionId='copied-session', timestamp='2026-10-31T01:00:00Z')
+        with closing(sqlite3.connect(activity.path, isolation_level=None)) as held:
+            held.execute('BEGIN IMMEDIATE')
+            with transcript.open('a') as stream:
+                stream.write(json.dumps(record | dict(
+                    type='user', uuid='00000000-0000-4000-8000-000000000001', promptId='held',
+                    origin=dict(kind='human'), message=dict(content='hold it'))) + '\n')
+                stream.write(json.dumps(record | dict(
+                    type='assistant', uuid='00000000-0000-4000-8000-000000000002',
+                    message=dict(content=[dict(type='text', text='published once')]))) + '\n')
+                stream.write(json.dumps(dict(type='system', subtype='turn_duration')) + '\n')
+            deadline = time.monotonic() + 60
+            while (b'Transcript update waits for the store' not in log.read_bytes()
+                   and child.poll() is None and time.monotonic() < deadline):
+                time.sleep(.1)
+            assert child.poll() is None, log.read_text()
+            assert b'Transcript update waits for the store' in log.read_bytes(), log.read_text()
+            held.execute('ROLLBACK')
+
+        def published():
+            return [event for turn in comms.transcripts.turns('bridge-copy', LastTurns()).turns
+                    for event in turn.events
+                    if isinstance(event, AssistantTranscript) and event.text == 'published once']
+
+        deadline = time.monotonic() + 60
+        while not published() and child.poll() is None and time.monotonic() < deadline:
+            time.sleep(.1)
+        time.sleep(1)
+        assert child.poll() is None, log.read_text()
+        assert len(published()) == 1, log.read_text()
 
 
 def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_path, bridge_home):

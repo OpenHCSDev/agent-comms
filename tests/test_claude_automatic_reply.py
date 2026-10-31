@@ -1,7 +1,9 @@
 """Only a turn's opening DMs receive its final; channels always require explicit sends."""
 
 import json
+import sqlite3
 from collections.abc import Callable
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -13,6 +15,7 @@ from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
 from agent_comms.cli_bridges.shared import Binding, Options, StoredBinding, Watch
 from agent_comms.comms import Comms
+from agent_comms.coordination_errors import CoordinationBeginUnavailable
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.standing_rules import DirectiveUnacted
@@ -82,6 +85,29 @@ def replies_after(bridge: ClaudeBridge, sequence: int) -> tuple[tuple[str, str],
 def finish_reply(output: ThreadOutput, session: ClaudeSession) -> None:
     ended = decoded_record(dict(type='system', subtype='turn_duration'))
     output.publish_batch(list(ended.updates(session)))
+
+
+@pytest.mark.asyncio
+async def test_a_batch_refused_after_its_reply_never_sends_it_again(bridge: ClaudeBridge) -> None:
+    """Real contention on the transcript write right after the reply went out, while the turn's
+    reply window is still open: the batch is refused whole and its retry sends no second DM."""
+    output = bridge.output_type.for_comms(bridge.comms.transcripts.external('viewer'), bridge.comms)
+    session = ClaudeSession()
+    output.publish_batch(list(opening_record('reply-turn').updates(session)))
+    direct = bridge.comms.messaging.send('claude-code', 'viewer', 'a delivered DM', QuestionKind).message
+    await confirm_messages(bridge, output, session, (direct,))
+    output.publish_batch(list(assistant_record('final', 'Private answer').updates(session)))
+    batch = list(decoded_record(dict(type='system', subtype='turn_duration')).updates(session))
+    expected = (('claude-code', 'Private answer'),)
+    with closing(sqlite3.connect(output.transcript.path, isolation_level=None)) as held:
+        held.execute('BEGIN IMMEDIATE')
+        with pytest.raises(CoordinationBeginUnavailable):
+            output.publish_batch(batch)
+        held.execute('ROLLBACK')
+    assert replies_after(bridge, direct.seq) == expected
+    output.publish_batch(batch)
+    assert replies_after(bridge, direct.seq) == expected
+    assert output.sent == {}
 
 
 @pytest.mark.asyncio
