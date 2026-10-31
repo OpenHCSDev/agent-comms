@@ -206,10 +206,11 @@ class Fleet:
         return claimed
 
     def pull_request(self, number: int, branch: str, head: str, *,
-                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest) -> None:
+                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest,
+                     queued: bool = False) -> None:
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.github.put(self.repository, kind(
-            number, branch, head, stamp, "main", reviewable_times=(stamp,),
+            number, branch, head, stamp, "main", reviewable_times=(stamp,), queued=queued,
         ))
 
 
@@ -457,6 +458,24 @@ def fleet(comms, tmp_path, configured_repository, installed_runtime, github_cli)
 
 def test_every_held_branch_rule_has_a_seed():
     assert set(HeldBranchRule.members_with(HeldBranchRule)) <= set(IncidentSeed.seeds)
+
+
+def test_a_queued_request_is_not_told_to_merge_main_into_its_locked_branch(fleet):
+    built, _ = fleet
+
+    def behind(name, number, queued):
+        worktree = built.worktree(name, base=built.old_main)
+        head = built.commit(worktree, f"{name}.py", f"{name} = 1\n")
+        built.push(worktree)
+        todo = built.unit(name, worktree)
+        built.pull_request(number, name, head, queued=queued)
+        built.claim(todo, number, head, at=time.time())
+        return todo
+
+    queued, unqueued = behind("in-queue", 31, True), behind("not-queued", 32, False)
+    told = {rule.problem for rule in built.observe().rules if isinstance(rule, BranchBehindMain)}
+    assert unqueued.id in told
+    assert queued.id not in told
 
 
 def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):

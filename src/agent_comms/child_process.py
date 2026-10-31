@@ -69,7 +69,6 @@ from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
-    from .runtime_children import RuntimeChildrenStore
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
@@ -1200,14 +1199,12 @@ class ChildLifetime(DeclaredFamily, affix="Lifetime"):
         return command
 
     @classmethod
-    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
-                registration: ChildRegistration) -> SpawnedProcess:
-        return SpawnedProcess(process, Platform.current().identity(process.pid), registration)
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int) -> SpawnedProcess:
+        return SpawnedProcess(process, Platform.current().identity(process.pid))
 
     @classmethod
-    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
-                            registration: ChildRegistration) -> AttachedChild:
-        return AttachedChild(process, Platform.current().identity(process.pid), registration)
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int) -> AttachedChild:
+        return AttachedChild(process, Platform.current().identity(process.pid))
 
     @classmethod
     @abstractmethod
@@ -1250,56 +1247,31 @@ class OutlivesLauncherLifetime(ChildLifetime):
         return Platform.current().identity(int(encoded))
 
     @classmethod
-    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
-                registration: ChildRegistration) -> SpawnedProcess:
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int) -> SpawnedProcess:
         try:
             identity = cls.resident(descriptor)
         finally:
             returncode = process.wait()
         if returncode != 0:
             raise ChildProcessError("Resident handoff failed")
-        return HandedOffProcess(process, identity, registration)
+        return HandedOffProcess(process, identity)
 
     @classmethod
-    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
-                            registration: ChildRegistration) -> AttachedChild:
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int) -> AttachedChild:
         try:
             identity = await asyncio.to_thread(cls.resident, descriptor)
         finally:
             returncode = await process.wait()
         if returncode != 0:
             raise ChildProcessError("Resident handoff failed")
-        return HandedOffAttachedChild(process, identity, registration)
+        return HandedOffAttachedChild(process, identity)
 
     @classmethod
     def launcher(cls, platform: Platform) -> int:
         return 0
 
 
-class ChildRegistration(ABC):
-    """The durable owner notified after a launched group has finished."""
-
-    @abstractmethod
-    def finished(self, identity: ProcessIdentity) -> None: ...
-
-
-class NoChildRegistration(ChildRegistration):
-    """An observed process has no launch registration to remove."""
-
-    def finished(self, identity: ProcessIdentity) -> None:
-        pass
-
-
-NO_CHILD_REGISTRATION = NoChildRegistration()
-
-
 class ChildLaunch:
-    @property
-    def children_store(self) -> type[RuntimeChildrenStore]:
-        from .runtime_children import RuntimeChildrenStore
-
-        return RuntimeChildrenStore
-
     def __init__(self, platform: Platform, command: tuple[str, ...],
                  pass_fds: tuple[int, ...], runtime: LaunchRuntime,
                  lifetime: type[ChildLifetime]):
@@ -1313,19 +1285,6 @@ class ChildLaunch:
         self.error_writer = os.fdopen(error_w, "wb", buffering=0)
         self.identity_r, identity_w = os.pipe()
         self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
-
-    def record(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Record the gated child in the children store in one step, or cancel it before user code runs."""
-        try:
-            store.record(identity)
-        except BaseException:
-            self.cancel_before_release(identity)
-            raise
-
-    async def record_async(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Wait for the child's store record before cancellation can retire it."""
-        pending = asyncio.get_running_loop().run_in_executor(None, self.record, identity, store)
-        await join_retirement(pending)
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -1350,15 +1309,13 @@ class ChildLaunch:
                          self.identity_writer.fileno(), *self.pass_fds),
         }
 
-    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
-                ) -> SpawnedProcess:
+    def spawned(self, process: subprocess.Popen[bytes]) -> SpawnedProcess:
         self.identity_writer.close()
-        return self.lifetime.spawned(process, self.identity_r, registration)
+        return self.lifetime.spawned(process, self.identity_r)
 
-    async def spawned_async(self, process: asyncio.subprocess.Process,
-                            registration: ChildRegistration) -> AttachedChild:
+    async def spawned_async(self, process: asyncio.subprocess.Process) -> AttachedChild:
         self.identity_writer.close()
-        return await self.lifetime.spawned_async(process, self.identity_r, registration)
+        return await self.lifetime.spawned_async(process, self.identity_r)
 
     def spawn(
         self,
@@ -1367,36 +1324,22 @@ class ChildLaunch:
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdio: ChildStdio,
     ) -> SpawnedProcess:
-        """Record the launch handle before the platform allows exec."""
-        store = self.children_store.at(self.runtime.prefix)
+        """Hand back the launch handle before the platform allows exec."""
         process = subprocess.Popen(
             self.argv, cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)),
             **stdio.streams, **self.options,
         )
-        child = self.spawned(process, store)
-        try:
-            self.record(child.identity, store)
-        except BaseException:
-            child.reap()
-            child.close_streams()
-            raise
-        return child
+        return self.spawned(process)
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        store = self.children_store.at(self.runtime.prefix)
         process = await asyncio.create_subprocess_exec(
             self.argv[0], *self.argv[1:], cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)),
             **stdio.options, **self.options,
         )
-        child = await self.spawned_async(process, store)
+        child = await self.spawned_async(process)
         child._stderr_task = asyncio.create_task(child._drain_stderr())
-        try:
-            await self.record_async(child.identity, store)
-        except BaseException:
-            await child.stop()
-            raise
         return child
 
     def release(self, identity: ProcessIdentity) -> None:
@@ -1788,10 +1731,7 @@ async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
 class ChildProcess(Sealed, ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
-    def __init__(
-        self, identity: ProcessIdentity, registration: ChildRegistration = NO_CHILD_REGISTRATION,
-    ):
-        self.registration = registration
+    def __init__(self, identity: ProcessIdentity):
         self.identity = identity
         self.platform = Platform.current()
         self._stop_task: asyncio.Task[ChildOutcome] | None = None
@@ -1837,7 +1777,6 @@ class ChildProcess(Sealed, ABC):
             # Re-enumerate after a member exits: a surviving member may have forked.
             until = grace_deadline if stage is GracefulStopOutcome else deadline
             yield members, max(0, until - now)
-        self.registration.finished(self.identity)
         return stage
 
     def _retire_group(self, guard, deadline=math.inf):
@@ -1911,9 +1850,8 @@ class TerminalChildStdio(ChildStdio):
 class AttachedChild(ChildProcess):
     stderr_limit: ClassVar[int] = 16000
 
-    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
+        super().__init__(identity)
         self.process = process
         self.stdin = process.stdin
         self.stdout = process.stdout
@@ -2160,9 +2098,8 @@ class BoundedRun:
 class SynchronousProcess(ChildProcess):
     """Identity-checked process control; each subclass supplies synchronous reaping."""
 
-    def __init__(self, identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, identity: ProcessIdentity):
+        super().__init__(identity)
         self._retirement_lock = threading.Lock()
         self._retirement: Future[ChildOutcome] = Future()
 
@@ -2281,19 +2218,11 @@ class ObservedProcess(SynchronousProcess):
         return self.reap()
 
 
-class RecordedRuntimeGroup(ObservedProcess):
-    """A recorded launch owns the group even after its original leader exits."""
-
-    def require_stop_authority(self) -> None:
-        self.platform.group_members(self.identity)
-
-
 class SpawnedProcess(SynchronousProcess):
     """A launched process handle; surviving the launcher does not preserve its parent."""
 
-    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity):
+        super().__init__(identity)
         self.process = process
 
     @classmethod

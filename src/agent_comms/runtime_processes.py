@@ -10,7 +10,6 @@ from pathlib import Path
 from agent_comms.child_process import IdentityMismatchError, Platform, ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime_children import ApplicationChildInitiator
 
 
 class RuntimeProcessOutcome(DeclaredFamily, ABC, affix="RuntimeProcess"):
@@ -28,9 +27,10 @@ class UnreadableRuntimeProcess(RuntimeProcessOutcome):
 
 
 @dataclass(frozen=True)
-class RuntimeApplication(ApplicationChildInitiator):
+class RuntimeApplication:
     """The observed parent application's exact identity and display name."""
 
+    process: ProcessIdentity
     name: str
 
     def describe(self) -> str:

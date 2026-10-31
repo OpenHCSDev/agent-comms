@@ -687,6 +687,7 @@ class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="Pull
     orders: tuple[OrderId, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
+    queued: bool = field(default=False, kw_only=True)
 
     def as_ready(self) -> tuple[PullRequest, ...]:
         return (self,)
@@ -728,7 +729,8 @@ class UnmergedPullRequest(PullRequest):
     def from_listed(cls, row: ListedPullRequest, problems: tuple[str, ...],
                     orders: tuple[OrderId, ...]) -> Self:
         return cls(row.number, row.branch, row.head, row.updated_at, orders,
-                   base=row.base, problems=problems, status_contexts=row.status_contexts)
+                   base=row.base, problems=problems, status_contexts=row.status_contexts,
+                   queued=row.queued)
 
 
 class DraftPullRequest(UnmergedPullRequest):
@@ -894,6 +896,7 @@ class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullReque
     armed_times: tuple[str, ...] = field(default=(), kw_only=True)
     merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
     required_times: tuple[str, ...] = field(default=(), kw_only=True)
+    queued: bool = field(default=False, kw_only=True)
 
     def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
         """Open work and merged work awaiting acceptance stay with their recorded holder."""
@@ -1198,7 +1201,7 @@ class PullRequests(RepositoryReads):
             'merged: mergedAt closed_at: closedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
-            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
+            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus queued: isInMergeQueue '
             'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context state } } '
             'statusCheckRollup { contexts(first: 100) { nodes { '
             f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '
@@ -4273,6 +4276,10 @@ class HeadVerdict(HeadReview, declared_name=None):
     preparation_field: ClassVar[str] = '--head'
     preparation_fix: ClassVar[str] = 'supply the current PR head SHA with --head'
 
+    def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
+        """The read this decision stands on: an open PR at the reviewed head."""
+        return request.current()
+
     @classmethod
     def require_ok(cls, request: PullRequestHead) -> None:
         """The commander's admin merge needs this exact head's recorded ok, nothing more."""
@@ -4305,7 +4312,7 @@ class HeadVerdict(HeadReview, declared_name=None):
             self.after_record(goals, recorded)
         return HeadReviewed(recorded, self.landing(prepared.current))
 
-    def landing(self, current: OpenPullRequestHead) -> MergeArm:
+    def landing(self, current: ReadPullRequestHead) -> MergeArm:
         """Source verdicts never request merge; native explicit promotion owns enqueueing."""
         return UntouchedMergeArm()
 
@@ -4487,6 +4494,10 @@ class SupersededHeadVerdict(DecidedHeadVerdict):
 
     def supersedes(self) -> bool:
         return True
+
+    def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
+        """Dropping a head is how a closed PR's lost commits get their recorded reason."""
+        return request.closed_or_open()
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{super().description(reviewer, subject)} (replaced by {self.replacement})"

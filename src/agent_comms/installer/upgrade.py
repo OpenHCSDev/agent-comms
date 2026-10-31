@@ -60,7 +60,9 @@ from agent_comms.installer.backup import (
     SavedFile,
     StoreBackup,
     bus_files,
+    bus_resources,
     pinned_bus_files,
+    saved_bus_files,
 )
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.commands import InstallCommands
@@ -1072,11 +1074,12 @@ class PreparedMigration(Extendable):
         """Snapshot the held bus and the chain's declared external locations, pinned until
         ``carry`` compares them, so only a step's own write can move their bytes."""
         writer_stores = Carry.writer_declarations(steps)
-        with BeforeMigrationFileScanPhase().running(outgoing.commands.clock), \
-                pinned_bus_files(files, writer_stores) as pins:
-            before = bus_files(files, writer_stores)
-            return cls(hold, before, outgoing.verify(files.root), files, pins.pop_all(),
-                       writer_stores)
+        with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
+            resources = bus_resources(files, writer_stores)
+            with pinned_bus_files(files, resources) as pins:
+                before = saved_bus_files(files, resources)
+                return cls(hold, before, outgoing.verify(files.root), files, pins.pop_all(),
+                           writer_stores)
 
     def carry(
         self, pending: tuple[Carry, ...], staged: TargetStack,
