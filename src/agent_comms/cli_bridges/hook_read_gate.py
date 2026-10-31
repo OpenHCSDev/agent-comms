@@ -11,7 +11,6 @@ it may not write the main agent's audit, and it reports its tool activity throug
 
 from __future__ import annotations
 
-import json
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field

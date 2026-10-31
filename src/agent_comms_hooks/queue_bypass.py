@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import ClassVar, Self
 from urllib.parse import unquote, urlsplit
 
-from agent_comms_hooks import Bash, BashRefusal, ClaudeToolHook, HookRecord, HookRefused
+from agent_comms_hooks import BashRefusal, HookRecord, HookRefused
 
 from .shell_commands import (
     Program,

@@ -16,7 +16,6 @@ from __future__ import annotations
 import inspect
 import json
 from datetime import datetime
-import sys
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -367,7 +366,7 @@ class DeckStart(DealtDeck):
         return self.source.reason().deal(self, reader, comms, snapshot)
 
     def primed(self, prime: type[Prime], comms: Comms, binding: Binding) -> tuple[str, ...]:
-        """The owner-selected variant, dealt through the same admitted resident context."""
+        """The owner-selected variant, dealt through the same bound resident context."""
         snapshot = comms.registry.snapshot()
         reader = snapshot.commander_project.by_role(
             snapshot.born(binding.owner.require_recorded().lookup),

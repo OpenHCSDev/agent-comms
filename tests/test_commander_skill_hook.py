@@ -54,14 +54,16 @@ from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms.cli_bridges.hook_read_gate import GatedCall
-from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
-                                     Prime)
+from agent_comms_hooks.skill import (CommanderLightReader, CommanderReader, DeckReader, DeckStart,
+                                     FleetReader, FullPrime, LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
 
-from agent_comms.cli_bridges.hook_requests import HookRequest, SkillRequest, ReminderRequest, ResidentHookOutput
+from agent_comms.cli_bridges.hook_requests import (
+    HookRequest, PrimeRequest, SkillRequest, ReminderRequest, ResidentHookOutput,
+)
 from agent_comms_hooks.watch import HookBridgeUnavailable, SessionEndpoint
 from agent_comms_hooks.reread import ReminderProgram
 
@@ -92,6 +94,38 @@ def session_start(transcript, source, comms: Comms, binding: Binding, **extra):
                "transcript_path": str(transcript), **extra}
     reply = evaluate(SkillRequest(payload=payload), comms, binding)
     return subprocess.CompletedProcess("resident SessionStart", reply.status, reply.stdout, reply.stderr)
+
+
+@pytest.mark.parametrize("source", ["startup", "resume", "compact"])
+def test_session_wire_keeps_keyword_only_fields_and_resident_output(
+        tmp_path: Path, source: str) -> None:
+    transcript = tmp_path / "session.jsonl"
+    output = ResidentHookOutput()
+    start = DeckStart.of({
+        "session_id": "session", "hook_event_name": "SessionStart",
+        "transcript_path": str(transcript), "source": source, "agent_id": "child",
+        "output": "foreign input cannot replace resident context",
+    }, output=output)
+    assert start.source == SessionSource(source)
+    assert start.stem == transcript.with_suffix("") / "subagents" / "agent-child.jsonl"
+    assert start.output is output
+
+
+def test_light_prime_executes_through_the_resident_request(
+        tmp_path: Path, commanding_session: Comms, commander_bus: Comms,
+        commander_binding: Binding) -> None:
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    request = PrimeRequest(payload={
+        "session_id": commander_binding.thread, "hook_event_name": "Prime",
+        "transcript_path": str(transcript),
+    }, prime=LightPrime)
+    reply = evaluate(request, commander_bus, commander_binding)
+    assert reply.status == 0, reply.stderr
+    start = DeckStart.decode(request.payload)
+    assert start.current().trigger == LightPrime.trigger()
+    assert start.current().paths == tuple(path.resolve() for path in CommanderLightReader.sources())
+    assert str(start.audit) in reply.stdout
 
 
 def unbound_session_start(transcript, source):
