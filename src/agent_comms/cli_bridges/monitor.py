@@ -537,17 +537,17 @@ class MonitorService:
             path.unlink(missing_ok=True)
 
 
-RELAUNCH_FAILURES: tuple[type[Exception], ...] = (SessionFailure, *BRIDGE_FAILURES)
-
-
 async def relaunched(claim: WatchClaim, relaunch: Callable[[], None]) -> bool:
     """Whether the claim's state took this reader's relaunch. A bridge that cannot start is the
     outage the reader then announces, naming its log; it is not retried."""
     try:
         return await asyncio.to_thread(claim.state().rearm, relaunch)
-    except RELAUNCH_FAILURES as error:
-        print(f'Session bridge relaunch failed: {error}', file=sys.stderr, flush=True)
-        return False
+    except SessionFailure as error:
+        failure: Exception = error
+    except BRIDGE_FAILURES as error:
+        failure = error
+    print(f'Session bridge relaunch failed: {failure}', file=sys.stderr, flush=True)
+    return False
 
 
 async def read_monitor(

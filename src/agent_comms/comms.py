@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
 from contextlib import AbstractContextManager, aclosing
 from functools import partial
 from pathlib import Path
@@ -19,6 +18,7 @@ from .goal_management import Goals
 from .history_views import HistoryViews
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .message_page import InboxPage
 from .message_reference import InboxStart
 from .agent_inbox import TakenInputStart
 from .messages import Message
@@ -28,14 +28,11 @@ from .publisher import OwnerPublisher
 from .relationships import ThreadRelationships
 from .route_client import ActivityClient
 from .thread_configuration import ThreadConfiguration
+from .thread_identity import ThreadIncarnation
 from .thread_management import ThreadManagement
+from .transcript_sources import TranscriptSource
 from .transcripts import Transcripts
 from .watched import FileSource
-
-if TYPE_CHECKING:
-    from .message_page import InboxPage
-    from .thread_identity import ThreadIncarnation
-    from .transcript_sources import TranscriptSource
 
 
 class Comms(ActivityClient):
