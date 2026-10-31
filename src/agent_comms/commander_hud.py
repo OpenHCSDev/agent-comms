@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms_hooks import ToolRefusedError
 from aiohttp import ClientError
 from pydantic import JsonValue
 
@@ -25,7 +26,6 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.disclosure_text import (
     AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
 )
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import (
     DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
 )

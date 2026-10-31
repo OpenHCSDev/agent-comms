@@ -22,7 +22,10 @@ from agent_comms.coordination_errors import (
     TranscriptChanged,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable, ToolRefusedError
+from agent_comms.errors import (
+    RelationViolationError,
+    StoredHistoryUnreadable,
+)
 from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyLostError
 from agent_comms.context_store import ContextRequest
 from agent_comms.presentation import WireRevision
@@ -46,6 +49,7 @@ from agent_comms.ui_model.observation import (
 )
 from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms.turn_context import RecordedContextManifest
+from agent_comms_hooks import ToolRefusedError
 from observed_queue import ObservedQueue
 from test_turn_context_wire import corrupt_context_kind, manifest
 from agent_comms.threads import Thread

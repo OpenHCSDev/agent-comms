@@ -50,6 +50,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
@@ -91,11 +92,15 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import (
-    HeldClaim, NoSessionBridge, SessionCommandError, SessionConnectionClosed,
-    SessionFailure, SessionRequestTimeout, WatchClaim, WatchRecord,
-)
 
+from .session_watch import (
+    HeldClaim,
+    SessionConnectionClosed,
+    SessionFailure,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
+)
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
@@ -419,7 +424,7 @@ class Options:
         commands = parser.add_subparsers(required=True)
         for operation in Operation.offered(bridge_type):
             command = commands.add_parser(
-                operation.__name__.lower(), parents=[common],
+                operation.command_name(), parents=[common],
                 help=operation.help, description=operation.help)
             Binding.add_arguments(command, operation.binding_session, operation.binding_request)
             operation.add_arguments(command)
@@ -444,6 +449,10 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
     binding_session: ClassVar[type[BindingSession]] = EnvironmentSession
     binding_request: ClassVar[type[GivenBinding]] = ResolvedBinding
+
+    @classmethod
+    def command_name(cls) -> str:
+        return cls.__name__.lower()
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -595,7 +604,7 @@ class Serve(Watch):
     def command(self, record: WatchRecord, runtime: LaunchRuntime) -> tuple[str, ...]:
         return (
             str(runtime.interpreter.with_name(Path(record.command[0]).name)),
-            type(self).__name__.lower(), *record.command[2:], *self.arguments(),
+            self.command_name(), *record.command[2:], *self.arguments(),
         )
 
     def arguments(self) -> tuple[str, ...]:
@@ -967,6 +976,10 @@ class Enrol(Operation):
 
 
 @dataclass(frozen=True)
+# What a bridge reports and stops on; anything else is a defect and crashes.
+REPORTED_FAILURES = (OSError, ValueError, CoordinationError)
+
+
 class IncomingFrame(ABC):
     message: messages.Message
 
@@ -1216,7 +1229,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             await self.options.operation.execute(self)
         except* (BlockingIOError, SessionFailure):
             raise
-        except* (OSError, ValueError, CoordinationError) as group:
+        except* REPORTED_FAILURES as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
@@ -1239,12 +1252,12 @@ async def raised(error: Exception) -> None:
 def core_watch_failure(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> Iterator[None]:
     """A read failure takes its turn in the delivery line, so a delivery under way finishes
     before the group stops. A hold reaches the bus's own wait; every other failure stops the
-    bridge loudly through its one report, whatever its type."""
+    bridge loudly through its one report, and anything outside that family crashes."""
     try:
         yield
     except MaintenanceHeldError as held:
         lines.put_nowait(partial(raised, held))
-    except Exception as error:
+    except REPORTED_FAILURES as error:
         ended = CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}')
         ended.__cause__ = error
         lines.put_nowait(partial(raised, ended))
@@ -1627,7 +1640,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
-        command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
+        command = (str(Path(sys.argv[0]).absolute()), Watch.command_name(),
                    '--state', str(self.options.state.absolute()))
         return WatchRecord(binding.bus, binding.root, command, self.options.base_state)
 

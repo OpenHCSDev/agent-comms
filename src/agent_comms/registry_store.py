@@ -221,6 +221,15 @@ class RegistryEdit:
     """Other stores' writes this edit causes; they run after the registry lock is released, so
     no unit's registry read waits behind a second store's lock."""
 
+    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        current = owner.require_source_snapshot(self.original.snapshot)
+        status = self.document.status(current.name)
+        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
+        return NativeSourcePublication(
+            thread=replace(current, session_file=location), status=status,
+            previous=current, previous_status=status,
+        )
+
     def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
         restored = self.document.restore_stopped(source, names)
         for name in restored:
@@ -241,15 +250,6 @@ class RegistryEdit:
         )
         self.commit()
         return fenced
-
-    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        current = owner.require_source_snapshot(self.original.snapshot)
-        status = self.document.status(current.name)
-        location = RegistrySessionLocation.from_path(session_file, self.store.path.parent)
-        return NativeSourcePublication(
-            thread=replace(current, session_file=location), status=status,
-            previous=current, previous_status=status,
-        )
 
     def lease_turn(
         self,

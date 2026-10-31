@@ -12,7 +12,7 @@ import pytest
 from agent_comms.channel_targets import CommandersTag
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import Comms
-from agent_comms.errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.installer.probes.services import CommanderHeartbeatProbe
 from agent_comms.locked_store import DocumentChange
 from agent_comms.service_passes import ServicePasses, ServicePassStore

@@ -13,11 +13,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
+from agent_comms_hooks import ToolRefusedError
 from nominal_refactor_advisor import audit
 
 from .build_identity import RepositoryCommit
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
 from .installer.runtime_resolution import PrivateUvProject, StackSources
 from .repo import Checkout, GitCommandError, Repo

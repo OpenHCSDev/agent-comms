@@ -216,11 +216,6 @@ class ThreadsResult(CliResult):
 
 
 @dataclass(frozen=True)
-class RegisteredResult(CliResult):
-    registered: str
-
-
-@dataclass(frozen=True)
 class HeartbeatResult(CliResult):
     heartbeat: str
 

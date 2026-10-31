@@ -1208,7 +1208,7 @@ async def test_a_maintenance_hold_waits_and_resumes_without_loss_or_repeat(bridg
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('failure, stops', (
-    (LookupError('not a declared failure'), CoreWatchEnded),
+    (OSError('the read failed'), CoreWatchEnded),
     (MaintenanceHeldError('held'), MaintenanceHeldError),
 ))
 async def test_a_read_failure_stops_only_after_the_delivery_under_way_finishes(failure, stops):
@@ -1231,3 +1231,11 @@ async def test_a_read_failure_stops_only_after_the_delivery_under_way_finishes(f
     with pytest.raises(stops):
         await delivering
     assert finished == ['delivered']
+
+
+def test_a_failure_outside_the_reported_family_crashes_instead_of_queueing():
+    lines = asyncio.Queue()
+    with pytest.raises(LookupError):
+        with core_watch_failure(lines):
+            raise LookupError('a defect')
+    assert lines.empty()

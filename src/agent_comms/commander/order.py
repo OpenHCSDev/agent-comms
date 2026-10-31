@@ -1367,10 +1367,9 @@ class SessionEndVerb(OrderVerb, declared_name="session-end"):
 
     def run(self, ctx: Commander) -> None:
         """A session's subagents end with it, whether or not each one stopped on its own."""
-        registered = tuple(fork for fork in self.forks if fork in ctx.comms.registry)
-        for fork in registered:
-            CommanderForkCaller(fork).end(ctx.comms)
-        print(f'session forks ended: {" ".join(registered)}')
+        registered = CommanderForkCaller.end_session(
+            ctx.comms, tuple(CommanderForkCaller(fork) for fork in self.forks))
+        print(f'session forks ended: {" ".join(caller.name for caller in registered)}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1517,9 +1516,8 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        scan = HeldOrders.read(ctx.comms, ctx.commander)
-        for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander, scan):
-            print(thread.name)
+        for unit in UnownedWheelSpin.read_idle(ctx.comms, ctx.project.commander):
+            print(unit.name)
 
 
 

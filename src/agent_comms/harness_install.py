@@ -8,15 +8,19 @@ from __future__ import annotations
 
 import json
 import os
+import pkgutil
 import shutil
 import subprocess
 import sys
 from abc import abstractmethod
 from dataclasses import dataclass
+from importlib import import_module
+from importlib.metadata import EntryPoints, entry_points
 from importlib.resources import files
 from pathlib import Path
 from typing import ClassVar, Self
 
+import agent_comms_hooks
 from agent_comms_hooks import ClaudeHookProgram
 
 from .child_process import Platform, ResidentManager
@@ -165,18 +169,40 @@ class ClaudeCodeHarness(ConnectorClientHarness):
             check=True,
         )
 
+    @staticmethod
+    def hook_programs() -> tuple[type[ClaudeHookProgram], ...]:
+        """Discover installation declarations here, never inside a running hook."""
+        for module in pkgutil.iter_modules(agent_comms_hooks.__path__):
+            import_module(f"{agent_comms_hooks.__name__}.{module.name}")
+        return tuple(
+            installed
+            for program in ClaudeHookProgram.descendants()
+            if not program.__abstractmethods__
+            for installed in program.installation_members()
+        )
+
+    @staticmethod
+    def command(program: type[ClaudeHookProgram], scripts: EntryPoints) -> str:
+        """Installed metadata owns the shell command, not the program's RPC identity."""
+        (name,) = {point.name for point in scripts if point.value == program.entrypoint()}
+        return name
+
     def configure(self) -> tuple[Path, ...]:
         settings = self.home / ".claude/settings.json"
+        scripts = entry_points(group="console_scripts")
+        programs = self.hook_programs()
+        installed_hooks = tuple(program.hook(self.command(program, scripts)) for program in programs)
 
         def reconcile_hooks(document: dict) -> None:
             events = document.setdefault("hooks", {})
             for event, entries in events.items():
                 events[event] = [
-                    entry for entry in entries if not ClaudeHookProgram.owns_entry(entry)
+                    entry for entry in entries
+                    if not ClaudeHookProgram.owns_entry(entry, installed_hooks)
                 ]
-            for program in ClaudeHookProgram.members():
+            for program in programs:
                 for event in program.events:
-                    events.setdefault(event, []).append(program.entry())
+                    events.setdefault(event, []).append(program.entry(self.command(program, scripts)))
 
         merge_json(settings, reconcile_hooks)
         return (settings, self.home / ".claude.json")

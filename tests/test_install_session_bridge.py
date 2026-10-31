@@ -2,6 +2,13 @@
 
 
 
+from agent_comms_hooks.watch import NoSessionBridge
+from agent_comms.cli_bridges.session_watch import (
+    LapsedWatch,
+    LiveWatch,
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import json
 import os
@@ -35,8 +42,7 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms_hooks.session import started
-from agent_comms_hooks.watch import LapsedWatch, LiveWatch, NoSessionBridge, WatchClaim, WatchRecord
+from agent_comms.cli_bridges import hook_session
 from source_programs import SourcePrograms
 from agent_comms.threads import Thread
 
@@ -119,7 +125,7 @@ def test_real_monitor_survives_bridge_retirement_and_requires_a_fresh_probe(tmp_
              'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
              'from agent_comms.cli_bridges.shared import '
              'MonitorBridgeStopped, MonitorBridgeSwapping; '
-             'from agent_comms_hooks.watch import WatchClaim; '
+             'from agent_comms.cli_bridges.session_watch import WatchClaim; '
              'from agent_comms.cli_bridges.shared import Serve; '
              'asyncio.run(read_monitor(WatchClaim("copied-session"), '
              'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
@@ -191,7 +197,7 @@ def test_a_sigkilled_bridge_comes_back_through_its_claim_with_no_repeat(
             (sys.executable, '-c',
              'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
              'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping, Serve; '
-             'from agent_comms_hooks.watch import WatchClaim; '
+             'from agent_comms.cli_bridges.session_watch import WatchClaim; '
              f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
              'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -234,7 +240,7 @@ def test_a_bridge_that_stopped_itself_is_announced_and_not_relaunched(tmp_path, 
             (sys.executable, '-c',
              'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
              'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping, Serve; '
-             'from agent_comms_hooks.watch import WatchClaim; '
+             'from agent_comms.cli_bridges.session_watch import WatchClaim; '
              f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
              'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -360,7 +366,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 assert not claim.socket_path.exists()
                 assert isinstance(claim.state(), LiveWatch)
                 hook = subprocess.run(
-                    (str(old.script(started)),), input=packet, text=True, capture_output=True,
+                    (str(old.script(hook_session.SessionHook.main)),), input=packet, text=True, capture_output=True,
                     timeout=40, env={**env, 'CLAUDE_CODE_SESSION_ID': claim.thread,
                                      'CLAUDE_PID': str(os.getpid())})
                 assert hook.returncode != 0
@@ -373,7 +379,7 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                     (sys.executable, '-c',
                      'import asyncio; from agent_comms.cli_bridges.monitor import read_monitor; '
                      'from agent_comms.cli_bridges.shared import MonitorBridgeStopped, MonitorBridgeSwapping; '
-                     'from agent_comms_hooks.watch import WatchClaim; '
+                     'from agent_comms.cli_bridges.session_watch import WatchClaim; '
                      'from agent_comms.cli_bridges.shared import Serve; '
                      f'asyncio.run(read_monitor(WatchClaim({claim.thread!r}), '
                      'MonitorBridgeStopped.announce, MonitorBridgeSwapping.announce, Serve.relaunch))'),

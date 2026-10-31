@@ -46,6 +46,11 @@ class CliResult(DeclaredReply):
 
 
 @dataclass(frozen=True)
+class RegisteredResult(CliResult):
+    registered: str
+
+
+@dataclass(frozen=True)
 class ToolCatalogResult(CliResult):
     tools: tuple[dict[str, object], ...]
 
