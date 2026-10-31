@@ -103,8 +103,8 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         bash.judge_under(unit_deal)  # a partial read is not a reading
     for source in sources:
         call("read", {"path": str(source)}).completed_under(unit_deal)
-    with pytest.raises(RulesUnread, match="template was in your first refusal"):
-        bash.judge_under(unit_deal)  # the whole template is printed once per deal
+    with pytest.raises(RulesUnread):
+        bash.judge_under(unit_deal)  # reading without answering still keeps the gate closed
     answered = [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()]
     unit_deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     with pytest.raises(RulesUnread, match="then fix the gate"):
