@@ -264,6 +264,15 @@ class OutgoingRoute:
 class AgentTextTranscript(OutgoingRoute, LiveTextTranscript):
     """Native output that can continue streaming inside one mounted block."""
 
+    unrouted_category: ClassVar[type[MessageCategory]] = AgentCategory
+
+    @property
+    def category(self) -> type[MessageCategory]:
+        return OutboundCategory if self.routed else self.unrouted_category
+
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        ImportedReply(self.text).import_to(accept)
+
 
 @dataclass(frozen=True, kw_only=True)
 class WireTextTranscript(MarkdownTranscript):
@@ -363,6 +372,10 @@ class ModelOutput:
         return answering()
 
 
+class NarrationTranscript(ModelOutput, AgentTextTranscript):
+    """Visible assistant progress closes the window for new automatic replies but is not an answer or DM final."""
+
+
 class AssistantTranscript(ModelOutput, AgentTextTranscript):
     @property
     def answers_turn(self) -> bool:
@@ -391,18 +404,12 @@ class AssistantTranscript(ModelOutput, AgentTextTranscript):
         published = bool(references) and source.sent_messages(references).keys() >= set(references)
         return self.for_assigned_source(source, published)
 
-    @property
-    def category(self) -> type[MessageCategory]:
-        return OutboundCategory if self.routed else AgentCategory
-
-    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
-        ImportedReply(self.text).import_to(accept)
-
 
 class NoticeTranscript(AgentTextTranscript):
-    @property
-    def category(self) -> type[MessageCategory]:
-        return OutboundCategory if self.routed else OtherCategory
+    unrouted_category = OtherCategory
+
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        """System notices are not conversation replies."""
 
     def as_context(self) -> NoticeTranscript:
         # Native failures remain visible notices, including bounded triage.
