@@ -67,6 +67,28 @@ if TYPE_CHECKING:
     from .turn_goal_account import VerifiedGoalSettlement
 
 
+@dataclass(frozen=True)
+class GoalUnavailable(GoalDisplay):
+    last_confirmed: GoalDeclaration
+
+    can_control: ClassVar[bool] = False
+
+    @property
+    def snapshot(self) -> GoalDeclaration:
+        return self.last_confirmed
+
+    visible: ClassVar[bool] = True
+
+    def standby(self, execution: GoalExecution) -> bool:
+        return False
+
+    def action_failure(self, error: Exception) -> str:
+        return str(error)
+
+    def heading(self, execution: GoalExecution) -> str:
+        return self.last_confirmed.unavailable_heading
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoalMentionBinding(DeclaredFamily, affix="MentionBinding"):
     """One current stored resolution family; each member owns its projection."""

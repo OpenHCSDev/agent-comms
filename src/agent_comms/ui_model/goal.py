@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent_comms.goal_presentation import GoalExecution
@@ -37,23 +36,3 @@ class GoalDisplay(ABC):
     def action_failure(self, error: Exception) -> str: ...
 
 
-@dataclass(frozen=True)
-class GoalUnavailable(GoalDisplay):
-    last_confirmed: GoalDeclaration
-
-    can_control: ClassVar[bool] = False
-
-    @property
-    def snapshot(self) -> GoalDeclaration:
-        return self.last_confirmed
-
-    visible: ClassVar[bool] = True
-
-    def standby(self, execution: GoalExecution) -> bool:
-        return False
-
-    def action_failure(self, error: Exception) -> str:
-        return str(error)
-
-    def heading(self, execution: GoalExecution) -> str:
-        return self.last_confirmed.unavailable_heading

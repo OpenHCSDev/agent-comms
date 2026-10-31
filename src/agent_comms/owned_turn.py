@@ -63,13 +63,13 @@ from .turn_terminal import EndedWithoutResult, TurnTerminal
 from agent_comms.errors import GoalAttemptError
 from dataclasses import field
 from .turn_item import UsageChargeId
+from .turn_lease import TurnLeaseFence
+from .threads import Thread
+from agent_comms.pi_wire import PiUsage
+from .comms import Comms
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
     from .goal_attempts import LaunchPermit
-    from .comms import Comms
-    from agent_comms.pi_wire import PiUsage
-    from .threads import Thread
-    from .turn_lease import TurnLeaseFence
 
 
 @dataclass(kw_only=True)

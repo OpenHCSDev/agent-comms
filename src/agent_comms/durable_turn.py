@@ -20,7 +20,8 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from . import pi_events as pi
-from .agent_events import NativePhaseChanged, PromptAccepted
+from agent_comms.turn_phase import NativePhaseChanged
+from .agent_events import PromptAccepted
 from .attempt_states import (
     AttemptFailedAttempt,
     CompactionAttempt,

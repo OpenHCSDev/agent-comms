@@ -22,8 +22,8 @@ from .goals import Goal
 from .reported_turn import ReportedTurn
 from .attempt_resolution import VerifiedTurnDecision
 
+from .goal_attempts import GoalAttemptStore, LaunchPermit
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .comms import Comms
     from .threads import Thread
 

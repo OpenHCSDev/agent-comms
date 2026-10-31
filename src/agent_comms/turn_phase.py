@@ -11,9 +11,18 @@ from .field_codec import ToolCallId
 from .pi_payloads import ProviderDiagnosticError
 
 
+from .child_process import ProcessIdentity
+from agent_comms.agent_events import AgentEvent
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
+
+
+@dataclass(frozen=True)
+class NativePhaseChanged(AgentEvent):
+    """Actual native observer phase; never reconstructed from visible chunks."""
+    phase: TurnPhase
+    native_process: ProcessIdentity
 
 
 class StallExempt:

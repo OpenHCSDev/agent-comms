@@ -47,10 +47,10 @@ from .registration import Registration
 
 from dataclasses import dataclass
 from .goal_failure_observation import GoalFailureEvidence
+from .registry_document import RegistrySnapshot
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
-    from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
     from .turn_lease import TurnDeclaration
 from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, GoalWaitTarget, IdleGoalExecution

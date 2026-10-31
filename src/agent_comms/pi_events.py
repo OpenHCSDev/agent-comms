@@ -29,7 +29,7 @@ from .native_input_proof import NativeContextRecord, NativeInputCommit, NativeIn
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_session_reopen import PiSessionId
-from .native_turn_context import NativeContextManifestData
+from .native_turn_context import ContextObserved, NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from agent_comms.pi_wire import AnonymousRequest, OpenPayload, PiOmitted, PiRequestId, PiUsage
 from agent_comms.pi_wire import Opaque, UnknownPayload
@@ -442,7 +442,7 @@ class TurnContextObserved(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for segment in self.context.segments:
             segment.remember_received(session.native)
-        yield events.ContextObserved(self.context)
+        yield ContextObserved(self.context)
 
 
 class ExtensionUiChoice(ABC):

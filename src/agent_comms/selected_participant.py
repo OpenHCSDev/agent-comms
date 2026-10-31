@@ -13,7 +13,8 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .agent_events import CompactionEvent, NativePhaseChanged
+from agent_comms.turn_phase import NativePhaseChanged
+from .agent_events import CompactionEvent
 from .cohort_schema import CohortTable
 from .comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeTable
