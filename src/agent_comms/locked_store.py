@@ -294,13 +294,12 @@ class RootFile:
     @classmethod
     def installation_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
         root = files.root
-        declarations = {
-            member: owner.declaring_owner()
-            for owner, directory in cls.declarations_in(root)
-            for member in owner.files_in(directory)
-        }
-        declarations.update((path, owner.declaring_owner())
-                            for path, owner in cls.primaries_in(root).items())
+        declarations = {}
+        for owner, directory in cls.declarations_in(root):
+            declarations.update(dict.fromkeys(owner.files_in(directory), owner.declaring_owner()))
+        primaries = cls.primaries_in(root)
+        declaring = {owner: owner.declaring_owner() for owner in set(primaries.values())}
+        declarations.update((path, declaring[owner]) for path, owner in primaries.items())
         declarations.update(cls.external_declarations(files))
         return declarations
 
