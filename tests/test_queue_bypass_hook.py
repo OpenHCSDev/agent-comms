@@ -13,7 +13,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from hook_session_fixture import resident_hook, resident_session
 from agent_comms.todos import QualifiedHeadVerdict, ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
-from agent_comms_hooks.shell_commands import ShellCommand
+from agent_comms_hooks.shell_commands import ShellCommand, shell_commands
 from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)
@@ -168,3 +168,17 @@ def test_merge_authority_comes_from_the_admitted_actor_not_a_changed_launcher(
             decision = json.loads(result.stdout)["hookSpecificOutput"]
             assert decision["permissionDecision"] == "deny"
             assert "bound commander" in decision["permissionDecisionReason"]
+
+
+def test_escaped_quote_inside_double_quotes_is_one_word():
+    command = """git grep -n "'watch'\\|\\"watch\\"" -- tools | cut -c1-9"""
+    assert list(shell_commands(command)) == [
+        ["git", "grep", "-n", """'watch'\\|"watch\"""", "--", "tools"], ["cut", "-c1-9"],
+    ]
+
+
+def test_here_document_body_after_escaped_quote_is_not_shell():
+    command = 'echo "a\\"b"; cat <<\'EOF\'\nit\'s "not shell\nEOF\necho done\n'
+    assert list(shell_commands(command)) == [
+        ["echo", 'a"b'], ["cat", "<<", "EOF"], ["echo", "done"],
+    ]
