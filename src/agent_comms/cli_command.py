@@ -17,7 +17,6 @@ from typing import (
     get_origin,
 )
 
-from metaclass_registry.mro_dispatch import MroDispatch, handles
 from pydantic import JsonValue
 
 from agent_comms.active_route import ActiveRoute
@@ -82,7 +81,6 @@ Answer = TypeVar("Answer", bound=CliResult, covariant=True, default=CliResult)
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
     ModuleMembers,
-    MroDispatch,
     DeclaredCommand,
     CliExecution[Answer],
     Generic[Answer],
@@ -155,44 +153,12 @@ class CliCommand(
 
     @classmethod
     def bindings(
-        cls, resolved: ResolvedTarget | Checkout, comms: Comms, channel: SurroundingChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[Self, ...]:
-        return cast(tuple[Self, ...], cls.handler_for(type(resolved))(
-            resolved, comms, channel, project=project, snapshot=snapshot, catalog=catalog,
-        ))
-
-    @handles(ResolvedTarget)
-    @classmethod
-    def _unsupported_bindings(
         cls, resolved: ResolvedTarget, comms: Comms, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
     ) -> tuple[Self, ...]:
-        raise TypeError(f"No CLI binding for {type(resolved).__name__}")
-
-    @handles(ResolvedThread)
-    @classmethod
-    def _thread_bindings(
-        cls, resolved: ResolvedThread, comms: Comms, channel: SurroundingChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[Self, ...]:
-        return cls.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
-
-    @handles(ResolvedChannel)
-    @classmethod
-    def _channel_bindings(
-        cls, resolved: ResolvedChannel, comms: Comms, channel: SurroundingChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[Self, ...]:
-        return cls.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
-
-    @handles(Checkout)
-    @classmethod
-    def _project_bindings(
-        cls, resolved: Checkout, comms: Comms, channel: SurroundingChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[Self, ...]:
-        return cls.project_bindings(comms, resolved)
+        return resolved.bindings(
+            cls, comms, channel, project=project, snapshot=snapshot, catalog=catalog,
+        )
 
     @classmethod
     def target_catalog(cls, comms: Comms, target: TargetSelection,

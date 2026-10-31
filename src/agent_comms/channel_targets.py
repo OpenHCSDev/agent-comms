@@ -22,10 +22,11 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage
     from .frozen_recipient import FrozenRecipient
-    from .catalog_document import CatalogDocument
+    from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand
     from .cli_result import CliResult
+    from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .history_views import HistoryViews
@@ -107,8 +108,25 @@ def exact_stored_target(name: str) -> bool:
             if name in BuiltinChannelView.addresses() else True)
 
 
-class ResolvedTarget:
-    """An acquired thread/channel value; CLI commands bind this nominal result family."""
+class ResolvedTarget(ABC):
+    """An acquired value owns its binding operation, not a second type dispatcher."""
+
+    @abstractmethod
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]: ...
+
+
+@dataclass(frozen=True)
+class ResolvedProject(ResolvedTarget):
+    project: Checkout
+
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]:
+        return declaration.project_bindings(comms, self.project)
 
 
 class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
@@ -153,7 +171,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
     @abstractmethod
     def resolve(
         self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel],
-    ) -> ResolvedTarget | Checkout: ...
+    ) -> ResolvedTarget: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
@@ -618,8 +636,8 @@ class ProjectTarget(CommandTarget):
     def destination_names(self) -> tuple[str, ...]:
         return ()
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> Checkout:
-        return self.project
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedProject:
+        return ResolvedProject(self.project)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")
