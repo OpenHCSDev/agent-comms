@@ -14,6 +14,7 @@ from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
@@ -536,12 +537,31 @@ class MonitorService:
             path.unlink(missing_ok=True)
 
 
+async def relaunched(claim: WatchClaim, relaunch: Callable[[], None]) -> bool:
+    """Whether the claim's state took this reader's relaunch. A bridge that cannot start is the
+    outage the reader then announces, naming its log; it is not retried."""
+    try:
+        return await asyncio.to_thread(claim.state().rearm, relaunch)
+    except SessionFailure as error:
+        failure: Exception = error
+    except BRIDGE_FAILURES as error:
+        failure = error
+    print(f'Session bridge relaunch failed: {failure}', file=sys.stderr, flush=True)
+    return False
+
+
 async def read_monitor(
     claim: WatchClaim, announce: Callable[[WatchClaim], None],
     swapping: Callable[[WatchClaim], None],
+    relaunch: Callable[[WatchClaim, SessionInformation], None],
 ) -> None:
+    """Holds the reader claim and relays the bridge's lines. A bridge killed from under the
+    session comes back through its claim. Only a kill leaves its socket file behind: a bridge
+    that stopped on its own removed it and stays stopped, loudly. Only a bridge that then
+    delivered something earns another relaunch, so one dying on start cannot loop."""
     session = await asyncio.to_thread(InspectSession().awaited, claim, swapping)
     announced = False
+    delivering = True
     with claim.reader_held():
         while session.owner.alive():
             try:
@@ -549,13 +569,20 @@ async def read_monitor(
                 if current.owner != session.owner:
                     raise ValueError('The session bridge now belongs to a different owner')
                 announced = False
+                probed = False
                 async for line in AttachMonitor().lines(claim.socket_path):
                     sys.stdout.write(line.decode())
                     sys.stdout.flush()
+                    delivering = delivering or probed
+                    probed = True
             except (FileNotFoundError, ConnectionRefusedError, ConnectionResetError):
                 # Retirement drops the old connection; the same owner can publish a
                 # fresh endpoint, and this reader keeps its lease for it. A stopped
                 # bridge is still an outage, so the claim's state decides whether to say so.
+                if (delivering and claim.socket_path.exists()
+                        and await relaunched(claim, partial(relaunch, claim, session))):
+                    delivering = False
+                    continue
                 announced = announced or claim.state().announce_absence(
                     lambda: announce(claim))
             await asyncio.sleep(.05)
