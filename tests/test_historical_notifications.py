@@ -1,7 +1,7 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
-from agent_comms.notification_evidence import AssignmentResponse, AnsweredResponse, UnansweredResponse
+from agent_comms.notification_progress import AssignmentResponse, AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus

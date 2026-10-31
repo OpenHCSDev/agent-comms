@@ -75,7 +75,7 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import sealed_cohort_assignments
     from agent_comms.coordinator import Coordination
-    from agent_comms.presentation import MessageNotification
+    from agent_comms.message_notification import MessageNotification
     from agent_comms.threads import Thread
     from agent_comms.notification_read import NotificationsRead
     from agent_comms.notification_reads import LiveNotificationRead
@@ -195,7 +195,8 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
 
     from conftest import publish_initial
     from test_coordinated_runtime import _root
-    from agent_comms.thread_presentation import AcquiredThreadPresentation, ThreadPresentation
+    from agent_comms.transcripts import AcquiredThreadPresentation
+    from agent_comms.thread_presentation import ThreadPresentation
 
     _path, _root_id, comms, initial, _people = _root(private_directory, direct=True)
     reading = ObserveThreads(frozenset({'beta'})).observation()

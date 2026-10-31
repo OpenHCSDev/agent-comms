@@ -4,6 +4,7 @@ No model, provider, product monkeypatch or hand-edited coordination row is used.
 """
 from __future__ import annotations
 
+from agent_comms.notification_assignment import NotificationSelection
 from pathlib import Path
 import pytest
 
@@ -14,10 +15,10 @@ from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_evidence import AnsweredResponse
+from agent_comms.notification_progress import AnsweredResponse
 from agent_comms.notification_evidence import AllOutcomes, AfterRecipient, OwnerOutcomes
 from agent_comms.notification_evidence import RecipientLimit
-from agent_comms.presentation import MessageNotification
+from agent_comms.message_notification import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
@@ -61,8 +62,8 @@ def test_acquired_rows_and_proofs_are_exact_bounded_subset_without_rewriting_ori
     before_reads = ReadLedger.at(comms.root).read()
     before_wire = comms.bus.bus.revision()
     viewer = AllOutcomes()
-    full = NotificationAssignment.read(comms.root, viewer.selection((source,)))
-    selection = viewer.selection((source,), limit=RecipientLimit(3))
+    full = NotificationAssignment.read(comms.root, NotificationSelection.of(viewer, (source,)))
+    selection = NotificationSelection.of(viewer, (source,), limit=RecipientLimit(3))
     bounded = NotificationAssignment.read(comms.root, selection)
     selected = {recipient.recipient_lookup for recipient in selection.pages[0].recipients}
     assert len(full.rows) == len(frozen) > len(bounded.rows) == 3
@@ -83,7 +84,7 @@ def test_retained_cut_ignores_other_recipient_change_but_observes_its_own_proof(
     frozen_window: tuple[Comms, Delivered],
 ) -> None:
     comms, source = frozen_window
-    selection = AllOutcomes().selection((source,), limit=RecipientLimit(3))
+    selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(3))
     before = NotificationAssignment.read(comms.root, selection)
     record_attempt(comms, source, len(source.recipients) - 1)
     assert NotificationAssignment.changed((before,), comms.root) == ()
@@ -134,7 +135,7 @@ def test_independent_reply_changes_retained_evidence_without_claiming_context(
     frozen_window: tuple[Comms, Delivered],
 ) -> None:
     comms, source = frozen_window
-    selection = AllOutcomes().selection((source,), limit=RecipientLimit(1))
+    selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(1))
     recipient = selection.pages[0].recipients[0]
     record_attempt(comms, source, 0)
     before = NotificationAssignment.read(comms.root, selection)
@@ -161,7 +162,7 @@ def test_independent_reply_without_any_claim_is_retained_without_context_or_read
     comms, _accepted_source = frozen_window
     message = publish_initial(comms, "sender", "#team", "An original without a handling claim")
     source = comms.bus.bus.delivery(message.seq)
-    selection = AllOutcomes().selection((source,), limit=RecipientLimit(1))
+    selection = NotificationSelection.of(AllOutcomes(), (source,), limit=RecipientLimit(1))
     recipient = selection.pages[0].recipients[0]
     reads = ReadLedger.at(comms.root).read()
     before = NotificationAssignment.read(comms.root, selection)

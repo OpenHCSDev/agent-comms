@@ -79,7 +79,7 @@ from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.presentation import MessageNotification
+from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Checkout, Repo, RepositoryReads

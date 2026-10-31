@@ -9,12 +9,8 @@ from .bus_read import UiRead
 from .comms import Comms
 from .historical_views import HistorySource, HistorySourceKey
 from .message_reference import MessageReference
-from .notification_evidence import (
-    FirstRecipient,
-    NotificationWindow,
-    RecipientCursor,
-    RecipientLimit,
-)
+from agent_comms.message_notification import NotificationWindow
+from .notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit
 from .notification_read import NotificationsRead
 from .presentation import WireRevision
 from .read_basis import ReadAuthority

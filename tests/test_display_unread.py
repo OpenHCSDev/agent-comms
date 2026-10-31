@@ -5,14 +5,13 @@ from agent_comms.bus import Bus, DisplayUnread
 from agent_comms.field_codec import ThreadLookup
 from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.notification_progress import UnrecordedProgress
-from agent_comms.presentation import MessageNotification
+from agent_comms.message_notification import MessageNotification
 from agent_comms.read_selection import DisplayUnreadSelection
 from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DisplayedConversation, ReadCursor
 from agent_comms.registry_provenance import RegistryProvenance
-from agent_comms.thread_presentation import (
-    ThreadPresentation,
-    WorkingThreadPresentationStatus,
-)
+from agent_comms.transcripts import NotifiedThreadPresentation
+from agent_comms.thread_presentation import WorkingThreadPresentationStatus
+from agent_comms.thread_presentation import ThreadPresentation
 from agent_comms.ui_model.status import ThreadStatusModel
 
 
@@ -121,7 +120,7 @@ def test_status_row_equality_ignores_an_older_notification_outside_shown_lines()
         FrozenRecipient(lookup, "worker"), lookup, UnrecordedProgress(),
         message=Message("author", "worker", "older history", InfoKind, seq=1),
     )
-    presentation = ThreadPresentation("Worker", "○", "Ready", notifications=(older,))
+    presentation = NotifiedThreadPresentation("Worker", "○", "Ready", notifications=(older,))
     row = ThreadStatusModel("worker", True, ("Ready",), presentation, ("Ready",))
     changed_history = replace(row, presentation=replace(
         presentation, notifications=(replace(older, message=replace(older.message, body="changed old history")),),

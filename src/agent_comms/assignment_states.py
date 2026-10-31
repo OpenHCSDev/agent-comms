@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     from .historical_native_inputs import FailedTriageHistoricalNativeInput, HistoricalNativeInput
     from .native_input_record import TriageNativeExecution
     from .notification_assignment import AssignmentActivity
-    from .presentation import MessageNotification
+    from .message_notification import MessageNotification
 
 
 @dataclass(frozen=True)
@@ -151,7 +151,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         updated_at_ms: int = 0,
         triage_inflight: bool = False,
     ) -> MessageNotification:
-        from .presentation import MessageNotification
+        from .message_notification import MessageNotification
 
         return MessageNotification(
             recipient,

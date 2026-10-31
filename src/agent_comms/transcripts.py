@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from agent_comms.notification_assignment import NotificationSelection
 from abc import abstractmethod
 from collections.abc import Awaitable, Iterator, Sequence
 from contextlib import contextmanager
@@ -28,9 +29,10 @@ from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import NotificationWindow, OwnerOutcomes
-from .presentation import MessageNotification
-from .thread_presentation import AcquiredThreadPresentation, ThreadPresentation
+from agent_comms.message_notification import NotificationWindow
+from .notification_evidence import OwnerOutcomes
+from .message_notification import MessageNotification
+from .thread_presentation import ThreadPresentation
 from .private_path import FileObservation, FileRevision
 from .private_registry_guard import RegistryPrivacy
 from .recorded_bus import RecordedBusIdentity
@@ -656,7 +658,7 @@ class TranscriptSourceWindow:
         sources = tuple({source.message.reference: source
                          for source in (*self.sources, *self.sent_sources)}.values())
         viewer = OwnerOutcomes.of(self.read.identity.thread.incarnation)
-        notification_read = NotificationAssignment.read(transcripts.root, viewer.selection(sources))
+        notification_read = NotificationAssignment.read(transcripts.root, NotificationSelection.of(viewer, sources))
         projected = MessageNotification.delivery_window(
             transcripts.root, transcripts.registry, notification_read)
         incoming = tuple(
@@ -664,13 +666,72 @@ class TranscriptSourceWindow:
             for source in self.sources
             for notification in projected.outcomes[source.message.seq, source.message.message_id]
         )
-        shown = replace(ordinary, notifications=incoming, read_identity=self.read.identity)
         return AcquiredThreadPresentation(
-            **{declared.name: getattr(shown, declared.name)
+            **{declared.name: getattr(ordinary, declared.name)
                for declared in fields(ThreadPresentation)},
+            notifications=incoming,
+            read_identity=self.read.identity,
             notification_window=projected,
             incoming_references=tuple(source.message.reference for source in self.sources),
             sent_references=tuple(source.message.reference for source in self.sent_sources))
+
+
+
+@dataclass(frozen=True, slots=True)
+class NotifiedThreadPresentation(ThreadPresentation):
+    """A presentation holding the notifications and read identity of its acquired page."""
+
+    notifications: tuple[MessageNotification, ...] = field(default=())
+    read_identity: TranscriptReadIdentity | None = field(default=None)
+
+    def same_observation(self, other: ThreadPresentation) -> bool:
+        """Equal view and turn evidence, not merely equal global store revisions.
+
+        Keep the exact registered thread and binding used for turn settlement.
+        The transcript owner decides whether its page changed; unrelated bus,
+        read-mark and coordinator writes do not create another page publication.
+        """
+        if type(other) is not type(self) or replace(self, read_identity=other.read_identity) != other:
+            return False
+        original, current = self.read_identity, other.read_identity
+        if original is None or current is None:
+            return original is current
+        return original.thread == current.thread and original.same_snapshot(current)
+
+
+@dataclass(frozen=True, slots=True)
+class AcquiredThreadPresentation(NotifiedThreadPresentation):
+    """A presentation together with the notification evidence it was acquired from.
+
+    The evidence stays with the reader that acquired it, for its change checks and sent
+    summaries; a viewer receives only the published NotifiedThreadPresentation."""
+
+    incoming_references: tuple[MessageReference, ...] = field(kw_only=True)
+    sent_references: tuple[MessageReference, ...] = field(kw_only=True)
+    notification_window: NotificationWindow = field(kw_only=True)
+
+    def published(self) -> ThreadPresentation:
+        return NotifiedThreadPresentation(**{declared.name: getattr(self, declared.name)
+                                             for declared in fields(NotifiedThreadPresentation)})
+
+    def sent_notifications(
+        self,
+    ) -> tuple[tuple[MessageReference, tuple[MessageNotification, ...]], ...]:
+        """Each recent sent source with its outcomes from this presentation's captured window."""
+        return tuple(
+            (reference,
+             self.notification_window.outcomes.get((reference.seq, reference.message_id), ()))
+            for reference in self.sent_references
+        )
+
+    def collect_revision_input(self, name: str,
+                               readable: dict[str, AcquiredThreadPresentation]) -> None:
+        readable[name] = self
+
+    def __reduce_ex__(self, protocol: object) -> NoReturn:
+        raise TypeError(
+            "AcquiredThreadPresentation keeps private delivery evidence with its reader; "
+            "send its published() ThreadPresentation")
 
 
 class Transcripts:
@@ -749,9 +810,9 @@ class Transcripts:
         bus evidences contribute to the same projection. Registry-owned thread
         metadata also carries inherited fork text and source selection.
         """
-        if not 1 <= source_limit <= NotificationWindow.window_limit:
+        if not 1 <= source_limit <= NotificationSelection.window_limit:
             raise ValueError("Transcript source capture requires a bounded window")
-        if not 0 <= sent_source_limit <= NotificationWindow.window_limit:
+        if not 0 <= sent_source_limit <= NotificationSelection.window_limit:
             raise ValueError("Sent source capture requires a bounded window")
         page = page_source.resolve(self, name, limit)
         captured = page.projection.window(limit=source_limit, sent_limit=sent_source_limit)

@@ -35,15 +35,11 @@ from .message_page import (
 )
 from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
-from .notification_evidence import (
-    FirstRecipient,
-    NotificationWindow,
-    OutcomeViewer,
-    RecipientCursor,
-    RecipientLimit,
-)
+from agent_comms.message_notification import NotificationWindow
+from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification, WireRevision
+from .message_notification import MessageNotification
+from .presentation import WireRevision
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,

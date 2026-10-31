@@ -13,13 +13,8 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, ThreadNotStoppedError
 from .field_codec import FieldCodec, TextRepresentation
 from .lifecycle_capability import LifecycleCapability
-from .thread_presentation import (
-    InactiveThreadPresentationStatus,
-    LiveThreadOwnerBinding,
-    ThreadOwnerBinding,
-    ThreadPresentation,
-    UnavailableThreadOwnerBinding,
-)
+from .thread_presentation import InactiveThreadPresentationStatus, LiveThreadOwnerBinding, ThreadOwnerBinding, UnavailableThreadOwnerBinding
+from .thread_presentation import ThreadPresentation
 from .turn_lease import (
     FinishedTurnFence,
     NoFinishedTurn,

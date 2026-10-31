@@ -1,5 +1,6 @@
 """Whole conversations derive their original frozen wire sources, in both directions."""
 
+from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.notification_evidence import AllOutcomes, OwnerOutcomes
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
@@ -82,7 +83,7 @@ def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp
         profiling = sys.getprofile()
         sys.setprofile(count_decodes)
         try:
-            own = NotificationAssignment.read(root, viewer.selection((initial,)))
+            own = NotificationAssignment.read(root, NotificationSelection.of(viewer, (initial,)))
         finally:
             sys.setprofile(profiling)
         assert decoded == 1
@@ -345,7 +346,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
     from conftest import accept_initial, publish_initial
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.native_runtime_input import NativeRuntimeTable
-    from agent_comms.notification_evidence import NotificationWindow
+    from agent_comms.message_notification import NotificationWindow
     from agent_comms.registry_store import RegistryStore
 
     root, root_id, comms, initial, _people = _root(tmp_path)
@@ -359,7 +360,7 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
         for schema in (privacy.coordinator_schema(), NativeRuntimeTable)))
     key_fields = 3
     originals = limit // (key_fields * len(initial.recipients)) + 1
-    assert originals + 1 <= NotificationWindow.window_limit
+    assert originals + 1 <= NotificationSelection.window_limit
     sources = [initial]
     for index in range(originals - 1):
         later = publish_initial(comms, "sender", "#team", f"Broadcast {index} for the window")

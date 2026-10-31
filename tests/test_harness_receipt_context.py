@@ -11,7 +11,7 @@ from agent_comms.harness_delivery_states import (
     ObservedMonitor, PersistedOutcome, UnconfirmedOutcome, UnrecordedMonitor,
 )
 from agent_comms.notification_progress import HarnessConsumedProgress
-from agent_comms.notification_evidence import UnansweredResponse
+from agent_comms.notification_progress import UnansweredResponse
 from agent_comms.notification_evidence import AllOutcomes
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from transcript_record_fixture import transcript_record

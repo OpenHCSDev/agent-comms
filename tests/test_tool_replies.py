@@ -42,7 +42,7 @@ def result_type(tool: type[ToolRequest]) -> type:
 
 def test_bus_read_result_follows_an_inherited_specialisation_and_refuses_an_unspecialised_family():
     from agent_comms.bus_read import OwnerLiveRead, UiRead
-    from agent_comms.notification_evidence import NotificationWindow
+    from agent_comms.message_notification import NotificationWindow
     from agent_comms.notification_reads import RecordedNotificationRead
 
     # RecordedNotificationRead restates no header: it inherits NotificationRead's UiRead[...].

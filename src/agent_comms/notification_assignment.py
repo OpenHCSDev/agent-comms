@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sqlite3
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .frozen_recipient import FrozenRecipient
 from .bus import Bus
@@ -21,14 +21,8 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, ThreadLookup, boundary_decoder
 from .input_disposition import InputDispositions
 from .message_reference import MessageReference
-from .notification_evidence import (
-    AssignmentResponse,
-    ConsumptionEvidence,
-    NotificationAssignmentRead,
-    NotificationSelection,
-    NotificationWindow,
-    UnansweredResponse,
-)
+from agent_comms.notification_progress import AssignmentResponse, UnansweredResponse
+from .notification_evidence import ConsumptionEvidence
 from .notification_progress import (
     AssignmentProgress,
     QueuedProgress,
@@ -40,14 +34,190 @@ from .registry_store import RegistryStore
 from .typed_table import BooleanStorage, TypedRow
 from .wake_policy import RecipientDecision
 
+from dataclasses import field
+from functools import cached_property
+from .thread_identity import ThreadIncarnation
+from agent_comms.notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
+from .bus_publication import Delivered
 if TYPE_CHECKING:
-    from collections.abc import Mapping
 
     from .agent_activity import RecipientActivity
-    from .bus_publication import Delivered
     from .coordination_database import InvalidStore, MissingStore
-    from .presentation import MessageNotification
+    from .message_notification import MessageNotification
     from .private_registry_guard import RegistryPrivacy
+    from .notification_progress import DeliveryProgress
+
+
+@dataclass(frozen=True)
+class RecipientSelection:
+    """A bounded slice of original frozen positions, never a replacement audience."""
+
+    source: Delivered
+    eligible: range
+    limit: RecipientLimit
+
+    @property
+    def positions(self) -> range:
+        return self.eligible[: self.limit.value]
+
+    @property
+    def remaining(self) -> int:
+        return len(self.eligible) - len(self.positions)
+
+    @property
+    def recipients(self) -> tuple[FrozenRecipient, ...]:
+        return tuple(self.source.recipients[position] for position in self.positions)
+
+    @property
+    def entries(
+        self,
+    ) -> tuple[tuple[tuple[ThreadLookup, MessageReference], FrozenRecipient], ...]:
+        return tuple(
+            ((recipient.recipient_lookup, self.source.message.reference), recipient)
+            for recipient in self.recipients
+        )
+
+
+@dataclass(frozen=True)
+class NotificationSelection:
+    """The exact per-original recipient cuts used by every expensive evidence reader."""
+
+    window_limit: ClassVar[int] = 120
+    viewer: OutcomeViewer
+    pages: tuple[RecipientSelection, ...]
+
+    @classmethod
+    def of(
+        cls,
+        viewer: OutcomeViewer,
+        sources: Sequence[Delivered],
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
+    ) -> NotificationSelection:
+        pages = []
+        for source in sources:
+            eligible, following = viewer.positions(source), after.positions(source)
+            pages.append(
+                RecipientSelection(
+                    source,
+                    range(max(eligible.start, following.start), min(eligible.stop, following.stop)),
+                    limit,
+                )
+            )
+        return cls(viewer, tuple(pages))
+
+    def read_without_assignments(self) -> NotificationAssignmentRead:
+        return NotificationAssignmentRead(self, ())
+
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return tuple(page.source for page in self.pages)
+
+    @property
+    def keys(self) -> tuple[tuple[ThreadLookup, MessageReference], ...]:
+        return tuple(key for page in self.pages for key, _recipient in page.entries)
+
+
+@dataclass(frozen=True)
+class SourceEvidence:
+    """One original's claims, harness attempts, stored inputs and independent responses,
+    grouped by frozen recipient. Equality over all of them is the window's change test."""
+
+    claims: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...] = ()
+    consumption: Mapping[ThreadLookup, tuple[ConsumptionEvidence, ...]] = field(
+        default_factory=dict
+    )
+    responses: Mapping[ThreadLookup, AssignmentResponse] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+    def answered(
+        self, recipient: ThreadLookup, notification: MessageNotification
+    ) -> MessageNotification:
+        return self.responses.get(recipient, UnansweredResponse()).answered(notification)
+
+    def consumed_progress(self, recipient: ThreadLookup,
+                          progress: DeliveryProgress) -> DeliveryProgress:
+        """The recipient's progress after each of its own harness attempts and stored inputs
+        of this original."""
+        for attempt in self.consumption.get(recipient, ()):
+            progress = attempt.consumed_progress(progress)
+        return progress
+
+
+@dataclass(frozen=True)
+class NotificationAssignmentRead:
+    """A window's claims and its harness attempts, both keyed by the exact original, as the
+    viewer captured with them may see them: every later projection and change check of this
+    read answers for that same viewer.
+
+    A harness attempt is its own consumption evidence: a no-wake or passive recipient has no
+    claim for the attempt to move, and its message still entered the session."""
+
+    selection: NotificationSelection
+    rows: tuple[tuple[WakeAssignment, AssignmentActivityEvidence], ...]
+    consumption: Mapping[tuple[ThreadLookup, MessageReference], tuple[ConsumptionEvidence, ...]] = (
+        field(default_factory=lambda: MappingProxyType({}))
+    )
+    responses: Mapping[tuple[ThreadLookup, MessageReference], AssignmentResponse] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+
+    @property
+    def sources(self) -> tuple[Delivered, ...]:
+        return self.selection.sources
+
+    @cached_property
+    def evidence(self) -> Mapping[MessageReference, SourceEvidence]:
+        """Each original's evidence, grouped once per captured window."""
+        claims: dict[MessageReference, list[tuple[WakeAssignment, AssignmentActivityEvidence]]] = {
+            source.message.reference: [] for source in self.sources
+        }
+        consumption: dict[MessageReference, dict[ThreadLookup, tuple[ConsumptionEvidence, ...]]] = {
+            source.message.reference: {} for source in self.sources
+        }
+        responses: dict[MessageReference, dict[ThreadLookup, AssignmentResponse]] = {
+            source.message.reference: {} for source in self.sources
+        }
+        for (lookup, source), response in self.responses.items():
+            responses[source][lookup] = response
+        for (lookup, source), facts in self.consumption.items():
+            consumption[source][lookup] = facts
+        for row in self.rows:
+            claims.setdefault(row[0].source, []).append(row)
+        return {
+            source: SourceEvidence(
+                tuple(claims[source]),
+                MappingProxyType(consumption[source]),
+                MappingProxyType(responses[source]),
+            )
+            for source in claims
+        }
+
+    def differs_from(self, fresh: Mapping[MessageReference, SourceEvidence]) -> bool:
+        return any(previous != fresh.get(source, SourceEvidence())
+                   for source, previous in self.evidence.items())
+
+
+@dataclass(frozen=True)
+class NotificationReadMark:
+    """The exact display evidence used for a source/recipient, including no display.
+
+    A mark is identified by its source's message reference, not the source's value:
+    bus rows are append-only (typed_table's abort-on-UPDATE/DELETE triggers), so a
+    reference names one frozen delivery and its audience. Comparing the delivery
+    itself walked its whole audience once per mark, so a window of N marks on an
+    N-recipient channel message compared N squared recipients on every revision.
+    """
+
+    source: Delivered = field(compare=False)
+    recipient: FrozenRecipient
+    displayed_to: tuple[ThreadIncarnation, ...]
+    reference: MessageReference = field(init=False)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reference", self.source.message.reference)
 
 
 @dataclass(frozen=True)
@@ -289,7 +459,7 @@ class NotificationAssignment(NotificationSource):
         The existing (recipient_lookup, wire_seq) unique index selects each row;
         message_id corroborates the exact original rather than a current name.
         """
-        if len(selection.pages) > NotificationWindow.window_limit:
+        if len(selection.pages) > NotificationSelection.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = tuple(dict.fromkeys(selection.keys))
         if not keys:

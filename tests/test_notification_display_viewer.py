@@ -11,10 +11,10 @@ from agent_comms.comms import Comms, wire
 from agent_comms.historical_views import HistorySource
 from agent_comms.message_page import MessagePage
 from agent_comms.messages import Message
-from agent_comms.notification_evidence import NotificationWindow
+from agent_comms.message_notification import NotificationWindow
 from agent_comms.notification_progress import DeliveryProgress
 from agent_comms.notification_evidence import AllOutcomes, OutcomeViewer, OwnerOutcomes
-from agent_comms.presentation import MessageNotification
+from agent_comms.message_notification import MessageNotification
 from agent_comms.registration import Registration
 from agent_comms.historical_views import HistoricalDisplay, HistoricalSelection
 from agent_comms.read_basis import NamedViewer
