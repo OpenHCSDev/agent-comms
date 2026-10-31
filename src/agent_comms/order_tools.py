@@ -227,7 +227,7 @@ class HeadVerdictTool:
                 actors.append(caller.head_review_actor(comms, self.request, order))
         heads = []
         with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
-            heads.append(self.request.current())
+            heads.append(self.operation.current_head(self.request))
         preparations = []
         for current in heads:
             with RecordProblems.collecting(problems, self.operation.preparation_field,

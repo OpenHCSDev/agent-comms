@@ -1413,3 +1413,16 @@ def test_another_commanders_linked_request_stays_off_the_orderless_board(head_bu
                       held.generation).record(comms.goals, todo.id)
     assert ready.pr not in {rule.request.pr for rule in
                             OrderlessPullRequest.scan_orderless(comms.goals, ProgressRead(()))}
+
+
+def test_only_superseded_may_decide_a_closed_head(head_bus):
+    comms, github, request = head_bus
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    github.put(request.repo, ClosedListedPullRequest(
+        request.pr, 'feature', request.head, closed_at=stamp, updated=stamp,
+        base='main', reviewable_times=(stamp,)))
+    with pytest.raises(Exception, match='no longer an open source'):
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    invoke(comms, request, SupersededHeadVerdict(ACCEPTED, 'P2'))
+    reviewed, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert reviewed.verdict.supersedes()
