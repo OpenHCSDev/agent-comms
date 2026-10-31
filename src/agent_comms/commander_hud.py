@@ -19,7 +19,7 @@ from pydantic import JsonValue
 
 from agent_comms.build_identity import InstalledBuild
 from agent_comms.cli_bridges.codex_connection import CodexConnection
-from agent_comms.cli_bridges.codex_protocol import RateLimitReading
+from agent_comms.cli_bridges.codex_protocol import CodexRefused, RateLimitReading
 from agent_comms.commander.vibe_check import OverloadDegradation
 from agent_comms.commander_frame_file import CommanderFrameFile
 from agent_comms.commander_service import CommanderService
@@ -244,7 +244,7 @@ class CodexUsage:
     def read(cls) -> CodexUsage:
         try:
             return cls(asyncio.run(CodexConnection.rate_limits()))
-        except (OSError, ClientError) as error:
+        except (OSError, ClientError, CodexRefused) as error:
             return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
 
     def line(self) -> str:
