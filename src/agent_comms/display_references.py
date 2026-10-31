@@ -169,10 +169,10 @@ class DisplayReferences(RootedReferences):
     def for_source(self, source) -> DisplayReferences:
         if source is None:
             return self
-        if (known := self.sourced.get(source.key)) is not None:
+        if (known := self.sourced.get(source.snapshot_identity)) is not None:
             return known
         recorded = self.recorded(self.root, source)
-        return self.sourced.setdefault(source.key, DisplayReferences(self.root, {
+        return self.sourced.setdefault(source.snapshot_identity, DisplayReferences(self.root, {
             **{name: entry for name, reference in self.targets.items()
                if (entry := reference.historical_entry(recorded.targets.get(name))) is not None},
             **recorded.targets,

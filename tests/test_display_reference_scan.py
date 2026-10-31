@@ -33,11 +33,15 @@ class RecordedNames:
         return tuple((name, SimpleNamespace(incarnation=SimpleNamespace(name=name))) for name in self.names)
 
 
-def test_each_source_is_resolved_once_and_sources_stay_distinct():
-    first, second = RecordedNames("old-name"), RecordedNames("other-name")
+def source(key, revision, names):
+    return SimpleNamespace(key=key, snapshot_identity=(key, revision), provenance=names)
+
+
+def test_each_snapshot_is_resolved_once_and_snapshots_stay_distinct():
+    earlier, later = RecordedNames("old-name"), RecordedNames("new-name")
     references = DisplayReferences("/root", {})
-    from_first = references.for_source(SimpleNamespace(key="first", provenance=first))
-    assert references.for_source(SimpleNamespace(key="first", provenance=first)) is from_first
-    assert first.walks == 1
-    from_second = references.for_source(SimpleNamespace(key="second", provenance=second))
-    assert set(from_first.targets) == {"old-name"} and set(from_second.targets) == {"other-name"}
+    from_earlier = references.for_source(source("root", 1, earlier))
+    assert references.for_source(source("root", 1, earlier)) is from_earlier
+    assert earlier.walks == 1
+    from_later = references.for_source(source("root", 2, later))
+    assert set(from_earlier.targets) == {"old-name"} and set(from_later.targets) == {"new-name"}
