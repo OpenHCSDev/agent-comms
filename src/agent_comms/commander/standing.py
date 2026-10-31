@@ -242,8 +242,25 @@ class DiedInstallDue(RunInstallDue):
 
 
 @dataclass(frozen=True)
+class RequestSubject(HeartbeatSubject):
+    """Tristan's open request. An order serving it, or marking it done, ends the stalled line's
+    condition itself, so no separate action record answers it before then."""
+
+    request: OwnerRequestId
+
+
+@dataclass(frozen=True)
 class RequestStalled(IndependentStandingRule, UndatedStandingRule):
+    """Tristan's own request with nothing serving it: his lines lead the board and wake the
+    commander every beat until an order serves it, never sit under WATCHING."""
+
+    owner_flagged: ClassVar[bool] = True
+    urgent: ClassVar[bool] = True
+
     request: OwnerRequest
+
+    def subjects(self) -> tuple[HeartbeatSubject, ...]:
+        return (RequestSubject(self.request.id),)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:

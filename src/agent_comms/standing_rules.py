@@ -233,8 +233,16 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         verbs = dict.fromkeys(member for parent in type(self).__mro__
                               for family in vars(parent).get("clearing_verbs", ())
                               for member in family.members_with(family))
-        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
-                           for command in verb.commands(values))
+        # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
+        # not the same arguments once per verb.
+        alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+        for verb in verbs:
+            if self.review_allowed(verb):
+                for command in verb.commands(values):
+                    tool, name, *arguments = command.split(" ")
+                    alike.setdefault((tool, tuple(arguments)), []).append(name)
+        return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
+                           for (tool, arguments), names in alike.items())
 
     def attention(self) -> bool:
         return True

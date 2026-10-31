@@ -217,8 +217,10 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
         "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
-    command = next(command for command in re.findall(r"`([^`]+)`", rule.line())
-                   if command.startswith("judge ok "))
+    # One printed command offers every verb that takes the same arguments: `judge ok|back ARGS`.
+    tool, verbs, arguments = next(command.split(" ", 2) for command in re.findall(r"`([^`]+)`", rule.line())
+                                  if command.startswith("judge ") and "ok" in command.split(" ")[1].split("|"))
+    command = f"{tool} ok {arguments}"
     judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
