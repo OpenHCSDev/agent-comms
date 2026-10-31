@@ -18,6 +18,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
 from agent_comms.field_codec import FieldCodec, PathText
@@ -371,6 +372,9 @@ class EndSession(VerifySession, declared_name='end'):
         return reply
 
 
+BRIDGE_FAILURES: tuple[type[Exception], ...] = (OSError, ValueError, CoordinationError)
+"""What the bus, its files and its wire can raise into a bridge: the failures a bridge reports.
+Anything else is a defect in the bridge's own code and crashes it loudly."""
 async def read_monitor(
     claim: WatchClaim, announce: Callable[[WatchClaim], None],
     swapping: Callable[[WatchClaim], None],

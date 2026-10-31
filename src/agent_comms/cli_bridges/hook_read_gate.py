@@ -204,7 +204,7 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
         offset = deal.words_end()
         owner = self.binding.owner.require_recorded()
         message = MeantNotice().publish(self.comms.messaging, ThreadTarget(owner.name), line)
-        return Asked(str(message.message_id), offset)
+        return Asked(message.message_id, offset)
 
 
 @dataclass(frozen=True)
