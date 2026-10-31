@@ -17,7 +17,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
+from contextlib import AbstractContextManager, ExitStack, aclosing, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -33,15 +33,13 @@ from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
-    AttachedChild,
     OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
     SpawnedProcess,
-    StreamingChildStdio,
 )
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
+from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.harness_delivery_states import (
     DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
     Outcome, ReceivingMonitor, UnconfirmedOutcome,
@@ -59,6 +57,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
 from agent_comms.store_files import ExclusiveDirectoryAtomicFile
 from agent_comms.message_reference import (
@@ -629,6 +628,11 @@ class Serve(Watch):
             lambda operation: VerifySession(owner=operation.owner),
         )
 
+    @classmethod
+    def relaunch(cls, claim: WatchClaim, session: SessionInformation) -> None:
+        """The reader's way back from a dead bridge: the session it last saw, through launch."""
+        cls.launch(claim, lambda: session.owner, session.transcript)
+
     def launch_record(self, claim: WatchClaim, record: WatchRecord,
                       request: SessionRequest) -> None:
         runtime = LaunchRuntime.installed()
@@ -657,7 +661,7 @@ class Serve(Watch):
         with log.open('rb') as recorded:
             recorded.seek(offset)
             appended = recorded.read().decode(errors='replace').strip()
-        raise RuntimeError(
+        raise SessionCommandError(
             f'Session bridge PID {child.pid} exited before answering ({summary}): {appended}'
         )
 
@@ -1187,27 +1191,51 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         await self.prepare_delivery()
         self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
         while True:
-            await self.comms.bus.when_open(self.watch_child)
+            await self.comms.bus.when_open(self.watch_bus)
 
-    async def watch_child(self) -> None:
-        """One child stream; the bus owns waiting and its next attempt after a hold."""
-        child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(
-                await self.once_available('Watch resume', self.resume_after)))),
-            stdio=StreamingChildStdio(input_enabled=False, limit=64 * 1024 * 1024))
+    async def watch_bus(self) -> None:
+        """The message read in this process: one line at a time reaches delivery, so the attempts
+        keep owning the resume position and a bridge restart reads from the same place."""
+        lines: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue()
         try:
-            async for item in WatchLine.stream(child):
-                await item.handle(self, child)
-            outcome = await child.wait()
-            if outcome.interrupted:
-                self.log(f'Core watch PID {child.pid} {outcome.summary}; '
-                         'reopening its subscription, retaining delivery attempts.')
-                return
-            await raise_child_exit(child, '')
-        finally:
-            await child.stop()
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(self.read_messages(lines))
+                tasks.create_task(self.read_requests(lines))
+                tasks.create_task(self.deliver_lines(lines))
+        except* MaintenanceHeldError as held:  # the bus owns waiting and its next attempt
+            raise held.exceptions[0] from None
+
+    async def read_messages(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        """A busy store repeats the whole subscription: every message already read has its
+        attempt, because the next read waits for its delivery, so the resume position skips it."""
+        async def subscription() -> None:
+            arrived = self.comms.watch(self.binding.bus, after=await self.resume_after())
+            async with aclosing(arrived) as messages:
+                async for message in messages:
+                    lines.put_nowait(partial(self.accept, message))
+                    await lines.join()
+
+        with core_watch_failure(lines):
+            await self.once_available('Watch read', subscription)
+            # Nothing else would say so: delivery alone would keep the session deaf and silent.
+            raise CoreWatchEnded('The bus read ended on its own')
+
+    async def read_requests(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        async def subscription() -> None:
+            source = await Coordination.run_worker(
+                partial(self.comms.history_source, self.binding.bus))
+            await source.watch_requests(lambda row: lines.put_nowait(
+                partial(EarlierItems.from_row(row).handle, self)))
+
+        with core_watch_failure(lines):
+            await self.once_available('Watch requests', subscription)
+
+    @staticmethod
+    async def deliver_lines(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        while True:
+            line = await lines.get()
+            await line()
+            lines.task_done()
 
     async def run(self) -> None:
         current = asyncio.current_task()
@@ -1226,6 +1254,29 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
+
+
+class CoreWatchEnded(OSError):
+    """The bus read stopped for a reason other than maintenance; no message was retried."""
+
+
+async def raised(error: Exception) -> None:
+    raise error
+
+
+@contextmanager
+def core_watch_failure(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> Iterator[None]:
+    """A read failure takes its turn in the delivery line, so a delivery under way finishes
+    before the group stops. A hold reaches the bus's own wait; every other failure stops the
+    bridge loudly through its one report, and anything outside that family crashes."""
+    try:
+        yield
+    except MaintenanceHeldError as held:
+        lines.put_nowait(partial(raised, held))
+    except BRIDGE_FAILURES as error:
+        ended = CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}')
+        ended.__cause__ = error
+        lines.put_nowait(partial(raised, ended))
 
 
 class BridgeDeliveryStore(WriterOwnedStore):
@@ -1614,7 +1665,7 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     async def watch_operation(self, operation: Watch) -> None:
         await read_monitor(
             WatchClaim(self.binding.thread), MonitorBridgeStopped.announce,
-            MonitorBridgeSwapping.announce,
+            MonitorBridgeSwapping.announce, Serve.relaunch,
         )
 
     async def accept(self, message: messages.Message) -> None:
