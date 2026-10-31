@@ -548,7 +548,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def repository(self) -> tuple[str, str]:
-        repository = Repo.of(self.checkout).github
+        repository = self.reads.repository(self.checkout).github
         return repository.owner, repository.name
 
     @cached_property

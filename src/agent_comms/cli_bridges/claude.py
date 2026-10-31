@@ -11,6 +11,7 @@ from agent_comms.bus import Bus
 from agent_comms.private_path import FileRevision
 from agent_comms.runtime_updates import RuntimeUpdate
 from agent_comms.watched import FileSource
+from agent_comms_hooks.shell_commands import ConnectCommand
 
 from .history import ClaudeHistory
 from .claude_protocol import ClaudeMonitorFrame
@@ -77,7 +78,7 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
                         yield update
 
 
-class Connect(Enrol):
+class Connect(ConnectCommand, Enrol):
     help = "Bind this running Claude session to a bus thread and start its bridge now"
     reported = 'Session bridge running and ready. Run watch under Monitor to receive.'
 

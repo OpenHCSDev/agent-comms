@@ -397,19 +397,18 @@ class TestedSources(DeclaredFamily, affix="Sources"):
         repositories = tuple(
             Repo.of(BaseSide.checkout(directory, source.repository)) for source in inputs.sources
         )
-        if self.require_merge_review(repositories) != inputs:
-            raise IntegrationFailed("The hosted input changed after source materialization")
-        try:
-            self.publish_merge_review()
-            if self.require_merge_review(repositories) != inputs:
-                raise IntegrationFailed("The hosted input changed during review publication")
-        except ToolRefusedError, GitCommandError:
-            self.withdraw_merge_review()
-            raise
-        print(
-            f"COMBINED CARRIER #{self.carrier.pr} {self.carrier.head}; inputs {inputs.digest}",
-            flush=True,
-        )
+        for carrier in inputs.carriers():
+            if self.require_merge_review(repositories) != carrier:
+                raise IntegrationFailed("The hosted input changed after source materialization")
+            try:
+                self.publish_merge_review()
+                if self.require_merge_review(repositories) != carrier:
+                    raise IntegrationFailed("The hosted input changed during review publication")
+            except ToolRefusedError, GitCommandError:
+                self.withdraw_merge_review()
+                raise
+        print(f"#{self.carrier.pr} {self.carrier.head} combined={inputs.combined}; "
+              f"inputs {inputs.digest}", flush=True)
         return inputs
 
     def materialize(self, directory: Path) -> IntegrationInput:

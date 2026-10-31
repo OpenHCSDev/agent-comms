@@ -19,6 +19,8 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import ClassVar, NoReturn, Self, get_type_hints
 
+from .shell_commands import ConnectCommand
+
 
 class ToolRefusedError(ValueError):
     """An intentional refusal safe to return as a tool answer, not a transport failure."""
@@ -198,6 +200,11 @@ class ClaudeHookProgram(ABC):
         """A session with no bus has no commander or fleet behavior to run."""
 
     @classmethod
+    def absent(cls, record: Mapping[str, object], error: BaseException) -> None:
+        """An enrolled session does not silently become an unbound one."""
+        cls.failed(error)
+
+    @classmethod
     def owns_entry(cls, entry: Mapping[str, object], installed_hooks: tuple[dict[str, str], ...]) -> bool:
         """Ownership survives deletion of a program and its console script. An untagged
         entry running only this package's hooks was written before the tag existed;
@@ -225,6 +232,15 @@ class PermissionHookProgram(ClaudeHookProgram, ABC):
     @classmethod
     def failure_status(cls, status: int = 1) -> int:
         return 2
+
+    @classmethod
+    def absent(cls, record: Mapping[str, object], error: BaseException) -> None:
+        """Only a standalone connect command can repair the missing resident owner."""
+        hook = ClaudeToolHook.decode(record)
+        if hook.tool_name == Bash.__name__ and ConnectCommand.permits(Bash.decode(hook.tool_input).command):
+            cls.unbound(record)
+            return
+        cls.failed(error)
 
 
 class ClaudeToolHookProgram(ClaudeHookProgram, ABC):

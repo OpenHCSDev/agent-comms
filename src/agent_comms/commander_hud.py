@@ -248,7 +248,7 @@ class CodexUsage:
             return cls(UnreadableUsage(reason=f'{type(error).__name__}: {error}'))
 
     def line(self) -> str:
-        return self.reading.line()
+        return f"Codex {self.reading.line()}"
 
     def needs_hand(self) -> bool:
         return self.reading.needs_hand()

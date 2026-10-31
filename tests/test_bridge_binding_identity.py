@@ -3,6 +3,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.repo import Checkout
 """An enrolled address becomes a registered reader without changing its journal."""
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         reader = comms.registry.require('new-reader')
         assert original.owner == reader.incarnation
         assert reader.tags == tags
+        assert reader.worktree == Checkout(Path.cwd())
 
         comms.registry.rename('new-reader', 'renamed-reader')
         bridge = ClaudeBridge(bridge.options, StoredBinding().bind(db), db)

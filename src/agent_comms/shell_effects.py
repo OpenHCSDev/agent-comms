@@ -120,7 +120,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, projection: StorageProjection) -> None:
         rule, thread = projection.rule, projection.thread
         rule.require_destination(thread, self.path)
-        if not rule.owns_checkout(thread, self.path, self.repository.github):
+        if not rule.owns_checkout(thread, self.path, self.repository.github, projection.reads):
             destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         projection.storage = self.project(projection.storage)

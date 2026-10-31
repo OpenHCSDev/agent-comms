@@ -2,10 +2,10 @@
 
 
 
+from agent_comms_hooks.watch import NoSessionBridge
 from agent_comms.cli_bridges.session_watch import (
     LapsedWatch,
     LiveWatch,
-    NoSessionBridge,
     WatchClaim,
     WatchRecord,
 )

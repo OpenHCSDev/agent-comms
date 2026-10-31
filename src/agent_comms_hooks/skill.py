@@ -33,12 +33,13 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal, RuleDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
     StartedDeal, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
-from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeSubagentHook
 from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.hook_read_gate import TranscriptWords
 
 class DeckReader(DealtSources):
     """Which packaged sources a bound session is dealt, by the audience its rules declare, on
@@ -286,7 +287,7 @@ class LightPrime(Prime, declared_name="light"):
 
 
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook, RuleDeal):
+class DealtDeck(TranscriptWords):
     """The deal and the slices the session start hook dealt beside the transcript."""
 
     def deck(self, reader: DeckReader) -> Path:
@@ -385,19 +386,12 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
-            " a time, and answer those in the audit: greentext lines it holds quoted verbatim, what they did, and why"
-            " it holds. Check what you did since your last start or compaction against it and"
-            " name every action that broke it, and fix what you can: reading alone is passive, the"
-            " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
-            " one session). That audit is not optional: every tool but Read, and Write or Edit of"
-            f" {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "quote": WHOLE GREENTEXT LINES OF IT VERBATIM, "does": what they did,'
-            ' "why": why it holds, "broke": [each action since the last start or compaction that'
-            ' broke it; empty means kept]}, one entry for every rule you were dealt],'
-            ' "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are doing about'
-            " it right now}]}. This order is given once per session start or"
-            " compaction; a short slice of them comes back inline every few tool calls.\n"
+            " a time, and answer those in the audit: reading alone is passive. Every tool but"
+            " Read, and Write or Edit of"
+            f" {self.audit}, is refused until it answers. This order is given once per session"
+            " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
+            self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self, comms, snapshot, commanders),
         )

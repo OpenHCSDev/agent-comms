@@ -737,7 +737,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     }'''))
     usage = CodexUsage(reply.rate_limits)
     reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
-    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert usage.line() == f'Codex usage 37% weekly, resets {reset}'
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
     refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))

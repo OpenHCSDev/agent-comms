@@ -67,6 +67,23 @@ class Program:
         return command.program in (self.name, *self.aliases)
 
 
+class ConnectCommand:
+    """The Claude bridge's connect declaration, shared by its CLI and outage permission."""
+
+    program: ClassVar[Program] = Program("agent-comms-claude-bridge")
+
+    @classmethod
+    def command_name(cls) -> str:
+        return __class__.__name__.removesuffix("Command").lower()
+
+    @classmethod
+    def permits(cls, command: str) -> bool:
+        """Recovery runs alone, not beside another command or shell redirection."""
+        commands = tuple(ShellCommand.split(command))
+        return (len(commands) == 1 and cls.program.runs(commands[0])
+                and commands[0].args == [cls.command_name()])
+
+
 @dataclass(frozen=True)
 class ShellCommand:
     """One simple command: its words after any leading `NAME=value` assignments, so its

@@ -843,15 +843,20 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, com
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}, comms=commander_bus, binding=commander_binding))
 
 
-def test_the_reminder_teaches_the_three_fields_by_a_real_answer(capsys, dealt_session, commander_bus, commander_binding):
-    transcript, start = dealt_session
-    gated(transcript, "Bash", {}, comms=commander_bus, binding=commander_binding).judge()
-    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(
+        tmp_path, capsys, commanding_session, commander_bus, commander_binding):
+    """The hook's order prints the one template; the first refusal does not print it again."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    said = DeckStart.decode(hook_record(transcript, "SessionStart")).take(commander_bus, commander_binding)
+    template = next(part for part in said if "{\n" in part)
     example = AuditDue.worked_answer
-    assert json.dumps(FieldCodec.encode(example), ensure_ascii=False) in reason
+    assert json.dumps(FieldCodec.encode(example), ensure_ascii=False) in template
     spine = next(rule for rule in CommanderReader.rules() if rule.name == example.rule)
     assert example.unengaged(spine.path) == ""
-    assert {"quote", "does", "why"} <= json.loads(reason[reason.index("{\n"):])["rules"][0].keys()
+    assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
+    gated(transcript, "Bash", {}, comms=commander_bus, binding=commander_binding).judge()
+    assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(

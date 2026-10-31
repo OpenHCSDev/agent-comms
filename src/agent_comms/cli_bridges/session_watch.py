@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from abc import (
     ABC,
     abstractmethod,
@@ -23,9 +22,9 @@ from typing import (
 )
 
 from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
-from agent_comms_hooks.watch import SessionEndpoint, SessionFailure
+from agent_comms_hooks.process_claim import ProcessSingleton
+from agent_comms_hooks.watch import HeldSocketWatch, SessionCommandError, SessionEndpoint, SessionFailure, SocketWatch
 
-from ..process_claim import ProcessSingleton
 from ..registry_store import RegistryStore
 from ..store_files import AtomicFile
 
@@ -36,25 +35,12 @@ class SessionRefusedError(ValueError, SessionFailure):
     """A session endpoint rejected the control request, not malformed wire data."""
 
 
-class SessionCommandError(RuntimeError, SessionFailure):
-    """A session command could not complete."""
-
-
 class SessionRequestTimeout(SessionCommandError):
     """The request's declared reply budget expired."""
 
 
 class SessionConnectionClosed(SessionCommandError):
     """The peer closed before a required reply or startup probe."""
-
-
-class NoSessionBridge(SessionCommandError):
-    """No bridge holds this claim: nothing is delivered until connect starts one."""
-
-    def __init__(self, session: str) -> None:
-        super().__init__(
-            f'No session bridge is running for session {session}; its log names why it stopped. '
-            'Start it with agent-comms-claude-bridge connect.')
 
 
 @dataclass(frozen=True)
@@ -118,10 +104,6 @@ class WatchClaim(SessionEndpoint):
         return tuple(sorted(path for path in directory.glob("*.lock") if len(path.suffixes) == 1))
 
     @property
-    def claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.path)
-
-    @property
     def reader_claim(self) -> ProcessSingleton:
         return ProcessSingleton(self.path.with_suffix(".reader.lock"))
 
@@ -180,7 +162,7 @@ class WatchClaim(SessionEndpoint):
             self.state().enrol(self, record)
 
 
-class WatchState(ABC):
+class WatchState(SocketWatch, ABC):
     """The claim state owns connection, shutdown, enrolment and discovery."""
 
     @abstractmethod
@@ -223,11 +205,6 @@ class WatchState(ABC):
     def name_wait(self, announce: Callable[[], None]) -> bool:
         """An absent holder is not a wait to name."""
         return False
-
-    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
-        """No bridge holds the claim, so its socket is gone, not between bridges."""
-        raise NoSessionBridge(claim.thread) from absent
-
 
 class UnclaimedWatch(WatchState):
     def rearm(self, launch: Callable[[], None]) -> None:
@@ -277,7 +254,7 @@ class RecordedWatch(WatchState):
         serve.launch_record(self.claim, self.record, request)
 
 
-class LiveWatch(RecordedWatch):
+class LiveWatch(RecordedWatch, HeldSocketWatch):
     def rearm(self, launch: Callable[[], None]) -> None:
         """The kernel-held bridge is already serving; do not launch another."""
         return
@@ -310,12 +287,6 @@ class LiveWatch(RecordedWatch):
         """Name a held claim's replacement once through the reader's protocol."""
         announce()
         return True
-
-    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
-        """The claim's lock outlives the install's exec, so a held claim's absent socket is
-        the swap's gap: wait for the successor however long it starts."""
-        time.sleep(.05)
-
 
 class LapsedWatch(RecordedWatch):
     def rearm(self, launch: Callable[[], None]) -> None:

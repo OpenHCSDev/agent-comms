@@ -17,14 +17,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import DealtRuleGate, Owed, ReadSpan
+from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Speaking, Voice
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.cli_bridges.shared import Binding
 import time
 from agent_comms.turn_phase import ToolRunningPhase
-from agent_comms_hooks import ClaudeToolHook, HookRecord
+from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
+from agent_comms.channel_targets import ThreadTarget
+from agent_comms.task_attachments.owner_notices import MeantNotice
+from .claude_transcript import ClaudeJsonLines
 from .hook_forks import SeatedSubagent
 
 
@@ -82,18 +85,50 @@ class ReadTool(ToolMeaning, declared_name="Read"):
 
 
 class WriteTool(ToolMeaning, declared_name="Write"):
-    """Writing the audit itself is the way through the gate; any other write waits."""
+    """Writing the audit itself is the way through the gate; ask once its write completes."""
 
     def judge(self, call: GatedCall) -> None:
         call.judge_write(call.tool_name, WriteInput.decode(call.tool_input).file_path.resolve())
+
+    def completed(self, call: GatedCall) -> bool:
+        if WriteInput.decode(call.tool_input).file_path.resolve() == call.audit.resolve():
+            call.audit_written()
+        return False
 
 
 class EditTool(WriteTool, declared_name="Edit"):
     """Answering one rule edits the audit in place; an edit is judged like a write."""
 
 
+class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
+    """The session's transcript owns its words and the position where a question was asked."""
+
+    def words_end(self) -> int:
+        return self.stem.stat().st_size
+
+    def complete_lines(self, offset: int) -> list[tuple[int, bytes]]:
+        """Read complete lines after the retained position; a partial last line waits."""
+        with self.stem.open("rb") as stream:
+            stream.seek(offset)
+            raw = stream.read()
+        lines, position = [], offset
+        for line in raw.splitlines(keepends=True):
+            if line.endswith(b"\n"):
+                lines.append((position, line))
+            position += len(line)
+        return lines
+
+    def said_since(self, offset: int) -> tuple[str, ...]:
+        decoder = ClaudeJsonLines()
+        return tuple(words for position, line in self.complete_lines(offset)
+                     for words in decoder.decode_line(line, position).said())
+
+    def delivered(self, asked: Asked) -> bool:
+        return any(asked.message_id.encode() in line for _, line in self.complete_lines(asked.offset))
+
+
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, DealtRuleGate):
+class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
     """One tool call of the session's own agent, judged before it runs and seen after it
     completes. Its deal lives beside the transcript, and a refusal is a PreToolUse denial."""
 
@@ -132,6 +167,16 @@ class GatedCall(ClaudeToolHook, DealtRuleGate):
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
 
+    def voice(self) -> Voice:
+        """The supplied resident bus and binding are already this call's speaking seat."""
+        return self
+
+    def say(self, line: str, deal: RuleDeal) -> Asked:
+        offset = deal.words_end()
+        owner = self.binding.owner.require_recorded()
+        message = MeantNotice().publish(self.comms.messaging, ThreadTarget(owner.name), line)
+        return Asked(str(message.message_id), offset)
+
 
 @dataclass(frozen=True)
 class SubagentCall(GatedCall, SeatedSubagent):
@@ -142,6 +187,10 @@ class SubagentCall(GatedCall, SeatedSubagent):
     def judge(self) -> None:
         self.enter(self.comms, self.binding, ToolRunningPhase(self.tool_name))
         super().judge()
+
+    def voice(self) -> Voice:
+        """The main session's bus seat cannot ask a question inside its subagent's turn."""
+        return Mute()
 
     def judge_write(self, tool: str, path: Path) -> None:
         """The main agent's audit is never a subagent's to write, whatever its context says."""

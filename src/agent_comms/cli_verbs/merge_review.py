@@ -36,8 +36,7 @@ class ReviewedMerge:
         for bypass in bypasses:
             target = bypass.target()
             request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-            StoredHeadReview.current_verdict(ctx.goals.todos, request).require_merge(
-                request, snapshot.commander_project.require().repos)
+            StoredHeadReview.current_verdict(ctx.goals.todos, request).require_ok(request)
             heads.append(request)
         return MergeReviewResult(tuple(heads))
 

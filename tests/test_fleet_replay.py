@@ -33,7 +33,7 @@ from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo, UnpushedHead
+from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
@@ -606,7 +606,7 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
     built.git(path, 'config', f'branch.{branch}.merge', 'refs/heads/main')
     head = built.commit(path, 'clone_only.py', 'clone_work = 1\n')
     assert Repo.of(path).github == built.repository
-    assert storage.owns_present_checkout(built.thread('unpushed'), path)
+    assert storage.owns_present_checkout(built.thread('unpushed'), path, RepositoryReads())
     assert built.git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir') != (
         built.git(built.source.checkout, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
     plans = CommanderHeartbeat()

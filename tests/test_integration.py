@@ -140,18 +140,18 @@ def test_actual_ordinary_ci_cli_captures_main_once_and_never_steals_an_unlinked_
     assert Package(base, resource.at(checkout.path, baseline, tested, BaseSide)).missing_names == ()
     assert {name for _, name in Package(candidate, resource.at(checkout.path, baseline, tested, HeadSide)).missing_names} == {"old_api"}
     assert not any("state=success" in call or call[:2] == ("pr", "merge") for call in github_cli.calls())
-    refused = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                              str(tmp_path / "refused-individual")), cwd=checkout.path,
-                             env=environment, capture_output=True, text=True, timeout=120)
-    assert refused.returncode != 0 and "individual source" in refused.stderr
+    ordinary = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
+                               str(tmp_path / "ordinary")), cwd=checkout.path,
+                              env=environment, capture_output=True, text=True, timeout=120)
+    assert ordinary.returncode == 0 and "combined=False" in ordinary.stdout, ordinary.stderr
     document.write_text(json.dumps({"merge_group": {
         "head_sha": tested, "base_sha": baseline,
         "head_ref": f"refs/heads/gh-readonly-queue/main/pr-{pair.core.number}-{head}"}}))
     queued = subprocess.run((sys.executable, "-m", "agent_comms.integration", "--check-merge-inputs",
-                             str(tmp_path / "refused-ordinary-queue")), cwd=checkout.path,
+                             str(tmp_path / "ordinary-queue")), cwd=checkout.path,
                             env={**environment, "GITHUB_EVENT_NAME": "merge_group"},
                             capture_output=True, text=True, timeout=120)
-    assert queued.returncode != 0 and "individual source" in queued.stderr
+    assert queued.returncode == 0 and "combined=False" in queued.stdout, queued.stderr
     assert not HeadReview.accepted(pair.core.github, tested)
     assert not MergeHeadReview.accepted(pair.core.github, tested)
 

@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
@@ -123,6 +124,120 @@ class OpenedReadsStore(SingleFileStore, LockedStore[OpenedReads], DependentState
 
 
 @dataclass(frozen=True)
+class Asked:
+    """One line the gate said to the session in the owner's voice: its bus message, and how far
+    the session's own record of its words ran when it went out."""
+
+    message_id: str
+    offset: int
+
+
+@dataclass(frozen=True)
+class MeantRecord:
+    """Whether the session meant its answers: the rules already asked about, and the open
+    question with each line said after it, oldest first. No open question owes nothing.
+
+    Tristan, 2026-10-30, after asking a session that had just read every rule "did you mean
+    it?" and watching it answer "I'm going to go look at this now": every batch it answers is
+    followed by that question, and the next file stays shut until it says yes or no. A dodge
+    gets "fuck you"; a dodge after that gets its own words quoted back, because the second one,
+    with the quote and "it's literally your default", is what made his session talk to him."""
+
+    asked: frozenset[str] = frozenset()
+    open: tuple[Asked, ...] = ()
+
+    question: ClassVar[str] = "did you mean it?"
+    answer: ClassVar[re.Pattern[str]] = re.compile(r"^[\W_]*(yes|yeah|yep|yup|no|nope)\b", re.I)
+
+    def answered_by(self, words: tuple[str, ...]) -> bool:
+        """A clear yes or no opens with it; anything else talks around the question."""
+        return any(self.answer.match(word) for word in words)
+
+    def asking(self, rules: frozenset[str], asked: Asked) -> MeantRecord:
+        return MeantRecord(self.asked | rules, (asked,))
+
+    def settled(self) -> MeantRecord:
+        return replace(self, open=())
+
+    def said(self, asked: Asked) -> MeantRecord:
+        return replace(self, open=(*self.open, asked))
+
+    def next_line(self, words: tuple[str, ...]) -> str:
+        """The first dodge is told off; each later one hears its own newest words first."""
+        if len(self.open) == 1 or not words:
+            return "fuck you"
+        quoted = words[-1].strip().splitlines()[0][:200]
+        return f"> {quoted}\n\nfuck you. it's literally your default"
+
+
+@dataclass(frozen=True, slots=True)
+class MeantStore(SingleFileStore, LockedStore[MeantRecord], DependentStateTier):
+    """One session's questions beside its deal. A parallel batch's hooks each decide under the
+    lock, so one dodge is answered once, not once per refused call."""
+
+    record_type = MeantRecord
+
+    def empty(self) -> MeantRecord:
+        return MeantRecord()
+
+
+class Voice(ABC):
+    """How a deal speaks to its session in the owner's voice, or that it cannot."""
+
+    @abstractmethod
+    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+        """After an audit edit: ask about the rules it newly answered, once."""
+
+    @abstractmethod
+    def escalate(self, deal: RuleDeal) -> None:
+        """A call was refused while the question stands."""
+
+
+class Speaking(Voice):
+    """A voice that reaches its session. The question and its escalation are decided here, for
+    every backend; a member says only how a line reaches the session."""
+
+    @abstractmethod
+    def say(self, line: str, deal: RuleDeal) -> Asked:
+        """Put this line in front of the session as the owner's."""
+
+    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+        """After an audit edit: ask about the rules it newly answered, once."""
+
+        def asked(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
+            fresh = answered - meant.asked
+            if not fresh:
+                return DocumentChange.to(meant)
+            return DocumentChange.to(meant.asking(fresh, self.say(meant.question, deal)))
+
+        deal.meant.update(asked)
+
+    def escalate(self, deal: RuleDeal) -> None:
+        """A call refused while the question stands: once the last line has reached the
+        session, it is a dodge, and the next line goes out. Until then the refusal itself
+        carries the question, so a session whose bridge is down can still answer."""
+
+        def escalated(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
+            if not meant.open or not deal.delivered(meant.open[-1]):
+                return DocumentChange.to(meant)
+            line = meant.next_line(deal.said_since(meant.open[-1].offset))
+            return DocumentChange.to(meant.said(self.say(line, deal)))
+
+        deal.meant.update(escalated)
+
+
+class Mute(Voice):
+    """A deal with no owner's voice: a Pi thread, a subagent, a session bound to no bus. It
+    never asks, so it never owes an answer."""
+
+    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+        return
+
+    def escalate(self, deal: RuleDeal) -> None:
+        return
+
+
+@dataclass(frozen=True)
 class DealtRead:
     """One dealt file read in full: the source and the content that was read. It still counts
     under any runtime holding that content, and stops counting the moment the file changes."""
@@ -136,11 +251,12 @@ class DealtRead:
 
 @dataclass(frozen=True)
 class RuleAudit:
-    """One dealt rule: each action since the last start or compaction that broke it, and the
-    answer to reading it: greentext lines it holds verbatim, what they did, and why it holds."""
+    """One dealt rule and the answer to reading it: greentext lines it holds verbatim, what they
+    did, and why it holds. Nothing ever read a list of the actions that broke it, and after a
+    compaction the window it covered held only refused calls, so every compacted session signed
+    every rule kept."""
 
     rule: str
-    broke: tuple[str, ...] = ()
     quote: str = ""
     does: str = ""
     why: str = ""
@@ -267,9 +383,8 @@ class AuditDue:
                 f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
-                f"Write this SessionAudit to {audit_path}. Fill quote, does, why, broke and doing;"
-                " keep every rule name and quoted words unchanged. Empty broke means the rule was"
-                " kept; doing must name your current action:\n"
+                f"Write this SessionAudit to {audit_path}. Fill quote, does, why and doing; keep"
+                " every rule name and quoted words unchanged. Doing names your current action:\n"
                 + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
             )
         )
@@ -384,6 +499,15 @@ class Blocked(ToolGateState):
         frame-baseline and install-speed reread 16 files the call after finishing 25 (bus 45261,
         45247)."""
         deal.refresh_answered(usage)
+
+
+@dataclass(frozen=True)
+class Questioned(Blocked):
+    """The gate shut on an unanswered question: each refused call is a chance to dodge it."""
+
+    def enforce(self, gate: ToolGate, tool: str) -> None:
+        gate.voice().escalate(gate)
+        super().enforce(gate, tool)
 
 
 class DealTrigger(DeclaredFamily, affix="Deal"):
@@ -621,6 +745,40 @@ class Unengaged(Owed):
 
 
 @dataclass(frozen=True)
+class Unmeant(Owed):
+    """Tristan asked whether the answers just written were meant, and the session has not said
+    yes or no. What it already read stays open to reread; nothing new opens."""
+
+    question: Asked
+    read: tuple[Path, ...]
+
+    before: ClassVar[str] = "answering Tristan"
+
+    def state(self) -> ToolGateState:
+        return Questioned(self)
+
+    @classmethod
+    def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
+        meant = deal.meant.read()
+        if not meant.open:
+            return
+        if meant.answered_by(deal.said_since(meant.open[0].offset)):
+            # Recorded once, so no later call reads the session's words again.
+            deal.meant.update(lambda now: DocumentChange.to(
+                now.settled() if now.open == meant.open else now))
+            return
+        yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened))
+
+    @property
+    def reason(self) -> str:
+        return (f'Tristan asked you "{MeantRecord.question}" about the answers you just wrote.'
+                " Say yes or no to him before you read on.")
+
+    def permits_read(self, path: Path) -> bool:
+        return path in self.read
+
+
+@dataclass(frozen=True)
 class Unread(Owed):
     """A dealt file has not been read in full. They open in the order dealt: the papers first,
     the indictment last. On 2026-10-30 claude-code opened the indictment and two rules first and
@@ -729,6 +887,38 @@ class RuleDeal(State, DealtCalls):
         return stem.with_suffix(".audit.json")
 
     @property
+    def meant(self) -> MeantStore:
+        return MeantStore(self.stem.with_suffix(".meant"))
+
+    def voice(self) -> Voice:
+        """How this deal speaks as the owner; a deal with no bus seat stays mute."""
+        return Mute()
+
+    def words_end(self) -> int:
+        """Where the session's record of its own words ends now."""
+        return 0
+
+    def said_since(self, offset: int) -> tuple[str, ...]:
+        """The session's own words after `offset` in its backend's record of them. A mute
+        deal never asks, so it has none to read."""
+        return ()
+
+    def delivered(self, asked: Asked) -> bool:
+        """Whether this line has reached the session."""
+        return False
+
+    def audit_written(self) -> None:
+        """An audit edit completed: the rules it now answers are each asked about once."""
+        record = self.current()
+        audit = SessionAudit.read(self.audit)
+        if audit.fault():
+            return
+        self.voice().question(self, frozenset(
+            source.stem for source in record.read_by(self)
+            if source.stem in record.due.rules and not audit.entry(source.stem).unengaged(source)
+        ))
+
+    @property
     def template_shown(self) -> Path:
         return self.stem.with_suffix(".template-shown")
 
@@ -740,7 +930,7 @@ class RuleDeal(State, DealtCalls):
         except FileExistsError:
             return (
                 f"{due.reminder()}\n\n"
-                f"The audit's template was in your first refusal; it goes in {self.audit}."
+                f"The audit's template was shown once already; it goes in {self.audit}."
             )
         return f"{due.reminder()}\n\n{due.template(self.audit)}"
 
@@ -773,6 +963,7 @@ class RuleDeal(State, DealtCalls):
         self.dealt_read.write_text("", encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
+        self.meant.replace(MeantRecord())
         self.template_shown.unlink(missing_ok=True)
         self.publish(
             DealRecord(
@@ -843,6 +1034,11 @@ class ToolGate(RuleDeal):
         """Deliver this refusal to the model the way the backend refuses a tool call."""
 
 
+class AsksIfMeant(ToolGate, owes=(Unmeant,)):
+    """Each batch answered is followed by Tristan's "did you mean it?"; nothing new opens until
+    the session says yes or no. A mute deal never asks, so it never owes this."""
+
+
 class AnswersDealtRules(ToolGate, owes=(Unengaged,)):
     """Each rule read is answered in the audit; at most `Unengaged.batch` stand unanswered."""
 
@@ -855,8 +1051,9 @@ class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
     """After reading, the audit answers every dealt rule and prompt."""
 
 
-class DealtRuleGate(AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
-    """Read a batch, answer it, read the next, then finish the audit: the gate every backend runs."""
+class DealtRuleGate(AsksIfMeant, AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
+    """Read a batch, answer it, say whether you meant it, read the next, then finish the audit:
+    the gate every backend runs."""
 
 
 @dataclass(frozen=True)
