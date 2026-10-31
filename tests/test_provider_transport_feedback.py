@@ -13,11 +13,15 @@ from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import (
-    AfterMessageStreamStartStage, CodedProviderDiagnosticError,
-    CodelessProviderDiagnosticError, RequestBytes, UnrecognizedTransportStage,
+    AfterMessageStreamStartStage,
+    CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError,
+    RequestBytes,
+    UnrecognizedTransportStage,
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
+
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
 

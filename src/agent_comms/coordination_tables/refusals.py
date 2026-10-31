@@ -11,9 +11,10 @@ from typing import TYPE_CHECKING, Annotated
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_session import CoordinationSession
-from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.errors import RelationViolationError
 from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.typed_table import Column, Index
+from agent_comms_hooks import ToolRefusedError
 
 from ..locked_store import RegistryFile
 

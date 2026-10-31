@@ -21,7 +21,7 @@ from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
 from agent_comms.task_attachments.owner_notices import RestartNotice
 from agent_comms.threads import Thread
-from agent_comms_hooks.read_gate import ReadInput
+from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import CommanderReader, FleetReader
 from conftest import answer_deal, engaged
 

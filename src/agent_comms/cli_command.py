@@ -10,13 +10,13 @@ from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.config_options import ConfigOptions
-from agent_comms.errors import ToolRefusedError
 from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.target_fields import TargetField
 from dataclasses import dataclass, field, replace
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 from collections.abc import Mapping
 from typing import Annotated, Generic, Self, TypeVar
