@@ -52,7 +52,6 @@ from .native_arguments import (
 )
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
-from .repo import Checkout
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryEdit
 from .restart_refusals import (

@@ -132,7 +132,7 @@ def test_guard_follows_aliases_qualified_imports_and_inherited_reexports():
     sources = {
         OWNER: "class FieldCodec: pass\nclass Shared(FieldCodec): pass",
         "agent_comms.a": (
-            "from .field_codec import FieldCodec as F\n"
+            "from .nominal.field_codec import FieldCodec as F\n"
             "Alias = F\nclass Bad(Alias): pass"
         ),
         "agent_comms.b": "import agent_comms.nominal.field_codec as fc\nclass Bad(fc.FieldCodec): pass",
@@ -145,7 +145,7 @@ def test_guard_follows_aliases_qualified_imports_and_inherited_reexports():
             "import agent_comms.nominal.field_codec as fc\n"
             "class Bad(fc.FieldCodec): pass"
         ),
-        "agent_comms.f": "from .field_codec import *\nclass Bad(Shared): pass",
+        "agent_comms.f": "from .nominal.field_codec import *\nclass Bad(Shared): pass",
         "agent_comms.safe": "class FieldCodec: pass\nclass Fine(FieldCodec): pass",
     }
     assert codec_subclasses(sources) == {

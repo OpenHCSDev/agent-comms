@@ -88,4 +88,4 @@ def test_raw_shape_guard_reuses_the_existing_overlay_detector():
     typed = b'def read(row):\n return row.a, row.b, row.c\n'
     assert audit.source_measures.RawRecordShapes.count(project, raw, 'src/example.py') == 1
     assert audit.source_measures.RawRecordShapes.count(project, typed, 'src/example.py') == 0
-    assert audit.source_measures.RawRecordShapes.count(project, raw, 'src/agent_comms/field_codec.py') == 1
+    assert audit.source_measures.RawRecordShapes.count(project, raw, 'src/agent_comms/nominal/field_codec.py') == 1

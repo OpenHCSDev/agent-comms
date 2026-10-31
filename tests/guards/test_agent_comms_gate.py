@@ -320,7 +320,7 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
                  id="qualified"),
     pytest.param("import agent_comms.nominal.field_codec\n@agent_comms.nominal.field_codec.boundary_decoder\n{function}", 0,
                  id="module"),
-    pytest.param("from .field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+    pytest.param("from .nominal.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
                  id="relative"),
     pytest.param("{function}", 1, id="undecorated"),
     pytest.param("from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,

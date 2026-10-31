@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import aclosing

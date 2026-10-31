@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, ClassVar
 
+
 from .nominal.field_codec import TurnId, GoalId
 from .turn_item import UsageChargeId
 
