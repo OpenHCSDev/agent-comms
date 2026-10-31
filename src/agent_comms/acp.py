@@ -91,7 +91,6 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
-from .schedule_rules import SelectedWakeCheck
 from .selected_write_authority import AcpSelectedWriteAuthority
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
@@ -103,12 +102,67 @@ from .working_memory_policy import AnnotationPolicy
 from .working_memory_worker import AnnotationWorker
 
 
+from dataclasses import dataclass
+from .drain_failures import drain_failures
+from .activity import FailedWakeDiagnostic
+from .reservation_rules import ReservationViolationError
+from agent_comms.input_drain import SchedulesWake, SessionScheduleCheck, WakeDue, WakeHeld, WakeOutcome
+from .thread_identity import OwnerIdentity
+
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
     from .selected_write_authority import AcpSelectedWriteAuthority
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedWakeCheck(SchedulesWake, SessionScheduleCheck):
+    """A selected turn runs beside the owner's observation, which hands it later messages."""
+
+    execution: "SelectedExecution"
+    thread: str
+    owner: "OwnerIdentity"
+
+    def schedule(self) -> None:
+        try:
+            self.require_valid()
+        except ReservationViolationError:
+            return  # The wake already running drains again when it ends.
+        self.inputs.register_wake(
+            self.session_id, self.inputs.runtime.background(self.run())
+        )
+
+    async def run(self) -> WakeOutcome:
+        inputs, session_id = self.inputs, self.session_id
+        effects = inputs.effects
+        root_id = inputs.comms.owners.require_private_launch().wire_root_id
+        # Selection may have been scheduled just before maintenance began.
+        # A deferred selection is not a successful drain or diagnostic recovery.
+        hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+        if hold.turn_pending:
+            return WakeHeld(hold)
+        async with drain_failures(inputs.comms, self.thread, self.owner, FailedWakeDiagnostic):
+            before = await inputs._observe_private_revision(session_id, root_id)
+            result = await effects.turns.run_selected(session_id, self.execution)
+            if result is not None:
+                # A disconnected client must not turn a settled claim into an
+                # apparent model failure. Reconnect reads the same durable row.
+                await effects.cursors.publish(
+                    session_id, self.thread, selected_status=result.cursor_status
+                )
+            else:
+                # N (or absent-audience) rows prove coverage, not an injected
+                # input. Extend only an existing current generation or an all-N prefix;
+                # old-generation Pi evidence cannot initialize this cursor on reconnect.
+                await effects.cursors.publish(session_id, self.thread, advance=True)
+                if before == await inputs._observe_private_revision(session_id, root_id):
+                    inputs.state(session_id).idle_revision = before
+            if result is not None:
+                # Messages this turn could not take are still pending.
+                await inputs.drain_inbox(session_id)
+        return WakeDue()
 
 
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):
