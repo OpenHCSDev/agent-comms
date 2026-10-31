@@ -53,7 +53,7 @@ from agent_comms.cli_bridges.hook_reread import BoardReminder, DeafReminder, Sli
 from agent_comms.cli_bridges.hook_deferral import StopHook
 from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
-from agent_comms.cli_bridges.hook_read_gate import GatedCall
+from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.skill import (CommanderLightReader, CommanderReader, DeckReader, DeckStart,
                                      FleetReader, FullPrime, LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
@@ -235,6 +235,20 @@ def test_an_unbound_session_is_never_told_to_rearm_a_commander_watch(tmp_path, m
     hook = DeafReminder.decode(hook_record(transcript))
     assert not hook.deck(CommanderReader()).exists()
     assert not hook.deck(FleetReader()).exists()
+
+
+@pytest.mark.parametrize(("command", "allowed"), (
+    ("agent-comms-claude-bridge watch", True),
+    ("/owned/bin/agent-comms-claude-bridge watch --state '/owned/state directory'", True),
+    ("echo unrelated", False),
+    ("agent-comms-claude-bridge connect", False),
+    ("agent-comms-claude-bridge watch; echo unrelated", False),
+    ("agent-comms-claude-bridge watch > output", False),
+    ("agent-comms-claude-bridge watch --root other", False),
+    ("agent-comms-claude-bridge watch --state", False),
+))
+def test_only_the_bus_monitor_may_cross_an_unfinished_deal(command: str, allowed: bool):
+    assert MonitorInput(command).watches_bus() is allowed
 
 
 def tool_call(hook, server, comms, db, now):

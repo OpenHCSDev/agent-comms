@@ -11,17 +11,20 @@ it may not write the main agent's audit, and it reports its tool activity throug
 
 from __future__ import annotations
 
+import shlex
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import ClassVar
 
+from agent_comms_hooks.shell_commands import ConnectCommand, ShellCommand
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Speaking, Voice
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.cli_bridges.shared import Binding
+from agent_comms.cli_bridges.shared import Binding, Watch
 import time
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
@@ -50,6 +53,24 @@ class WriteInput(HookRecord):
     """The Write tool's input: the gate only needs where it writes."""
 
     file_path: Path
+
+
+@dataclass(frozen=True)
+class MonitorInput(HookRecord):
+    """Only the bridge's watch may run inside an unfinished deal, not arbitrary Monitor code."""
+
+    command: str
+    options: ClassVar[frozenset[str]] = frozenset({"--state"})
+    shell: ClassVar[frozenset[str]] = frozenset(";|&$`<>()\n")
+
+    def watches_bus(self) -> bool:
+        if self.shell & set(self.command):
+            return False
+        words = shlex.split(self.command)
+        options = words[2:]
+        return (len(words) >= 2 and ConnectCommand.program.runs(ShellCommand(tuple(words)))
+                and words[1] == Watch.command_name()
+                and len(options) % 2 == 0 and set(options[::2]) <= self.options)
 
 
 class ToolMeaning(DeclaredFamily):
@@ -82,6 +103,14 @@ class ReadTool(ToolMeaning, declared_name="Read"):
     def completed(self, call: GatedCall) -> bool:
         read = ReadInput.decode(call.tool_input)
         return call.record_read(read.file_path.resolve(), read.span())
+
+
+class MonitorTool(ToolMeaning, declared_name="Monitor"):
+    """Bus input must survive a deal; unrelated Monitor commands stay gated."""
+
+    def judge(self, call: GatedCall) -> None:
+        if not MonitorInput.decode(call.tool_input).watches_bus():
+            call.judge_tool(call.tool_name)
 
 
 class WriteTool(ToolMeaning, declared_name="Write"):
