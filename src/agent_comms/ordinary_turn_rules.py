@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 
 from .reservation_rules import ReservationRule, RuleCheck
 
 if TYPE_CHECKING:
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    pass
 
 
 class MissingTurnOwnerCheck(RuleCheck):
@@ -34,20 +33,6 @@ class MissingAcceptedInputRule(ReservationRule):
 
     def violated(self, check: MissingAcceptedInputCheck) -> bool:
         return True
-
-
-@dataclass(frozen=True, kw_only=True)
-class OrdinaryGoalGrantCheck(RuleCheck):
-    permit: LaunchPermit
-    store: GoalAttemptStore
-
-
-class OrdinaryGoalGrantRule(ReservationRule):
-    check_type = OrdinaryGoalGrantCheck
-    explanation = "The captured autonomous goal launch is no longer claimed."
-
-    def violated(self, check: OrdinaryGoalGrantCheck) -> bool:
-        return not check.permit.is_claimed(check.store)
 
 
 class UnboundOrdinaryInputCheck(RuleCheck):

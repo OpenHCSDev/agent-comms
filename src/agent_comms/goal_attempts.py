@@ -93,11 +93,26 @@ from .typed_table import (
     TypedTable,
 )
 
+from .reservation_rules import ReservationRule, RuleCheck
 if TYPE_CHECKING:
     from .goal_scope import GoalScope
     from .goal_management import Goals
     from .threads import Thread
     from .turn_context import TurnContext
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrdinaryGoalGrantCheck(RuleCheck):
+    permit: LaunchPermit
+    store: GoalAttemptStore
+
+
+class OrdinaryGoalGrantRule(ReservationRule):
+    check_type = OrdinaryGoalGrantCheck
+    explanation = "The captured autonomous goal launch is no longer claimed."
+
+    def violated(self, check: OrdinaryGoalGrantCheck) -> bool:
+        return not check.permit.is_claimed(check.store)
 
 
 class StorageUncertainError(errors.GoalAttemptError):
@@ -490,6 +505,9 @@ class LaunchPermit(GoalTurnPermit):
     @property
     def claims(self) -> tuple[LaunchPermit, ...]:
         return (self,)
+
+    def check_grant(self, store: GoalAttemptStore) -> None:
+        OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
 
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         """Read the original attempt, even after its successor generation advances."""

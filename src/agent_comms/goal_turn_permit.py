@@ -6,8 +6,6 @@ from abc import ABC, abstractmethod
 from contextlib import ExitStack
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
-
 from .field_codec import TurnId, GoalId
 from .turn_item import UsageChargeId
 
@@ -31,7 +29,7 @@ class GoalTurnPermit(ABC):
 
     def check_grant(self, store: GoalAttemptStore) -> None:
         for permit in self.claims:
-            OrdinaryGoalGrantCheck(permit=permit, store=store).require_valid()
+            permit.check_grant(store)
 
     def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
         for permit in self.claims:
