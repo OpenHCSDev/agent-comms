@@ -14,6 +14,7 @@ from agent_comms.heartbeat_delivery import OnHeartbeatDelivery
 from agent_comms.installer.carry import CarryChain
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.repo import Checkout
 from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.task_attachments.commander_pings import (
     CommanderNotice, CommanderUpdate, CommanderUpdateStore,
@@ -26,8 +27,11 @@ from cutover.carry_rule_ping_types import RulePingTypes
 
 
 @pytest.fixture
-def carry_bus(comms: Comms) -> Comms:
-    comms.registry.register(Thread(name="carry-lead", heartbeat_delivery=OnHeartbeatDelivery))
+def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
+    comms.registry.register(Thread(
+        name="carry-lead", tags=frozenset(), worktree=Checkout(tmp_path),
+        heartbeat_delivery=OnHeartbeatDelivery,
+    ))
     commander = comms.registry.require("carry-lead").incarnation
     now = time.time()
     original = CommanderNotice(commander, ())
