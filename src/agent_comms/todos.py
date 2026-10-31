@@ -2493,6 +2493,12 @@ class OrderScope[Delivery: OrderDelivery](DeclaredFamily, affix="Scope"):
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         """Triage has no implementation declarations to validate."""
 
+    def recurrence_declarations(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+    ) -> tuple[Declaration, ...]:
+        """Triage measures what nobody has diagnosed yet, so it has no restated fact to name."""
+        return ()
+
     @abstractmethod
     def instructions(self, problem: str) -> tuple[str, ...]: ...
 
@@ -2558,6 +2564,11 @@ class FixScope(OrderScope[CheckedDelivery]):
 
     def require_references(self, roots: SourceRoots, revision: SourceRevision) -> None:
         self.shape.require_references(roots, revision)
+
+    def recurrence_declarations(
+        self, order: CheckedProblemOrder, where: FileLine, root: Path,
+    ) -> tuple[Declaration, ...]:
+        return (order.owner.declaration(root), where.declaration(root))
 
     def instructions(self, problem: str) -> tuple[str, ...]:
         return ("Scope: fix", "Parents: " + ", ".join(p.to_wire() for p in self.shape.parents),
@@ -6407,7 +6418,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
         slop: tuple[Slop, ...], now: float,
     ) -> None:
-        declarations = (order.owner.declaration(root), where.declaration(root))
+        declarations = order.scope.recurrence_declarations(order, where, root)
         previous = tuple(line for todo in self.list(Repo.of(root).github)
                          for line in todo.recurrence(declarations, root, now))
         if not previous:
