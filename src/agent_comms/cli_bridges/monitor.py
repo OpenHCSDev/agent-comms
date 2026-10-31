@@ -18,6 +18,7 @@ from pathlib import Path
 from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
+from agent_comms_hooks.watch import SessionFailure
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
