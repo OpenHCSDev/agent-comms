@@ -11,7 +11,6 @@ it may not write the main agent's audit, and it reports its tool activity throug
 
 from __future__ import annotations
 
-import shlex
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -61,16 +60,11 @@ class MonitorInput(HookRecord):
 
     command: str
     options: ClassVar[frozenset[str]] = frozenset({"--state"})
-    shell: ClassVar[frozenset[str]] = frozenset(";|&$`<>()\n")
 
     def watches_bus(self) -> bool:
-        if self.shell & set(self.command):
-            return False
-        words = shlex.split(self.command)
-        options = words[2:]
-        return (len(words) >= 2 and ConnectCommand.program.runs(ShellCommand(tuple(words)))
-                and words[1] == Watch.command_name()
-                and len(options) % 2 == 0 and set(options[::2]) <= self.options)
+        return any(command.invokes(ConnectCommand.program, Watch.command_name())
+                   and command.value_options(self.options)
+                   for command in ShellCommand.standalone(self.command))
 
 
 class ToolMeaning(DeclaredFamily):

@@ -74,14 +74,14 @@ class ConnectCommand:
 
     @classmethod
     def command_name(cls) -> str:
-        return __class__.__name__.removesuffix("Command").lower()
+        return ConnectCommand.__name__.removesuffix("Command").lower()
 
     @classmethod
     def permits(cls, command: str) -> bool:
         """Recovery runs alone, not beside another command or shell redirection."""
         commands = tuple(ShellCommand.split(command))
-        return (len(commands) == 1 and cls.program.runs(commands[0])
-                and commands[0].args == [cls.command_name()])
+        return (len(commands) == 1 and commands[0].invokes(cls.program, cls.command_name())
+                and not commands[0].args[1:])
 
 
 @dataclass(frozen=True)
@@ -98,6 +98,24 @@ class ShellCommand:
     @property
     def args(self) -> list[str]:
         return list(self.words[1:])
+
+    def invokes(self, program: Program, verb: str) -> bool:
+        """The executable and first argument identify one declared invocation."""
+        return program.runs(self) and self.args[:1] == [verb]
+
+    def value_options(self, allowed: frozenset[str]) -> bool:
+        """After its verb, this command contains only named option/value pairs."""
+        options = self.args[1:]
+        return len(options) % 2 == 0 and set(options[::2]) <= allowed
+
+    @classmethod
+    def standalone(cls, command: str) -> Iterator[Self]:
+        """One literal invocation, never shell operators, substitution or redirection."""
+        if set(command) & set(";|&$`<>()\n"):
+            return
+        words = tuple(shlex.split(command))
+        if words:
+            yield cls(words)
 
     @classmethod
     def of(cls, words: Iterable[str]) -> Iterator[Self]:

@@ -15,7 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_deferral import FutureOrder, Later, NextTick, TranscriptRecord
 from agent_comms.cli_bridges.hook_requests import HookReply, StopRequest
-from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -145,7 +145,8 @@ def test_a_stop_with_no_monitor_on_a_running_bridge_is_sent_back_once(
     with resident_session(commander_bus, tmp_path / "state", actor, "s") as bridge:
         claim = WatchClaim(bridge.binding.thread)
         assert stop(bridge, tmp_path, quiet).stdout == ""
-        with claim.claim.claimed():
+        record = WatchRecord(bridge.binding.bus, bridge.binding.root, (), bridge.options.base_state)
+        with claim.held(record):
             decision = json.loads(stop(bridge, tmp_path, quiet).stdout)
             assert decision["decision"] == "block"
             assert "RE-ARM this session's watch" in decision["reason"]

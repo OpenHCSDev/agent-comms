@@ -295,6 +295,18 @@ class SessionRefused(SessionReply, declared_name='refused'):
 
 
 @dataclass(frozen=True)
+class RequestFailure:
+    """A failed request keeps its exception until it reports a refused wire reply."""
+
+    error: Exception
+
+    def reply(self, log: Callable[[str], None]) -> SessionRefused:
+        failure = "".join(traceback.format_exception(self.error))
+        log(f"Session request failed:\n{failure}")
+        return SessionRefused(error=failure)
+
+
+@dataclass(frozen=True)
 class BoardReply(SessionBoard, SessionReply, declared_name=SessionBoard.request):
     """The hook decodes this with the standard library, through the fields it declares."""
 
@@ -480,12 +492,9 @@ class MonitorService:
                     reply = await request.handle(self, peer)
                 except (MalformedRecord, TimeoutError, SessionFailure) as error:
                     reply = SessionRefused(error=str(error))
-                except Exception:
-                    # This is the foreign request boundary, not a successful default:
-                    # fail this call loudly without cancelling every client in the TaskGroup.
-                    failure = traceback.format_exc()
-                    self.bridge.log(f"Session request failed:\n{failure}")
-                    reply = SessionRefused(error=failure)
+                except Exception as error:
+                    # Refuse this request without cancelling every client in the TaskGroup.
+                    reply = RequestFailure(error).reply(self.bridge.log)
                 await reply.publish(peer)
             finally:
                 await peer.close()
