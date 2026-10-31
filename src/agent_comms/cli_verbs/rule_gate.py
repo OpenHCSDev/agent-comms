@@ -21,7 +21,7 @@ class RuleGateConfiguredResult(CliResult):
 
 @dataclass(frozen=True, kw_only=True)
 class RuleGateCliCommand(CliCommand, declared_name="rule-gate"):
-    help = "Configure a session's rule gate: full, startup (no automatic redeals), or off"
+    help = "Configure rule reads: full, compaction (no periodic refresh), startup, or off"
     stem: Annotated[Path, PathText, Argument(flags=("stem",))]
     mode: Annotated[type[DealMode], Argument(flags=("mode",))]
 

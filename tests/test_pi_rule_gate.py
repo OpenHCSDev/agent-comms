@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.rule_deal import FullDealMode, OffDealMode, StartupDealMode, Unengaged
+from agent_comms.rule_deal import CompactionDealMode, FullDealMode, OffDealMode, StartupDealMode, Unengaged
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
@@ -202,6 +202,28 @@ def test_automatic_redeals_preserve_the_configured_session(unit_deal, mode):
     assert unit_deal.audit.read_bytes() == audit
     assert unit_deal.dealt_read.read_bytes() == reads
     assert not refused(unit_deal)
+
+
+@pytest.mark.parametrize("name", ("unit-x", "claude-code"))
+def test_compaction_mode_redeals_lost_context_but_never_periodic_refreshes(commander_bus, name):
+    deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
+    deal.start()
+    answer_deal(deal)
+    deal.configure(CompactionDealMode)
+    before = deal.current()
+    for used in (35, 70, 95):
+        deal.observe_context(ContextUsage(used, 100))
+    assert deal.current() == before
+    assert not refused(deal)
+
+    events.CompactionEnd().deal_rules(deal)
+    assert deal.current().mode is CompactionDealMode
+    assert deal.current().dealt == before.dealt
+    assert deal.current().read_by(deal) == ()
+    assert refused(deal)
+    answer_deal(deal)
+    deal.observe_context(ContextUsage(95, 100))
+    assert not refused(deal)
 
 
 def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(unit_deal):
