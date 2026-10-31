@@ -2,7 +2,7 @@
 from dataclasses import replace
 
 
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_states import BlockedGoal, PausedGoal
 from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
 from agent_comms.native_tools import CoordinationCall, ReadTool

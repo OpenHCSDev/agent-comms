@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, PathText
+from .nominal.field_codec import FieldCodec, PathText
 
 
 class LaunchSelection(ABC):

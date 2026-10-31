@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Annotated
 from dataclasses import dataclass
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .turn_context import ContextSegment, ContextSpan
 from .working_memory_questions import SpanQuestion

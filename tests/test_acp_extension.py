@@ -39,7 +39,7 @@ from agent_comms.acp_failure import ACPFailure, BackendDeliveryFailure
 from agent_comms.agent_events import CompactionStart
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.context_reading import UnmeasuredContext
-from agent_comms.field_codec import AcpSessionId, AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import McpLiveAcknowledgement

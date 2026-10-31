@@ -46,7 +46,7 @@ from .bus_read import OwnerLiveRead, UiRead
 from .commander_hud import CommanderFrame, CommanderHud, CommanderLoad, CommanderUnitDetail
 from .comms import Comms
 from .coordinator import Coordination
-from .field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
 from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead

@@ -11,7 +11,7 @@ from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.envelope_claim_transitions import NativeClaim, WakeClaims
-from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread

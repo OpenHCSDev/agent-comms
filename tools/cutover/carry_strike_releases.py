@@ -10,7 +10,7 @@ from typing import ClassVar
 
 from pydantic import JsonValue
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.todos import ReleaseTodo, StoredOrderStory, TodoCommand, TodoStore

@@ -33,15 +33,15 @@ import agent_comms
 from agent_comms_hooks import process_claim
 from agent_comms import (
     coordination_schema,
-    field_codec,
     locked_store,
     store_files,
     typed_table,
 )
+from agent_comms.nominal import field_codec
 from agent_comms.child_process import ForkedProcessPool, SpawnedProcess
 from agent_comms.core_stamp import WheelStamp
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import boundary_decoder
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.head_review import Side as CutSide
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry

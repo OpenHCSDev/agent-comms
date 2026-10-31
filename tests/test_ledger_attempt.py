@@ -13,7 +13,7 @@ import pytest
 
 from agent_comms.attempt_resolution import GoalCleared
 from agent_comms.errors import StaleAttemptError
-from agent_comms.field_codec import AttemptId, GoalId, NoAttemptId
+from agent_comms.nominal.field_codec import AttemptId, GoalId, NoAttemptId
 from agent_comms.goal_attempt_identity import GoalAttemptIdentity
 from agent_comms.goal_attempt_phase import ReservedAttempt, ResolvedAttempt
 from agent_comms.goal_attempts import (

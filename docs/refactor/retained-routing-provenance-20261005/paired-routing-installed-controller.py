@@ -8,7 +8,7 @@ import sys
 import time
 
 from agent_comms.child_process import BoundedRun, ProcessIdentity
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 def digest(path):

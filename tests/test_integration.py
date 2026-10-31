@@ -21,7 +21,7 @@ from agent_comms.todos import (
     DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
     ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources

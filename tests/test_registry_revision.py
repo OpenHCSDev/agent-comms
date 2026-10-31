@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.registration import Registration
 from agent_comms.store_files import AtomicFile
 from agent_comms.thread_status import StoppedThreadStatus
@@ -57,7 +57,7 @@ def test_an_entry_fence_ignores_other_threads_writes_but_not_its_own(tmp_path):
 
 def test_missing_registry_version_is_rejected_without_rewriting_the_file(tmp_path):
     from agent_comms.errors import RelationViolationError
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry_document import RegistryDocument
 
     path = tmp_path / "registry.json"

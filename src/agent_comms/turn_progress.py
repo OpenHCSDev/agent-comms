@@ -26,7 +26,7 @@ from .coordinator import Coordination
 from .diagnostics import record_request_progress, record_terminal_failure
 from .publication_measurements import PublicationMeasurements
 from .messages import AlertKind, NoticeRole
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate

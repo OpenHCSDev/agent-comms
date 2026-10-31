@@ -27,7 +27,7 @@ from agent_comms.comms import wire
 from conftest import accept_initial
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch

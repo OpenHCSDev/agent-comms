@@ -8,7 +8,7 @@ nothing is refused until the commander answers that message (the OwedAnswer gate
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 import time
 from collections.abc import Mapping, Sequence
@@ -19,7 +19,7 @@ from typing import ClassVar, Self
 from agent_comms.bus import BusReader
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.comms import Comms
-from agent_comms.field_codec import projected
+from agent_comms.nominal.field_codec import projected
 from agent_comms.heartbeat_frame import HeartbeatFrame
 from agent_comms.goal_actions import (
     ChokeholdPausedGoalAction,

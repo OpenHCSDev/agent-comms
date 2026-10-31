@@ -6,9 +6,9 @@ import os
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 from .message_reference import MessageReference
 from .retained_task_facts import RetainedTaskFacts
 from .task_sources import AnnotationDisclosureGrant

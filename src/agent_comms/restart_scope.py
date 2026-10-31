@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import NullMember, SingleFieldValue, SubclassUnion
+from agent_comms.nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot

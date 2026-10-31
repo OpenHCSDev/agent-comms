@@ -77,7 +77,7 @@ def test_real_route_counts_and_inbox_use_each_conversation(tmp_path):
 
 
 def test_durable_cursor_map_round_trip():
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.thread_identity import RecordedThreadIncarnation
 
     owner = RecordedThreadIncarnation("reader", 1.0)

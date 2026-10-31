@@ -11,7 +11,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from agent_comms.field_codec import FieldCodec, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, ThreadLookup
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError

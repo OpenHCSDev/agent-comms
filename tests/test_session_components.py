@@ -10,7 +10,7 @@ from agent_comms.threads import Thread
 
 
 def test_thread_service_tier_defaults_standard_and_preserves_explicit_priority(*, thread_registration):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.pi_vocabulary import ServiceTier
 
     encoded = FieldCodec.encode(thread_registration.declare(Thread('legacy', frozenset(), Checkout(Path('.')))))

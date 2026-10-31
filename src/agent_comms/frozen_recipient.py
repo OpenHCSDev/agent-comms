@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .class_fact import ClassFact
-from .field_codec import ThreadLookup
+from .nominal.field_codec import ThreadLookup
 from .participant_identity import ParticipantIdentity
 from .projection_source import ProducedRow, ProjectionSource
 

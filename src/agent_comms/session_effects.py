@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 from .runtime import RuntimeProxy
 from .threads import Thread
 

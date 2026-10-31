@@ -8,12 +8,12 @@ from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.config_options import ThinkingLevelConfigOption
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Catalog
-from agent_comms.field_codec import EditorFormat
-from agent_comms.field_codec import FieldCodec
-from agent_comms.field_codec import Multiline
-from agent_comms.field_codec import Normalize
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Catalog
+from agent_comms.nominal.field_codec import EditorFormat
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import Multiline
+from agent_comms.nominal.field_codec import Normalize
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.repo import Checkout, LaunchCheckout
 from agent_comms.pi_vocabulary import ThinkingLevelField

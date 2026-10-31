@@ -6,7 +6,7 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
 from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns

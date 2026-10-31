@@ -9,8 +9,8 @@ from agent_comms.channel_targets import ResolvedChannel
 from agent_comms.channels import Channel
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import TargetBound
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.registry_document import RegistrySnapshot
 from dataclasses import dataclass
 from typing import Annotated

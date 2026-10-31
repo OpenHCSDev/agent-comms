@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from dataclasses import dataclass
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .native_session_files import NativeSessionFiles
 from .private_path import FileRevision
 

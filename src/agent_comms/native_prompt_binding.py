@@ -20,7 +20,7 @@ from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordinator import Coordination
 
 from .cohort_schema import CohortTable
-from .field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
+from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, RootId, Sha256Text, ThreadLookup
 from .native_entries import NativeEvidenceRead
 from .native_input_owner import ParticipantOwner
 from .native_input_record import NativeColumn, NativeInputExecution, NativeInputRecord

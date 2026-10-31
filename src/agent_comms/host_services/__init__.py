@@ -16,8 +16,8 @@ from typing import Annotated, ClassVar, Self
 
 from ..child_process import ProcessIdentity, ResidentManager
 from ..systemd_unit import SystemdUnit
-from ..declared_family import DeclaredFamily
-from ..field_codec import PathText
+from ..nominal.declared_family import DeclaredFamily
+from ..nominal.field_codec import PathText
 from ..launch_runtime import LaunchRuntime
 
 

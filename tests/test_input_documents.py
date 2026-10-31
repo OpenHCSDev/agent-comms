@@ -10,7 +10,7 @@ import pytest
 
 from agent_comms.input_key import AcpInputKey, BusInputKey, InputKey, InputKeyText
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, GoalId, InputId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     GoalInputDecision,

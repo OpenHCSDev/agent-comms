@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import GoalId, GoalWaitId
+from agent_comms.nominal.field_codec import GoalId, GoalWaitId
 from agent_comms.bus import BusRecord, PublicRecord
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import RecordedGoalWait

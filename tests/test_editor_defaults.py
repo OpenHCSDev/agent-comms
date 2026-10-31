@@ -4,7 +4,7 @@ import json
 import pytest
 
 from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.field_codec import FieldCodec, compile_decoder
+from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField
 from agent_comms.repo import LaunchCheckout
 from agent_comms.thread_execution import ExternalThreadExecution, ThreadExecution

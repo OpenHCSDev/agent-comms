@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from pydantic import JsonValue
 
-from .field_codec import NullMember
+from .nominal.field_codec import NullMember
 
 if TYPE_CHECKING:
     from .transcript_events import SentTranscript

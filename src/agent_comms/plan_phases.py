@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.store_files import SqliteStore
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.pi_events import PiEvent
@@ -20,7 +20,7 @@ from agent_comms.thread_identity import BirthlessIncarnation
 from agent_comms.tool_calls import CliToolArguments
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
-from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
+from agent_comms.nominal.field_codec import Id128, MessageId, NominalSpelling, NominalText
 from agent_comms.phase_evidence import (
     AllEvidence,
     AuditPatternPresent,
@@ -475,7 +475,7 @@ class DuplicatesPhase(MultipleInheritancePhase):
                     ("__init__",),
                     ("durable_turn.py", "execution_store.py", "exporting.py", "publisher.py"),
                 ),
-                (("wire_member",), ("pi_payloads.py", "field_codec.py")),
+                (("wire_member",), ("pi_payloads.py", "nominal/field_codec.py")),
                 (
                     (
                         "_assert_response_schema",
@@ -537,12 +537,12 @@ class NominalIdTypePhase(Id128NominalPhase):
 
     evidence = AllEvidence(
         (
-            *(ClassDeclared(kind.__name__, ("src/agent_comms/field_codec.py",))
+            *(ClassDeclared(kind.__name__, ("src/agent_comms/nominal/field_codec.py",))
               for kind in (
                   NominalText, NominalSpelling, Id128, MessageId, *Id128.__subclasses__(),
               )),
             PatternAbsent(
-                r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/field_codec.py",)
+                r"def mint\(cls(, text: str)?\) -> str:", ("src/agent_comms/nominal/field_codec.py",)
             ),
         )
     )
@@ -633,8 +633,8 @@ class RedecodesDeletedPhase(Id128NominalPhase):
         (
             PatternAbsent(r"Id128Text\.(decode|from_text)\("),
             PatternAbsent(r"Annotated\[str, *(Id128Text|MessageIdText)\]"),
-            PatternAbsent(r"uuid4\(\)\.hex([^\[]|$)", ("src", ":!src/agent_comms/field_codec.py")),
-            PatternAbsent(r"isinstance\(\w+, NominalText\)", ("src/agent_comms/field_codec.py",)),
+            PatternAbsent(r"uuid4\(\)\.hex([^\[]|$)", ("src", ":!src/agent_comms/nominal/field_codec.py")),
+            PatternAbsent(r"isinstance\(\w+, NominalText\)", ("src/agent_comms/nominal/field_codec.py",)),
         )
     )
 
@@ -836,9 +836,9 @@ class OwnedDispatchPhase(RemainingSlopPhase):
             PatternAbsent(r"class TurnInboxReceiver\b"),
             PatternAbsent(
                 r"""separators\s*=\s*\(\s*["'],["']\s*,\s*["']:["']\s*\)""",
-                ("src", ":!src/agent_comms/field_codec.py"),
+                ("src", ":!src/agent_comms/nominal/field_codec.py"),
             ),
-            FunctionDeclared("compact", ("src/agent_comms/field_codec.py",)),
+            FunctionDeclared("compact", ("src/agent_comms/nominal/field_codec.py",)),
         )
     )
 

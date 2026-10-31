@@ -10,7 +10,7 @@ from __future__ import annotations
 from abc import ABC
 from collections.abc import Sequence
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 
 
 class RelevanceCapability(ABC):

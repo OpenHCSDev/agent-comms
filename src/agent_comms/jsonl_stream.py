@@ -1,7 +1,7 @@
 """Cancellation-safe JSONL framing."""
 import asyncio
 
-from .field_codec import MalformedRecord
+from .nominal.field_codec import MalformedRecord
 
 
 class JsonlStreamReader:

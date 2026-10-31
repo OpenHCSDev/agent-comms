@@ -15,13 +15,13 @@ from functools import cmp_to_key
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
-from agent_comms.field_codec import GoalId
-from agent_comms import field_codec
+from agent_comms.nominal.field_codec import GoalId
+from agent_comms.nominal import field_codec
 
 from . import presentation
 from .channel_targets import CommandTarget
 from .command import Command
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
 from .goals import Goal, GoalMentionBinding

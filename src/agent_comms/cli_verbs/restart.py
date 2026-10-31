@@ -5,11 +5,11 @@ from agent_comms.cli_commands import OwnersRestartedResult
 from agent_comms.cli_commands import _shell_words
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import NamedArgumentGroup
-from agent_comms.field_codec import Normalize
-from agent_comms.field_codec import TargetBound
-from agent_comms.field_codec import WireName
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import NamedArgumentGroup
+from agent_comms.nominal.field_codec import Normalize
+from agent_comms.nominal.field_codec import TargetBound
+from agent_comms.nominal.field_codec import WireName
 from agent_comms.native_arguments import ConfiguredBinary
 from agent_comms.native_arguments import InheritedArguments
 from agent_comms.native_arguments import LaunchArguments

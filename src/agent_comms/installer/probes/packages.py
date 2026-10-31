@@ -13,7 +13,7 @@ from pydantic import BaseModel, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
 import agent_comms
-from agent_comms.field_codec import WireValue
+from agent_comms.nominal.field_codec import WireValue
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.package_stamp import STAMP
 from agent_comms.runtime_preparation import RuntimePreparation

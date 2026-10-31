@@ -25,8 +25,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
-from .field_codec import AcpSessionId, InputId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AcpSessionId, InputId
 from .native_input_proof import NativeContextProof
 from .pi_counts import PiCount
 from .pi_commands import NativeQuery

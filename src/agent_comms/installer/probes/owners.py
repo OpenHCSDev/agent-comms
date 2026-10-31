@@ -8,7 +8,7 @@ from typing import Annotated, TextIO
 
 from agent_comms.cli_command import TargetBatchResult
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, PathText
+from agent_comms.nominal.field_codec import FieldCodec, PathText
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.probes.commands import CliCommandProbe
 from agent_comms.installer.owner_starts import OwnerStart

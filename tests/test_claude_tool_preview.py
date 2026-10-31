@@ -4,7 +4,7 @@ import pytest
 from transcript_record_fixture import transcript_record
 from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
 from agent_comms.tool_calls import ToolCall
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_tools import BashTool
 from agent_comms.tool_results import NoToolDiff
 

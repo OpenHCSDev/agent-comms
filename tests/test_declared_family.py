@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import pytest
 from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, DeclaredOrder, RegisteredFamily
 
 
 class SampleFamily(DeclaredFamily, affix="Case"):

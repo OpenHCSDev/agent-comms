@@ -35,7 +35,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     from contextlib import AsyncExitStack
     from agent_comms.child_process import BoundedRun
     from agent_comms.input_disposition import InputDispositions
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.owner_launch import RetainedOwnerLaunch
     from agent_comms.launch_runtime import RestartEnvironment
     from native_backend_fixture import native_backend_fixture
@@ -77,7 +77,7 @@ from agent_comms.threads import Thread
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 service = wire(Path(os.environ['AGENT_COMMS_ROOT']))

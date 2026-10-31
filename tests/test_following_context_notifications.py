@@ -15,7 +15,7 @@ from agent_comms.turn_inbox import InputContent, InputRequest, SteerInputPolicy
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey

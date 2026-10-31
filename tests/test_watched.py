@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, GoalWaitId, WatchPaths
 from agent_comms.bus import Bus, PublicRecord
 from agent_comms.comms import wire
 from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncertainError

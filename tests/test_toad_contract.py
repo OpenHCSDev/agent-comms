@@ -13,7 +13,7 @@ from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
 from agent_comms.comms import Comms, wire
 from agent_comms.goals import Goal
-from agent_comms.field_codec import AcpSessionId, TurnId
+from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
 from agent_comms.transcripts import TranscriptCursor, TranscriptPage

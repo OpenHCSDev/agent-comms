@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus import BusReader

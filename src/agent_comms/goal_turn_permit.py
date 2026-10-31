@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from agent_comms.ordinary_turn_rules import OrdinaryGoalGrantCheck
 
-from .field_codec import TurnId, GoalId
+from .nominal.field_codec import TurnId, GoalId
 from .turn_item import UsageChargeId
 
 if TYPE_CHECKING:

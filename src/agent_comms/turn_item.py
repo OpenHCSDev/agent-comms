@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from .errors import RelationViolationError
-from .field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
+from .nominal.field_codec import Id128, NominalSpelling, NominalText, NullMember, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .channel_targets import NamedTarget

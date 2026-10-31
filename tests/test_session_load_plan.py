@@ -1,7 +1,7 @@
 """Public type names may change; the existing ACP metadata must not."""
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.session_load import (
     EnsuringSessionLoadPlan,
     ExistingSessionLoadPlan,

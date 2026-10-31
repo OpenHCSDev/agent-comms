@@ -13,8 +13,8 @@ from typing import ClassVar, Hashable
 
 from metaclass_registry.mro_dispatch import handles
 
-from agent_comms.declared_family import DeclaredFamily, FamilyMeta
-from agent_comms.field_codec import FieldCodec, FieldPlan, PublicationExclude, ValueDescription, ViewColumn, ViewExclusion
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, PublicationExclude, ValueDescription, ViewColumn, ViewExclusion
 
 
 class DisclosureKey:

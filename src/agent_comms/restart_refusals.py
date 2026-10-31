@@ -3,7 +3,7 @@
 from abc import abstractmethod
 from typing import ClassVar
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 
 

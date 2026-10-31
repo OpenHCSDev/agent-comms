@@ -16,9 +16,9 @@ from typing import IO, TYPE_CHECKING, Annotated, ClassVar, Self, cast
 
 from .command import Command
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
+from .nominal.field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
 from .jsonl_stream import JsonlStreamReader
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerLine, OwnerResult

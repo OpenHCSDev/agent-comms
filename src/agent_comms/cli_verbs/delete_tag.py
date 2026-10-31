@@ -6,9 +6,9 @@ from agent_comms.channel_management import TagDisposition
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_support.exact_tag import ExactTagCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Editor
-from agent_comms.field_codec import TargetBound
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Editor
+from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.target_fields import ChoiceTargetField
 from dataclasses import dataclass
 from dataclasses import replace

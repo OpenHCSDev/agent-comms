@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import IdentityExclude
+from agent_comms.nominal.field_codec import IdentityExclude
 
 import json
 import sqlite3
@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
+from .nominal.field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
 from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
 from .thread_identity import ThreadIncarnation

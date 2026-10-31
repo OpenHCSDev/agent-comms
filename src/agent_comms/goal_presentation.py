@@ -7,8 +7,8 @@ from dataclasses import dataclass, fields
 from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
-from .field_codec import NullMember, WireValue, GoalId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import NullMember, WireValue, GoalId
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration

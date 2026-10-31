@@ -5,9 +5,9 @@ from agent_comms.repo import Checkout
 from typing import Annotated
 from dataclasses import dataclass, replace
 
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 from agent_comms.comms import wire
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registration_inheritance import PredicateInheritance
