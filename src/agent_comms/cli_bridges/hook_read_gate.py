@@ -123,8 +123,14 @@ class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
         return tuple(words for position, line in self.complete_lines(offset)
                      for words in decoder.decode_line(line, position).said())
 
-    def delivered(self, asked: Asked) -> bool:
-        return any(asked.message_id.encode() in line for _, line in self.complete_lines(asked.offset))
+    def said_after(self, asked: Asked) -> tuple[str, ...]:
+        """The words after the line that actually delivered this question to the session."""
+        lines = self.complete_lines(asked.offset)
+        arrival = next((index for index, (_, line) in enumerate(lines)
+                        if asked.message_id.encode() in line), len(lines))
+        decoder = ClaudeJsonLines()
+        return tuple(words for position, line in lines[arrival + 1:]
+                     for words in decoder.decode_line(line, position).said())
 
 
 @dataclass(frozen=True)
