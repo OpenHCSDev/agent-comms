@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, Self
 
+from agent_comms_hooks import ToolRefusedError
+
 from ..active_route import ActiveRoute
 from ..bus import Bus
 from ..child_process import ResidentManager
@@ -22,7 +24,7 @@ from ..connector import (
     ToolsCallReply,
 )
 from ..connector_store import ConnectorStore
-from ..errors import RelationViolationError, ToolRefusedError
+from ..errors import RelationViolationError
 from ..field_codec import Argument, FieldCodec, MalformedRecord, PathText
 from ..launch_root import LaunchRoot
 from ..recorded_bus import RecordedBusIdentity

@@ -261,8 +261,9 @@ class ReplyingThreadOutput(ThreadOutput):
     def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
         """A commanded session's last item replies to the senders delivered in its turn; the
         commander answers its owner in its own transcript and messages units only by tool."""
-        return comms.registry.snapshot().commander_project.by_role(
-            transcript.incarnation,
+        snapshot = comms.registry.snapshot()
+        return snapshot.commander_project.by_role(
+            snapshot.born(transcript.incarnation.require_recorded().lookup),
             commander=ThreadOutput(transcript, comms.agents),
             commanded=cls(transcript, comms.agents, messaging=comms.messaging),
         )

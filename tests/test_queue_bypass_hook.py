@@ -7,15 +7,23 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.hook_requests import HookReply, QueueBypassRequest
+from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
+from hook_session_fixture import resident_hook, resident_session
 from agent_comms.todos import QualifiedHeadVerdict, ReviewedHeadVerdict, RejectedHeadVerdict
-from agent_comms.shell_commands import ShellCommand
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from agent_comms_hooks.shell_commands import ShellCommand
 from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)
 
 ADMIN_MERGE = "gh pr merge 2557 --admin --merge"
+
+
+def resident_tool_use(command: str, transcript: Path, bridge: ClaudeBridge) -> HookReply:
+    return resident_hook(bridge, QueueBypassRequest, transcript,
+                         tool_name=QueueBypassRequest.tool, tool_input={"command": command})
 
 
 def pre_tool_use(command: str, transcript: Path = Path("s.jsonl")) -> subprocess.CompletedProcess:
@@ -104,38 +112,59 @@ def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
         head_bus, reviewed_source, tmp_path):
     comms, github, request = head_bus
     transcript = tmp_path / "s.jsonl"
-    WatchClaim("s").enrol(WatchRecord("lead", str(comms.root), (), tmp_path / "state"))
     def commands(head):
         return (
             f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()} --match-head-commit {head}",
             f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge -f merge_method=merge -f sha={head}",
         )
 
-    def refused(head):
-        for command in commands(head):
-            result = pre_tool_use(command, transcript)
-            assert result.returncode == 0, result.stderr
+    with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
+        def refused(head):
+            for command in commands(head):
+                result = resident_tool_use(command, transcript, bridge)
+                assert result.status == 0, result.stderr
+                decision = json.loads(result.stdout)["hookSpecificOutput"]
+                assert decision["permissionDecision"] == "deny"
+                assert f"#{request.pr}" in decision["permissionDecisionReason"]
+                assert head in decision["permissionDecisionReason"]
+                assert "ok verdict" in decision["permissionDecisionReason"]
+
+        refused(request.head)
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+        for command in commands(request.head):
+            result = resident_tool_use(command, transcript, bridge)
+            assert result.status == 0, result.stderr
+            assert result.stdout == ""
+        moved = opened(github, reviewed_source, request.pr, "b" * 40)
+        refused(moved.head)
+        # Core authorizes the saved pin; GitHub's precondition refuses that old pin after a push.
+        for command in commands(request.head):
+            result = resident_tool_use(command, transcript, bridge)
+            assert result.status == 0, result.stderr
+            assert result.stdout == ""
+        opened(github, reviewed_source, request.pr, request.head)
+        invoke(comms, request, RejectedHeadVerdict(REASON))
+        refused(request.head)
+        invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
+        refused(request.head)
+
+
+@pytest.mark.parametrize("actor,allowed", (("lead", True), ("worker", False)))
+def test_merge_authority_comes_from_the_admitted_actor_not_a_changed_launcher(
+        head_bus, tmp_path, actor, allowed):
+    comms, _, request = head_bus
+    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+    command = (f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
+               f" --match-head-commit {request.head}")
+    with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
+        # A replacement launcher's record may neither revoke nor grant this admitted actor's role.
+        replacement = "worker" if allowed else "lead"
+        WatchClaim("s").enrol(WatchRecord(replacement, str(comms.root), (), tmp_path / "elsewhere"))
+        result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
+        assert result.status == 0, result.stderr
+        if allowed:
+            assert result.stdout == ""
+        else:
             decision = json.loads(result.stdout)["hookSpecificOutput"]
             assert decision["permissionDecision"] == "deny"
-            assert f"#{request.pr}" in decision["permissionDecisionReason"]
-            assert head in decision["permissionDecisionReason"]
-            assert "ok verdict" in decision["permissionDecisionReason"]
-
-    refused(request.head)
-    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    for command in commands(request.head):
-        result = pre_tool_use(command, transcript)
-        assert result.returncode == 0, result.stderr
-        assert result.stdout == ""
-    moved = opened(github, reviewed_source, request.pr, "b" * 40)
-    refused(moved.head)
-    # Core authorizes the saved pin; GitHub's precondition refuses that old pin after a push.
-    for command in commands(request.head):
-        result = pre_tool_use(command, transcript)
-        assert result.returncode == 0, result.stderr
-        assert result.stdout == ""
-    opened(github, reviewed_source, request.pr, request.head)
-    invoke(comms, request, RejectedHeadVerdict(REASON))
-    refused(request.head)
-    invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
-    refused(request.head)
+            assert "bound commander" in decision["permissionDecisionReason"]

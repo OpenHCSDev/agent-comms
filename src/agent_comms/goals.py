@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
+from agent_comms_hooks.shell_commands import ShellCommand
 
 from .child_process import (
     BoundedRun,
@@ -45,7 +46,6 @@ from .goal_authority import GoalAuthority, GoalTurnAuthority, NoGoalAuthority
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
-from .shell_commands import ShellCommand
 from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation

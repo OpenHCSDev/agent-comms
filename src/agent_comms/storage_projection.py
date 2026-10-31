@@ -34,7 +34,7 @@ class StorageProjection:
 
     @cached_property
     def storage(self) -> UnitStorage:
-        return UnitStorage.read(self.rule, self.thread)
+        return UnitStorage.read(self.rule, self.thread, self.reads)
 
     def require_write(self, path: Path) -> None:
         self.rule.require_destination(self.thread, path)

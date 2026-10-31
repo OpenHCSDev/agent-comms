@@ -72,7 +72,9 @@ from agent_comms.todos import (
 from agent_comms.turn_digests import TurnDigestRead, TurnsSince
 from agent_comms.ui_model.unit_state import AwaitingCommander, UnitState
 from agent_comms.work_dispatch import ReusedWorkDispatch, WorkDispatch
-from agent_comms_hooks.watch import DeafWatch
+
+from ..cli_bridges.session_watch import DeafWatch
+
 
 if TYPE_CHECKING:
     from agent_comms.commander.order import CommanderVerb
@@ -501,6 +503,12 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     todo: Todo
 
     recent: ClassVar[int] = 10 * 60
+
+    @classmethod
+    def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
+        """A fresh read and an already captured frame share the same idle selection."""
+        actor = comms.registry.require_lookup(commander.require_recorded().lookup)
+        return cls.idle(comms, actor.name, HeldOrders.read(comms, actor.name))
 
     @classmethod
     def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:

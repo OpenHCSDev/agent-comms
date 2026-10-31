@@ -1,17 +1,18 @@
-"""The shell's words and commands, decoded once for Core's storage rules and for the hooks.
-
-Standard library only, because every hook imports it on every tool call.
-"""
-
 from __future__ import annotations
 
 import io
 import shlex
-from collections.abc import Iterable, Iterator
+from collections.abc import (
+    Iterable,
+    Iterator,
+)
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import (
+    ClassVar,
+    Self,
+)
 
 
 def without_here_documents(command: str) -> str:
@@ -66,6 +67,23 @@ class Program:
         return command.program in (self.name, *self.aliases)
 
 
+class ConnectCommand:
+    """The Claude bridge's connect declaration, shared by its CLI and outage permission."""
+
+    program: ClassVar[Program] = Program("agent-comms-claude-bridge")
+
+    @classmethod
+    def command_name(cls) -> str:
+        return ConnectCommand.__name__.removesuffix("Command").lower()
+
+    @classmethod
+    def permits(cls, command: str) -> bool:
+        """Recovery runs alone, not beside another command or shell redirection."""
+        commands = tuple(ShellCommand.split(command))
+        return (len(commands) == 1 and commands[0].invokes(cls.program, cls.command_name())
+                and not commands[0].args[1:])
+
+
 @dataclass(frozen=True)
 class ShellCommand:
     """One simple command: its words after any leading `NAME=value` assignments, so its
@@ -80,6 +98,24 @@ class ShellCommand:
     @property
     def args(self) -> list[str]:
         return list(self.words[1:])
+
+    def invokes(self, program: Program, verb: str) -> bool:
+        """The executable and first argument identify one declared invocation."""
+        return program.runs(self) and self.args[:1] == [verb]
+
+    def value_options(self, allowed: frozenset[str]) -> bool:
+        """After its verb, this command contains only named option/value pairs."""
+        options = self.args[1:]
+        return len(options) % 2 == 0 and set(options[::2]) <= allowed
+
+    @classmethod
+    def standalone(cls, command: str) -> Iterator[Self]:
+        """One literal invocation, never shell operators, substitution or redirection."""
+        if set(command) & set(";|&$`<>()\n"):
+            return
+        words = tuple(shlex.split(command))
+        if words:
+            yield cls(words)
 
     @classmethod
     def of(cls, words: Iterable[str]) -> Iterator[Self]:

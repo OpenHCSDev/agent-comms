@@ -11,9 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, TextIO
 
+from agent_comms_hooks.process_claim import ProcessSingleton
+
 from .child_process import ProcessIdentity
 from .launch_runtime import LaunchRuntime
-from .process_claim import ProcessSingleton
 from .store_files import SourceTier
 
 

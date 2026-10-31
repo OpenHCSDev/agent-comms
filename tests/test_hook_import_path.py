@@ -8,13 +8,19 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from pathlib import Path
+import tomllib
 
 import pytest
 
 FACADE = ("agent_comms.comms", "agent_comms.todos", "agent_comms.cli_commands")
 
 
-@pytest.mark.parametrize("hook", ["agent_comms_hooks.read_gate", "agent_comms_hooks.seats"])
+@pytest.mark.parametrize("hook", sorted({
+    target.partition(":")[0]
+    for target in tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())["project"]["scripts"].values()
+    if target.startswith("agent_comms_hooks.")
+}))
 def test_per_call_hook_never_imports_the_facade(hook: str) -> None:
     loaded = subprocess.run(
         [sys.executable, "-c",

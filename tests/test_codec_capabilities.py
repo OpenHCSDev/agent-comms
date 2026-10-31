@@ -166,7 +166,6 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
         MissingToolResult,
         NoToolDetails,
         PiModel,
-        PiPayload,
         PiToolResult,
         UnreportedModel,
     )

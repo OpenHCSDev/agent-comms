@@ -10,12 +10,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .bus import Bus
 from .context_store import ContextStore
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
 from .external_transcript import ExternalTranscript, StoreRead
 from .field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold

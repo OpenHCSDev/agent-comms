@@ -15,18 +15,12 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from agent_comms.cli_bridges.claude_transcript import RunningClaude
+from agent_comms.cli_bridges.monitor import InspectSession
 from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
-from agent_comms_hooks.skill import DeckStart, FullPrime, Prime, SessionSource
-from agent_comms_hooks.watch import WatchClaim
-
-
-def session_start() -> DeckStart:
-    """This Claude session as a deal: its id from the environment Claude exports to every Bash
-    call, its transcript found by that id."""
-    session = WatchClaim.environment_session()
-    return DeckStart(session, "Prime", str(RunningClaude(session).source), SessionSource("prime"))
+from agent_comms.cli_bridges.hook_requests import PrimeRequest
+from agent_comms_hooks.skill import FullPrime, Prime
+from agent_comms_hooks.watch import SessionEndpoint
 
 
 def prime_threads(prime: type[Prime], names: Sequence[str]) -> None:
@@ -56,7 +50,16 @@ def main() -> None:
     if arguments.to:
         prime_threads(arguments.variant, arguments.to)
         return
-    print("\n\n".join(session_start().primed(arguments.variant)))
+    session = SessionEndpoint.environment_session()
+    endpoint = SessionEndpoint(session)
+    endpoint.session().require_bound()
+    information = InspectSession().information(endpoint.socket_path)
+    request = PrimeRequest(prime=arguments.variant, payload={
+        "session_id": session,
+        "hook_event_name": "Prime",
+        "transcript_path": str(information.transcript),
+    })
+    request.exchange(endpoint.socket_path).print(PrimeRequest)
 
 
 if __name__ == "__main__":

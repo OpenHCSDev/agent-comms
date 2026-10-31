@@ -75,7 +75,6 @@ from agent_comms.errors import (
     RejectedEnforcementError,
     TodoConflict,
     TodoError,
-    ToolRefusedError,
 )
 from agent_comms.field_codec import (
     DefaultNonNull,
@@ -177,6 +176,7 @@ from agent_comms.work_branches import (
     WorkBranchError,
     WorkBranches,
 )
+from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
@@ -304,6 +304,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
             UnitStorage.read(
                 comms.registry.storage_rule,
                 comms.registry.require(holder),
+                RepositoryReads(),
             ).require_retired(todo.id)
         if problems:
             raise TodoProblems(problems)
@@ -3479,13 +3480,17 @@ class HuntRecord(TodoStoreRows, TypedTable):
     hunt: Hunt
 
 
-class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
-    """Two different order holders cannot write into the same physical worktree."""
-
-    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
+class TodoRefusal(TodoError, RejectedEnforcementError):
+    """A todo refusal a standing rule reports as not applied, in the refusal's own words."""
 
     def explanation(self) -> str:
         return str(self)
+
+
+class SharedWorktreeRefusal(TodoRefusal):
+    """Two different order holders cannot write into the same physical worktree."""
+
+    reason: ClassVar[str] = 'the proposed holder shares an occupied edit boundary'
 
     def __init__(self, problem: str, holding_problem: str, holder: ThreadIncarnation,
                  holding_holder: ThreadIncarnation, worktree: Path) -> None:
@@ -3500,14 +3505,18 @@ class SharedWorktreeRefusal(TodoError, RejectedEnforcementError):
         )
 
 
-class UnitOccupied(TodoError, RejectedEnforcementError):  # noqa: N818 - domain refusal
+class UnitOccupied(TodoRefusal):  # noqa: N818 - domain refusal
     """The unit holds an open order the incoming work does not own; a standing rule that
     restores work to it reports this refusal instead of applying."""
 
     reason: ClassVar[str] = "the unit already holds other work"
 
-    def explanation(self) -> str:
-        return str(self)
+
+class ForeignRequest(TodoRefusal):  # noqa: N818 - domain refusal
+    """An owner request answers only its own commanders; a standing rule that restores work
+    serving another commander's request reports this refusal instead of ending the pass."""
+
+    reason: ClassVar[str] = "the order serves another commander's request"
 
 
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
@@ -5504,7 +5513,7 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
 
     def require_commander(self, commander: ThreadIncarnation) -> None:
         if not commander.commands(self.commander):
-            raise TodoError(f"Request {self.id.value} belongs to another commander.")
+            raise ForeignRequest(f"Request {self.id.value} belongs to another commander.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
         self.require_commander(commander)
