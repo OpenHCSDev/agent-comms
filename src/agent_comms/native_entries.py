@@ -14,11 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, Tex
 
 from .locked_store import DurableFile
 from .native_failures import NativePiUnavailable
-from .native_pi import (
-    NativeEvidencePrefixChanged,
-    NativeInputUncommitted,
-    PrivateEvidenceRead,
-)
+from .native_evidence_read import NativeEvidencePrefixChanged, NativeInputUncommitted, PrivateEvidenceRead
 from .native_session_files import BusTranscriptFile, NativeSessionFiles
 from .store_files import AtomicFile
 

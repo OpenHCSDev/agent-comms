@@ -238,7 +238,7 @@ def test_strict_native_decoding_cannot_check_malformed_rows(row):
 
 def test_private_evidence_refuses_duplicate_keys():
     from agent_comms.native_failures import NativePiUnavailable
-    from agent_comms.native_pi import PrivateEvidenceRead
+    from agent_comms.native_evidence_read import PrivateEvidenceRead
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

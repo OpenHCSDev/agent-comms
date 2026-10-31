@@ -71,7 +71,7 @@ class AssignmentState(CoordinatorVocabulary, LifecycleState, affix="Assignment")
         if policy.proves_source(evidence) and all(
             proof.assignment_id == claim_id for proof in evidence
         ):
-            return ProvedByInput(evidence)
+            return ProvedByInput()
         return Unproved()
 
     @classmethod

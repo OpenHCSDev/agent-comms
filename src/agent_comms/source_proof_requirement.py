@@ -24,25 +24,23 @@ class SourceSettlement(ABC):
     """Whether a claim is settled, separately from whether it injected native input."""
 
     @abstractmethod
-    def apply(self, inputs: list[HistoricalNativeInput]) -> bool: ...
+    def apply(self, inputs: list[HistoricalNativeInput], evidence: tuple[HistoricalNativeInput, ...]) -> bool: ...
 
 
 @dataclass(frozen=True)
 class ProvedByInput(SourceSettlement):
-    evidence: tuple[HistoricalNativeInput, ...]
-
-    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
-        inputs.extend(self.evidence)
+    def apply(self, inputs: list[HistoricalNativeInput], evidence: tuple[HistoricalNativeInput, ...]) -> bool:
+        inputs.extend(evidence)
         return True
 
 
 class SettledWithoutInput(SourceSettlement):
-    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
+    def apply(self, inputs: list[HistoricalNativeInput], evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return True
 
 
 class Unproved(SourceSettlement):
-    def apply(self, inputs: list[HistoricalNativeInput]) -> bool:
+    def apply(self, inputs: list[HistoricalNativeInput], evidence: tuple[HistoricalNativeInput, ...]) -> bool:
         return False
 
 
