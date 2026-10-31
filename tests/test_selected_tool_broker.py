@@ -7,6 +7,7 @@ import json
 import os
 import secrets
 import sqlite3
+from contextlib import closing
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,6 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.selected_tool_broker as broker
+from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
@@ -89,6 +91,21 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
     assert not hasattr(intent, "action")
     with pytest.raises(TypeError):
         broker.SelectedToolMode(None, None)  # type: ignore[arg-type]
+
+
+def test_a_busy_write_refuses_the_call_as_busy_and_consumes_nothing(slot_store) -> None:
+    """Real contention through the real session: busy, never the UNKNOWN of a started write."""
+    call = FieldCodec.decode(ToolCallId, "call_1")
+    slot_id = broker.SelectedToolRequest(
+        call, broker.SelectedWriteArguments("notes.txt", "write"),
+    ).slot(InputId.mint(), 0)
+    with closing(sqlite3.connect(slot_store.session.path, isolation_level=None)) as held:
+        held.execute("BEGIN EXCLUSIVE")
+        with pytest.raises(SelectedToolBusy):
+            broker.consume_selected_slot(slot_store, slot_id, call)
+        held.execute("ROLLBACK")
+    broker.consume_selected_slot(slot_store, slot_id, call)
+    assert SelectedToolSlot.require(slot_store.session._connection, slot_id=slot_id).call_id == "call_1"
 
 
 def test_consumption_is_once_only_and_terminal_is_separate(slot_store) -> None:

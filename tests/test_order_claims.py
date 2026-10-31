@@ -9,7 +9,10 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from agent_comms.coordination_errors import (
+    CoordinationBeginUnavailable,
+    CoordinationReadUnavailable,
+)
 
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile, main
@@ -178,8 +181,9 @@ def test_a_busy_begin_answers_every_storage_error_handler() -> None:
     with pytest.raises(sqlite3.Error) as caught, CoordinationBeginUnavailable.checking():
         raise raw
     assert isinstance(caught.value, CoordinationBeginUnavailable)
-    # A nested decoder reads its code rather than failing on a missing attribute.
-    with pytest.raises(CoordinationReadUnavailable), CoordinationReadUnavailable.checking():
+    assert caught.value.sqlite_errorcode == sqlite3.SQLITE_BUSY
+    # An enclosing read decoder leaves it as it is: its handlers name this exact class.
+    with pytest.raises(CoordinationBeginUnavailable), CoordinationReadUnavailable.checking():
         raise caught.value
 
 

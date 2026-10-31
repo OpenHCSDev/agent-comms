@@ -67,13 +67,17 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     """No committed SQLite snapshot was acquired; no absence is established."""
 
     busy_message: ClassVar[str] = "The database read is busy"
+    sqlite_errorcode: int
+    sqlite_errorname: str
 
     @classmethod
     @contextmanager
     def checking(cls) -> Iterator[None]:
-        """Handle SQLite read errors."""
+        """Handle SQLite read errors; one already decoded keeps its own class."""
         try:
             yield
+        except CoordinationReadUnavailable:
+            raise
         except sqlite3.OperationalError as error:
             cls.raise_from(error)
 
@@ -82,7 +86,8 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
         """Decode SQLite's contention codes once, never its error wording."""
         if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
             busy = cls(cls.busy_message)
-            busy.sqlite_errorcode, busy.sqlite_errorname = error.sqlite_errorcode, error.sqlite_errorname
+            busy.sqlite_errorcode = error.sqlite_errorcode
+            busy.sqlite_errorname = error.sqlite_errorname
             raise busy from error
         raise error
 
