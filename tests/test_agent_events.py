@@ -1,6 +1,6 @@
 """Nominal extension, dispatch ordering, and shared settlement contracts."""
 
-from agent_comms.pi_payloads import RequestId
+from agent_comms.pi_wire import RequestId
 from dataclasses import FrozenInstanceError, dataclass, replace
 
 import pytest

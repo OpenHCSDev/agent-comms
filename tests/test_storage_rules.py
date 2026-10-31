@@ -21,8 +21,8 @@ from agent_comms.shell_effects import (
     shell_storage_effects,
 )
 from agent_comms.standing_rules import StorageHomeMissing
+from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
-    StorageProjection,
     StorageRule,
     UnitStorage,
 )

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_comms.activity_clocks import ActivityClocks, ChannelActivity
-import json
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Generator, Iterable, Iterator, Mapping
@@ -55,9 +54,7 @@ from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreComm
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
 from agent_comms.read_basis import CursorRow
-from agent_comms.read_basis import (
-    DisplayUnreadSelection, ReadCursor, RepliesDisplayScope, UnreadQuery,
-)
+from agent_comms.read_basis import ReadCursor, RepliesDisplayScope, UnreadQuery
 from agent_comms.typed_table import (
     CarriedWriter, PracticeRebuild, ReconciledFile, SchemaRebuild,
     SQLiteDatabase, WalStore,
@@ -65,6 +62,7 @@ from agent_comms.typed_table import (
 from agent_comms.watched import Watched
 
 if TYPE_CHECKING:
+    from .read_selection import DisplayUnreadSelection
     from agent_comms.registry_document import RegistrySnapshot
 
 

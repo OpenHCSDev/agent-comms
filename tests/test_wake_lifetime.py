@@ -12,7 +12,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.routing import ScheduledTurn
 from agent_comms.controller import UNBOUND_CONTROLLER
-from agent_comms.schedule_rules import WakeScheduleCheck
+from agent_comms.input_drain import WakeScheduleCheck
 from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.head_review import PullRequestHead
 from agent_comms.held_orders import HeldOrders
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.plan_reading import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime
@@ -19,10 +19,9 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import TurnDigest
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead, RecentTurnsSince, TurnDigestRead
-from agent_comms.storage_rules import EditWorkplaces
 from agent_comms.todos import (
     ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
-    Todo, TodoStore,
+    EditWorkplaces, Todo, TodoStore,
 )
 
 if TYPE_CHECKING:

@@ -70,7 +70,8 @@ from .systemd_unit import AgentsSlice, SystemdUnit
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
     from .thread_identity import ThreadIncarnation, ThreadRole
-    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_presentation import ThreadOwnerBinding
+    from .thread_presentation import ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
     from .turn_lease import ActiveTurn
 

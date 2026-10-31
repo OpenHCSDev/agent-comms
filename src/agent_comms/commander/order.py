@@ -31,7 +31,8 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.change_report import FileLine, MainRevision, NoSourceReference, RegisteredRoots
+from agent_comms.todos import RegisteredRoots
+from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.commander.standing import (
     DeliveryAwaitingJudgement,
     InstallDue,
@@ -75,10 +76,10 @@ from agent_comms.order_tools import (
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.presentation import MessageNotification
+from agent_comms.message_notification import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Checkout, Repo, RepositoryReads

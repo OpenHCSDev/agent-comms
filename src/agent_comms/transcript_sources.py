@@ -38,7 +38,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
-from .sent_message import PublishedSentMessage
+from .sent_message import AssignedSourceIdentity, PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
     IncomingTranscript,
@@ -49,20 +49,6 @@ from .transcript_events import (
 )
 from .turn_item import NativeTurnId
 from .typed_table import StoreWriter
-
-
-@dataclass(frozen=True)
-class AssignedSourceIdentity:
-    root: str
-    recipient: ThreadIncarnation
-
-    @property
-    def publication_key(self) -> tuple[str, float]:
-        """Published authorship survives a rename, not a new birth or wire."""
-        return self.root, self.recipient.require_recorded().created_at
-
-    def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
-        return self.root == other.root and self.recipient == other.recipient
 
 
 class WireFrontier(DeclaredFamily, affix="WireFrontier"):

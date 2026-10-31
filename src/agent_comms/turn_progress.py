@@ -31,12 +31,13 @@ from .send_result import SendResult
 from .thread_identity import ClaimedIdentity
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_lease import TurnState
-from .turn_phase import PublishingPhase
+from .native_turn_context import ContextObserved
+from .turn_phase import NativePhaseChanged, PublishingPhase
 
 if TYPE_CHECKING:
     from .owned_turn import OwnedTurn
     from .turn_failure import TurnFailure
-    from .turn_goal_account import TurnGoalAccount
+    from agent_comms.owned_turn import TurnGoalAccount
 
 
 @dataclass(kw_only=True)
@@ -109,7 +110,7 @@ class TurnProgress(events.AgentEventConsumer):
     def origins(self):
         return self.original.origins
 
-    @handles(events.ContextObserved)
+    @handles(ContextObserved)
     async def observe_context(self, event):
         await Coordination.run_worker(partial(
             self.comms.registry.observe_offered_tools,
@@ -246,8 +247,8 @@ class TurnProgress(events.AgentEventConsumer):
             with self.publication_measurements.measuring():
                 await self.consumer.dispatch(TurnTranscriptUpdate(state=state))
 
-    @handles(events.NativePhaseChanged)
-    async def native_phase(self, event: events.NativePhaseChanged) -> None:
+    @handles(NativePhaseChanged)
+    async def native_phase(self, event: NativePhaseChanged) -> None:
         states = await Coordination.run_worker(partial(
             self.comms.agents.observe_native_phase, self.turn_lease, event.phase
         ))

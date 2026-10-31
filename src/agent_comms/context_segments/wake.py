@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.presentation import SentMessageOutcome
+from agent_comms.message_notification import SentMessageOutcome
 
 from ..bus_publication import Delivered
 from ..threads import Thread

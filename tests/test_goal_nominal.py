@@ -123,7 +123,7 @@ def test_unrelated_attempt_commit_requests_a_real_comparison_not_a_second_revisi
 
 def test_original_proxy_decodes_typed_goal_control_at_json_boundary():
     original_goal_id = GoalId.mint()
-    from agent_comms.owner_connection import RuntimeRequest
+    from agent_comms.runtime_server import RuntimeRequest
     from agent_comms.runtime_requests import UpdateGoalRuntimeRequest
 
     payload = UpdateGoalRuntimeRequest.proxy_payload("worker", None, {

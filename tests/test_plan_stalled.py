@@ -2,7 +2,8 @@
 from dataclasses import replace
 
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_reading import PlanReading
+from agent_comms.phase_evidence import MainTree
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason

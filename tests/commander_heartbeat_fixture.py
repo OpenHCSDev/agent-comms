@@ -12,7 +12,7 @@ from agent_comms.task_attachments.commander_pings import CommanderDelivery, Comm
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.phase_evidence import PlanReadings
+from agent_comms.plan_reading import PlanReadings
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead
 

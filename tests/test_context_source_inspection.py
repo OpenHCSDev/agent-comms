@@ -13,7 +13,7 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.native_turn_context import NativeContextManifestData
 from agent_comms.pi_payloads import NativeContextData
-from agent_comms.owner_connection import RuntimeRequest
+from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.runtime_requests import (ContextRecordedSegmentRuntimeRequest,
     ContextCoreRuntimeRequest, ContextCoreSourceRuntimeRequest)
 from agent_comms.thread_identity import TurnIdentity
@@ -114,7 +114,8 @@ def test_current_core_context_is_independent_and_source_selection_is_current(tmp
 @pytest.mark.asyncio
 async def test_core_context_socket_reads_without_native_session_or_preview(tmp_path):
     from delivery_owner_fixture import canonical_delivery_owner
-    from agent_comms.runtime import RuntimeConnection, socket_path
+    from agent_comms.owner_connection import socket_path
+    from agent_comms.runtime import RuntimeConnection
 
     async with canonical_delivery_owner(tmp_path) as (comms, agent, _, _):
         owner = comms.registry.require("alpha")

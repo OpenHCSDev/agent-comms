@@ -9,22 +9,23 @@ from collections.abc import Callable, Iterable, Iterator, Mapping, MutableMappin
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, Annotated, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Self
 
 from pydantic import JsonValue
 
-
-from .activity import ActivityCapture
-from .channel_targets import CommandersTag
-from .channels import ChannelMemberIndex
+from .activity import ActivityCapture, ObservedActivity
+from .agent_activity import AgentActivity
+from .catalog_document import CatalogAccess
+from .channel_targets import CommandersTag, ResolvedTarget, SurroundingChannel
+from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
-    MalformedRecord,
     FieldPlan,
+    MalformedRecord,
     SlicePolicy,
     ThreadLookup,
     WireOmitDefault,
@@ -37,8 +38,6 @@ from .registration_change import (
     RegistrationChange,
     UpdatedRegistration,
 )
-from .repo import Repo, RepositorySelection
-from .repository_name import RepositoryName
 from .registry_provenance import (
     DeletedThread,
     RegisteredRecipient,
@@ -46,6 +45,8 @@ from .registry_provenance import (
     RegistryProvenance,
     RetiredRecipient,
 )
+from .repo import Checkout, Repo, RepositorySelection
+from .repository_name import RepositoryName
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -58,9 +59,9 @@ from .thread_identity import (
     OfferedTools,
     OwnerIdentity,
     RecordedThreadIncarnation,
+    ThreadAuthority,
     ThreadIncarnation,
     ThreadIncarnationRecord,
-    ThreadAuthority,
     TurnIdentity,
 )
 from .thread_presentation import ThreadOwnerBinding
@@ -74,14 +75,19 @@ from .thread_status import (
 from .thread_text import ForkedParent, NoParent
 from .threads import Thread, ThreadWorkState
 from .turn_lease import (
-    FinishedTurn, FinishedTurnFence, NoFinishedTurn, StoredTurnRecord, TurnCompletion, TurnLeaseFence,
+    FinishedTurn,
+    FinishedTurnFence,
+    NoFinishedTurn,
+    StoredTurnRecord,
+    TurnCompletion,
+    TurnLeaseFence,
     TurnRecord,
 )
 
 if TYPE_CHECKING:
-    from .activity import ObservedActivity
-    from .agent_activity import AgentActivity
     from .bus_publication import Delivered
+    from .cli_command import CliCommand
+    from .comms import Comms
     from .rule_deal import DealTrigger, DealtSources, RuleDeal
 
 
@@ -94,6 +100,34 @@ class RosterVisibility:
 
 
 DEFAULT_ROSTER = RosterVisibility()
+
+
+@dataclass(frozen=True)
+class ResolvedThread(ResolvedTarget):
+    thread: Thread
+    status: ThreadStatus
+
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]:
+        return declaration.thread_bindings(
+            comms, self.thread, self.status, channel, catalog=catalog,
+        )
+
+
+@dataclass(frozen=True)
+class ResolvedChannel(ResolvedTarget):
+    channel: Channel
+    members: tuple[ResolvedThread, ...]
+
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]:
+        return declaration.channel_bindings(
+            comms, self, project=project, snapshot=snapshot, catalog=catalog,
+        )
 
 
 class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thread]):
@@ -118,6 +152,18 @@ class RegistryPresence[StatusMap: Mapping[str, ThreadStatus]](RegistryNames[Thre
     def status(self, name: str) -> ThreadStatus:
         thread = self.require(name)
         return self.statuses[thread.name].registered(thread, self.last_seen[thread.name])
+
+    def resolve_thread(self, name: str) -> ResolvedThread:
+        """Bind a thread and its status from this same acquired registry."""
+        thread = self.require(name)
+        return ResolvedThread(thread, self.status(thread.name))
+
+    def resolve_channel(self, channel: Channel) -> ResolvedChannel:
+        """A channel's visible members and statuses share this one registry cut."""
+        members = tuple(self.resolve_thread(thread.name)
+                        for thread in self.channel_audience()
+                        if channel.matches(thread.tags))
+        return ResolvedChannel(channel, members)
 
     def receiving(self, name: str) -> bool:
         """Whether a message sent now is read now; an unregistered name reads nothing."""

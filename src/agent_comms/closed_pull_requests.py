@@ -10,16 +10,15 @@ from typing import TYPE_CHECKING
 from .head_review import PullRequestHead
 from .message_bus import JoinedWatch
 from .repo import Repo
+from .repository_name import RepositoryName
 from .todos import (
     PullRequests, StoredClosedHead, StoredClosedRepository, StoredCommitPatch,
-    StoredHeadDiff, StoredMainPatch,
+    StoredHeadDiff, StoredMainPatch, TodoStore,
 )
 from .work_branches import CommitBase, UnservableCommitBase, WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .repository_name import RepositoryName
-    from .todos import TodoStore
 
 
 @dataclass(frozen=True)

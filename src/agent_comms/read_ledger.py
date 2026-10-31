@@ -21,7 +21,6 @@ from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, Subcl
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .private_path import ObservedPath
-from .notification_evidence import NotificationReadMark
 from .read_basis import (
     AllConversation,
     ChannelConversation,
@@ -39,6 +38,7 @@ from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
+    from .notification_assignment import NotificationReadMark
     from .bus_publication import Delivered
     from .messages import Message
     from .read_basis import MessageDisplayScope

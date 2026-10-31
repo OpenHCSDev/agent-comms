@@ -7,30 +7,27 @@ import json
 import os
 import socket
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
-from typing import IO, TYPE_CHECKING, Annotated, ClassVar, Self, cast
+from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
-from .command import Command
 from .coordinator import Coordination
-from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .nominal.field_codec import AcpSessionId, FieldCodec, NullMember, WireOmitDefault
+from .nominal.field_codec import FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
-from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
-from .owner_protocol import OwnerLine, OwnerResult
+from .maintenance_barrier import MaintenanceHolder
+from .owner_protocol import OwnerLine
 from .private_path import PrivateSocketRole
 from .thread_identity import OwnerIdentity, ThreadIncarnation
-from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
+    from agent_comms.runtime_server import RuntimeRequest
     from .child_process import ProcessIdentity
     from .comms import Comms
     from .registry_document import RegistryEntry
-    from .runtime import RuntimeServer, SocketClient
     from .threads import Thread
 
 
@@ -49,75 +46,6 @@ class OwnerReplyLostError(RuntimeError, ConnectionError):
 @dataclass(frozen=True, slots=True)
 class NoControllerToken(NullMember):
     """The prompt came from no attached controller; no subscriber answers its dialogs."""
-
-
-@dataclass(frozen=True)
-class RuntimeRequestContext:
-    server: RuntimeServer
-    reader: asyncio.StreamReader
-    client: SocketClient
-    name: str
-
-    async def send(self, line: OwnerLine) -> None:
-        await self.client.send(line)
-
-
-@dataclass(frozen=True)
-class AttachedRuntimeRequestContext(RuntimeRequestContext):
-    session: AcpSessionId
-
-
-@dataclass(frozen=True, kw_only=True)
-class RuntimeRequest[Ctx: RuntimeRequestContext](
-    DeclaredFamily, Command[Ctx, Awaitable[None]], affix="RuntimeRequest"
-):
-    family_discriminator: ClassVar[str] = "action"
-    thread: str
-    holder: Annotated[MaintenanceHolder, WireOmitDefault()] = NoMaintenanceHolder()
-
-    @classmethod
-    def proxy_payload(
-        cls, thread: str, controller_token: str | NoControllerToken, parameters: dict[str, object]
-    ) -> dict[str, object]:
-        return OwnerConnection.wire_request(cls.declared_name, thread, parameters)
-
-    @abstractmethod
-    async def bind(
-        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
-    ) -> Ctx: ...
-
-
-class AttachedRuntimeRequest(RuntimeRequest[AttachedRuntimeRequestContext]):
-    def require_owner(self, entry: RegistryEntry) -> Thread:
-        owner = entry.thread
-        if not owner.process_identity.runs_here() or not entry.status.running:
-            raise RelationViolationError("This process no longer owns the thread.")
-        return owner
-
-    async def bind(
-        self, server: RuntimeServer, reader: asyncio.StreamReader, client: SocketClient,
-    ) -> AttachedRuntimeRequestContext:
-        entry = (await Coordination.run_worker(partial(
-            server.agent._comms.registry.entry, self.thread,
-        ))).entry
-        owner = self.require_owner(entry)
-        session_id = server.agent.sessions.require_owned_session(entry)
-        return AttachedRuntimeRequestContext(server, reader, client, owner.name, session_id)
-
-
-class ResultRuntimeRequest[Ctx: RuntimeRequestContext](RuntimeRequest[Ctx]):
-    async def apply(self, ctx: Ctx) -> None:
-        reply = await self.result(ctx)
-        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
-
-    @abstractmethod
-    async def result(self, ctx: Ctx) -> DeclaredReply: ...
-
-
-class AttachedResultRuntimeRequest(
-    ResultRuntimeRequest[AttachedRuntimeRequestContext], AttachedRuntimeRequest
-):
-    pass
 
 
 class OwnerConnection:

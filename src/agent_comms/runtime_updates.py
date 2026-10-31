@@ -14,9 +14,11 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from . import activity
 from .agent_activity import AgentActivity
+from .agent_events import RuntimeInfoObservation
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .message_reference import MessageReference
+from .messaging import Messaging
 from .recorded_time import EventTime, UnrecordedEventTime
 from .transcript_events import (
     LiveTextTranscript,
@@ -29,11 +31,9 @@ from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
 from .turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
 
 if TYPE_CHECKING:
-    from .agent_events import RuntimeInfoObservation
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
     from .comms import Comms
-    from .messaging import Messaging
     from .thread_status import ThreadStatus
 
 

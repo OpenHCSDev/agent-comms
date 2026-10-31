@@ -5,21 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from agent_comms.nominal.field_codec import RootId
 
 from .child_process import ProcessIdentity
 from .coordination_tables.assignments import WakeAssignment
-from .coordination_tables.participants import OwnerGenerations
 from .reservation_rules import ReservationRule, RuleCheck
-from .text_digest import TextDigest
+from .native_input_record import NativeInputIdentity, NativeInputRecord
+from .native_runtime_input import NativeRuntimeInput
 from .turn_goal_permission import GoalPermission
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .native_input_record import NativeInputRecord
-    from .native_prompt_binding import PromptBinding
-    from .native_runtime_input import NativeRuntimeInput
-    from .private_send_stage import NativeSendStage
+    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -179,8 +175,7 @@ class RegistryGoalRule(ReservationRule):
 @dataclass(frozen=True, kw_only=True)
 class NativeIdentityCheck(RuleCheck):
     row: NativeInputRecord
-    stage: NativeSendStage
-    owner: OwnerGenerations
+    expected: NativeInputIdentity
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -189,19 +184,12 @@ class NativeReservationCheck(NativeIdentityCheck):
     token_digest: str
 
 
-@dataclass(frozen=True, kw_only=True)
-class NativeBindingCheck(NativeIdentityCheck):
-    row: PromptBinding
-    wire_root_id: RootId
-    prompt_digest: TextDigest
-
-
 class NativeInputIdentityRule(ReservationRule):
     check_type = NativeIdentityCheck
     explanation = "The original native input assignment, stage, attempt or owner changed."
 
     def violated(self, check: NativeIdentityCheck) -> bool:
-        return check.row.identity != check.stage.identity(check.row.input_id, check.owner)
+        return check.row.identity != check.expected
 
 
 class NativeTokenRule(ReservationRule):
@@ -234,22 +222,6 @@ class NativeAlreadyDecidedRule(ReservationRule):
 
     def violated(self, check: NativeReservationCheck) -> bool:
         return check.row.verdict.decided
-
-
-class NativeBindingRootRule(ReservationRule):
-    check_type = NativeBindingCheck
-    explanation = "The prelaunch binding belongs to a different wire root."
-
-    def violated(self, check: NativeBindingCheck) -> bool:
-        return check.row.wire_root_id != check.wire_root_id
-
-
-class NativeBindingContentRule(ReservationRule):
-    check_type = NativeBindingCheck
-    explanation = "The native request digest differs from its durable prelaunch binding."
-
-    def violated(self, check: NativeBindingCheck) -> bool:
-        return TextDigest(check.row.expected_prompt_digest) != check.prompt_digest
 
 
 @dataclass(frozen=True, kw_only=True)

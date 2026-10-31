@@ -29,7 +29,7 @@ from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.turn_input_source import AcceptedTurn
+from agent_comms.queued_input import AcceptedTurn
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
 from native_proof_cases import read_proof_rows

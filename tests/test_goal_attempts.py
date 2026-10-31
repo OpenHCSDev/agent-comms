@@ -38,7 +38,7 @@ from agent_comms.goal_generation import (
 )
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.pi_counts import PiCount, UnreportedCount
-from agent_comms.pi_payloads import PiUsage
+from agent_comms.pi_wire import PiUsage
 from agent_comms.threads import Thread
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.attempt_resolution import OperatorStopped, RetryDecision

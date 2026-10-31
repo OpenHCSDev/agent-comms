@@ -12,7 +12,7 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.cli import main
 from agent_comms.comms import wire
 from agent_comms.repo import Checkout
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.read_basis import NamedViewer
 from native_backend_fixture import native_backend_fixture
 

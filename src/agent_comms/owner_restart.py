@@ -23,20 +23,20 @@ from .native_arguments import (
 )
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import (
-    OwnerCompletion,
+    OwnerLifecycle,
     OwnerRestartResult,
     OwnerRestartSelection,
 )
+from .owner_release import OwnerCompletion
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
 from .thread_identity import ThreadAuthority
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
-    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
     from .registry_document import RegistrySnapshot
     from .registry_store import RegistryEdit
-    from .threads import Thread
 
 
 @dataclass(frozen=True)

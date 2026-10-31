@@ -19,7 +19,7 @@ from .nominal.field_codec import (
     WireOmitDefault,
 )
 from .native_tool_call import CodingCall
-from .pi_payloads import PiReported
+from agent_comms.pi_wire import PiReported
 from .recorded_time import EventTime
 from .rule_deal import ReadSpan
 from .shell_effects import WriteStorageEffect, physical_path, shell_storage_effects

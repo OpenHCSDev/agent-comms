@@ -7,13 +7,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from .comms import Comms
-from .owner_connection import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequestContext,
-    OwnerConnection,
-    OwnerReading,
-    OwnerReplyConnection,
-)
+from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext
+from .owner_connection import OwnerConnection, OwnerReading, OwnerReplyConnection
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool

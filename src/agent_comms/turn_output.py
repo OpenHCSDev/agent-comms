@@ -8,17 +8,14 @@ from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import turn_failure as failures
-from .acp_failure import (
-    FailureSource,
-    NativeMessageFailureSource,
-    ProviderRetryResult,
-    UnrecordedFailureSource,
-)
+from agent_comms.pi_payloads import NativeMessageFailureSource
+from .acp_failure import FailureSource, ProviderRetryResult, UnrecordedFailureSource
 from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
     from .backend import NativeSession
-    from .pi_payloads import AssistantMessage, PiDiagnostic
+    from agent_comms.pi_wire import PiDiagnostic
+    from .pi_payloads import AssistantMessage
 
 
 @dataclass

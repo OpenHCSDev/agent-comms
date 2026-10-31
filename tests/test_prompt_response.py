@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import ClearQueue, FollowingPrompt, GetSessionStats, GetState, PiCommand, Prompt, SettingCommand
-from agent_comms.pi_payloads import AnonymousRequest, RequestId
+from agent_comms.pi_wire import AnonymousRequest, RequestId
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_inputs import InputForwarding
 from agent_comms.turn_stats import ReadingStats, RequestingStats, StatsRequest

@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.pi_payloads import RequestId
+from agent_comms.pi_wire import RequestId
 
 from . import pi_commands as commands
 from . import turn_failure as failures

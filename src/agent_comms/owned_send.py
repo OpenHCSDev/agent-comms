@@ -8,14 +8,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.ordinary_turn_rules import (
-    InputKeysCheck,
-    MissingAcceptedInputRule,
-    MissingTurnOwnerCheck,
-    OrdinaryContextCheck,
-    OrdinaryOwnerCheck,
-    RunningOrdinaryOwnerCheck,
-)
+from agent_comms.turn_input_source import OrdinaryOwnerCheck, RunningOrdinaryOwnerCheck
+from agent_comms.ordinary_turn_rules import MissingAcceptedInputRule, MissingTurnOwnerCheck
 from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 
 from . import agent_events as events
@@ -25,26 +19,41 @@ from .coordination_session import NativeCapture, NativeCommit
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
 from .nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
+from .goal_attempts import GoalAttemptStore
+from .goal_turn_permit import GoalTurnPermit
 from .input_attempt import InputAlreadyCleared
+from .input_drain import InputDrain
 from .native_input_proof import NativeContextProof
 from .reservation_rules import ReservationRule, ReservationViolationError
+from .threads import Thread
 from .tool_denial import SelectedToolDenied
 from .turn_input_source import (
     OriginalTurnInput,
     TurnInputSource,
 )
 
+from .reservation_rules import RuleCheck
+from .goal_waits import GoalWait
+from agent_comms.channel_coding_tools import OrdinaryContextCheck
 if TYPE_CHECKING:
-    from agent_comms.goal_attempts import GoalAttemptStore
-    from agent_comms.goal_turn_permit import GoalTurnPermit
-
-    from .goal_waits import GoalWait
-    from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputKeysCheck(RuleCheck):
+    source: TurnInputSource
+    text: str
+
+
+class InputKeysRule(ReservationRule):
+    check_type = InputKeysCheck
+    explanation = "The input keys do not prove this exact original channel batch."
+
+    def violated(self, check: InputKeysCheck) -> bool:
+        return not check.source.valid_keys(check.text)
 
 
 @dataclass(frozen=True, kw_only=True)

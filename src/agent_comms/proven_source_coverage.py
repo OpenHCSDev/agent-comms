@@ -31,7 +31,6 @@ from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn
 from .native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from .private_path import FileIdentity, ObservedPath, PresentPath
-from .source_proof_requirement import SourceSettlement
 from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
@@ -270,8 +269,7 @@ class SourceCoverage:
                 if not claims:
                     no_wake.append(seq)
                 for selected in claims:
-                    settlement = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
-                    if not settlement.apply(inputs):
+                    if not self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads, inputs):
                         blocked = seq
                         break
                 if blocked is not None:
@@ -303,8 +301,8 @@ class SourceCoverage:
 
     def _selected_inputs(
         self, seq: int, recipient: FrozenRecipient, decision: RecipientDecision, acknowledgement: AcceptedCohort,
-        source_reads: NativeEvidenceScope,
-    ) -> SourceSettlement:
+        source_reads: NativeEvidenceScope, inputs: list[HistoricalNativeInput],
+    ) -> bool:
         assignments = [
             a
             for a in acknowledgement.assignments
@@ -317,7 +315,8 @@ class SourceCoverage:
         evidence = (self.native_inputs(seq, source_reads=source_reads)
                     if policy.items_with(Active, policy) else ())
         assignment = assignments[0]
-        return assignment.lifecycle.source_settlement(evidence, policy, assignment.assignment_id)
+        settlement = assignment.lifecycle.source_settlement(evidence, policy, assignment.assignment_id)
+        return settlement.apply(inputs, evidence)
 
     def native_inputs(self, source_seq: int, *, source_reads: NativeEvidenceScope) -> tuple[HistoricalNativeInput, ...]:
         return read_historical_native_inputs(

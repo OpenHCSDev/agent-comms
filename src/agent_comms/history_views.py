@@ -27,7 +27,7 @@ from .retained_task_facts import RetainedTaskFacts
 from .shared_ledger import LedgerDocument
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
-from .transcript_sources import AssignedSourceIdentity
+from .sent_message import AssignedSourceIdentity
 from .view_unread import transcript_read_state
 
 if TYPE_CHECKING:
@@ -57,27 +57,11 @@ from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
-from .notification_evidence import (
-    FirstRecipient,
-    NotificationWindow,
-    OutcomeViewer,
-    RecipientCursor,
-    RecipientLimit,
-)
+from agent_comms.message_notification import NotificationWindow
+from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
 from .page_traversal import LiveCursor
-from .presentation import (
-    BusPresentation,
-    ChannelView,
-    CoordinationSnapshot,
-    CountedRead,
-    InboxRead,
-    MessageNotification,
-    NoRevision,
-    ReadState,
-    ThreadRecord,
-    ThreadView,
-    WireRevision,
-)
+from .message_notification import MessageNotification
+from .presentation import BusPresentation, ChannelView, CoordinationSnapshot, CountedRead, InboxRead, NoRevision, ReadState, ThreadRecord, ThreadView, WireRevision
 from .read_basis import AnonymousViewer, DisplayViewer, DMDisplayBasis, NamedViewer
 from .threads import Thread, current_thread
 from .transcripts import TranscriptCursor, Transcripts

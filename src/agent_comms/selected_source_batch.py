@@ -2,8 +2,8 @@
 
 import hashlib
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from .assignment_store import AssignmentStore
 from .bus_publication import Delivered
 from .coordination_errors import IdentityConflict
 from .coordination_tables.assignments import WakeAssignment
@@ -11,9 +11,6 @@ from .nominal.field_codec import AssignmentId, FieldCodec
 from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable
 from .turn_context import ReplyRouteSegment, WireProvenance
-
-if TYPE_CHECKING:
-    from .assignment_store import AssignmentStore
 
 
 @dataclass(frozen=True)

@@ -35,23 +35,8 @@ from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import OwnerToolConnection
-from .pi_payloads import (
-    CompactionData,
-    EmptyData,
-    ModelsData,
-    NativeContextData,
-    PiOmitted,
-    PiRequestId,
-    PiResponseData,
-    QueueClearedData,
-    ReportedText,
-    RequestId,
-    SessionStatsData,
-    SessionSwitchData,
-    StateData,
-    ThinkingLevelsData,
-    UnknownData,
-)
+from agent_comms.pi_wire import PiOmitted, PiRequestId, RequestId
+from .pi_payloads import CompactionData, EmptyData, ModelsData, NativeContextData, PiResponseData, QueueClearedData, ReportedText, SessionStatsData, SessionSwitchData, StateData, ThinkingLevelsData, UnknownData
 from .turn_context import InputContributionCoordinates, SegmentManifest
 from .turn_item import PiRequestKey
 

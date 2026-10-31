@@ -60,7 +60,8 @@ from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
-from .presentation import ChannelView, MessageNotification
+from .message_notification import MessageNotification
+from .presentation import ChannelView
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer

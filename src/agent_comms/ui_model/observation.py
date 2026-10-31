@@ -57,14 +57,12 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
-from agent_comms.notification_evidence import NotificationWindow
+from agent_comms.message_notification import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
-from agent_comms.presentation import (
-    CoordinationSnapshot, MessageNotification, NoRevision, ReadState,
-    WireRevision,
-)
+from agent_comms.message_notification import MessageNotification
+from agent_comms.presentation import CoordinationSnapshot, NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.registry_provenance import DeletedThread
 from agent_comms.revision_views import (
@@ -77,7 +75,8 @@ from agent_comms.revision_views import (
     StoresView,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.thread_presentation import AcquiredThreadPresentation, ThreadPresentation
+from agent_comms.transcripts import AcquiredThreadPresentation
+from agent_comms.thread_presentation import ThreadPresentation
 from agent_comms.order_tools import TranscriptPageRead
 from agent_comms.transcripts import TranscriptReadIdentity
 from agent_comms.ui_model.sidebar import (

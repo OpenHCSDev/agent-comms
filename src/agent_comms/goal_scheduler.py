@@ -36,7 +36,7 @@ from .goals import Goal, GoalDeclaration, GoalRevision
 from .registry_document import RegistryDocument, RegistrySnapshot
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
-from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
+from agent_comms.input_drain import WakeScheduleCheck
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -100,9 +100,7 @@ class GoalScheduler:
     async def schedule_goal(self, session_id: AcpSessionId) -> None:
         """Finish recording the goal's start permission before binding its loop queue."""
         await self._retain_current_goal_turns(session_id)
-        check = OwnerTurnScheduleCheck(
-            session_id=session_id, inputs=self.inputs, turns=self.effects.turns,
-        )
+        check = self.effects.turns.owner_schedule_check(session_id, self.inputs)
         try:
             check.require_valid()
         except ReservationViolationError:

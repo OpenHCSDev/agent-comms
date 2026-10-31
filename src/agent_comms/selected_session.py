@@ -14,7 +14,7 @@ from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.participant_identity import ParticipantIdentity
 from .native_session_reopen import NativeSessionIdentity
-from agent_comms.native_pi import _session_location
+from .native_evidence_read import session_location
 from agent_comms.native_failures import NativePiUnavailable
 from .nominal.field_codec import boundary_decoder
 from .private_path import PrivateFileRole
@@ -63,7 +63,7 @@ class SelectedSession:
 
     def attest(self, identity: NativeSessionIdentity) -> Path:
         # Only an unselected new session uses the originally allocated directory.
-        return _session_location(self.directory, identity.session_file)
+        return session_location(self.directory, identity.session_file)
 
     def verify_start(self, actual: NativeSessionIdentity) -> Path:
         return self.attest(actual)

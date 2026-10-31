@@ -16,7 +16,8 @@ from nominal_refactor_advisor.ast_tools import ParsedModule
 from nominal_refactor_advisor.audit.findings import GodFunction
 from nominal_refactor_advisor.audit.source_measures import ForeignAbsenceProbe
 
-from agent_comms.phase_evidence import Census, MainModule, PlanReadings
+from agent_comms.plan_reading import PlanReadings
+from agent_comms.phase_evidence import Census, MainModule
 
 
 @dataclass(frozen=True)

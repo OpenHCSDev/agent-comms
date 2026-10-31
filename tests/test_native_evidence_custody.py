@@ -17,7 +17,7 @@ from agent_comms.native_input_proof import NativeContextJournal, NativeInputLoca
 from agent_comms.nominal.field_codec import InputId
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.turn_item import FreshNativeId
-from agent_comms.native_pi import PrivateEvidenceRead
+from agent_comms.native_evidence_read import PrivateEvidenceRead
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.store_files import (
     ExclusiveLock,

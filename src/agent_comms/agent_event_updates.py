@@ -36,6 +36,7 @@ from .acp_extension import (
     encode_updates,
 )
 from .context_reading import ContextUsage, UnsizedContext
+from .controller import SessionUpdateSink
 from .coordinator import Coordination
 from .nominal.field_codec import AcpSessionId, TurnId
 from .tool_declaration import (
@@ -48,14 +49,13 @@ from .tool_declaration import (
 )
 from .tool_results import tool_result_content
 from .transcript_updates import TranscriptUpdate
+from .routing import MessageRoute, NoMessageRoute
+from .turn_effects import TurnEffects
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate
-    from .controller import SessionUpdateSink
     from .native_output import NativeRecordLocation
-    from .routing import MessageRoute, NoMessageRoute
     from .transcripts import NativeCommittedPrefix
-    from .turn_effects import TurnEffects
 
 
 class AcpToolAction(MroDispatch):

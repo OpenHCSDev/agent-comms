@@ -32,7 +32,6 @@ from .repository_name import RepositoryName
 
 if TYPE_CHECKING:
     from .registry_document import CommanderProject
-    from .todos import PullRequestLink
 
 
 class SourceText(ABC):
@@ -178,19 +177,6 @@ class CommitRevision(FetchedRevision):
         return self.commit
 
 
-@dataclass(frozen=True)
-class PullRequestHeadRevision(FetchedRevision):
-    link: PullRequestLink
-
-    @property
-    def reference(self) -> str:
-        return f'refs/agent-comms/cited/{self.link.number}'
-
-    @property
-    def fetch_refspec(self) -> str:
-        return f'+pull/{self.link.number}/head:{self.reference}'
-
-
 class SourceRoots(ABC):
     """Where citations are read: the checkout an unqualified citation names, and the commander
     project whose registered repositories a qualified citation names instead."""
@@ -201,35 +187,6 @@ class SourceRoots(ABC):
     @abstractmethod
     def order(self) -> Path:
         """The checkout an unqualified ``file.py:line`` is read in."""
-
-
-@dataclass(frozen=True)
-class OrderRoots(SourceRoots):
-    """Citations from one checkout, an order's check directory or a unit's worktree:
-    unqualified ones are read there."""
-
-    checkout: Path
-    project: CommanderProject
-
-    @property
-    def order(self) -> Path:
-        return self.checkout
-
-
-@dataclass(frozen=True)
-class RegisteredRoots(SourceRoots):
-    """Citations with no order behind them: unqualified ones need exactly one registered
-    repository to name."""
-
-    project: CommanderProject
-
-    @property
-    def order(self) -> Path:
-        repositories = self.project.require().repos
-        if len(repositories) != 1:
-            raise ValueError("An unqualified FILE:LINE names no repository when several are "
-                             "registered; cite it as owner/name:FILE:LINE.")
-        return repositories[0].checkout
 
 
 class CitedRepository(DeclaredFamily, ABC, affix="Repository"):

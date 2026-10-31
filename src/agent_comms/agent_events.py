@@ -27,7 +27,6 @@ from .acp_failure import (
     UnrecordedFailureSource,
     UnresolvedNativeTurnOutcome,
 )
-from .child_process import ProcessIdentity
 from .coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import (
@@ -40,7 +39,7 @@ from .input_attempt import InputAttempt
 from .native_failures import NativePiUnavailable
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
+from agent_comms.pi_wire import McpLiveAcknowledgement, PiDiagnostic, PiOmitted, PiRequestId, PiUsage
 from .rule_deal import CompactedDeal
 from .pi_vocabulary import (
     CompactionReason,
@@ -55,22 +54,20 @@ from .turn_failure import BackendFailed, TurnFailure
 from .turn_goal_account import OriginGoalSettlement, VerifiedGoalSettlement
 from .turn_item import UsageChargeId
 from .turn_terminal import FailedGoalTurn
+from .goal_presentation import GoalSnapshot
+from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
     from .acp_extension import AgentCommsUpdate, TextNoticeUpdate
     from .agent_event_updates import AcpEventConsumer
     from .comms import Comms
-    from .goal_presentation import GoalPublicationSnapshot, GoalSnapshot
+    from .goal_presentation import GoalPublicationSnapshot
     from .input_disposition import InputDocument
     from .input_drain import InputDrain
-    from .native_turn_context import NativeContextManifestData
-    from .pi_commands import PiCommand
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
-    from .transcript_events import SentTranscript
     from .turn_input_source import OriginalTurnInput
-    from .turn_phase import TurnPhase
     from .turn_progress import TurnProgress
 
 
@@ -128,13 +125,6 @@ class NativeOutputCommitted(AgentEvent):
 
 
 @dataclass(frozen=True)
-class ContextObserved(AgentEvent):
-    """Text-free SDK input observation; no transcript or status publication."""
-
-    context: NativeContextManifestData
-
-
-@dataclass(frozen=True)
 class PromptAccepted(AgentEvent):
     """The command's matching successful response acknowledged this turn's prompt."""
 
@@ -188,13 +178,6 @@ class InputCleared(InputRefused):
 @dataclass(frozen=True)
 class PromptCancelled(AgentEvent):
     input_state: type[InputAttempt] | None
-
-
-@dataclass(frozen=True)
-class NativePhaseChanged(AgentEvent):
-    """Actual native observer phase; never reconstructed from visible chunks."""
-    phase: TurnPhase
-    native_process: ProcessIdentity
 
 
 @dataclass(frozen=True)
@@ -265,7 +248,6 @@ class CompactionEvent(AgentEvent, DeclaredFamily, affix="Event"):
     @property
     def will_retry(self) -> bool:
         return False
-
 
 
 @dataclass(frozen=True)
@@ -422,7 +404,6 @@ class Error(AgentEvent):
     # its resolution; a recovered turn never publishes an interim refusal.
     text: str
     reason_code: str | None = None
-    command: PiCommand | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     source: FailureSource = UnrecordedFailureSource()
 
@@ -501,6 +482,10 @@ class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
 class ProviderUsage(AgentEvent):
     response_id: UsageChargeId
     usage: PiUsage
+
+    @classmethod
+    def charges(cls, usage: PiUsage, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
+        return tuple(cls(response_id=key, usage=usage) for key in usage.charged(identity))
 
 
 @dataclass(frozen=True)

@@ -27,15 +27,15 @@ from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
 from agent_comms.order_tools import InputDeliveryRead
-from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection, RuntimeRequest
+from agent_comms.runtime_server import RuntimeRequest
+from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyConnection
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, RootId
+from agent_comms.nominal.field_codec import AcpSessionId, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.runtime import (
-    RuntimeConnection, present_session, socket_path,
-)
+from agent_comms.owner_connection import socket_path
+from agent_comms.runtime import RuntimeConnection, present_session
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation

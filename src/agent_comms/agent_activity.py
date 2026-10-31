@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
     from .bus_publication import Delivered
     from .notification_progress import AssignmentProgress, DeliveryProgress
-    from .presentation import MessageNotification
+    from .message_notification import MessageNotification
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .thread_status import ThreadStatus

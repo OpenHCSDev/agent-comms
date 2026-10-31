@@ -5,25 +5,24 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
+from .activity import Activity, ActivityState, ObservedActivity
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import ToolCallId
 from .pi_payloads import ProviderDiagnosticError
 
 
+from .child_process import ProcessIdentity
+from agent_comms.agent_events import AgentEvent
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
 
 
 @dataclass(frozen=True)
-class TurnPhaseOutput(ThreadOutput):
-    agents: AgentActivity
-    lease: TurnLeaseFence
-
-    @property
-    def activity_thread(self) -> str:
-        return self.lease.identity.incarnation.name
+class NativePhaseChanged(AgentEvent):
+    """Actual native observer phase; never reconstructed from visible chunks."""
+    phase: TurnPhase
+    native_process: ProcessIdentity
 
 
 class StallExempt:
@@ -135,7 +134,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return f"Model produced no RPC progress for {budget:g} seconds."
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        TurnPhaseOutput(agents, lease).enter(self)
+        agents.enter_phase(lease.identity.incarnation.name, self)
 
 
 class Excursion(TurnPhase, declared_name=None):

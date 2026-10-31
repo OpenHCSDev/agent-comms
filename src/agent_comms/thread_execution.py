@@ -19,7 +19,8 @@ if TYPE_CHECKING:
     from .goal_management import Goals
     from .goals import GoalDeclaration
     from .registry_document import RegistrySnapshot
-    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_presentation import ThreadOwnerBinding
+    from .thread_presentation import ThreadPresentation
     from .threads import Thread
 
 

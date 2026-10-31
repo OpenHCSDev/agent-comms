@@ -46,11 +46,10 @@ from .private_nk_entrypoint import (
 from .private_path import FileObservation, PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
-from .notification_evidence import NotificationAssignmentRead
-from .notification_evidence import NotificationSelection
 
 
 if TYPE_CHECKING:
+    from .notification_assignment import NotificationAssignmentRead, NotificationSelection
     from .acp_extension import CursorAdvancedUpdate, CursorScope
     from .cursor_publication import CursorPublication
     from .historical_native_inputs import HistoricalNativeAnswers
@@ -217,7 +216,7 @@ class PublicRegistry(RegistryPrivacy):
     def missing_notification_assignments(
         self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
-        return NotificationAssignmentRead(selection, ())
+        return selection.read_without_assignments()
 
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,

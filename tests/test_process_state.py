@@ -9,7 +9,7 @@ import pytest
 from agent_comms.child_process import NoProcess, ProcessIdentity, ProcessState
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.owner_lifecycle import OwnerReleaseEvidence
+from agent_comms.owner_release import OwnerReleaseEvidence
 
 
 @pytest.mark.parametrize("process, wire", [(NoProcess(), None), (ProcessIdentity(123, 456), {"pid": 123, "start_time": 456})])

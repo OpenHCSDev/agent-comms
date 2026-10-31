@@ -28,7 +28,7 @@ from agent_comms.launch_runtime import RestartEnvironment
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.pi_vocabulary import ManualCompactionReason
 from agent_comms.queued_input import InitialInput
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from delivery_owner_fixture import canonical_agent
 
 

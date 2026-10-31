@@ -13,13 +13,13 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
+from .goal_records import GoalRecords
 from .goal_actions import (
     GoalAction,
     GoalActionContext,
@@ -29,44 +29,33 @@ from .goal_actions import (
     SentBackOrderGoalAction,
     SetGoalAction,
 )
-from .goal_attempts import Generation, GoalAttemptFile, GoalAttemptStore
+from .goal_attempts import Generation
 from .errors import UnresolvedAttemptError
 from .goal_history import GoalHistoryEntry, RecordedGoalHistory
 from .goal_scope import AllGoals, GoalScope, OneGoal
 from .goal_waits import (
-    GoalInputReview,
     GoalWait,
-    GoalWaitRecovery,
-    GoalWaitReview,
-    GoalWaits,
     StandbyReview,
 )
 from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
-from .registration import Registration
 
+from dataclasses import dataclass
+from .goal_failure_observation import GoalFailureEvidence
+from .registry_document import RegistrySnapshot
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
-    from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
-from .goal_presentation import (
-    GoalExecution,
-    GoalExecutionSource,
-    GoalPublicationSnapshot,
-    GoalSnapshot,
-    GoalWaitTarget,
-    IdleGoalExecution,
-)
+    from .turn_lease import TurnDeclaration
+from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, IdleGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     InputDeliveryScope,
-    ReservedInput,
     UnresolvedInput,
 )
-from .input_disposition import DeliveryOverview, InputDispositions
-from .message_bus import MessageBus
+from .input_disposition import DeliveryOverview
 from .threads import Thread
 from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
@@ -74,26 +63,36 @@ from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, T
 _LOG = logging.getLogger(__name__)
 
 
-class Goals(GoalWaitRecovery):
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, agents: AgentActivity):
-        self.root = root
-        self.registry = registry
-        self.bus = bus
-        self.agents = agents
-        self.waits = GoalWaits(root)
-        self.dispositions = InputDispositions(root)
-        self.goal_store: GoalAttemptFile = GoalAttemptFile(GoalAttemptStore.path_in(
-            GoalAttemptStore.directory_in(root)))
+@dataclass(frozen=True)
+class GoalExecutionSource:
+    """One read's original owners; never persisted or used as launch authority."""
 
+    goal: Goal
+    wait: GoalWait
+    generation: Generation
+    evidence: GoalFailureEvidence
+    owner: Thread
+    snapshot: RegistrySnapshot
+    agents: AgentActivity
+
+    @cached_property
+    def turn(self) -> TurnDeclaration:
+        return self.owner.turn_record.read()
+
+    @cached_property
+    def owner_alive(self) -> bool:
+        return self.owner.process_alive
+
+    def execution(self) -> GoalExecution:
+        return self.goal.state.execution(self)
+
+
+class Goals(GoalRecords):
     def fork_goal(self, parent: Thread, child: Thread) -> Goal:
         """Create a commander's child goal from its parent's active work."""
         text = ('\n'.join(goal.text for goal in parent.goal.active())
                 or f'Coordinate assigned work for {parent.name}.')
         return SetGoalAction(text=text).create(GoalActionContext(self, child))
-
-    @cached_property
-    def todos(self) -> TodoStore:
-        return TodoStore(self.root)
 
     def change_problem(self, problem, operation, actor: ThreadIncarnation):
         """The caller's resolved identity carries its authority; a name lookup would drop it."""
@@ -157,11 +156,6 @@ class Goals(GoalWaitRecovery):
                 + " -> the holder must commit and push it before the problem is released")
         return store.fire(owner, actor, reason)
 
-    def open_goal_store(self) -> GoalAttemptStore:
-        store = self.goal_store.open()
-        self.goal_store = store
-        return store
-
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
@@ -213,79 +207,6 @@ class Goals(GoalWaitRecovery):
         """Project exact review eligibility for one current goal and dependency set."""
         review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
         return review.standby_review()
-
-    def _goal_input_review(
-        self, thread: Thread, goal_id: GoalId, wait_for: Sequence[str]
-    ) -> GoalInputReview:
-        captured = GoalWaitReview.capture(self, thread.incarnation.require_recorded())
-        thread = captured.owner
-        snapshot = captured.snapshot
-        goal = thread.goal.require().require_id(goal_id).require_active()
-        if not wait_for:
-            raise ValueError("Standby requires explicit wait_for thread names.")
-        resolved = tuple(snapshot.require(target.removeprefix("@")) for target in wait_for)
-        if any(target.incarnation == thread.incarnation for target in resolved):
-            raise ValueError("A goal cannot wait for its own thread.")
-        targets = tuple(
-            dict.fromkeys(GoalWaitTarget(target.incarnation.require_recorded()) for target in resolved)
-        )
-        owners = captured.owners
-        dispositions = self.dispositions
-        unknown = {row.key: row for row in
-                   dispositions.unresolved((snapshot.entry(thread.name),)).unknown(owners)}
-        eligible = set()
-        incarnation = thread.incarnation.require_recorded()
-        lookup = incarnation.lookup
-        after_seq = captured.wait.review_after_seq(
-            goal, incarnation, targets
-        )
-        sequences = tuple({
-            sequence for row in unknown.values()
-            for sequence in row.bus_sequences_through(after_seq)
-        })
-        senders = tuple(target.incarnation.lookup for target in targets)
-        replies: dict[str, Message] = {}
-        with self.bus.bus.reading() as source:
-            through_seq = source.revision()
-            # Preserve older UNKNOWN rows; new inputs begin at this wait's own cursor.
-            # Both selections use the same frozen recipient and sender projections.
-            page = source.direct_replies(
-                lookup, sequences=sequences, limit=len(sequences), descending=False,
-                sender_lookups=senders,
-            ) if sequences else ()
-            while True:
-                replies.update({
-                    InputDispositions.bus_key(original.message, thread): original.message
-                    for original in page
-                })
-                page = source.direct_replies(
-                    lookup, after=after_seq, limit=100, descending=False,
-                    sender_lookups=senders,
-                )
-                if not page:
-                    break
-                after_seq = page[-1].seq
-        # Pure document inspection; only explicit successful review persists it.
-        document = dispositions.read(tuple(replies)).record(*(
-            ReservedInput(
-                key, message.seq, thread.name, snapshot.claim_generation(thread.name),
-                message.target, message.body,
-            )
-            for key, message in replies.items()
-        ))
-        for pending in document.unknown(owners):
-            unknown[pending.key] = pending
-            eligible.add(pending.key)
-        return GoalInputReview(
-            captured.snapshot,
-            thread,
-            captured.wait,
-            captured.turn,
-            through_seq,
-            targets,
-            tuple(sorted(unknown.values(), key=lambda row: row.order)),
-            frozenset(eligible),
-        )
 
     def goal_history(
         self, name: str, scope: GoalScope = AllGoals()

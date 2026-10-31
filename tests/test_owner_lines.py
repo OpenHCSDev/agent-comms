@@ -1,7 +1,7 @@
 """Both directions of the owner socket are declared families, decoded once."""
 
 
-from agent_comms.runtime import ClientPermissionResponse
+from agent_comms.runtime_server import ClientPermissionResponse
 
 from agent_comms.owner_protocol import (
     ClientLine,
