@@ -39,8 +39,8 @@ class MergeReviewCliCommand(CliCommand[MergeReviewResult], declared_name="merge-
         heads = []
         for simple in ShellCommand.split(self.bash):
             for bypass in QueueBypass.matching(simple):
-                target = bypass.target()
-                request = PullRequestHead(RepositoryName.from_wire(target.repository), target.number, target.head)
-                StoredHeadReview.current_verdict(ctx.goals.todos, request).require_ok(request)
-                heads.append(request)
+                for owed in bypass.owes_verdict(bypass.target()):
+                    request = PullRequestHead(RepositoryName.from_wire(owed.repository), owed.number, owed.head)
+                    StoredHeadReview.current_verdict(ctx.goals.todos, request).require_ok(request)
+                    heads.append(request)
         return MergeReviewResult(tuple(heads))
