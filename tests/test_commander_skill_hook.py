@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
+from agent_comms.rule_deal import (CompactedDeal, OffDealMode, StartupDealMode, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
 from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
@@ -172,6 +172,24 @@ def test_the_commander_session_start_reads_all_package_files(tmp_path, source, c
         Slop.catalog() / "README.md",
     )
     assert len(dealt) == len(expected) and set(dealt) == {path.resolve() for path in expected}
+
+
+@pytest.mark.parametrize("mode", (StartupDealMode, OffDealMode))
+def test_configured_claude_compaction_keeps_the_deal_and_emits_no_read_order(
+    tmp_path, commander_bus, commander_binding, mode,
+):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    assert start.take(commander_bus, commander_binding)
+    start.audit.write_text("retained audit")
+    start.configure(mode)
+    before = start.current()
+
+    compacted = replace(start, source=SessionSource("compact"))
+    assert compacted.take(commander_bus, commander_binding) == ()
+    assert start.current() == before
+    assert start.audit.read_text() == "retained audit"
 
 
 def dealt_sources(transcript):

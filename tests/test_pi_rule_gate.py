@@ -8,7 +8,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.rule_deal import Unengaged
+from agent_comms.rule_deal import FullDealMode, OffDealMode, StartupDealMode, Unengaged
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
@@ -182,6 +182,40 @@ def test_the_rules_come_back_once_at_each_declared_share_of_context_left(unit_de
     answer_deal(unit_deal)
     unit_deal.observe_context(ContextUsage(40, 100))
     assert refused(unit_deal)
+
+
+@pytest.mark.parametrize("mode", (StartupDealMode, OffDealMode))
+def test_automatic_redeals_preserve_the_configured_session(unit_deal, mode):
+    unit_deal.start()
+    answer_deal(unit_deal)
+    unit_deal.configure(mode)
+    before = unit_deal.current()
+    audit = unit_deal.audit.read_bytes()
+    reads = unit_deal.dealt_read.read_bytes()
+
+    for used in (35, 70, 95):
+        unit_deal.observe_context(ContextUsage(used, 100))
+    events.CompactionEnd().deal_rules(unit_deal)
+    unit_deal.start()
+
+    assert unit_deal.current() == before
+    assert unit_deal.audit.read_bytes() == audit
+    assert unit_deal.dealt_read.read_bytes() == reads
+    assert not refused(unit_deal)
+
+
+def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(unit_deal):
+    unit_deal.start()
+    before = unit_deal.current().dealt
+    assert refused(unit_deal)
+
+    unit_deal.configure(OffDealMode)
+    assert not refused(unit_deal)
+    assert unit_deal.current().read_by(unit_deal) == ()
+
+    unit_deal.configure(FullDealMode)
+    assert refused(unit_deal)
+    assert unit_deal.current().dealt == before
 
 
 def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, tmp_path):

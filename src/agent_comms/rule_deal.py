@@ -26,7 +26,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from .session_receipts import SessionReceipts
 from .nominal.declared_family import DeclaredFamily
@@ -36,9 +36,8 @@ from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
 from .store_files import AtomicFile, DependentStateTier, SingleFileStore
 
-if TYPE_CHECKING:
-    from .commander.rule_file import RuleFile
-    from .context_reading import ContextUsage
+from .commander.rule_file import RuleFile
+from .context_reading import ContextUsage
 
 
 @dataclass(frozen=True)
@@ -530,14 +529,57 @@ class Questioned(Blocked):
         super().enforce(gate, tool)
 
 
+class DealMode(DeclaredFamily, affix="DealMode"):
+    """Session gate policy, retained with the deal and shared by every backend."""
+
+    @classmethod
+    def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
+        return Open()
+
+    @classmethod
+    def automatic[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        """Automatic redealing is disabled unless the mode supplies it."""
+        return kept
+
+
+class OffDealMode(DealMode):
+    """Do not enforce the read/audit gate or automatically redeal."""
+
+
+class StartupDealMode(DealMode):
+    """Enforce first-start and explicit deals, but never interrupt for automatic redeals."""
+
+    @classmethod
+    def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
+        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, record, opened))
+        return next(owed, Open()).state()
+
+
+class FullDealMode(StartupDealMode):
+    """Enforce the gate and redeal on compaction and context thresholds."""
+
+    @classmethod
+    def automatic[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        return action()
+
+
 class DealTrigger(DeclaredFamily, affix="Deal"):
     """Why this deal was dealt, said first on every refusal it causes. A fresh context has no
     memory of compacting, so a deal that does not say why looks unprovoked: claude-code called
     real compactions a gate bug at least four times (rules/after-compaction.md)."""
 
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        """First starts and explicit requests are not automatic interruptions."""
+        return action()
+
     @abstractmethod
     def reason(self) -> str:
         """The cause with its evidence, as the refusal's first line."""
+
+
+class AutomaticDeal(DealTrigger, declared_name=None):
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        return mode.automatic(action, kept)
 
 
 @dataclass(frozen=True)
@@ -548,7 +590,7 @@ class StartedDeal(DealTrigger):
         return "Dealt because this session just started: nothing you read before is in front of you."
 
 
-class CompactionDeal(DealTrigger):
+class CompactionDeal(AutomaticDeal):
     """A compaction replaced the context with a summary; a member says when."""
 
     @abstractmethod
@@ -601,7 +643,7 @@ class PrimedDeal(DealTrigger):
 
 
 @dataclass(frozen=True)
-class RefreshDeal(DealTrigger):
+class RefreshDeal(AutomaticDeal):
     """A declared share of the context window filled before any compaction."""
 
     used: int
@@ -621,6 +663,7 @@ class DealRecord:
     dealt: tuple[Path, ...]
     due: AuditDue
     trigger: DealTrigger = StartedDeal()
+    mode: type[DealMode] = FullDealMode
 
     def sources(self) -> tuple[DealtSource, ...]:
         return tuple(DealtSource.of(path) for path in self.dealt)
@@ -655,6 +698,7 @@ class DealRecord:
             tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
             AuditDue(self.due.rules | dealt.answered(), self.due.owner_words),
             self.trigger,
+            self.mode,
         ))
         return kept
 
@@ -665,8 +709,7 @@ class DealRecord:
 
     def answer(self, deal: RuleDeal, opened: OpenedReads) -> ToolGateState:
         """The first requirement still owed holds the gate; with none owed it is open."""
-        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self, opened))
-        return next(owed, Open()).state()
+        return self.mode.answer(deal, self, opened)
 
 
 class UndealtRecord(DealRecord):
@@ -984,12 +1027,24 @@ class RuleDeal(State, DealtCalls):
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
 
+    def configure(self, mode: type[DealMode]) -> None:
+        """Change policy without discarding read evidence, the audit, or the current deal."""
+        with self.write_guard(self.record):
+            self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
+            self.publish(replace(self.current(), mode=mode))
+
     def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
              trigger: DealTrigger) -> None:
+        with self.write_guard(self.record):
+            trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, prompts, trigger), None)
+
+    def replace_deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
+                     trigger: DealTrigger) -> None:
         """A start or compaction drops what was read: the read log resets first, then the record
         is published whole, so no reader sees a half-written deal. The audit goes with the reads:
         a fresh instance owes a fresh confession, never one carried over from the context it
         lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
+        mode = self.current().mode
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
         self.dealt_read.write_text("", encoding="utf-8")
@@ -1002,6 +1057,7 @@ class RuleDeal(State, DealtCalls):
                 tuple(source.resolve() for source in dealt.sources()),
                 AuditDue(dealt.answered(), prompts),
                 trigger,
+                mode,
             )
         )
 
@@ -1023,6 +1079,17 @@ class RuleDeal(State, DealtCalls):
                 first = record.tell() == 0
                 record.write(line)
                 return first
+
+
+@dataclass(frozen=True)
+class SessionRuleDeal(RuleDeal):
+    """A session's persisted deal, independently of its running tool transport."""
+
+    path: Path
+
+    @property
+    def stem(self) -> Path:
+        return self.path
 
 
 class ToolGate(RuleDeal):
