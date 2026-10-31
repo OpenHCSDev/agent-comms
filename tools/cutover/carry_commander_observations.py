@@ -36,11 +36,11 @@ class CommanderObservations(Carry):
                         for packet in message.task.commander_update(lookup):
                             packets[lookup] = packet
         missing = tuple(packet for packet in packets.values()
-                        if not CommanderUpdateStore.at(self.root, packet.commander).path.exists())
+                        if not CommanderUpdateStore.for_commander(self.root, packet.commander).path.exists())
         if apply:
             for packet in missing:
                 CommanderUpdateStore.record(self.root, packet)
         return Carried(len(missing), detail={"observations": len(missing)}, rewritten=tuple(
-            CommanderUpdateStore.at(self.root, packet.commander).path.relative_to(self.root)
+            CommanderUpdateStore.for_commander(self.root, packet.commander).path.relative_to(self.root)
             for packet in missing
         ) if apply else ())

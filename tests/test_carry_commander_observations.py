@@ -59,7 +59,7 @@ def test_carry_preserves_indexed_failure_and_age_without_rewriting_history(
     expected = CommanderUpdate.published(comms, commander)
     stale, = CommanderFrame.at(comms.root, commander).read().packets
     assert expected[0].handled and not stale.handled
-    store = CommanderUpdateStore.at(comms.root, commander)
+    store = CommanderUpdateStore.for_commander(comms.root, commander)
     step = CommanderObservations(LiveFilesRequest(comms.root), tmp_path / "spill")
     before = Bus.digest(Bus.path_in(comms.root))
     assert step.carry(apply=False).changed == 1
@@ -82,12 +82,12 @@ def test_carry_keeps_advanced_destination_and_birth_key_across_rename_and_recrea
     advanced = replace(published, commander=renamed,
                        not_applied=("newer retained observation",))
     CommanderUpdateStore.record(comms.root, advanced)
-    existing = CommanderUpdateStore.at(comms.root, commander)
-    assert existing.path == CommanderUpdateStore.at(comms.root, renamed).path
+    existing = CommanderUpdateStore.for_commander(comms.root, commander)
+    assert existing.path == CommanderUpdateStore.for_commander(comms.root, renamed).path
     recreated = RecordedThreadIncarnation(commander.name, commander.created_at + 1)
     recreated_packet = CommanderNotice(recreated, ())
     CommanderUpdateStore.record(comms.root, recreated_packet)
-    distinct = CommanderUpdateStore.at(comms.root, recreated)
+    distinct = CommanderUpdateStore.for_commander(comms.root, recreated)
     assert distinct.path != existing.path
     step = CommanderObservations(LiveFilesRequest(comms.root), tmp_path / "spill")
     assert step.carry(apply=True).changed == 0

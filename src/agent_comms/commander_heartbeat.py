@@ -112,8 +112,10 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                 recipients = self.recipients(comms.registry.snapshot(), item.thread)
                 held = {recipient.incarnation: CommanderUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
-                announced = {recipient.incarnation: CommanderUpdate.published(comms, recipient.incarnation)
-                             for recipient in recipients}
+                announced = {
+                    recipient.incarnation: CommanderUpdate.published(comms, recipient.incarnation)
+                    for recipient in recipients
+                }
                 previous = held[item.thread.incarnation]
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
