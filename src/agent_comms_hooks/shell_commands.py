@@ -22,18 +22,17 @@ def without_here_documents(command: str) -> str:
     kept = []
     while command:
         text = io.StringIO(command)
-        lex = shlex.shlex(text, posix=False, punctuation_chars="<>")
+        lex = shlex.shlex(text, posix=True, punctuation_chars="<>")
         lex.whitespace_split = True
         delimiters: list[str] = []
         previous, line_end = "", len(command)
         for word in lex:
-            if delimiters and text.tell() > line_end + 1:
-                break
             if previous in ("<<", "<<-"):
                 if not delimiters:
                     found = command.find("\n", text.tell() - 1)
                     line_end = len(command) if found < 0 else found
-                delimiters.append(shlex.split(word)[0])
+                    lex.instream = io.StringIO(command[text.tell():line_end + 1])
+                delimiters.append(word)
             previous = word
         lines = iter(command[line_end + 1:].splitlines(keepends=True))
         kept.append(command[:line_end + 1])
