@@ -17,7 +17,7 @@ from .repo import Checkout
 from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
 from .typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
+from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
 
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage
@@ -43,7 +43,6 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
     from .threads import Thread
-    from .wake_policy import WakePolicy
 
 
 class ChannelSelection(ABC):
