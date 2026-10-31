@@ -46,7 +46,7 @@ from .registration_inheritance import (
     InheritEmpty,
     InheritPrevious,
 )
-from .repo import Checkout
+from .repo import Checkout, RepositoryReads
 from .session_file import NoSessionFile, SessionFile
 from .task_sources import TaskScope
 from .thread_creation import CreationSeconds, CreationTime, GeneratedCreationTime
@@ -359,7 +359,8 @@ class Thread(ThreadProvenance, CatalogSelection):
 
     def contains_worktree(self, worktree: Checkout, rule: StorageRule) -> bool:
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
-        return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(self)
+        return self.ran_in(worktree) or worktree.resolved().path in rule.checkouts_of(
+            self, RepositoryReads())
 
     @cached_property
     def project_path(self) -> Path:
