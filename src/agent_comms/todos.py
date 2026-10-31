@@ -4309,7 +4309,7 @@ class HeadVerdict(HeadReview, declared_name=None):
             self.after_record(goals, recorded)
         return HeadReviewed(recorded, self.landing(prepared.current))
 
-    def landing(self, current: OpenPullRequestHead) -> MergeArm:
+    def landing(self, current: ReadPullRequestHead) -> MergeArm:
         """Source verdicts never request merge; native explicit promotion owns enqueueing."""
         return UntouchedMergeArm()
 

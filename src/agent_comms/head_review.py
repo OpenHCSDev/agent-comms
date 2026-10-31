@@ -124,7 +124,8 @@ class PullRequestHead:
         current = self.at(self.repo, self.pr)
         if not current.holds(self.head):
             raise ToolRefusedError(
-                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; review again."
+                f"#{self.pr} moved to {current.head[:9]} since {self.head} was reviewed; "
+                "review again."
             )
         return current
 
@@ -783,7 +784,7 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
 class PreparedHeadReview:
     """The current forge head and its checked status text, read once before recording."""
 
-    current: OpenPullRequestHead
+    current: ReadPullRequestHead
     subject: str
 
 
