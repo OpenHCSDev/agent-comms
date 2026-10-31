@@ -31,7 +31,7 @@ from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.held_orders import HeldOrders
 from agent_comms.goals import OrderCheck

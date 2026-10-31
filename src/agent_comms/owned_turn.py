@@ -26,7 +26,7 @@ from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
-from .field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
+from .nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput

@@ -43,7 +43,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, InputId, RootId, ThreadLookup
+from .nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -71,7 +71,7 @@ from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .turn_terminal import OwnerStop
 from .watched import ChangeSignal, FileLifetimeSource, FileSource
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .turn_outcome import TurnOutcome

@@ -3,7 +3,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import ClaimId
+from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.bus import Bus, ClaimRecord, PublicRecord
 from agent_comms.messages import BusRow, Claimed, InfoKind, Message
 from agent_comms.envelope_claim_transitions import UnscopedClaims

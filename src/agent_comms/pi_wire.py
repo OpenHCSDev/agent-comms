@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Annotated, ClassVar, Literal, Self
 from pydantic import JsonValue
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import ExternalField, FieldCodec, InputId, MalformedRecord, NullMember, RecordProblems, SingleFieldValue, ValidatedScalar, WireName, WireNullDefault, WireOmitDefault, boundary_decoder
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import ExternalField, FieldCodec, InputId, MalformedRecord, NullMember, RecordProblems, SingleFieldValue, ValidatedScalar, WireName, WireNullDefault, WireOmitDefault, boundary_decoder
 from .pi_counts import NonnegativePiCount, TotalPiCount, UnreportedCount
 from .turn_item import PiRequestKey, UsageChargeId
 from typing import TYPE_CHECKING

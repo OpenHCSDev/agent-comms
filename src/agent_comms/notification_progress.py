@@ -5,11 +5,11 @@ from abc import abstractmethod
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredOrder
+from .nominal.declared_family import DeclaredOrder
 from .thread_presentation import ThreadPresentationStatus, WorkingThreadPresentationStatus
 
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId, boundary_decoder
 from .message_reference import MessageReference
 if TYPE_CHECKING:
     from .message_notification import MessageNotification

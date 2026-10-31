@@ -11,7 +11,7 @@ from test_todos import order, thread
 
 from agent_comms.commander.order import OrderFile, main
 from agent_comms.commander.request import RequestAddVerb
-from agent_comms.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
 from agent_comms.goals import CountCheckResult, OrderCheck

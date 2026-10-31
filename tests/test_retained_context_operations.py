@@ -15,7 +15,7 @@ import pytest
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.cli import main
 from agent_comms.cli_commands import ConstraintPinnedResult
-from agent_comms.field_codec import InputId, FieldCodec, GoalId
+from agent_comms.nominal.field_codec import InputId, FieldCodec, GoalId
 from agent_comms.input_key import AcpInputKey
 from agent_comms.context_segments.retained import RetainedSegment
 from agent_comms.turn_lease import NoTurnLease

@@ -31,9 +31,9 @@ from agent_comms.coordinator import Coordination
 
 from .child_process import Platform
 from .coordination_cohort import sealed_cohort_assignments
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import ExistingFileClaim
-from .field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
+from .nominal.field_codec import AssignmentId, ClaimId, FieldCodec, MalformedRecord, MessageId, RootId
 from .repo import Checkout
 from .message_reference import MessageReference
 from .private_path import PrivateDirectoryRole, PrivateFileRole

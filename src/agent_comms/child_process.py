@@ -41,9 +41,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     DisclosedRecord,
     FieldCodec,
     FieldDirective,
@@ -64,7 +64,7 @@ from .native_build_inputs import (
     GitOpening,
     StdioOptions,
 )
-from .sealed import Sealed
+from .nominal.sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:

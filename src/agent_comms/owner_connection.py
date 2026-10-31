@@ -16,7 +16,7 @@ from typing import IO, TYPE_CHECKING, ClassVar, Self, cast
 
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import FieldCodec, NullMember
+from .nominal.field_codec import FieldCodec, NullMember
 from .jsonl_stream import JsonlStreamReader
 from .maintenance_barrier import MaintenanceHolder
 from .owner_protocol import OwnerLine

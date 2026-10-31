@@ -23,7 +23,7 @@ from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.publications import PublicationEvidence
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.historical_native_inputs import read_historical_native_inputs
 from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution

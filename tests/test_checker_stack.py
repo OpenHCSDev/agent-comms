@@ -11,7 +11,7 @@ from packaging.requirements import Requirement
 import pytest
 import tomli_w
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import BaseSide, HeadSide
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.refusals import UpgradeRefused

@@ -21,7 +21,7 @@ from agent_comms_hooks import ClaudeTranscriptHook, HookRecord
 from .session_watch import WatchClaim
 from .shared import Binding
 from ..comms import Comms
-from ..declared_family import DeclaredFamily
+from ..nominal.declared_family import DeclaredFamily
 from ..commander.standing import UnownedWheelSpin
 
 

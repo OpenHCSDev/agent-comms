@@ -8,7 +8,7 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 import subprocess
 from abc import abstractmethod
@@ -23,8 +23,8 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
-from .declared_family import DeclaredFamily
-from .field_codec import GitCommitText, PathText, projected
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import GitCommitText, PathText, projected
 from .repo import (
     BranchUpstream, Checkout, CheckoutHistory, DetachedHead, GitCommandError, GitHead,
     Repo, RepositoryReads, UnpushedHead,

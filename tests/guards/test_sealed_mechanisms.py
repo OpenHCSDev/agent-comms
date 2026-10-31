@@ -8,12 +8,12 @@ from types import ModuleType
 import pytest
 
 from agent_comms.child_process import AttachedChild, ChildProcess, SynchronousProcess
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.sealed import Sealed
+from agent_comms.nominal.sealed import Sealed
 
 pytestmark = pytest.mark.refactor_guard
 

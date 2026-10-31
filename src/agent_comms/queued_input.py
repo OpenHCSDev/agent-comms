@@ -31,7 +31,7 @@ from .coordination_session import (
 )
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, InputId, GoalId, RootId
+from .nominal.field_codec import AcpSessionId, InputId, GoalId, RootId
 from .goals import GoalDeclaration, NoGoal
 from .coordination_tables.assignments import WakeAssignment
 from .messages import Message

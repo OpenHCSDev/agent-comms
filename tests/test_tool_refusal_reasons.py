@@ -10,7 +10,7 @@ from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.native_tool_call import SelectedToolBusy
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.selected_tool_broker import verify_sent_full_input

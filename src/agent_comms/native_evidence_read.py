@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
+from .nominal.field_codec import FieldCodec, MalformedRecord
 from .native_failures import NativePiUnavailable
 from .pi_vocabulary import PendingStopReason
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, TrustedAncestorRole

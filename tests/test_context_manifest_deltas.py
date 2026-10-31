@@ -9,7 +9,7 @@ import pytest
 from agent_comms.context_store import ContextRequest
 import json
 
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_context import ObservedDispatchRequest

@@ -11,7 +11,7 @@ from cutover.carry_native_cursor_thread_key import NativeCursorThreadKey
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from agent_comms.native_input_record import UnrecordedNativeColumn
 from agent_comms.native_runtime_input import CurrentNativeCursor
 

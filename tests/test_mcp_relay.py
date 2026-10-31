@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
 from agent_comms.runtime_server import SocketClient

@@ -19,9 +19,9 @@ from .catalog_document import CatalogAccess
 from .channel_targets import CommandersTag, ResolvedTarget, SurroundingChannel
 from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import (
+from .nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     FieldPlan,

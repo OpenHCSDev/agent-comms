@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from functools import cached_property
 from pathlib import Path
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .goal_attempts import GoalAttemptFile, GoalAttemptStore
 from .goal_waits import (

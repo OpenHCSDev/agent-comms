@@ -21,7 +21,7 @@ from .active_route import (
     resolve_comms_route,
 )
 from .coordination_errors import IdentityConflict
-from .field_codec import (
+from .nominal.field_codec import (
     InputId,
 )
 from .launch_root import LaunchRoot

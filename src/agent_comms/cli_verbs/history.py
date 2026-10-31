@@ -4,7 +4,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.history_result import DmHistoryPageResult, HistoryPageResult
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import NewestCursor

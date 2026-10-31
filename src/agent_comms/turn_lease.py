@@ -14,7 +14,7 @@ from .channel_targets import CommandTarget
 from .child_process import ProcessIdentity, ProcessState
 from .coordination_session import NativeCapture
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     NullMember,
     RecordMember,
     SingleFieldValue,

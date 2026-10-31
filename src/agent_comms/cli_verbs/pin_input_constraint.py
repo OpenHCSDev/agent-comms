@@ -4,7 +4,7 @@ from agent_comms.cli_commands import ConstraintPinnedResult
 from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.constraint_pin import OriginalConstraintPin
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import InputKey
 from agent_comms.input_key import InputKeyText

@@ -22,7 +22,7 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
 from agent_comms.bus_read import OwnerReadRuntimeRequest
@@ -32,7 +32,7 @@ from agent_comms.owner_connection import OwnerIdentityChangedError, OwnerReplyCo
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
-from agent_comms.field_codec import AcpSessionId, RootId
+from agent_comms.nominal.field_codec import AcpSessionId, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.owner_connection import socket_path
 from agent_comms.runtime import RuntimeConnection, present_session

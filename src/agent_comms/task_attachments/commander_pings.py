@@ -13,12 +13,12 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.channel_targets import ThreadTarget
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
-from agent_comms.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
+from agent_comms.nominal.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (

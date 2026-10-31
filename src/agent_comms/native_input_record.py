@@ -21,8 +21,8 @@ from .coordination_tables.assignments import (
 )
 from .coordination_tables.participants import OwnerGenerations, OwnerRecord
 from .coordination_tables.responses import ResponseObligation
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     AssignmentId,
     FieldCodec,
     InputId,

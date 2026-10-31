@@ -13,7 +13,7 @@ from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS, require_bounded, require_nonempty, validate_execution_id,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     NullMember,

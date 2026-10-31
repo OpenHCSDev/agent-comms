@@ -223,7 +223,7 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.routing import MessageRoute, TurnRouting
     from agent_comms.transcript_sources import AssignedTranscriptSource
 

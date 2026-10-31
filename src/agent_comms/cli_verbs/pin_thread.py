@@ -7,8 +7,8 @@ from agent_comms.cli_command import ChannelBound, MultipleTargets
 from agent_comms.cli_commands import ThreadPinnedResult
 from agent_comms.cli_support.named import NamedCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import TargetBound
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import TargetBound
 from agent_comms.thread_status import ThreadStatus
 from agent_comms.threads import Thread
 from dataclasses import dataclass

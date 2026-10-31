@@ -15,8 +15,8 @@ from typing import ClassVar
 
 from pydantic import AliasChoices, Field, JsonValue, ValidationError
 
-from .declared_family import UniqueExternalSelector
-from .field_codec import (
+from .nominal.declared_family import UniqueExternalSelector
+from .nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     ToolCallId,

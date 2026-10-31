@@ -24,7 +24,7 @@ from agent_comms.envelope_claim_transitions import (
     NativeClaim,
     WritableFileClaim,
 )
-from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ActivityExclude
+from agent_comms.nominal.field_codec import ActivityExclude
 
 from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -15,9 +15,9 @@ from pydantic import JsonValue
 
 from .bus import Bus
 from .context_store import ContextStore
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .external_transcript import ExternalTranscript, StoreRead
-from .field_codec import FieldCodec, WireExclude, WireTransient, projected
+from .nominal.field_codec import FieldCodec, WireExclude, WireTransient, projected
 from .held_orders import HeldOrders, LiveHold
 from .historical_native_inputs import HistoricalNativeAnswers
 from .message_reference import MessageReference

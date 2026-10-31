@@ -20,7 +20,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,

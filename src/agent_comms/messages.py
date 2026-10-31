@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 from .input_key import InputKey
 
@@ -36,13 +36,13 @@ from agent_comms.typed_table import (
 from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import IdentityConflict
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .envelope_claim_transitions import (
     ClaimOwner, ClaimProducer, ClaimProjection, ClaimTransition, ClaimTransitionError, ResourceClaim,
     UnclaimedResource,
 )
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     ClaimId,
     FieldCodec,
     InlineRecord,

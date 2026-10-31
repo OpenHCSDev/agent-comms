@@ -26,11 +26,11 @@ from .channels import Channel, ChannelMemberIndex, Channels
 from .cli_result import CliResult
 from .commander_frame_file import CommanderFrameFile
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import CurrentDisplayReferences
 from .external_transcript import ExternalTranscript
-from .field_codec import (
+from .nominal.field_codec import (
     Differs,
     FieldCodec,
     JsonShapeFamily,

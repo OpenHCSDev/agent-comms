@@ -46,9 +46,9 @@ from typing import (
 )
 
 from .class_fact import ClassFact
-from .declared_family import DeclaredFamily, FamilyMember, declared_words
+from .nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,

@@ -12,7 +12,7 @@ from agent_comms.agent_backend import (
     StaleCompaction,
 )
 from agent_comms.agent_events import Chunk, Error, Thinking, ToolStart
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.native_entries import NativeEntry, StoredEntry, TranscriptProjection
 from agent_comms.pi_commands import GetSessionStats
 from agent_comms.pi_counts import PiCount, UnreportedCount

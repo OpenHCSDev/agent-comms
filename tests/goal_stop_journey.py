@@ -10,7 +10,7 @@ from pathlib import Path
 
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goal_attempts import AttemptRecord

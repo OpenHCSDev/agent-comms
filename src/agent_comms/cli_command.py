@@ -34,9 +34,9 @@ from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions
-from agent_comms.declared_family import ModuleMembers
+from agent_comms.nominal.declared_family import ModuleMembers
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.field_codec import FieldCodec, FieldPlan, RecordMember, TargetBound, WireValue
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, RecordMember, TargetBound, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful

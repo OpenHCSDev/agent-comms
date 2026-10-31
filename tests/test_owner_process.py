@@ -25,7 +25,7 @@ from agent_comms.comms import wire
 from agent_comms.config_options import ThinkingLevelConfigOption
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
+from agent_comms.nominal.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.owner_connection import socket_path
@@ -123,7 +123,7 @@ async def test_fleet_memory_stays_under_its_cap(tmp_path, native_workers, owner_
     from delivery_owner_fixture import FakeClient
     from agent_comms.tools import CommsResourcesTool
     from agent_comms.tool_caller import NoThreadCaller
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.child_process import Platform, ProportionalMemory, ResidentMemory
     import json
 

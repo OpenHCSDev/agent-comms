@@ -19,7 +19,7 @@ from .child_process import join_retirement
 from .config_options import (CatalogConfigOption,
                              ConfigOptions, InvalidConfigChoice)
 from .coordinator import Coordination
-from .field_codec import AcpSessionId, FieldCodec
+from .nominal.field_codec import AcpSessionId, FieldCodec
 from .native_failures import NativePiUnavailable
 from .threads import ChosenModel, NextTurnConfiguration
 from .thread_model import CatalogSelection

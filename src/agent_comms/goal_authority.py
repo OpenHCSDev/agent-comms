@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .field_codec import GoalId, NullMember, RecordMember, SubclassUnion
+from .nominal.field_codec import GoalId, NullMember, RecordMember, SubclassUnion
 from .goal_states import GoalState
 
 

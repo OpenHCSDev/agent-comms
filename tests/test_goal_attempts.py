@@ -23,7 +23,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import RecoveryBlocked
-from agent_comms.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
+from agent_comms.nominal.field_codec import AttemptId, GoalId, MalformedRecord, RetryDecisionId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempt_phase import ClaimedAttempt, FailedAttempt, SucceededAttempt
 from agent_comms.goal_failure_observation import FailedTurnEvidence

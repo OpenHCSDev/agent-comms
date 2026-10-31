@@ -21,9 +21,9 @@ from pydantic_core import CoreSchema
 from typing_extensions import TypeForm
 
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import UnknownFamilyMember
+from .nominal.declared_family import UnknownFamilyMember
 from .external_transcript import RequestedEarlierPage
-from .field_codec import TimestampText
+from .nominal.field_codec import TimestampText
 from .maintenance_barrier import MaintenanceHeldError
 from .recorded_time import UnrecordedTimeError
 from .turn_item import NativeTurnId, TurnItem

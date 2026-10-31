@@ -20,8 +20,8 @@ from typing import (
 from pydantic import JsonValue
 
 from .annotation_disclosure import PublicInstructionAnnotations, WithheldAnnotations
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import (
     ExternalNull,
     ExternalNullMember,
     FieldCodec,

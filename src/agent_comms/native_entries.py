@@ -21,8 +21,8 @@ from .store_files import AtomicFile
 if TYPE_CHECKING:
     from .importing import ImportedConversation
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

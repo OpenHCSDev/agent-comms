@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 from .coordination_errors import IdentityConflict
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 
 if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate

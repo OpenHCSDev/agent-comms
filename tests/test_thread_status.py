@@ -16,7 +16,7 @@ from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (

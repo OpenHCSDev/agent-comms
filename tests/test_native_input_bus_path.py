@@ -14,7 +14,7 @@ import pytest
 from agent_comms.turn_inbox import ClearQueue, InputContent, InputRequest, SteerInputPolicy, TurnInbox
 from agent_comms.backend import NativeSession
 from agent_comms.child_process import Platform
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.locked_store import RegistryFile
 from agent_comms.store_files import RegistryLocking
 from agent_comms.native_package import VerifiedNativePackage

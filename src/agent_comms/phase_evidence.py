@@ -20,8 +20,8 @@ from functools import cached_property
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import MergeHeadReview
 from agent_comms.repo import Checkout, CheckoutHistory, Repo
 

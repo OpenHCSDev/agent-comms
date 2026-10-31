@@ -14,7 +14,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.native_input_proof import NativeContextJournal, NativeInputLocation
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.native_evidence_read import PrivateEvidenceRead

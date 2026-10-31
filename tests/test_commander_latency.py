@@ -20,7 +20,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.commander.order import Commander
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message

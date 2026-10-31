@@ -16,7 +16,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.native_runtime_input import NativeRuntimeInput

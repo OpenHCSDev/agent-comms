@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 
-from .field_codec import TurnId
+from .nominal.field_codec import TurnId
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .goals import Goal
 from .reported_turn import ReportedTurn

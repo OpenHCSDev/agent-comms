@@ -17,7 +17,7 @@ import time
 
 from agent_comms.comms import wire
 from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.owner_connection import socket_path
 from agent_comms.runtime_requests import SubscribeRuntimeRequest

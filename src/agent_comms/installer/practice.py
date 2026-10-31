@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agent_comms.field_codec import boundary_decoder
+from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime

@@ -12,7 +12,7 @@ from agent_comms.context_reading import ContextUsage
 from agent_comms.rule_deal import (
     DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms_hooks.skill import FleetReader
 from conftest import answer_deal

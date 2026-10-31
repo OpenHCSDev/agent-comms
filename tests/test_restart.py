@@ -7,7 +7,7 @@ from agent_comms import restart_queue
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.restart_queue import PendingRestart, RestartedRestart
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.pi_counts import PiCount

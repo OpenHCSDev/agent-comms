@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated
 
 from .child_process import ProcessState
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .registry_document import RegistrySnapshot
 from .thread_identity import (

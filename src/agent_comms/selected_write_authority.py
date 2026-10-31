@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
 from typing import TYPE_CHECKING
 
-from .field_codec import ClaimId
+from .nominal.field_codec import ClaimId
 
 if TYPE_CHECKING:
     from .coordination_tables.assignments import WakeAssignment

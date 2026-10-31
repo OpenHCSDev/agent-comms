@@ -5,7 +5,7 @@ from agent_comms.repo import Checkout
 import asyncio
 import os
 
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity

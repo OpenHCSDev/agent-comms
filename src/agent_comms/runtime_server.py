@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from .coordination_errors import Refused
 from acp.schema import DeniedOutcome, PermissionOption, RequestPermissionResponse, ToolCallUpdate
 from .controller import UNBOUND_CONTROLLER, Controller, SessionUpdateSink
-from .field_codec import AcpSessionId, FieldCodec
+from .nominal.field_codec import AcpSessionId, FieldCodec
 from .owner_protocol import ClientLine, OwnerFailure, OwnerLine, OwnerPermissionRequest, OwnerUpdate
 from .owner_connection import socket_path
 from .coordination_errors import CoordinationError, IdentityConflict
@@ -31,9 +31,9 @@ from functools import partial
 from typing import Annotated, ClassVar
 from .command import Command
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import WireOmitDefault
+from .nominal.field_codec import WireOmitDefault
 from .maintenance_barrier import MaintenanceHolder, NoMaintenanceHolder
 from .owner_protocol import OwnerResult
 from .tool_result import DeclaredReply

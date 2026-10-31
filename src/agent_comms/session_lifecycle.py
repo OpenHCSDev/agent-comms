@@ -45,7 +45,7 @@ from .turn_input_source import NoTurnAcceptance
 from .session_config_options import SessionConfigOptions
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
+from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boundary_decoder
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .pi_rule_gate import PiRedeal
 from .registry_document import RegistryEntry

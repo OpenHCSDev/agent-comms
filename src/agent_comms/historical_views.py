@@ -23,7 +23,7 @@ from .channels import Channel
 from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
+from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (

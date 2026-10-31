@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.audience_manifest import AudiencedMessage, freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.mentions import ThreadMention
 from agent_comms.messages import (
     AckKind,
@@ -228,7 +228,7 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
     assert decide(direct, members=MEMBERS[:1], control=SystemControl) == (
         WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, PassiveWake())
     )
-    from agent_comms.field_codec import FieldCodec, MalformedRecord
+    from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 
     assert FieldCodec.decode(type[MessageControl], "system_control") is SystemControl
     with pytest.raises(MalformedRecord):

@@ -10,7 +10,7 @@ from agent_comms.activity import Activity, ActivityState, ObservedActivity, Read
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
     TurnId,

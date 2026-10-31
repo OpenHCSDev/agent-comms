@@ -6,7 +6,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.errors import RelationViolationError

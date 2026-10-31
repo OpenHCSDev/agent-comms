@@ -28,9 +28,9 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .instruction_deck import DealtCalls
-from .field_codec import FieldCodec, MalformedRecord, MessageId
+from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
 from .store_files import AtomicFile, DependentStateTier, SingleFileStore

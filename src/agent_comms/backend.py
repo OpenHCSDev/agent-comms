@@ -52,7 +52,7 @@ from .turn_inbox import TurnInbox, TurnInboxItem
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .extension_ui import ExtensionUiSession
-from .field_codec import InputId, MalformedRecord, boundary_decoder
+from .nominal.field_codec import InputId, MalformedRecord, boundary_decoder
 from .image_input import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild

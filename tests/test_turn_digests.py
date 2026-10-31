@@ -21,7 +21,7 @@ from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.context_store import ContextEntry
 from agent_comms.external_transcript import NoEarlierPage
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.session_file import RegistrySessionLocation

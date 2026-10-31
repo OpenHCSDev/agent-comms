@@ -2,7 +2,7 @@
 import json
 from contextlib import closing
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.todos import ReleaseTodo, StoredOrderStory, StrikeReason, TodoStore
 from cutover.carry_strike_releases import StrikeReleases

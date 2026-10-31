@@ -23,7 +23,7 @@ from agent_comms.exporting import (
     WireExportScope,
     WireTranscriptExporter,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wire_exports"

@@ -4,7 +4,7 @@ import json
 import pytest
 
 from agent_comms.cli import build_parser
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.page_traversal import (
     HistoryCursor,
     LiveCursor,

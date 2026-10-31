@@ -26,7 +26,8 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms import field_codec, messages
+from agent_comms.nominal import field_codec
+from agent_comms import messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
@@ -48,13 +49,13 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
     CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
 from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceHeldError
@@ -116,7 +117,7 @@ from .monitor import (
 )
 
 import secrets
-from agent_comms.field_codec import MalformedRecord
+from agent_comms.nominal.field_codec import MalformedRecord
 from agent_comms.messages import Message
 from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from .monitor import PeerGone, RequestFailure, SessionReady, SessionRefused, SessionReply

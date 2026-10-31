@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 import asyncio
 import time
@@ -26,7 +26,7 @@ from agent_comms.commander_service import CommanderService
 from agent_comms.disclosure_text import (
     AccentTone, ErrorTone, ViewFacts, ViewSectionFacts, ViewTable,
 )
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     DisclosedRecord, DisclosureIdentity, HudExclude, OrderId, PublicationExclude, projected,
 )
 from agent_comms.heartbeat_frame import HeartbeatFrame

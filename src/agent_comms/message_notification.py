@@ -10,7 +10,7 @@ from pathlib import Path
 from .agent_activity import RecordedRecipientActivity
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
-from .field_codec import ThreadLookup
+from .nominal.field_codec import ThreadLookup
 from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse

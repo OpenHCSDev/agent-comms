@@ -33,9 +33,9 @@ from .activity import (
     ObservedActivity,
 )
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import ThreadLookup, TurnId
+from .nominal.field_codec import ThreadLookup, TurnId
 from .frozen_recipient import FrozenRecipient
 from .routing import NoTurnRouting, Routing
 from .runtime_info import RuntimeInfo, RuntimeInfoStore

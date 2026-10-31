@@ -18,7 +18,7 @@ from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeCapture, NativeCommit
 from .coordinator import Coordination
 from .envelope_claim_transitions import NativeClaim
-from .field_codec import AcpSessionId, ClaimId, InputId, TurnId
+from .nominal.field_codec import AcpSessionId, ClaimId, InputId, TurnId
 from .goal_attempts import GoalAttemptStore
 from .goal_turn_permit import GoalTurnPermit
 from .input_attempt import InputAlreadyCleared

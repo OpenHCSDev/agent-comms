@@ -11,9 +11,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .bus import BusReader
 from .bus_publication import Delivered
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
-from .field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
+from .nominal.field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
 from .goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText

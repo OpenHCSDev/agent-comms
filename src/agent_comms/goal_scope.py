@@ -6,7 +6,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
-from .field_codec import GoalId, NullMember, SingleFieldValue
+from .nominal.field_codec import GoalId, NullMember, SingleFieldValue
 
 if TYPE_CHECKING:
     from .goal_history import RecordedGoalRevision

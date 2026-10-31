@@ -40,10 +40,10 @@ from agent_comms.commander.standing import (
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import DeferredRead
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging import CommanderReceipts
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,
     MalformedRecord,

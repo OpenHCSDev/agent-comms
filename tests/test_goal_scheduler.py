@@ -1,6 +1,6 @@
 """Ledger readiness fences scheduling without rewriting the declared goal."""
 
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration, ReservedGeneration
 from agent_comms.goal_scope import OneGoal

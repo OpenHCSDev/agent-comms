@@ -33,7 +33,7 @@ from acp.schema import (
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS,
 )
-from .field_codec import AcpSessionId, FieldCodec, MalformedRecord
+from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord
 from .owner_protocol import (
     IncompatibleOwnerError,
     OwnerLine,

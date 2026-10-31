@@ -11,7 +11,7 @@ from agent_comms.agent_events import AgentInfo
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import StaleFence
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.owned_turn import OwnedTurn

@@ -18,7 +18,7 @@ from pydantic import JsonValue
 
 from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,

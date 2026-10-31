@@ -32,7 +32,7 @@ from agent_comms.display_order import (
     ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.session_file import RegistrySessionLocation
@@ -236,7 +236,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
 async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catalog(tmp_path):
     from agent_comms.channel_management import TagDisposition
     from agent_comms.cli_command import CliCommand
-    from agent_comms.field_codec import FieldCodec, compile_decoder
+    from agent_comms.nominal.field_codec import FieldCodec, compile_decoder
     from agent_comms.tool_declaration import NativeRequestTools
     from agent_comms.tools import CommsTagsTool
 

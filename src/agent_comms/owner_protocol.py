@@ -14,8 +14,8 @@ from .coordination_errors import Refused
 from pydantic import BaseModel
 
 
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
 )
 from . import package_stamp

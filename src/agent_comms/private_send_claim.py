@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agent_comms.native_runtime_input import NativeRuntimeTable
-from .field_codec import AcpSessionId, InputId
+from .nominal.field_codec import AcpSessionId, InputId
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (

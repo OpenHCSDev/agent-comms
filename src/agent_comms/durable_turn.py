@@ -36,7 +36,7 @@ from .coordination_session import NativeCapture
 from .coordination_tables.attempts import ReplayFact
 from .coordination_tables.executions import ReplayAssessments
 from .coordinator import Coordination
-from .field_codec import InputId
+from .nominal.field_codec import InputId
 from .owner_fence import OwnerFence
 from .turn_failure import TurnFailure
 from .turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase

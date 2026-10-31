@@ -13,8 +13,8 @@ from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     ContextSource,
     DefaultNonNull,
     Description,

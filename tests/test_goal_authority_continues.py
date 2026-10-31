@@ -1,6 +1,6 @@
 """An order or retry that re-activates a goal keeps the running turn; pausing or another goal ends it."""
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, PausedGoal
 from agent_comms.goal_authority import GoalAuthority
 from agent_comms.goals import NoGoal

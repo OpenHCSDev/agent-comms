@@ -1,7 +1,7 @@
 """Named family members used as choices across backend and user interfaces."""
 from typing import ClassVar
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 
 
 class DeclaredChoice(DeclaredFamily):

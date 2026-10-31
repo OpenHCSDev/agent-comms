@@ -10,7 +10,7 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
@@ -30,7 +30,7 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import InputId, RootId, TurnId
+from agent_comms.nominal.field_codec import InputId, RootId, TurnId
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.queued_input import QueuedInput, QueuedInputContext

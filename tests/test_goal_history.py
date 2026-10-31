@@ -12,7 +12,7 @@ import pytest
 
 from agent_comms.child_process import Platform
 from agent_comms.comms import Comms, wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from conftest import installed_comms
 from test_locked_store import _hold_lock, event, process
 from agent_comms.goal_actions import (

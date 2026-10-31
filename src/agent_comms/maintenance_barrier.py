@@ -23,9 +23,9 @@ from agent_comms_hooks import ToolRefusedError
 from .child_process import ProcessIdentity
 from .coordination_errors import DrainUnavailable
 from .private_path import FileObservation, FileRevision, PrivateFileRole
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     ClaimId,
     MalformedRecord,
