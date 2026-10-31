@@ -45,7 +45,7 @@ from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.storage_rules import StorageRule
-from agent_comms.storage_rules import EditWorkplaces
+from agent_comms.todos import EditWorkplaces
 from agent_comms.turn_digests import OrderEditsRead, OrderEditCountRead, TurnsSince
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.maintenance_barrier import (

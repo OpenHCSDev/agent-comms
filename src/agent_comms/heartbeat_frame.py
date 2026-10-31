@@ -19,10 +19,9 @@ from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import TurnDigest
 from agent_comms.turn_digests import LastTurns, OrderEditCountRead, RecentTurnsSince, TurnDigestRead
-from agent_comms.storage_rules import EditWorkplaces
 from agent_comms.todos import (
     ClosedHeadReading, HeadReviewRecord, ProgressRead, StoredClosedHead, StoredHeadReview,
-    Todo, TodoStore,
+    EditWorkplaces, Todo, TodoStore,
 )
 
 if TYPE_CHECKING:
