@@ -403,7 +403,7 @@ class StorageRule(RoomAllocation, DurableFile):
                 present.append(path)
             if not present:
                 continue
-            storage = UnitStorage.read(self, owner)
+            storage = UnitStorage.read(self, owner, RepositoryReads())
             for path in present:
                 if not storage.owns(Checkout(path)):
                     self.deny(f'{path} is not a registered Git checkout of {owner.name}')
@@ -459,9 +459,9 @@ class StorageRule(RoomAllocation, DurableFile):
                                        *sorted(ordered.parent.glob(ordered.name)))
                      if path.is_dir() and self.owns_present_checkout(owner, path, reads))
 
-    def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
-        """Read each repository now; directories and names do not register ownership."""
-        reads = RepositoryReads()
+    def checkouts_of(self, thread: Thread, reads: RepositoryReads) -> tuple[Path, ...]:
+        """Read each repository through the caller's cut; directories and names do not register
+        ownership."""
         home = thread.project_path
         candidates = (home, *self.checkout_paths(thread, reads))
         checkouts = {home}
@@ -589,8 +589,8 @@ class UnitStorage:
     extra_checkouts: tuple[Checkout, ...]
 
     @classmethod
-    def read(cls, rule: StorageRule, thread: Thread) -> UnitStorage:
-        home, *extras = rule.checkouts_of(thread)
+    def read(cls, rule: StorageRule, thread: Thread, reads: RepositoryReads) -> UnitStorage:
+        home, *extras = rule.checkouts_of(thread, reads)
         return cls(rule, thread.incarnation, rule.roots_of(thread), Checkout(home),
                    tuple(Checkout(path) for path in extras))
 
@@ -638,7 +638,7 @@ class StorageProjection:
 
     @cached_property
     def storage(self) -> UnitStorage:
-        return UnitStorage.read(self.rule, self.thread)
+        return UnitStorage.read(self.rule, self.thread, self.reads)
 
     def require_write(self, path: Path) -> None:
         self.rule.require_destination(self.thread, path)

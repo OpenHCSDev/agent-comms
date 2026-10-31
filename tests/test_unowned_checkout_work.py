@@ -83,8 +83,8 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
     assert not rule.owns_checkout(worker, misnamed, RepositoryName('OpenHCSDev', 'toad'), RepositoryReads())
     assert rule.problem_checkouts(
         rule.initial_roots('worker'), 'P1') == (checkout, misnamed, lockstep)
-    assert lockstep in rule.checkouts_of(worker)
-    assert misnamed not in rule.checkouts_of(worker)
+    assert lockstep in rule.checkouts_of(worker, RepositoryReads())
+    assert misnamed not in rule.checkouts_of(worker, RepositoryReads())
 
 
 @pytest.fixture

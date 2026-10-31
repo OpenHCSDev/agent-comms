@@ -375,10 +375,12 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = frame.holders
-        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held),
+                             frame.pulls)
 
     @classmethod
-    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation],
+                  reads: ProgressRead) -> tuple[Self, ...]:
         registry = comms.registry
         snapshot = registry.snapshot()
         members = cls.members_with(cls)
@@ -387,7 +389,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
             thread = snapshot.require(unit.name)
             if thread.incarnation != unit:
                 raise ValueError("Observed unit incarnation changed")
-            storage = UnitStorage.read(registry.storage_rule, thread)
+            storage = UnitStorage.read(registry.storage_rule, thread, reads)
             found.extend(member(storage) for member in members if member.violated(storage))
         return tuple(found)
 

@@ -302,6 +302,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
             UnitStorage.read(
                 comms.registry.storage_rule,
                 comms.registry.require(holder),
+                RepositoryReads(),
             ).require_retired(todo.id)
         if problems:
             raise TodoProblems(problems)

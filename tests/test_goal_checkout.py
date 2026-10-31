@@ -46,7 +46,7 @@ def test_goal_checkout_uses_origin_default_and_retires(
         repository.checkout, "rev-parse", "origin/master",
     ).strip()
     assert path in rule.checkout_paths(comms.registry.require(worker.name), RepositoryReads())
-    assert path in rule.checkouts_of(comms.registry.require(worker.name))
+    assert path in rule.checkouts_of(comms.registry.require(worker.name), RepositoryReads())
     prepared = core_process(*command, "add", str(repository.checkout))
     assert prepared.returncode == 0, prepared.stdout + prepared.stderr
     retired = core_process(*command, "remove", str(repository.checkout))
