@@ -989,8 +989,9 @@ def main() -> None:
     """Enter the existing CPU-slice owner before acquiring a transferable lease."""
     if any(argument.partition("=")[0] in TestedSources.options() for argument in sys.argv[1:]):
         raise SystemExit(run())
-    command = ResidentManager.current().command((sys.executable, "-m", __name__, *sys.argv[1:]))
-    os.execvpe(command[0], command, dict(os.environ))
+    manager = ResidentManager.current()
+    command = manager.command((sys.executable, "-m", __name__, *sys.argv[1:]))
+    os.execvpe(command[0], command, manager.handoff_environment(os.environ))
 
 
 @boundary_decoder
