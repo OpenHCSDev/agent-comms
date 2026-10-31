@@ -48,6 +48,7 @@ from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import (
+    AskedOnce,
     CoreActsStandingRule,
     DatedStandingRule,
     IndependentStandingRule,
@@ -251,7 +252,7 @@ class DiedInstallDue(RunInstallDue):
 
 
 @dataclass(frozen=True)
-class RequestStalled(IndependentStandingRule, UndatedStandingRule):
+class RequestStalled(AskedOnce, IndependentStandingRule, UndatedStandingRule):
     """Tristan's own request with nothing serving it: his lines lead the board and wake the
     commander every beat until an order serves it, never sit under WATCHING."""
 
@@ -270,9 +271,12 @@ class RequestStalled(IndependentStandingRule, UndatedStandingRule):
         return tuple(cls(request) for request in store.open_requests(thread.acting_identity)
                      if not store.serving_orders(request.id))
 
-    def line(self) -> str:
-        return (f"ADVANCE request {self.request.id.value} ({self.request.text}) has no order serving it."
-                " is anyone on it, or did we forget? -> order its next step or mark it done")
+    ask: ClassVar[str] = ("ADVANCE: no order serves these requests. is anyone on it, or did we forget?"
+                          " -> order its next step or mark it done")
+
+    def facts(self) -> str:
+        return f"{self.request.id.value} ({self.request.text})"
+
 
 
 class PlanRule(UndatedStandingRule, FamilyScan, declared_name=None):
@@ -319,7 +323,7 @@ class PlanIdle(PlanRule):
 
 
 @dataclass(frozen=True)
-class PlanStalled(PlanRule):
+class PlanStalled(AskedOnce, PlanRule):
     """A ready phase that a unit has held past the window while main still lacks it. Holding an
     order is not moving the plan: something structural keeps it still (steps that only land
     together, a blocked holder, a missing owner), and re-sending the order changes nothing."""
@@ -339,13 +343,13 @@ class PlanStalled(PlanRule):
             if now - since >= cls.window
         )
 
-    def line(self) -> str:
-        return (
-            f"UNSTALL {self.phase.plan.declared_name}/{self.phase.declared_name} held since {RecordedEventTime(self.since).stamp()}"
-            f" and still not on main ({self.phase.plan.document}). what's actually holding it?"
-            " -> find it and change that this wake: integrate steps that only land together,"
-            " take it over, or reassign it"
-        )
+    ask: ClassVar[str] = ("UNSTALL: held and still not on main. what's actually holding it?"
+                          " -> find it and change that this wake: integrate steps that only land together,"
+                          " take it over, or reassign it")
+
+    def facts(self) -> str:
+        return (f"{self.phase.plan.declared_name}/{self.phase.declared_name} since"
+                f" {RecordedEventTime(self.since).stamp()} ({self.phase.plan.document})")
 
 
 @dataclass(frozen=True)
@@ -774,7 +778,7 @@ class UnitDeaf(InboxUnavailable):
 
 
 @dataclass(frozen=True)
-class Scrutinize(IndependentStandingRule, UndatedStandingRule):
+class Scrutinize(AskedOnce, IndependentStandingRule, UndatedStandingRule):
     threshold: ClassVar[int] = 2
     holder: Assignment
     todo: Todo
@@ -789,9 +793,11 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
                      for count in (todo.strikes_against(held.owner_identity),)
                      if count >= cls.threshold)
 
-    def line(self) -> str:
-        return (f"SCRUTINIZE {self.holder.owner} {self.todo.id}: {self.count} strikes"
-                " -> read the unit's trail and diff, name the cause, and order the fix to the cause")
+    ask: ClassVar[str] = "SCRUTINIZE: read the unit's trail and diff, name the cause, and order the fix to the cause"
+
+    def facts(self) -> str:
+        return f"{self.holder.owner} {self.todo.id}: {self.count} strikes"
+
 
 
 @dataclass(frozen=True)
