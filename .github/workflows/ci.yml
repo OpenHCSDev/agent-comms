@@ -22,6 +22,25 @@ defaults:
     shell: bash .github/run-step.sh {0}
 
 jobs:
+  # Direct pushes and admin merges skip every pull-request gate; each commit they
+  # bring names the definitions it deletes, or main goes red here.
+  deletions:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+
+      - name: Every deleted definition is named in its commit
+        run: python tools/deleted_definitions.py "${{ github.event.before }}" "${{ github.sha }}"
+
   stack:
     runs-on: ubuntu-latest
     steps:
