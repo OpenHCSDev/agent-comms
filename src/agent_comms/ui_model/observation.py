@@ -599,7 +599,7 @@ class ReadOwnerOperation(OwnerRead):
     operation: OwnerLiveRead
 
     async def read(self, owner: OwnerConnection) -> ToolResult:
-        request = OwnerReadRuntimeRequest(thread=owner.session_id, operation=self.operation)
+        request = OwnerReadRuntimeRequest(thread=self.owner.name, operation=self.operation)
         return self.operation.decode_reply(await request.read(owner))
 
 
