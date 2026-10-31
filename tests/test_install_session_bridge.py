@@ -12,6 +12,7 @@ import subprocess
 import sys
 import time
 from contextlib import ExitStack, contextmanager
+from functools import partial
 from html import escape
 from pathlib import Path
 
@@ -28,7 +29,6 @@ from agent_comms.cli_bridges.shared import (
     ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
 )
 from conftest import installed_comms
-from agent_comms.comms import wire
 from transcript_record_fixture import transcript_record
 from agent_comms.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
@@ -154,6 +154,28 @@ def confirm(transcript, line, record):
                          + '</event></task-notification>'))) + '\n')
 
 
+def relayed(child):
+    """A delivered message reaches the Monitor as its own text line, not a protocol frame."""
+    assert select.select((child.stdout,), (), (), 15)[0], 'Monitor wrote nothing'
+    return child.stdout.readline().decode()
+
+
+def send_as_peer(built, tmp_path, env, body, *, declare=False):
+    """The bus belongs to the built runtime, so the sender attaches as that runtime."""
+    code = (
+        'import sys; from pathlib import Path; from agent_comms.comms import wire; '
+        'from agent_comms.repo import Checkout; from agent_comms.threads import Thread; '
+        'comms = wire(Path(sys.argv[1])); '
+        + ('comms.registry.declare(Thread("peer", frozenset(), Checkout(Path(sys.argv[3])))); ' if declare else '')
+        + 'comms.messaging.send("peer", "bridge-copy", sys.argv[2])'
+    )
+    sources = os.pathsep.join(dict.fromkeys(str(package.parent) for package in built.packages))
+    subprocess.run(
+        (str(built.runtime.interpreter), '-c', code, str(tmp_path / 'bus'), body, str(tmp_path)),
+        env={**env, 'PYTHONPATH': os.pathsep.join((sources, env.get('PYTHONPATH', '')))},
+        check=True, capture_output=True, timeout=60)
+
+
 def test_a_sigkilled_bridge_comes_back_through_its_claim_with_no_repeat(
         tmp_path, bridge_home, monkeypatch):
     built = SourcePrograms.create(tmp_path / 'built')
@@ -175,14 +197,11 @@ def test_a_sigkilled_bridge_comes_back_through_its_claim_with_no_repeat(
             env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         )
         cleanup.callback(stop, monitor)
-        comms = wire(tmp_path / 'bus')
-        comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-
+        send = partial(send_as_peer, built, tmp_path, env)
         first = probe(monitor)
         confirm(observed.transcript, first.model_dump_json(), 'first-probe')
-        comms.messaging.send('peer', 'bridge-copy', 'uncertain when the bridge dies')
-        delivered = frame(monitor)
-        assert 'uncertain when the bridge dies' in delivered.model_dump_json()
+        send('uncertain when the bridge dies', declare=True)
+        assert 'uncertain when the bridge dies' in relayed(monitor)
 
         os.kill(child.pid, signal.SIGKILL)
         child.wait(timeout=15)
@@ -196,10 +215,10 @@ def test_a_sigkilled_bridge_comes_back_through_its_claim_with_no_repeat(
         cleanup.callback(os.kill, resumed.process.pid, signal.SIGTERM)
         assert isinstance(claim.state(), LiveWatch)
         confirm(observed.transcript, second.model_dump_json(), 'second-probe')
-        comms.messaging.send('peer', 'bridge-copy', 'sent after the kill')
-        after = frame(monitor)
-        assert 'sent after the kill' in after.model_dump_json()
-        assert 'uncertain when the bridge dies' not in after.model_dump_json()
+        send('sent after the kill')
+        after = relayed(monitor)
+        assert 'sent after the kill' in after
+        assert 'uncertain when the bridge dies' not in after
         assert not [row for row in Path(f'/proc/{resumed.process.pid}/task').iterdir()
                     for grandchild in (row / 'children').read_text().split()
                     if b'watch' in Path(f'/proc/{grandchild}/cmdline').read_bytes()]
