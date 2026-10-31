@@ -240,10 +240,10 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
+        root = FieldCodec.record_key(BindingAddress, 'root')
         defaults: dict[str, object] = (FieldCodec.encode_fields(stored[0].address()) if stored else {
-            'start': FieldCodec.encode(Binding.bus_head(
-                self.given[FieldCodec.record_key(BindingAddress, 'root')])),
-        })
+            'start': FieldCodec.encode(Binding.bus_head(self.given[root])),
+        } if root in self.given else {})
         return FieldCodec.decode_record(BindingAddress, {**defaults, **self.given})
 
 

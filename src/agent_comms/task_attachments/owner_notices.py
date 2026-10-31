@@ -53,6 +53,12 @@ class RestartNotice(OwnerNotice, declared_name="restart_notice"):
 
 
 @dataclass(frozen=True)
+class MeantNotice(OwnerNotice, declared_name="meant_question"):
+    """The rule gate asks a session whether it meant the answers it just wrote, and tells off a
+    dodge (rule_deal.MeantRecord). It lands mid-turn like any line of his."""
+
+
+@dataclass(frozen=True)
 class FleetNotice(OwnerNotice, declared_name="fleet_notice"):
     """A line for the whole fleet's channel; it informs and starts no member's turn."""
 

@@ -463,11 +463,19 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the person typed in this record; most records carry none."""
         return ()
 
+    def said(self) -> tuple[str, ...]:
+        """What the model said to its reader in this record; most records carry none."""
+        return ()
+
 
 class AssistantBlock(TaggedWire, ABC, affix=""):
 
     @abstractmethod
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+    def said(self) -> tuple[str, ...]:
+        """The words this block shows the reader; a tool call or hidden reasoning shows none."""
+        return ()
 
 
 class TextContent(WireModel):
@@ -483,6 +491,9 @@ class ImageContent(WireModel):
 
 
 class AssistantText(TextWire, AssistantBlock, TextContent, declared_name='text'):
+
+    def said(self) -> tuple[str, ...]:
+        return (self.text,)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
@@ -500,6 +511,10 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
     filled in. The text is a message to the reader, never hidden reasoning."""
 
     thinking: str
+
+    def said(self) -> tuple[str, ...]:
+        """Saved reasoning is empty; narration is what the reader saw."""
+        return (self.thinking,) if self.thinking else ()
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         activity = super().updates(record, session)
@@ -547,6 +562,9 @@ class AssistantMessage(WireModel):
 
 class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     message: AssistantMessage
+
+    def said(self) -> tuple[str, ...]:
+        return tuple(words for block in self.message.content for words in block.said())
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (*(update for block in self.message.content for update in block.updates(self, session)),

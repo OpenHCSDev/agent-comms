@@ -31,13 +31,14 @@ from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
 from agent_comms.registry_store import RegistryStore
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal, RuleDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
     StartedDeal, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
 from agent_comms.todos import TodoStore
-from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook, ClaudeTranscriptHook
+from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook
 from agent_comms_hooks.watch import WatchClaim
+from agent_comms_hooks.read_gate import TranscriptWords
 
 if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
@@ -287,7 +288,7 @@ class LightPrime(Prime, declared_name="light"):
 
 
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook, RuleDeal):
+class DealtDeck(TranscriptWords):
     """The deal and the slices the session start hook dealt beside the transcript."""
 
     def deck(self, reader: DeckReader) -> Path:
@@ -393,8 +394,9 @@ class DeckStart(DealtDeck):
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
-            " a time, and answer those in the audit. Every tool but Read, the bus, your watch, and"
-            f" Write or Edit of {self.audit}, is refused until it answers. This order is given once per session"
+            " a time, and answer those in the audit: reading alone is passive. Every tool but"
+            " Read, the bus, your watch, and Write or Edit of"
+            f" {self.audit}, is refused until it answers. This order is given once per session"
             " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
             self.template_once(self.current().due),

@@ -10,7 +10,7 @@ import pytest
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec, RecordProblems
-from agent_comms.repo import Checkout, DetachedStart, Repo
+from agent_comms.repo import Checkout, DetachedStart, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
@@ -136,8 +136,8 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert storage.home == Checkout(home)
     assert storage.extra_checkouts == (Checkout(old),)
     assert storage.adding(Checkout(home)) == storage
-    assert rule.owns_present_checkout(thread, home)
-    assert not rule.owns_present_checkout(other, old)
+    assert rule.owns_present_checkout(thread, home, RepositoryReads())
+    assert not rule.owns_present_checkout(other, old, RepositoryReads())
     with pytest.raises(StorageDenied):
         StorageProjection(rule, other, comms).check((
             CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
