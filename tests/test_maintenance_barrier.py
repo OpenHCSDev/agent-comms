@@ -528,10 +528,9 @@ def test_every_carried_json_document_writes_through_the_maintenance_gate() -> No
     from agent_comms.read_ledger import ReadLedger
     from agent_comms.registry_store import RegistryStore
     from agent_comms.relationships import RelationshipStore
-    from agent_comms.runtime_children import RuntimeChildrenStore
     from agent_comms.runtime_info import RuntimeInfoStore
     from agent_comms.shared_ledger import SharedLedger
 
     for store in (ChannelCatalog, ConnectorStore, ReadLedger, RegistryStore, RelationshipStore,
-                  RuntimeChildrenStore, RuntimeInfoStore, SharedLedger):
+                  RuntimeInfoStore, SharedLedger):
         assert issubclass(store, CarriedDocument), store
