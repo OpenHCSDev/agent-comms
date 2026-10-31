@@ -189,6 +189,8 @@ def record_selected_terminal(
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
             SelectedToolSlot.require(db, slot_id=slot_id).acknowledge(db, call_id)
+    except CoordinationBeginUnavailable:
+        raise  # Nothing was written, so the acknowledgement is not UNKNOWN.
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
