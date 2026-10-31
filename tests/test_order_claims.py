@@ -31,7 +31,7 @@ from agent_comms.nominal.field_codec import (
 )
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import OrderCheck, ProblemGoalOrder
-from agent_comms.messages import QuestionKind
+from agent_comms.messages import HandoffKind, Message, QuestionKind
 from agent_comms.order_runs import ApplicationOrderRun
 from agent_comms.order_tools import (
     CommsOrderDeliverTool,
@@ -75,6 +75,34 @@ from test_held_problem_orders import merge_two_commit_fix
 from test_todos import order, thread
 
 pytest_plugins = ("test_held_problem_orders",)
+
+
+def test_pathname_handoff_publishes_without_completing_the_held_work(held_commander):
+    comms = held_commander.comms
+    commander = held_commander.commander
+    original = comms.goals.todos.get("P1")
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    goals = tuple(comms.registry.require(name).goal for name in ("worker", commander))
+    body = (
+        "Recording retained at `/home/ts/.cache/agent-scratch/probe/toad-comms-fixed`; "
+        "investigation continues."
+    )
+
+    committed = comms.messaging.send("worker", commander, body, HandoffKind).message
+    stored = comms.bus.bus.lookup_message(committed.message_id).message
+
+    assert stored.body == body
+    assert (stored.sender, stored.target, stored.type) == ("worker", commander, HandoffKind)
+    assert Message.from_message(stored).to_wire() == Message.from_message(committed).to_wire()
+    assert stored.type.allows_automatic_reply(stored)
+    assert comms.bus.bus.unanswered_references(
+        (stored.seq,), frozenset({commander}),
+    ) == (stored.reference,)
+    assert tuple(comms.registry.require(name).goal for name in ("worker", commander)) == goals
+    assert comms.goals.todos.get(original.id) == original
 
 
 def test_delivery_report_refuses_a_flat_status_memo():
