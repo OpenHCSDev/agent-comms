@@ -5,15 +5,15 @@ Finding a reference never creates a delivery mention or changes recipients.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 import re
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import SlicePolicy
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import SlicePolicy
 from agent_comms.registry_document import MappingRowsSlice, SnapshotRestored, WholeDocumentValue
 from agent_comms.thread_identity import ThreadIncarnation
 
@@ -69,6 +69,10 @@ class ChannelDisplayReference(DisplayReference):
     @property
     def name(self) -> str:
         return self.target
+
+
+_NAME_START = re.compile(r"(?<![\w@/\\.#:-])@?(?=\S)")
+_NAME_END = re.compile(r"[\w/\\@:-]|\.\w")
 
 
 @dataclass(frozen=True)
@@ -173,23 +177,56 @@ class DisplayReferences(RootedReferences):
         })
 
     @cached_property
-    def pattern(self):
-        # Escape declared names, not a second grammar for thread/channel names.
-        names = "|".join(re.escape(name) for name in sorted(self.targets, key=len, reverse=True))
-        return re.compile(r"(?<![\w@/\\.#:-])@?(?:" + names + r")(?![\w/\\@:-]|\.\w)")
+    def name_lengths(self) -> tuple[int, ...]:
+        """Longest first: a name wins over any shorter name it starts with."""
+        return tuple(sorted({len(name) for name in self.targets}, reverse=True))
+
+    def name_end(self, text: str, start: int) -> int:
+        """Where the longest declared name beginning at start ends; start itself when none does."""
+        ends = (start + length for length in self.name_lengths)
+        return next((end for end in ends if text[start:end] in self.targets and not _NAME_END.match(text, end)), start)
 
     def find(self, text: str) -> tuple[DisplayReferenceMatch, ...]:
-        if not self.targets:
-            return ()
-        return tuple(DisplayReferenceMatch(self.targets[match.group().removeprefix('@')],
-                                           match.start(), match.end())
-                     for match in self.pattern.finditer(text))
+        """Names are looked up where one can start: thousands of threads never become a regex."""
+        found = []
+        position = 0
+        while self.targets and (candidate := _NAME_START.search(text, position)):
+            end = self.name_end(text, candidate.end())
+            if end == candidate.end():
+                position = max(end, candidate.start() + 1)
+            else:
+                found.append(DisplayReferenceMatch(self.targets[text[candidate.end():end]], candidate.start(), end))
+                position = end
+        return tuple(found)
 
     def accepts_history(self, root):
         return self.root == root
 
     def contains(self, reference: DisplayReference) -> bool:
         return self.targets.get(reference.name) == reference
+
+
+@dataclass(frozen=True, eq=False)
+class CurrentTargets(Mapping[str, DisplayReference]):
+    """Each target is built when its name is asked for; a channel wins a name it shares with a member."""
+
+    root: str
+    members: Mapping[str, ThreadIncarnation] = field(repr=False)
+    channels: tuple[str, ...]
+
+    def __getitem__(self, name: str) -> DisplayReference:
+        if name in self.channels:
+            return ChannelDisplayReference(self.root, name)
+        return ThreadDisplayReference(self.root, self.members[name])
+
+    def __contains__(self, name: object) -> bool:
+        return name in self.members or name in self.channels
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(dict.fromkeys((*self.members, *self.channels)))
+
+    def __len__(self) -> int:
+        return len(self.members) + len(set(self.channels) - self.members.keys())
 
 
 @dataclass(frozen=True)
@@ -201,26 +238,26 @@ class CurrentDisplayReferences(SnapshotRestored, DisplayReferences):
     Recorded catalogs share name recognition but cannot resolve a live target.
     """
 
-    targets: Mapping[str, DisplayReference] = field(init=False)
+    targets: Mapping[str, DisplayReference] = field(init=False, compare=False)
     members: Annotated[Mapping[str, ThreadIncarnation], SlicePolicy(MappingRowsSlice)] = field(
         default_factory=dict, repr=False)
     channels: Annotated[tuple[str, ...], SlicePolicy(WholeDocumentValue)] = ()
-    current: Mapping[str, ThreadIncarnation] = field(init=False, repr=False, compare=False)
 
     @classmethod
     def from_registry(cls, root: str, registry: RegistrySnapshot, channels: tuple[str, ...] = ()) -> Self:
         return cls(root, {name: thread.incarnation for name, thread in registry.named_members()}, channels)
 
     def __post_init__(self) -> None:
-        """The target and lookup views of the one stored member map."""
+        """Restoring a packet copies the member map; lookups derive from it when asked."""
         object.__setattr__(self, "members", MappingRowsSlice.freeze(self.members))
-        object.__setattr__(self, "current", MappingProxyType({
-            incarnation.require_recorded().lookup: incarnation for incarnation in self.members.values()}))
-        targets: dict[str, DisplayReference] = {
-            name: ThreadDisplayReference(self.root, incarnation) for name, incarnation in self.members.items()}
-        targets.update((name, ChannelDisplayReference(self.root, name)) for name in self.channels)
-        object.__setattr__(self, "targets", MappingProxyType(targets))
+        object.__setattr__(self, "targets", CurrentTargets(self.root, self.members, self.channels))
+
+    @cached_property
+    def current(self) -> Mapping[float, ThreadIncarnation]:
+        """Each member's incarnation by its recorded birth."""
+        return MappingProxyType({
+            incarnation.require_recorded().wire_birth: incarnation for incarnation in self.members.values()})
 
     def thread(self, incarnation: ThreadIncarnation) -> ThreadDisplayReference:
         """Resolve an exact birth to its current name; a missing birth fails."""
-        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().lookup])
+        return ThreadDisplayReference(self.root, self.current[incarnation.require_recorded().wire_birth])

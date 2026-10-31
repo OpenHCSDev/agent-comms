@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, MessageId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.channel_targets import CommandTarget, NoChannel, PerTargetChannels
 from agent_comms.catalog_document import NoCatalog
@@ -407,7 +407,7 @@ class TestSelectedTargetActions:
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.delete_tag import DeleteTagCliCommand
         from agent_comms.cli_command import TargetEdit
-        from agent_comms.field_codec import compile_decoder
+        from agent_comms.nominal.field_codec import compile_decoder
         from agent_comms.thread_status import RunningThreadStatus
 
         comms = self.declared(tmp_path)

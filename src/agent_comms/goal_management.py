@@ -14,9 +14,9 @@ from contextlib import contextmanager
 from dataclasses import replace
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from .agent_activity import AgentActivity
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -72,7 +72,6 @@ from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
 _LOG = logging.getLogger(__name__)
-HistoryReply = TypeVar("HistoryReply", bound=RecordedGoalHistory)
 
 
 class Goals(GoalWaitRecovery):
@@ -294,12 +293,10 @@ class Goals(GoalWaitRecovery):
         """Read durable revisions for one thread incarnation within ``scope``."""
         return self.registry.goal_history(name, scope)
 
-    def recorded_history(
-        self, reply: type[HistoryReply], name: str, scope: GoalScope
-    ) -> HistoryReply:
+    def recorded_history(self, name: str, scope: GoalScope) -> RecordedGoalHistory:
         """Revisions from goal history, execution failures from the attempt ledger."""
         owner = self.registry.require(name).incarnation.wire_birth
-        return reply(
+        return RecordedGoalHistory(
             tuple(entry.recorded() for entry in self.goal_history(name, scope)),
             self.open_goal_store().failures(owner, scope),
         )

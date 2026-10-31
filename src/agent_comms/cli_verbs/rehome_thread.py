@@ -4,7 +4,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.cli_support.conversation_limits import ConversationLimitsCliCommand
 from agent_comms.cli_support.running_session import RunningSessionCliCommand
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated

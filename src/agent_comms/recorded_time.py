@@ -8,8 +8,19 @@ from dataclasses import dataclass
 from math import isfinite
 from typing import ClassVar, Never
 
-from .declared_family import DeclaredFamily
-from .field_codec import AcceptsNull, DisclosedRecord, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AcceptsNull, DisclosedRecord, FieldCodec, FieldRepresentation, NullMember, boundary_decoder
+
+class Timestamped:
+    """A recorded Unix-seconds clock owns its integer-millisecond projection."""
+
+    __slots__ = ()
+    timestamp: float
+
+    @property
+    def at_ms(self) -> int:
+        return round(self.timestamp * EventMilliseconds.units_per_second)
+
 
 class RecordedEventSeconds(FieldRepresentation):
     """The recorded-time value of an existing numeric-seconds contract."""

@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.commander.vibe_check import OverloadDegradation
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 @pytest.mark.parametrize("unjudged", [0, 1, 395, 1_000_000])

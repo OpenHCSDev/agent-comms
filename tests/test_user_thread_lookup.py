@@ -7,7 +7,7 @@ from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from dataclasses import replace
 
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.registry_document import NoUserThread, RegistryDocument
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_text import GivenThreadText

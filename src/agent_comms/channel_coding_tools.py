@@ -22,7 +22,7 @@ from .envelope_claim_transitions import (
     FileClaimPath,
     WakeClaim,
 )
-from .field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
+from .nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord
 from .lifecycle_capability import Executing
 from .native_arguments import NativeArguments
 from .native_runtime_input import NativeRuntimeInput

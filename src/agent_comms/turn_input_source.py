@@ -14,7 +14,8 @@ from . import input_attempt
 from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputStarted
 from .turn_inbox import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
-from .field_codec import AcpSessionId, InputId, TurnId
+from .errors import RelationViolationError
+from .nominal.field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
@@ -76,6 +77,11 @@ class TurnAcceptance(ABC):
     ) -> InputStartedUpdate:
         return update
 
+    def require_following_source(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+    ) -> None:
+        raise RelationViolationError("An input without an acceptance cannot own following context")
+
     @abstractmethod
     def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None: ...
 
@@ -123,6 +129,12 @@ class AcceptedTurn(TurnAcceptance):
         if self.input_id in queued:
             update = replace(update, text=await queued[self.input_id].started(inputs))
         return update.identified(self.input_id)
+
+    def require_following_source(
+        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
+    ) -> None:
+        if inputs.state(session_id).following.get(self.input_id) is not source:
+            raise RelationViolationError("Following context outlived its actual accepted input")
 
     def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         inputs.state(session_id).queued.pop(self.input_id, None)
@@ -198,6 +210,9 @@ class TurnInputSource(StartedInput, ABC):
             ) if self.origins else NoTurnRouting(),
         )
         return GrantedSend()
+
+    def require_context_source(self, sender: OwnedSend) -> None:
+        """An original's lease and durable binding fence its retained context."""
 
     def valid_keys(self, text: str) -> bool:
         return len(self.keys) <= 1
@@ -368,6 +383,9 @@ class FollowingTurnInput(TurnInputSource):
     keys: tuple[InputKey, ...]
     when_busy: ClassVar[type[BusyInputPolicy]] = SteerInputPolicy
     owner_check = RunningOrdinaryOwnerCheck
+
+    def require_context_source(self, sender: OwnedSend) -> None:
+        self.acceptance.require_following_source(sender.inputs, sender.session_id, self)
 
     def continue_response(self, response, parts):
         """An actual following request may revise the turn's automatic answer."""

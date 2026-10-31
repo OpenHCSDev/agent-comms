@@ -6,7 +6,7 @@ from dataclasses import dataclass, replace
 from typing import Annotated, ClassVar
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment
-from agent_comms.audience_manifest import FrozenRecipient
+from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
     POLICY_VERSION,
@@ -22,7 +22,7 @@ from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.envelope_claim_transitions import AssignmentBinding
-from agent_comms.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     Column,

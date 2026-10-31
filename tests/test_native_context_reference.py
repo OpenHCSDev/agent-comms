@@ -20,7 +20,7 @@ from agent_comms.cursor_owner import (
     RecordedCursor,
     UnstartedCursor,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, RootId, ThreadLookup
 from agent_comms.historical_native_inputs import (
     FullHistoricalNativeInput,
     TriageHistoricalNativeInput,
@@ -36,7 +36,7 @@ from agent_comms.native_input_record import (
     UnrecordedNativeColumn,
     UnrecordedNativeInputReference,
 )
-from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_input_proof import NativeContextProof
 from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
 from agent_comms.private_path import FileIdentity
 from agent_comms.proven_source_coverage import InjectedInput, NoInjectedInput, ProvenSourceCoverage, SourcePrefix
@@ -50,7 +50,7 @@ from agent_comms.threads import Thread
 from agent_comms.native_session_reopen import PiSessionId
 
 
-def cursor():
+def cursor() -> CurrentNativeCursor:
     return CurrentNativeCursor(
         wire_root_id=RootId("a" * 32), recipient_lookup=ThreadLookup("b" * 32),
         owner_generation=1, owner_claimed_generation=2, covered_seq=1, injected_seq=1,
@@ -72,7 +72,7 @@ def test_native_cursor_state_owns_start_observation_and_input_proof(
     assert not state.proves_input("d" * 32)
 
 
-def reservation():
+def reservation() -> NativeRuntimeInput:
     return NativeRuntimeInput(
         input_id=FieldCodec.decode(InputId, "c" * 32), stage=TriageNativeExecution,
         execution_id=UnrecordedNativeColumn(), attempt_ordinal=UnrecordedNativeColumn(),
@@ -82,7 +82,7 @@ def reservation():
 
 
 @pytest.fixture
-def recorded():
+def recorded() -> NativeRuntimeInput:
     return replace(
         reservation(), sent_owner_claimed_generation=RecordedNativeClaim(2),
         session_id=PiSessionId("original-session"), session_file="/original/session.jsonl",
@@ -96,7 +96,8 @@ def recorded():
 
 @pytest.mark.parametrize("changes", [
     {"input_id": UnrecordedNativeColumn()}, {"stage": UnrecordedNativeColumn()},
-    {"session_id": UnrecordedNativeColumn()}, {"request_generation": UnrecordedNativeColumn()},
+    {"session_id": UnrecordedNativeColumn()}, {"session_id": NumberNativeColumn(1)},
+    {"session_id": TextNativeColumn("")}, {"request_generation": UnrecordedNativeColumn()},
     {"request_generation": NumberNativeColumn(0)}, {"request_generation": NumberNativeColumn(True)},
 ])
 def test_partial_original_cursor_never_becomes_unrecorded_or_complete(changes):
@@ -104,7 +105,9 @@ def test_partial_original_cursor_never_becomes_unrecorded_or_complete(changes):
         _ = replace(cursor(), **changes).reference
 
 
-def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_corruption(recorded):
+def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_corruption(
+    recorded: NativeRuntimeInput,
+) -> None:
     empty = replace(cursor(), covered_seq=0, injected_seq=0, input_id=UnrecordedNativeColumn(),
                     stage=UnrecordedNativeColumn(), session_id=UnrecordedNativeColumn(),
                     request_generation=UnrecordedNativeColumn())
@@ -112,9 +115,13 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
     assert reservation().reference == UnrecordedNativeInputReference()
     with pytest.raises(IdentityConflict):
         _ = replace(reservation(), request_generation=NumberNativeColumn(1)).reference
-    assert recorded.reference == NativeInputReference(
+    reference = recorded.reference.require_recorded()
+    assert reference == NativeInputReference(
         recorded.input_id, type(recorded.execution), recorded.session_id, 1
     )
+    assert reference.session_id is recorded.session_id
+    selected = cursor().reference.require_recorded().session_id
+    assert selected == recorded.session_id and selected.require_recorded_session() is selected
     with pytest.raises(IdentityConflict):
         _ = replace(recorded, session_file=None).reference
     for name in ("session_entry_id", "session_entry_start", "llm_context_digest", "committed_at_ms"):
@@ -123,7 +130,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
 
 
 @pytest.fixture
-def historical_source(recorded):
+def native_source(recorded):
     return dict(
         wire_root_id="a" * 32, source_seq=1, source_message_id=MessageId.mint("original-message"),
         assignment_id="d" * 32, input_id=recorded.input_id,
@@ -143,7 +150,7 @@ def historical_source(recorded):
     (partial(CommittedCursorOwner, input_id=InputId("d" * 32)), False),
 ])
 def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
-    tmp_path, recorded, historical_source, make_owner, permitted,
+    tmp_path, recorded, native_source, make_owner, permitted,
 ):
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
     original = replace(
@@ -151,7 +158,7 @@ def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
         verdict=DecidedTriageRecord(IgnoreSelectedTriage),
     )
     owner = make_owner(thread=thread, claimed_generation=2, generation=1, wire_root_id="a" * 32)
-    source = {**historical_source, "owner_lookup": original.owner_lookup}
+    source = {**native_source, "owner_lookup": original.owner_lookup}
     with sqlite3.connect(":memory:") as db:
         NativeRuntimeInput.create(db)
         original.insert(db)
@@ -161,8 +168,8 @@ def test_cursor_owner_enforces_exact_settlement_without_restricting_refresh(
         assert InjectedInput(proof).allows(owner, db, UnstartedCursor()) is permitted
 
 
-def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded, historical_source):
-    source = historical_source
+def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(recorded, native_source):
+    source = native_source
     with sqlite3.connect(":memory:") as db:
         NativeRuntimeInput.create(db)
         recorded.insert(db)
@@ -207,7 +214,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
 
 
 def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
-    tmp_path, recorded, historical_source,
+    tmp_path, recorded, native_source,
 ):
     """Every install mints a new claim; the thread's cursor and its inputs stay its own."""
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
@@ -220,7 +227,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         CurrentNativeCursor.create(db)
         sent.insert(db)
         proof = sent.execution.historical_proof(
-            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+            sent, lifecycle=TriagePendingAssignment(), **{**native_source, "owner_lookup": lookup},
         )
         assert restarted.matches_prefix(db, (proof,))
         assert InjectedInput(proof).allows(restarted, db, UnstartedCursor())
@@ -243,8 +250,8 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
         newer = replace(sent, input_id=FieldCodec.decode(InputId, "9" * 32), sent_owner_claimed_generation=RecordedNativeClaim(6))
         newer.insert(db)
         newer_proof = newer.execution.historical_proof(newer, lifecycle=TriagePendingAssignment(), **{
-            **historical_source, "owner_lookup": lookup, "input_id": newer.input_id,
-            "context": replace(historical_source["context"], input_id=newer.input_id),
+            **native_source, "owner_lookup": lookup, "input_id": newer.input_id,
+            "context": replace(native_source["context"], input_id=newer.input_id),
             "native_reference": newer.reference,
         })
         assert restarted.matches_prefix(db, (proof,))
@@ -252,7 +259,7 @@ def test_a_restarted_claim_advances_past_the_inputs_its_earlier_claim_sent(
 
 
 def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_attempt_sent(
-    tmp_path, recorded, historical_source,
+    tmp_path, recorded, native_source,
 ):
     """A retry advances the participant generation (selected_participant.py prepare_attempt); same participant."""
     thread = Thread("owner", frozenset(), Checkout(tmp_path))
@@ -266,7 +273,7 @@ def test_a_retried_participant_generation_advances_past_the_inputs_its_earlier_a
         CurrentNativeCursor.create(db)
         sent.insert(db)
         proof = sent.execution.historical_proof(
-            sent, lifecycle=TriagePendingAssignment(), **{**historical_source, "owner_lookup": lookup},
+            sent, lifecycle=TriagePendingAssignment(), **{**native_source, "owner_lookup": lookup},
         )
         assert retried.matches_prefix(db, (proof,))
         assert InjectedInput(proof).allows(retried, db, UnstartedCursor())

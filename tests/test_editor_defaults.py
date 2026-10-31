@@ -6,7 +6,7 @@ import pytest
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from dataclasses import dataclass
 
-from agent_comms.field_codec import FieldCodec, MalformedRecord, UnchosenMember, compile_decoder
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, UnchosenMember, compile_decoder
 from agent_comms.target_fields import TargetField
 from agent_comms.thread_management import ChangedTags, GivenTags, InheritedTags, TagChoice
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, ThinkingLevelField

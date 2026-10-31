@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
@@ -14,7 +14,7 @@ from agent_comms.field_codec import (
 )
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.native_pi import NativeContextProof
+from agent_comms.native_input_proof import NativeContextProof
 from agent_comms.native_session_reopen import PiSessionId
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.transcript_events import (

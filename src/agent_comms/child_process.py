@@ -41,20 +41,34 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import IO, TYPE_CHECKING, Annotated, Any, ClassVar, NoReturn, Self
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import DisclosedRecord, FieldCodec, FieldDirective, Id128, NullMember, RecordMember, SubclassUnion, WireRequired
+from .nominal.field_codec import (
+    DisclosedRecord,
+    FieldCodec,
+    FieldDirective,
+    Id128,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    WireRequired,
+)
 from .launch_runtime import INHERITED_ENVIRONMENT, LaunchRuntime, RestoredRuntime
 from .native_build_inputs import (
-    AsyncStdioOptions, ChildStdio, ConfiguredChildStdio, DetachedChildStdio, GitAcquisitionCancelled,
-    GitLaunch, GitOpening, StdioOptions,
+    AsyncStdioOptions,
+    ChildStdio,
+    ConfiguredChildStdio,
+    DetachedChildStdio,
+    GitAcquisitionCancelled,
+    GitLaunch,
+    GitOpening,
+    StdioOptions,
 )
-from .sealed import Sealed
+from .nominal.sealed import Sealed
 from .systemd_unit import AgentsSlice, SystemdUnit
 
 if TYPE_CHECKING:
     from .registration_change import RegistrationChange, UpdatedRegistration
-    from .runtime_children import RuntimeChildrenStore
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ActiveThreadPresence, ThreadStatus
@@ -533,7 +547,7 @@ class Platform(DeclaredFamily, affix="Platform"):
             os.fchmod(descriptor, permissions)
 
     @contextmanager
-    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path]:
         with TemporaryDirectory(prefix="ac-socket-", dir="/tmp") as directory:
             parent = Path(directory) / "d"
             parent.symlink_to(path.parent, target_is_directory=True)
@@ -646,7 +660,7 @@ class LinuxPlatform(PidfdHandles, Platform):
         return None
 
     @contextmanager
-    def socket_address(self, path: Path, descriptor: int) -> Generator[Path, None, None]:
+    def socket_address(self, path: Path, descriptor: int) -> Generator[Path]:
         yield Path(f"/proc/{os.getpid()}/fd/{descriptor}") / path.name
 
     def parent_death_binding(self) -> int:
@@ -771,6 +785,13 @@ class LinuxPlatform(PidfdHandles, Platform):
                 os.close(descriptor)
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
+        """The kernel answers an empty group in one call; only a live one walks /proc."""
+        try:
+            os.killpg(pgid, 0)
+        except ProcessLookupError:
+            return ()
+        except PermissionError:
+            pass
         members = []
         for entry in Path("/proc").iterdir():
             if entry.name.isdecimal():
@@ -1178,14 +1199,12 @@ class ChildLifetime(DeclaredFamily, affix="Lifetime"):
         return command
 
     @classmethod
-    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
-                registration: ChildRegistration) -> SpawnedProcess:
-        return SpawnedProcess(process, Platform.current().identity(process.pid), registration)
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int) -> SpawnedProcess:
+        return SpawnedProcess(process, Platform.current().identity(process.pid))
 
     @classmethod
-    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
-                            registration: ChildRegistration) -> AttachedChild:
-        return AttachedChild(process, Platform.current().identity(process.pid), registration)
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int) -> AttachedChild:
+        return AttachedChild(process, Platform.current().identity(process.pid))
 
     @classmethod
     @abstractmethod
@@ -1228,56 +1247,31 @@ class OutlivesLauncherLifetime(ChildLifetime):
         return Platform.current().identity(int(encoded))
 
     @classmethod
-    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int,
-                registration: ChildRegistration) -> SpawnedProcess:
+    def spawned(cls, process: subprocess.Popen[bytes], descriptor: int) -> SpawnedProcess:
         try:
             identity = cls.resident(descriptor)
         finally:
             returncode = process.wait()
         if returncode != 0:
             raise ChildProcessError("Resident handoff failed")
-        return HandedOffProcess(process, identity, registration)
+        return HandedOffProcess(process, identity)
 
     @classmethod
-    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int,
-                            registration: ChildRegistration) -> AttachedChild:
+    async def spawned_async(cls, process: asyncio.subprocess.Process, descriptor: int) -> AttachedChild:
         try:
             identity = await asyncio.to_thread(cls.resident, descriptor)
         finally:
             returncode = await process.wait()
         if returncode != 0:
             raise ChildProcessError("Resident handoff failed")
-        return HandedOffAttachedChild(process, identity, registration)
+        return HandedOffAttachedChild(process, identity)
 
     @classmethod
     def launcher(cls, platform: Platform) -> int:
         return 0
 
 
-class ChildRegistration(ABC):
-    """The durable owner notified after a launched group has finished."""
-
-    @abstractmethod
-    def finished(self, identity: ProcessIdentity) -> None: ...
-
-
-class NoChildRegistration(ChildRegistration):
-    """An observed process has no launch registration to remove."""
-
-    def finished(self, identity: ProcessIdentity) -> None:
-        pass
-
-
-NO_CHILD_REGISTRATION = NoChildRegistration()
-
-
 class ChildLaunch:
-    @property
-    def children_store(self) -> type[RuntimeChildrenStore]:
-        from .runtime_children import RuntimeChildrenStore
-
-        return RuntimeChildrenStore
-
     def __init__(self, platform: Platform, command: tuple[str, ...],
                  pass_fds: tuple[int, ...], runtime: LaunchRuntime,
                  lifetime: type[ChildLifetime]):
@@ -1291,19 +1285,6 @@ class ChildLaunch:
         self.error_writer = os.fdopen(error_w, "wb", buffering=0)
         self.identity_r, identity_w = os.pipe()
         self.identity_writer = os.fdopen(identity_w, "wb", buffering=0)
-
-    def record(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Record the gated child in the children store in one step, or cancel it before user code runs."""
-        try:
-            store.record(identity)
-        except BaseException:
-            self.cancel_before_release(identity)
-            raise
-
-    async def record_async(self, identity: ProcessIdentity, store: RuntimeChildrenStore) -> None:
-        """Wait for the child's store record before cancellation can retire it."""
-        pending = asyncio.get_running_loop().run_in_executor(None, self.record, identity, store)
-        await join_retirement(pending)
 
     @property
     def argv(self) -> tuple[str, ...]:
@@ -1328,15 +1309,13 @@ class ChildLaunch:
                          self.identity_writer.fileno(), *self.pass_fds),
         }
 
-    def spawned(self, process: subprocess.Popen[bytes], registration: ChildRegistration
-                ) -> SpawnedProcess:
+    def spawned(self, process: subprocess.Popen[bytes]) -> SpawnedProcess:
         self.identity_writer.close()
-        return self.lifetime.spawned(process, self.identity_r, registration)
+        return self.lifetime.spawned(process, self.identity_r)
 
-    async def spawned_async(self, process: asyncio.subprocess.Process,
-                            registration: ChildRegistration) -> AttachedChild:
+    async def spawned_async(self, process: asyncio.subprocess.Process) -> AttachedChild:
         self.identity_writer.close()
-        return await self.lifetime.spawned_async(process, self.identity_r, registration)
+        return await self.lifetime.spawned_async(process, self.identity_r)
 
     def spawn(
         self,
@@ -1345,36 +1324,22 @@ class ChildLaunch:
         env: Mapping[str, str] = INHERITED_ENVIRONMENT,
         stdio: ChildStdio,
     ) -> SpawnedProcess:
-        """Record the launch handle before the platform allows exec."""
-        store = self.children_store.at(self.runtime.prefix)
+        """Hand back the launch handle before the platform allows exec."""
         process = subprocess.Popen(
             self.argv, cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)),
             **stdio.streams, **self.options,
         )
-        child = self.spawned(process, store)
-        try:
-            self.record(child.identity, store)
-        except BaseException:
-            child.reap()
-            child.close_streams()
-            raise
-        return child
+        return self.spawned(process)
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        store = self.children_store.at(self.runtime.prefix)
         process = await asyncio.create_subprocess_exec(
             self.argv[0], *self.argv[1:], cwd=cwd,
             env=self.lifetime.environment(self.runtime.child_environment(env)),
             **stdio.options, **self.options,
         )
-        child = await self.spawned_async(process, store)
+        child = await self.spawned_async(process)
         child._stderr_task = asyncio.create_task(child._drain_stderr())
-        try:
-            await self.record_async(child.identity, store)
-        except BaseException:
-            await child.stop()
-            raise
         return child
 
     def release(self, identity: ProcessIdentity) -> None:
@@ -1766,10 +1731,7 @@ async def join_retirement[Result](task: asyncio.Future[Result]) -> Result:
 class ChildProcess(Sealed, ABC):
     """The sole stop algorithm; cancellation retains the cleanup task."""
 
-    def __init__(
-        self, identity: ProcessIdentity, registration: ChildRegistration = NO_CHILD_REGISTRATION,
-    ):
-        self.registration = registration
+    def __init__(self, identity: ProcessIdentity):
         self.identity = identity
         self.platform = Platform.current()
         self._stop_task: asyncio.Task[ChildOutcome] | None = None
@@ -1815,7 +1777,6 @@ class ChildProcess(Sealed, ABC):
             # Re-enumerate after a member exits: a surviving member may have forked.
             until = grace_deadline if stage is GracefulStopOutcome else deadline
             yield members, max(0, until - now)
-        self.registration.finished(self.identity)
         return stage
 
     def _retire_group(self, guard, deadline=math.inf):
@@ -1889,9 +1850,8 @@ class TerminalChildStdio(ChildStdio):
 class AttachedChild(ChildProcess):
     stderr_limit: ClassVar[int] = 16000
 
-    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, process: asyncio.subprocess.Process, identity: ProcessIdentity):
+        super().__init__(identity)
         self.process = process
         self.stdin = process.stdin
         self.stdout = process.stdout
@@ -2138,9 +2098,8 @@ class BoundedRun:
 class SynchronousProcess(ChildProcess):
     """Identity-checked process control; each subclass supplies synchronous reaping."""
 
-    def __init__(self, identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, identity: ProcessIdentity):
+        super().__init__(identity)
         self._retirement_lock = threading.Lock()
         self._retirement: Future[ChildOutcome] = Future()
 
@@ -2259,19 +2218,11 @@ class ObservedProcess(SynchronousProcess):
         return self.reap()
 
 
-class RecordedRuntimeGroup(ObservedProcess):
-    """A recorded launch owns the group even after its original leader exits."""
-
-    def require_stop_authority(self) -> None:
-        self.platform.group_members(self.identity)
-
-
 class SpawnedProcess(SynchronousProcess):
     """A launched process handle; surviving the launcher does not preserve its parent."""
 
-    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity,
-                 registration: ChildRegistration = NO_CHILD_REGISTRATION):
-        super().__init__(identity, registration)
+    def __init__(self, process: subprocess.Popen[bytes], identity: ProcessIdentity):
+        super().__init__(identity)
         self.process = process
 
     @classmethod
@@ -2319,8 +2270,13 @@ class SpawnedProcess(SynchronousProcess):
 
     @classmethod
     def run(
-        cls, command: tuple[str, ...], *, timeout: float,
-        cwd: str | Path, env: dict[str, str],
+        cls,
+        command: tuple[str, ...],
+        *,
+        timeout: float,
+        cwd: str | Path,
+        env: dict[str, str],
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> subprocess.CompletedProcess[bytes]:
         """A one-shot interpreter exchange, including forced descendant retirement.
 
@@ -2330,8 +2286,13 @@ class SpawnedProcess(SynchronousProcess):
         if not math.isfinite(timeout) or timeout <= 0:
             raise ValueError("A positive finite timeout is required")
         deadline = time.monotonic() + timeout
-        with cls.launch(command, cwd=cwd, env=env, stdio=DetachedChildStdio(
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)) as child:
+        with cls.launch(
+            command,
+            cwd=cwd,
+            env=env,
+            runtime=runtime,
+            stdio=DetachedChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+        ) as child:
             try:
                 return child.collect(timeout=max(0, deadline - time.monotonic()))
             finally:
@@ -2580,5 +2541,3 @@ class ControllingTerminalCommand(ChildCommand):
     def run(self) -> None:
         fcntl.ioctl(0, termios.TIOCSCTTY, 0)
         os.execvpe(self.command[0], self.command, os.environ)
-
-

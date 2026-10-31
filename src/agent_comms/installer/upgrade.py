@@ -49,8 +49,8 @@ from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_verbs.target_action import TargetActionCliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
 from agent_comms.install_choices import InstallerChoice, RunMode
@@ -60,7 +60,9 @@ from agent_comms.installer.backup import (
     SavedFile,
     StoreBackup,
     bus_files,
-    settle_bus_files,
+    bus_resources,
+    pinned_bus_files,
+    saved_bus_files,
 )
 from agent_comms.installer.carry import CarryChain
 from agent_comms.installer.commands import InstallCommands
@@ -123,8 +125,10 @@ from agent_comms.installer.probes.commands import (
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
-from agent_comms.installer.probes.services import CommanderHeartbeatProbe, ServingProbe
-from agent_comms.installer.refusals import InstallRolledBack, InterpreterWorkerDied, UpgradeRefused
+from agent_comms.installer.probes.services import ServingProbe
+from agent_comms.installer.refusals import (
+    InstallRolledBack, InterpreterWorkerDied, OwnersNotRestarted, UpgradeRefused,
+)
 from agent_comms.installer.reporting import (
     RootWriter,
     RuntimeWriter,
@@ -260,11 +264,6 @@ class StoppedOwners:
 @dataclass(frozen=True)
 class RestartedServices:
     services: tuple[RestartedService, ...]
-    heartbeat: CommanderHeartbeatProbe = field(kw_only=True)
-
-    def require_heartbeat(self, stack: TargetStack) -> None:
-        """Owners and bridges must be released before joining the ordinary service pass."""
-        stack.probe(self.heartbeat)
 
     def service_lines(self) -> tuple[str, ...]:
         return (f"Restarted services: "
@@ -327,9 +326,6 @@ class RetiringRehearsal(FreshRehearsal):
 
 class LiveRun(DeclaredFamily, affix="Run"):
     """What a live install changed."""
-
-    def require_heartbeat(self, stack: TargetStack) -> None:
-        """A run which restarted no service has no new heartbeat to qualify."""
 
     @abstractmethod
     def lines(self) -> tuple[str, ...]: ...
@@ -455,11 +451,10 @@ class ServicesStopped:
     services: tuple[HostService, ...]
     give_back: ExitStack
 
-    def start_on(self, stack: TargetStack, root: Path) -> RestartedServices:
-        heartbeat = CommanderHeartbeatProbe(root, time.time())
+    def start_on(self, stack: TargetStack) -> RestartedServices:
         restarted = stack.start_services(self.services)
         self.give_back.pop_all()
-        return RestartedServices(restarted, heartbeat=heartbeat)
+        return RestartedServices(restarted)
 
 
 @dataclass
@@ -479,6 +474,22 @@ class OwnersStopped:
         self.stopped.extend(name for name in running if name not in self.stopped)
         for outcome in stack.owners(root, StopCliCommand, running):
             outcome.require_success(UpgradeRefused)
+
+    @contextmanager
+    def given_back_on(self, stack: Stack, root: Path) -> Iterator[None]:
+        """Every exit starts the stopped owners on ``stack`` again, unless a published
+        runtime took them over (``give_back.pop_all``). When the install itself is failing,
+        a refused restart carries that failure instead of replacing it."""
+        self.give_back.callback(self.start_on, stack, root)
+        try:
+            yield
+        except BaseException as failure:
+            try:
+                self.give_back.close()
+            except UpgradeRefused as restart:
+                raise OwnersNotRestarted(failure, restart) from failure
+            raise
+        self.give_back.close()
 
     def start_on(self, stack: Stack, root: Path) -> tuple[OwnerStart, ...]:
         self.started = stack.owners(root, StartCliCommand, self.stopped)
@@ -907,7 +918,6 @@ class Install[Rehearsed: Rehearsal](ABC):
             rehearsed = self.reported(rehearsal)
             try:
                 live_run = self.install(rehearsal, bridges, report)
-                live_run.require_heartbeat(self.staged)
                 self.chain.finish_at(self.root)
                 if self.installed.python != self.staged.python:
                     self.staged.commands.close_runtime(self.installed.python)
@@ -954,8 +964,7 @@ class StopsOwners:
     def owners_stopped(cls, root: Path, installed: Stack,
                        staged: TargetStack) -> Iterator[OwnersStopped]:
         owners = OwnersStopped()
-        with owners.give_back:
-            owners.give_back.callback(owners.start_on, installed, root)
+        with owners.given_back_on(installed, root):
             owners.stop(installed, root)
             yield owners
 
@@ -981,8 +990,7 @@ class ExistingBusInstall[Rehearsed: Rehearsal](Install[Rehearsed]):
             RootRuntimeStore.at(root).adopt(installed.runtime)
         maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
         owners = HeldOwnersStopped()
-        with owners.give_back:
-            owners.give_back.callback(owners.start_on, installed, root)
+        with owners.given_back_on(installed, root):
             with owners.hold:
                 with BeginMaintenancePhase().running(clock):
                     held = maintenance.begin(MaintenanceOperator.current())
@@ -1043,6 +1051,7 @@ class PreparedMigration(Extendable):
     before: dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]
     read: BusReadBack
     files: FilesRequest
+    pins: ExitStack
     writer_stores: tuple[type[ExternalStore], ...] = ()
 
     @property
@@ -1052,31 +1061,34 @@ class PreparedMigration(Extendable):
     @classmethod
     def capture(cls, hold: MaintenanceState, outgoing: Stack, files: FilesRequest,
                 steps: tuple[Carry, ...] = ()) -> PreparedMigration:
-        """Snapshot the held bus and the chain's declared external locations.
-        Only bus resources settle; external bytes reach backup without a prior write."""
+        """Snapshot the held bus and the chain's declared external locations, pinned until
+        ``carry`` compares them, so only a step's own write can move their bytes."""
         writer_stores = Carry.writer_declarations(steps)
         with BeforeMigrationFileScanPhase().running(outgoing.commands.clock):
-            settle_bus_files(files, writer_stores)
-            before = bus_files(files, writer_stores)
-        return cls(hold, before, outgoing.verify(files.root), files, writer_stores)
+            resources = bus_resources(files, writer_stores)
+            with pinned_bus_files(files, resources) as pins:
+                before = saved_bus_files(files, resources)
+                return cls(hold, before, outgoing.verify(files.root), files, pins.pop_all(),
+                           writer_stores)
 
     def carry(
         self, pending: tuple[Carry, ...], staged: TargetStack,
         reconcile_arguments: tuple[str, ...] = (),
     ) -> CarriedPass:
         """One migration sequence for rehearsal and the backed-up live bus."""
-        steps = [StepRun(step.declared_name, carried) for step, carried in zip(
-            pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
-        staged.probe(WriterOwnedOpeningProbe(
-            self.files, self.writer_stores,
-            scratch=StorageRule.load(self.files.source_root()).scratch_base))
-        reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
-        steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
-            len(reconciled.rewritten), rewritten=reconciled.rewritten)))
-        declared = tuple(steps)
-        with AfterMigrationFileScanPhase().running(staged.commands.clock):
-            files = carried(self.files, self.before, declared,
-                            RehearsalFiles.declared(declared), self.writer_stores)
+        with self.pins:
+            steps = [StepRun(step.declared_name, carried) for step, carried in zip(
+                pending, staged.call_steps(pending, MigrateOperation(apply=True)), strict=True)]
+            staged.probe(WriterOwnedOpeningProbe(
+                self.files, self.writer_stores,
+                scratch=StorageRule.load(self.files.source_root()).scratch_base))
+            reconciled = staged.cli(self.root, ReconcileStoresCliCommand, *reconcile_arguments)
+            steps.append(StepRun(ReconcileStoresCliCommand.declared_name, Carried(
+                len(reconciled.rewritten), rewritten=reconciled.rewritten)))
+            declared = tuple(steps)
+            with AfterMigrationFileScanPhase().running(staged.commands.clock):
+                files = carried(self.files, self.before, declared,
+                                RehearsalFiles.declared(declared), self.writer_stores)
         passed = CarriedPass(declared, files, staged.verify(self.root))
         passed.require_read(self.read)
         return passed
@@ -1148,6 +1160,8 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     migration = PreparedMigration.capture(
                         maintenance.held_by(MaintenanceOperator.current()), self.installed,
                         files, pending)
+                    # A failure before the carry still releases the pins.
+                    holder.push(migration.pins)
                     backup, selected_route = self.backed_up(selected)
                 except BaseException as error:
                     with AbortMaintenancePhase().running(self.staged.commands.clock):
@@ -1164,7 +1178,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         report.owners.release()
-                    restarted_services = stopped.start_on(self.staged, self.root)
+                    restarted_services = stopped.start_on(self.staged)
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)
@@ -1214,7 +1228,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     retired_backups = backup.retain(self.spill_dir)
                 return passed.extended(
                     CarriedRun, stopped=tuple(report.owners.stopped), services=restarted_services.services,
-                    heartbeat=restarted_services.heartbeat, started=started, restore_space=restore, backup=backup.report(),
+                    started=started, restore_space=restore, backup=backup.report(),
                     retired_backups=retired_backups)
             finally:
                 holder.close()
@@ -1268,7 +1282,7 @@ class FreshInstall(Install[FreshRehearsal]):
         with self.staged.services_stopped(self.installed) as stopped:
             try:
                 route = self.publish(backup, selected_route)
-                services = stopped.start_on(self.staged, self.root)
+                services = stopped.start_on(self.staged)
             except BaseException:
                 HostService.stop_all(stopped.services)
                 backup.restore_route()
@@ -1276,7 +1290,7 @@ class FreshInstall(Install[FreshRehearsal]):
                 raise
             with BackupRetirePhase().running(self.staged.commands.clock):
                 backup.retain(self.spill_dir)
-            return CreatedRun(services.services, route, heartbeat=services.heartbeat)
+            return CreatedRun(services.services, route)
 
 
 class RetiringInstall(StopsOwners, FreshInstall):

@@ -5,20 +5,25 @@ from __future__ import annotations
 import hashlib
 import math
 import os
+import sqlite3
 from abc import abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterable, Mapping
-from dataclasses import asdict, dataclass
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import asdict, dataclass, replace
+from contextlib import contextmanager
+from threading import Event
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import BinaryIO, ClassVar
 
 from .channels import Channel
 from .cli_result import CliResult
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion
 from .message_reference import MessageReference
-from .messages import Message
+from .messages import Message, StoredWireHistory
+from .bus_tables import MessageIdentitySource
+from .read_basis import DMDisplayScope
 from .registration import Registration
 from .store_files import AtomicFile, ExclusiveAtomicFile
 
@@ -43,6 +48,14 @@ class WireExportFormat(DeclaredFamily, affix="Format"):
     def json_record(record: Mapping[str, object]) -> str:
         return FieldCodec.compact(record, ensure_ascii=False)
 
+    def rows(self, messages: Iterable[Message]) -> Iterator[WireExportRow]:
+        return (WireExportRow(message.seq, message.timestamp, self.row(message))
+                for message in messages)
+
+    def stored_rows(self, source: StoredWireHistory) -> Iterable[WireExportRow]:
+        """Messages decoded once from their capability tables, rendered by this format."""
+        return self.rows(source.messages())
+
 
 class SelectableWireExportFormat(WireExportFormat):
     """Formats whose complete input is the ordinary wire export selection."""
@@ -51,14 +64,20 @@ class SelectableWireExportFormat(WireExportFormat):
 @dataclass(frozen=True)
 class JsonlFormat(SelectableWireExportFormat):
     importable: ClassVar[bool] = True
+    row_prefix: ClassVar[bytes] = b'{"record":"message","message":'
+    row_suffix: ClassVar[bytes] = b'}\n'
 
     def header(self, metadata: Mapping[str, object]) -> bytes:
         return (self.json_record(metadata) + "\n").encode()
 
     def row(self, message: Message) -> bytes:
-        return (self.json_record({
-            "record": "message", "message": Message.from_message(message).to_wire(),
-        }) + "\n").encode()
+        return self.row_prefix + self.json_record(Message.from_message(message).to_wire()).encode() + self.row_suffix
+
+    def stored_rows(self, source: StoredWireHistory) -> Iterable[WireExportRow]:
+        """The stored wire text is already this format's row; nothing is decoded."""
+        return (WireExportRow(message.seq, message.timestamp,
+                              self.row_prefix + message.wire.encode() + self.row_suffix)
+                for message in source.rows())
 
 
 @dataclass(frozen=True)
@@ -93,10 +112,11 @@ class TextFormat(SelectableWireExportFormat):
 
 @dataclass(frozen=True)
 class ResolvedExportScope:
-    """One canonical scope and its alias/catalog-resolved predicate snapshot."""
+    """One canonical scope and its required alias/catalog-resolved SQL predicate."""
 
     scope: WireExportScope
-    matches: Callable[[Message], bool]
+    predicate: str
+    parameters: tuple[object, ...]
 
 
 class WireExportScope(DeclaredFamily, affix="Scope"):
@@ -113,7 +133,7 @@ class WireExportScope(DeclaredFamily, affix="Scope"):
 @dataclass(frozen=True, slots=True)
 class EverythingScope(WireExportScope):
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        return ResolvedExportScope(self, lambda message: True)
+        return ResolvedExportScope(self, "1", ())
 
 
 @dataclass(frozen=True, slots=True)
@@ -123,7 +143,8 @@ class AuthoredSourceScope(WireExportScope):
     sources: tuple[MessageReference, ...]
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        return ResolvedExportScope(self, lambda message: message.reference in self.sources)
+        predicate, parameters = MessageIdentitySource.reference_predicate(self.sources)
+        return ResolvedExportScope(self, predicate, parameters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,7 +154,9 @@ class ChannelScope(WireExportScope):
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
         channel = require_channel(self.channel)
         channel.require_routable()
-        return ResolvedExportScope(self, channel.history_scope().includes)
+        history = channel.history_scope()
+        predicate, parameters = history.index_predicate
+        return ResolvedExportScope(self, predicate, parameters)
 
 
 @dataclass(frozen=True, slots=True)
@@ -150,17 +173,14 @@ class DmScope(WireExportScope):
             raise ValueError("A DM wire-export scope requires two distinct participants.")
 
     def resolve(self, require_channel: Callable[[str], Channel], registry: Registration) -> ResolvedExportScope:
-        first = registry.entry(self.participants[0]).entry
-        second = registry.entry(self.participants[1]).entry
+        snapshot = registry.snapshot()
+        first = snapshot.entry(self.participants[0])
+        second = snapshot.entry(self.participants[1])
         canonical = DmScope((first.thread.name, second.thread.name))
         first_names, second_names = first.names, second.names
 
-        def matches(message: Message) -> bool:
-            return (message.sender in first_names and message.target in second_names) or (
-                message.sender in second_names and message.target in first_names
-            )
-
-        return ResolvedExportScope(canonical, matches)
+        predicate, parameters = DMDisplayScope(first_names, second_names).index_predicate
+        return ResolvedExportScope(canonical, predicate, parameters)
 
 
 class ScopeFlag(SubclassUnion, affix="ScopeFlag"):
@@ -230,8 +250,9 @@ class WireExportLimit(DeclaredFamily, affix="Limit"):
 
         def filtered() -> Iterable[WireExportRow]:
             for row in rows:
+                stats.source_messages += 1
                 if cutoff is not None:
-                    timestamp = row.message.timestamp
+                    timestamp = row.timestamp
                     if not math.isfinite(timestamp) or timestamp <= 0:
                         stats.invalid_time += 1
                         continue
@@ -380,10 +401,10 @@ class WireExportProvenance(CliResult):
     output_sha256: str
     truncated: bool
     redacted_messages: int
-    first_sequence: int | None
-    last_sequence: int | None
-    first_timestamp: float | None
-    last_timestamp: float | None
+    first_sequence: int | None = None
+    last_sequence: int | None = None
+    first_timestamp: float | None = None
+    last_timestamp: float | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -395,24 +416,110 @@ class WireExportProvenance(CliResult):
         }
 
 
+class WireExportSelection:
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportSelection:
+        return self
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return metadata
+
+
+class NoSelection(WireExportSelection):
+    __slots__ = ()
+
+    def select_first(self, row: WireExportRow) -> WireExportRow:
+        return row
+
+
 @dataclass(frozen=True, slots=True)
-class WireExportRow:
-    message: Message
+class WireExportRow(WireExportSelection):
+    seq: int
+    timestamp: float
     data: bytes
+
+    def describe_first(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, first_sequence=self.seq, first_timestamp=self.timestamp)
+
+    def describe_last(self, metadata: WireExportProvenance) -> WireExportProvenance:
+        return replace(metadata, last_sequence=self.seq, last_timestamp=self.timestamp)
+
+
+@dataclass(frozen=True)
+class WireExportProgress:
+    bytes_written: int
+    messages_written: int
+
+
+class WireExportCancelled(InterruptedError):
+    """The owner cancelled this export; staging must unwind without publication."""
+
+
+class WireExportObserver:
+    """Stateless default for CLI and retained-context exports."""
+
+    def advanced(self, progress: WireExportProgress) -> None:
+        pass
+
+    def check(self) -> None:
+        pass
+
+    @contextmanager
+    def reading(self, source: StoredWireHistory) -> Iterator[None]:
+        yield
+
+
+class CancellableWireExport(WireExportObserver):
+    def __init__(self) -> None:
+        self.stop_requested = Event()
+        super().__init__()
+
+    def cancel(self) -> None:
+        self.stop_requested.set()
+
+    def cancelled(self) -> bool:
+        return self.stop_requested.is_set()
+
+    def check(self) -> None:
+        if self.cancelled():
+            raise WireExportCancelled("Wire export cancelled")
+
+    @contextmanager
+    def reading(self, source: StoredWireHistory) -> Iterator[None]:
+        self.check()
+        source.db.set_progress_handler(self.cancelled, 1000)
+        try:
+            yield
+        except sqlite3.OperationalError:
+            self.check()
+            raise
+        finally:
+            source.db.set_progress_handler(None, 0)
 
 
 class _ArtifactWriter:
     """Hashing byte writer over one private temporary file."""
 
-    def __init__(self, output: BinaryIO) -> None:
+    def __init__(self, output: BinaryIO, observer: WireExportObserver) -> None:
         self.output = output
+        self.observer = observer
         self.digest = hashlib.sha256()
         self.size = 0
+        self.messages = 0
 
     def write(self, data: bytes) -> None:
+        self.observer.check()
         self.output.write(data)
         self.digest.update(data)
         self.size += len(data)
+
+    def report(self) -> None:
+        self.output.flush()
+        self.observer.advanced(WireExportProgress(self.size, self.messages))
 
 
 @dataclass(eq=False, repr=False, kw_only=True)
@@ -433,8 +540,29 @@ class WireTranscriptExporter:
         destination: Path,
         *,
         overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
     ) -> WireExportProvenance:
-        """Consume ascending messages once and atomically publish the artifact."""
+        """Export authored in-memory context through the same atomic stream writer."""
+        return self._export(destination, lambda stats, header: self.limit.select(
+            self.format.rows(self._bounded(messages)), header,
+            self.boundary.export_started_at, stats),
+            overwrite=overwrite, observer=observer)
+
+    def export_stored(
+        self, source: StoredWireHistory, destination: Path, *, overwrite: bool = False,
+        observer: WireExportObserver = WireExportObserver(),
+    ) -> WireExportProvenance:
+        """Write the format's stored rows through the same limit selection as in-memory export."""
+        with observer.reading(source):
+            return self._export(destination, lambda stats, header: self.limit.select(
+                self.format.stored_rows(source), header, self.boundary.export_started_at, stats),
+                overwrite=overwrite, observer=observer)
+
+    def _export(
+        self, destination: Path,
+        rows: Callable[[ExportSelectionStats, int], Iterable[WireExportRow]],
+        *, overwrite: bool, observer: WireExportObserver,
+    ) -> WireExportProvenance:
         header = self._header()
         self.limit.validate_header(len(header))
 
@@ -445,26 +573,29 @@ class WireTranscriptExporter:
 
         artifact = AtomicFile(destination) if overwrite else ExclusiveAtomicFile(destination)
         stats = ExportSelectionStats()
-        exported = 0
-        first_selected: Message | None = None
-        last_selected: Message | None = None
+        first_selected: WireExportSelection = NoSelection()
+        last_selected: WireExportSelection = NoSelection()
         with artifact.staged() as output:
-            writer = _ArtifactWriter(output)
+            writer = _ArtifactWriter(output, observer)
             writer.write(header)
-            rows = self._rows(messages, stats)
-            for row in self.limit.select(
-                rows, len(header), self.boundary.export_started_at, stats
-            ):
+            writer.report()
+            reported = 0
+            for row in rows(stats, len(header)):
                 writer.write(row.data)
-                exported += 1
-                if first_selected is None:
-                    first_selected = row.message
-                last_selected = row.message
+                writer.messages += 1
+                if writer.size - reported >= 65536:
+                    writer.report()
+                    reported = writer.size
+                first_selected = first_selected.select_first(row)
+                last_selected = row
+            writer.report()
+            observer.check()
             bytes_written = writer.size
             output_sha256 = writer.digest.hexdigest()
 
+        exported = writer.messages
         omitted = stats.source_messages - exported
-        return WireExportProvenance(
+        metadata = WireExportProvenance(
             destination=str(destination),
             format=self.format,
             scope=self.scope,
@@ -480,11 +611,8 @@ class WireTranscriptExporter:
             output_sha256=output_sha256,
             truncated=omitted > 0,
             redacted_messages=0,
-            first_sequence=first_selected.seq if first_selected else None,
-            last_sequence=last_selected.seq if last_selected else None,
-            first_timestamp=first_selected.timestamp if first_selected else None,
-            last_timestamp=last_selected.timestamp if last_selected else None,
         )
+        return last_selected.describe_last(first_selected.describe_first(metadata))
 
     def _header(self) -> bytes:
         metadata = {
@@ -500,18 +628,13 @@ class WireTranscriptExporter:
         }
         return self.format.header(metadata)
 
-    def _rows(
-        self,
-        messages: Iterable[Message],
-        stats: ExportSelectionStats,
-    ) -> Iterable[WireExportRow]:
+    def _bounded(self, messages: Iterable[Message]) -> Iterator[Message]:
         previous_sequence = -1
         for message in messages:
             previous_sequence = self._validate_sequence(message, previous_sequence)
             if message.seq > self.boundary.through_seq:
                 return
-            stats.source_messages += 1
-            yield WireExportRow(message, self.format.row(message))
+            yield message
 
     @staticmethod
     def _validate_sequence(message: Message, previous: int) -> int:

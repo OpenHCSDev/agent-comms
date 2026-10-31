@@ -18,10 +18,10 @@ from pathlib import Path
 from subprocess import TimeoutExpired
 from typing import TYPE_CHECKING, ClassVar, Self, cast
 
-from agent_comms.declared_family import DeclaredFamily, RegisteredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.errors import RejectedEnforcementError, TodoConflict
-from agent_comms.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
@@ -203,6 +203,7 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         FieldCodec.compile_comparison(cls)
     commander_disposes: ClassVar[bool] = True
     urgent: ClassVar[bool] = False
+    owner_flagged: ClassVar[bool] = False
 
     @classmethod
     def disposes_subjects(cls, subjects: tuple[HeartbeatSubject, ...]) -> bool:
@@ -232,8 +233,16 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         verbs = dict.fromkeys(member for parent in type(self).__mro__
                               for family in vars(parent).get("clearing_verbs", ())
                               for member in family.members_with(family))
-        return " or ".join(f"`{command}`" for verb in verbs if self.review_allowed(verb)
-                           for command in verb.commands(values))
+        # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
+        # not the same arguments once per verb.
+        alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
+        for verb in verbs:
+            if self.review_allowed(verb):
+                for command in verb.commands(values):
+                    tool, name, *arguments = command.split(" ")
+                    alike.setdefault((tool, tuple(arguments)), []).append(name)
+        return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
+                           for (tool, arguments), names in alike.items())
 
     def attention(self) -> bool:
         return True
@@ -366,10 +375,12 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
         # Storage reads the filesystem, not the git source an unreadable card failed on:
         # a unit whose declared home is gone is that card and a missing home.
         held = frame.holders
-        return cls.for_units(comms, (state.unit for state in observed if state.unit in held))
+        return cls.for_units(comms, (state.unit for state in observed if state.unit in held),
+                             frame.pulls)
 
     @classmethod
-    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation]) -> tuple[Self, ...]:
+    def for_units(cls, comms: Comms, units: Iterable[ThreadIncarnation],
+                  reads: ProgressRead) -> tuple[Self, ...]:
         registry = comms.registry
         snapshot = registry.snapshot()
         members = cls.members_with(cls)
@@ -378,7 +389,7 @@ class StorageViolation(UndatedStandingRule, FamilyScan, declared_name=None):
             thread = snapshot.require(unit.name)
             if thread.incarnation != unit:
                 raise ValueError("Observed unit incarnation changed")
-            storage = UnitStorage.read(registry.storage_rule, thread)
+            storage = UnitStorage.read(registry.storage_rule, thread, reads)
             found.extend(member(storage) for member in members if member.violated(storage))
         return tuple(found)
 
@@ -462,6 +473,7 @@ class HeldBranch(HolderBranch):
     worktree: Path
     repository: PresentCheckout = field(compare=False, repr=False)
     source: UnitObservation = field(compare=False, repr=False)
+    queued: bool = field(compare=False)
 
     @property
     def problem(self) -> str:
@@ -537,6 +549,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                                 todo, unit, frame.pulls.require_branch_difference(path), path,
                                 frame.pulls.checkout(todo.order.checked().check.directory),
                                 state.source,
+                                any(request.queued for request in frame.pulls.open_for(todo)),
                             ))
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
@@ -571,7 +584,7 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
         return tuple(cls(problem=held.problem, holder=held.holder,
                          repository=held.difference.repository,
                          branch=held.difference.branch, behind=held.difference.behind)
-                     for held in branches if held.difference.behind)
+                     for held in branches if held.difference.behind and not held.queued)
 
     def line(self) -> str:
         return (f"MERGE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
@@ -1014,7 +1027,8 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
                 f" there unjudged. you read it yet?"
-                f" -> {self.clearing_commands()}")
+                f" -> judge ok/back/reviewing/superseded " + " ".join(
+                    f"--{name} {value}" for name, value in self.command_values().items()))
 
 
 @dataclass(frozen=True)
@@ -1239,6 +1253,8 @@ class LocatedHuntDue(HuntDue):
 class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     """An owner directive recorded on an open request, past its deadline with no order since."""
 
+    owner_flagged: ClassVar[bool] = True
+
     request: OwnerRequestId
     directive: RequestDirective
     answerer: Thread = field(compare=False)
@@ -1256,7 +1272,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
         """One debt whoever reads it: the request's commander answering clears it for every
         peer and fork that inherits the request, and any of them may answer it themselves."""
         reader = snapshot.require(commander)
-        names = snapshot.names_for(commander)
+        names = snapshot.names_for(commander) | frozenset(
+            thread.name for thread in snapshot.commanders_channel())
         return tuple(
             cls(message=original, request=request.id, directive=directive,
                 answerer=snapshot.participant(request.commander.name).answering_thread(reader))

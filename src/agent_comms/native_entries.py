@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from .native_failures import NativePiUnavailable
-
 import json
 from abc import ABC, abstractmethod
-from contextlib import ExitStack, contextmanager
 from collections.abc import Callable, Iterable, Iterator
-from itertools import repeat
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from itertools import repeat
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, TextIO, cast
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal, Never, Self, TextIO, cast
 
 from .locked_store import DurableFile
+from .native_failures import NativePiUnavailable
 from .native_pi import (
     NativeEvidencePrefixChanged,
     NativeInputUncommitted,
@@ -24,11 +23,10 @@ from .native_session_files import BusTranscriptFile, NativeSessionFiles
 from .store_files import AtomicFile
 
 if TYPE_CHECKING:
-    from .native_pi import NativeContextProof
     from .importing import ImportedConversation
 
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
@@ -40,14 +38,19 @@ from .field_codec import (
     WireOmitDefault,
 )
 from .importing import ImportedSessionMetadata
-from .native_input_record import NativeInputLocation
+from .native_input_proof import (
+    NativeContextJournal,
+    NativeContextProof,
+    NativeContextRecord,
+    NativeInputLocation,
+)
+from .native_session_reopen import PiSessionId
 from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputPresentation, NoInputDisplay, _SessionRoutes
-from .native_session_reopen import PiSessionId
 from .turn_item import FreshNativeId, NativeItemId
 
 
@@ -183,7 +186,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return cls
 
     @classmethod
-    def read(cls, raw: bytes) -> NativeEntry:
+    def read(cls, raw: bytes) -> Self:
         return cls.from_wire(FieldCodec.parse(raw))
 
     @classmethod
@@ -398,6 +401,78 @@ class NativeEvidenceRead:
         self.observe()
         return self.tracked(location.input_id)
 
+    def context_proof(
+        self,
+        files: NativeSessionFiles,
+        input_id: InputId,
+        *,
+        generations: range = NativeContextRecord.interval(),
+        session_entry_start: int,
+    ) -> NativeContextProof:
+        """Corroborate a journal row against this reader's original acquired bytes."""
+        session_file = files.session.absolute()
+        with self.borrow(session_file, self) as evidence:
+            with NativeContextJournal.open_evidence(files.input_proof) as db:
+                row = NativeContextJournal.for_input(db, input_id, generations)
+            location = NativeInputLocation(
+                input_id,
+                row.session_id,
+                row.session_entry_id,
+                session_entry_start=session_entry_start,
+            )
+            entry = evidence.read_input(location)
+            return row.corroborate(
+                session_file,
+                NativeInputLocation(
+                    input_id,
+                    evidence.header().id,
+                    entry.id,
+                    session_entry_start=session_entry_start,
+                ),
+            )
+
+    def corroborates_context(
+        self,
+        context: NativeContextProof,
+        *,
+        input_id: InputId,
+        files: NativeSessionFiles,
+    ) -> bool:
+        """Corroborate a located context through this reader's own pinned bytes.
+
+        This grants neither input replay nor recovery authority.
+        """
+        if context.input_id != input_id or files.session != context.session_file:
+            return False
+        return (
+            self.context_proof(
+                files,
+                input_id,
+                generations=range(context.request_generation, context.request_generation + 1),
+                session_entry_start=context.session_entry_start,
+            )
+            == context
+        )
+
+    def verify_context(
+        self,
+        files: NativeSessionFiles,
+        input_event: NativeInputLocation,
+        context: NativeContextRecord,
+    ) -> NativeContextProof:
+        """Join the normalized acknowledgement and this acquired durable evidence exactly."""
+        if context.input_commit != input_event.input_commit:
+            raise NativePiUnavailable("Native Pi input/context events disagree")
+        emitted = context.at(files.session, session_entry_start=input_event.session_entry_start)
+        with self.borrow(files.session, self) as evidence:
+            if not evidence.corroborates_context(
+                emitted, input_id=input_event.input_id, files=files
+            ):
+                raise NativePiUnavailable(
+                    "Native Pi emitted an event without matching durable proof"
+                )
+            return emitted
+
     def stopped_input(self, input_id: InputId):
         """Read only this input's contiguous branch, ending at the next input.
 
@@ -590,8 +665,12 @@ class MessageEntry(NativeEntry):
         # NativeEntry declares absence as None for every entry; this hands Pi's answer over.
         return self.message.input_id.value_or(None)
 
+    def require_input_id(self) -> InputId:
+        """A tracked user message names the input it carries; anything else is malformed."""
+        return self.message.input_id.require()
+
     def require_tracked_user(self) -> MessageEntry:
-        self.message.input_id.require()
+        self.require_input_id()
         if not self.message.user or not self.message.input_digest.reported:
             raise MalformedRecord("Native Pi session has ambiguous tracked user input")
         self.id.require_present()

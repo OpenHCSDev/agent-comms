@@ -10,21 +10,18 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
 
 from .coordination_errors import CommandFailure
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import MissingSourceLine
-from .field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
+from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
-
-if TYPE_CHECKING:
-    from .todos import Todo
 
 
 class RepositorySelection(ABC):
@@ -78,9 +75,7 @@ class FailedGitCommand(GitCommandError):
 
     def no_check_ran_on(self, sha: str) -> bool:
         """Git's absent-note reply, not a corrupt repository or an invalid revision."""
-        return self.returncode == 1 and self.stderr in (
-            "", f"error: no note found for object {sha}.\n",
-        )
+        return self.returncode == 1 and self.stderr == f"error: no note found for object {sha}.\n"
 
     def unrelated_history(self) -> bool:
         return self.returncode == 1
@@ -100,6 +95,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
     model_config = ConfigDict(frozen=True)
     remote: ClassVar[str] = "origin"
     local_remote: ClassVar[str] = "."
+    full_commit: ClassVar[re.Pattern[str]] = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
     checkout: Path
     github: InstanceOf[
@@ -171,8 +167,6 @@ class Repo(GitLaunch, BaseModel, WireValue):
         that git would resolve to the enclosing repository instead."""
         return (self.checkout / ".git").exists()
 
-    def holds(self, todo: Todo) -> bool:
-        return self.github == todo.repo
 
     def default_branch(self) -> str:
         """The origin's declared default, never a guessed branch name."""
@@ -215,6 +209,22 @@ class Repo(GitLaunch, BaseModel, WireValue):
             except GitCommandError as error:
                 raise UnavailableCommitError(checkout, missing, f"remote {remote}: {error}") from error
             cls.require_local_commits(checkout, *objects)
+
+    def acquire(self, *objects: str) -> None:
+        """Acquire exact commits from this repository's own remote."""
+        self.require_commits(self.checkout, self.remote, *objects)
+
+    @classmethod
+    def unservable_commits(cls, checkout: Path | str, remote: str,
+                           *objects: str) -> tuple[str, ...]:
+        """Fetch each missing object alone, so one the remote refuses cannot cost the others;
+        answer the ones still absent."""
+        for name in cls.missing_commits(checkout, *objects):
+            try:
+                cls.git(checkout, "fetch", "--quiet", "--no-tags", "--", remote, name)
+            except GitCommandError:
+                continue
+        return cls.missing_commits(checkout, *objects)
 
     def contains(self, sha: str, revision: str = "HEAD") -> bool:
         """Strict local ancestry; only valid local non-ancestors mean False."""
@@ -289,8 +299,29 @@ class Repo(GitLaunch, BaseModel, WireValue):
 
     @classmethod
     def descends(cls, checkout: Path | str, ancestor: str, revision: str) -> bool:
-        """Whether ``revision`` holds ``ancestor`` in this checkout's history."""
+        """Whether ``revision`` holds ``ancestor`` in this checkout's history. Two full commit ids
+        have one answer for good; a ref or an abbreviation moves, so it is asked every time."""
+        if cls.full_commit.fullmatch(ancestor) and cls.full_commit.fullmatch(revision):
+            return cls.commit_descends(cls.ancestry_dir(Path(checkout)), ancestor, revision)
         return cls.answers(checkout, "merge-base", "--is-ancestor", ancestor, revision)
+
+    @staticmethod
+    @cache
+    def commit_descends(common_dir: Path, ancestor: str, descendant: str) -> bool:
+        return Repo.answers(common_dir, "merge-base", "--is-ancestor", ancestor, descendant)
+
+    @staticmethod
+    @cache
+    def ancestry_dir(checkout: Path) -> Path:
+        """Where immutable ancestry is asked. Liveness probes read Checkout.common_dir instead,
+        because a removed worktree must stop answering there."""
+        return Repo.common_dir_of(checkout)
+
+    @staticmethod
+    def common_dir_of(checkout: Path) -> Path:
+        """Git's shared ref and object owner, independent of this worktree's HEAD."""
+        return Path(Repo.git(checkout, "rev-parse", "--path-format=absolute",
+                             "--git-common-dir").strip()).resolve()
 
     @classmethod
     def store_serves(cls, store: Path, *args: str) -> bool:
@@ -322,11 +353,18 @@ class Repo(GitLaunch, BaseModel, WireValue):
         return ()
 
     @classmethod
+    @cache
     def of(cls, checkout: Path) -> Repo:
-        """Its GitHub name comes from the checkout's own origin remote."""
+        """Its GitHub name comes from the checkout's own origin remote, which does not move while
+        a process runs: installs restart the connector."""
         url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
+        return cls(checkout=checkout, github=cls.repository_url(url))
+
+    @staticmethod
+    def repository_url(url: str) -> RepositoryName:
+        """The same Git-origin identity for a checkout and a declared stack source."""
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
-        return cls(checkout=checkout, github=RepositoryName.from_wire("/".join(github)))
+        return RepositoryName.from_wire("/".join(github))
 
 
 class CheckoutHoldsWorkError(ValueError):
@@ -514,8 +552,7 @@ class Checkout(SingleFieldValue, PresentMember):
     @cached_property
     def common_dir(self) -> Path:
         """Git's shared ref and object owner, independent of this worktree's HEAD."""
-        return Path(Repo.git(self.path, "rev-parse", "--path-format=absolute",
-                             "--git-common-dir").strip()).resolve()
+        return Repo.common_dir_of(self.path)
 
     def read(self) -> CheckoutHistory:
         """One operation's refs and commit graph; the caller owns this read's lifetime."""
@@ -670,8 +707,8 @@ class PublishedUpstream(TrackedUpstream):
     def unpushed(self, history: CheckoutHistory, head: str,
                  published: tuple[str, ...]) -> tuple[UnpushedHead, ...]:
         if published:
-            (remote_head,) = published
-            count = history.count(head, remote_head)
+            # Ahead of the upstream is not unpushed: only a commit on no remote exists only locally.
+            count = history.unpublished(head, "")
             return (UnpushedHead(head, count, self.tracking),) if count else ()
         return super().unpushed(history, head, published)
 
@@ -790,8 +827,21 @@ class RepositoryReads:
     def __init__(self) -> None:
         self._histories: dict[Path, CheckoutHistory] = {}
         self._worktree_histories: dict[Path, CheckoutHistory] = {}
+        self._remote_cuts: dict[Path, dict[str, dict[str, str]]] = {}
+
+    def remote_cuts(self, checkout: Checkout) -> dict[str, dict[str, str]]:
+        """Each remote's published refs: worktrees of one repository share their remotes."""
+        return self._remote_cuts.setdefault(checkout.resolved().common_dir, {})
+
+    def repository(self, path: Path) -> Repo:
+        """The common directory's identity, acquired once within this pass."""
+        return self.history_for(Checkout(path)).repository
 
     def history_for(self, checkout: Checkout) -> CheckoutHistory:
+        """One cut per common directory, shared by every worktree it listed. A worktree added
+        after that cut is in none of its listings, so it reads a cut of its own: on 2026-10-30
+        every new order's worktree (claude-nra--P1067) killed the heartbeat pass that saw it
+        mid-read, because head_for found no HEAD for it in the stale listing."""
         checkout = checkout.resolved()
         if checkout.path not in self._worktree_histories:
             common = checkout.common_dir
@@ -799,6 +849,8 @@ class RepositoryReads:
                 self._histories[common] = checkout.read()
             history = self._histories[common]
             self._worktree_histories.update((path, history) for path in history.heads)
+            if checkout.path not in history.heads:
+                history = checkout.read()
             self._worktree_histories[checkout.path] = history
         return self._worktree_histories[checkout.path]
 
@@ -836,6 +888,11 @@ class CheckoutHistory:
         self._remote_selections: dict[str, int] = {}
         self._bases: dict[int, tuple[str, ...]] = {}
         self._walks: dict[CommitSelection, tuple[GitCommit, ...]] = {}
+
+    @cached_property
+    def repository(self) -> Repo:
+        """Origin and source identity shared by every alias of this repository."""
+        return Repo.of(self.checkout.path)
 
     @cached_property
     def refs(self) -> dict[str, GitReference]:

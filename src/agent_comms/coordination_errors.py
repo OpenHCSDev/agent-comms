@@ -67,13 +67,17 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     """No committed SQLite snapshot was acquired; no absence is established."""
 
     busy_message: ClassVar[str] = "The database read is busy"
+    sqlite_errorcode: int
+    sqlite_errorname: str
 
     @classmethod
     @contextmanager
     def checking(cls) -> Iterator[None]:
-        """Handle SQLite read errors."""
+        """Handle SQLite read errors; one already decoded keeps its own class."""
         try:
             yield
+        except CoordinationReadUnavailable:
+            raise
         except sqlite3.OperationalError as error:
             cls.raise_from(error)
 
@@ -81,12 +85,17 @@ class CoordinationReadUnavailable(CoordinationError, DeferredRead):
     def raise_from(cls, error: sqlite3.OperationalError) -> Never:
         """Decode SQLite's contention codes once, never its error wording."""
         if error.sqlite_errorcode & 0xFF in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED):
-            raise cls(cls.busy_message) from error
+            busy = cls(cls.busy_message)
+            busy.sqlite_errorcode = error.sqlite_errorcode
+            busy.sqlite_errorname = error.sqlite_errorname
+            raise busy from error
         raise error
 
 
-class CoordinationBeginUnavailable(CoordinationReadUnavailable):
-    """BEGIN acquired no write transaction; its body and commit never ran."""
+class CoordinationBeginUnavailable(CoordinationReadUnavailable, sqlite3.OperationalError):
+    """BEGIN acquired no write transaction; its body and commit never ran.
+
+    It is SQLite's own refusal too, so every handler of a storage error still answers it."""
 
     busy_message = "The database write transaction did not start"
 

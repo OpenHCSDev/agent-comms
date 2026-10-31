@@ -12,8 +12,8 @@ from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendin
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     JsonShapeFamily,
@@ -30,8 +30,8 @@ if TYPE_CHECKING:
     from .assignment_states import AssignmentState
     from .coordinated_runtime import SelectedExecution
     from .historical_native_inputs import HistoricalNativeInput, TriageHistoricalNativeInput
+    from .native_input_proof import NativeContextProof
     from .native_input_record import TriageNativeExecution
-    from .native_pi import NativeContextProof
     from .native_runtime_input import NativeRuntimeInput
     from .private_send_claim import PrivateSendClaim
     from .private_send_stage import TriageNativeSend

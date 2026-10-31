@@ -13,6 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Self
 
 from agent_comms.coordination_errors import CoordinationError
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
+)
 
 from .channel_targets import DeclaredTag
 from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
@@ -20,7 +24,6 @@ from .cli_result import CliResult
 from .goal_waits import GoalWaits
 from .native_entries import ImportedSessionWriter
 from .locked_store import PatternFile, RuntimeFile
-from .process_claim import ClaimHeldError, ProcessSingleton
 from .registration import Registration
 from .relationships import RelationshipStore
 from .repo import Checkout, LaunchCheckout
@@ -38,7 +41,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .config_options import RunningSelection
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     NullMember,

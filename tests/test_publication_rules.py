@@ -12,7 +12,7 @@ from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.commander.publication_rules import (
     ClosedPullRequestScanPending, ClosedUnmergedPullRequest,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.head_review import PullRequestHead
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.heartbeat_subjects import CommanderHistory
@@ -20,7 +20,7 @@ from agent_comms.order_tools import CommsHeadVerdictTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.task_attachments.commander_pings import RulePing
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.work_branches import SharedCommitBase, UnrelatedCommitBase
+from agent_comms.work_branches import SharedCommitBase, UnrelatedCommitBase, UnservableCommitBase
 from agent_comms.todos import (
     ClosedListedPullRequest, MergedListedPullRequest, NoHeadOrder,
     ProgressRead, PullRequestCommit, ReviewedHeadVerdict, SupersededHeadVerdict, VerdictReason,
@@ -75,6 +75,31 @@ def test_unrelated_closed_head_does_not_poison_its_repository(head_bus, reviewed
     assert rules[10].base == UnrelatedCommitBase()
     assert frame.closed.unscanned == ()
     assert FieldCodec.decode(RulePing, FieldCodec.encode(RulePing.capture(rules[10]))) == RulePing.capture(rules[10])
+
+
+def test_closed_head_no_ref_reaches_is_compared_and_an_unservable_one_is_its_own_line(
+    head_bus, reviewed_source,
+):
+    comms, github, _ = head_bus
+    source = reviewed_source
+    stamp = datetime.fromtimestamp(time.time() - 601, UTC).strftime('%Y-%m-%dT%H:%M:%SZ')
+    head = source.branch_commit
+    for name in source.git(source.checkout, 'for-each-ref', '--contains', head,
+                           '--format=%(refname)').split():
+        source.git(source.checkout, 'update-ref', '-d', name)
+    gone = 'b' * 40
+    for number, closed in ((7, head), (10, gone)):
+        github.put(source.github, ClosedListedPullRequest(
+            number, f'closed/{number}', closed, updated=stamp, closed_at=stamp,
+            base='main', reviewable_times=(stamp,)))
+    asyncio.run(ClosedPullRequestWatch().run(lambda: nullcontext(comms)))
+    frame = capture_frame(comms, 'lead', ProgressRead(()), CommanderHeartbeat())
+    rules = {rule.request.pr: rule for rule in
+             ClosedUnmergedPullRequest.scan_observed(comms, 'lead', (), frame)}
+    assert rules[7].base == SharedCommitBase(source.main_commit)
+    assert rules[10].base == UnservableCommitBase()
+    assert rules[10].commits == (gone,)
+    assert 'has a head commit origin no longer serves' in rules[10].line()
 
 
 def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_source, installed_runtime):

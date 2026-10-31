@@ -5,7 +5,7 @@
 import pytest
 
 from agent_comms.input_key import AcpInputKey
-from agent_comms.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_session_files import NativeSessionFiles
 from agent_comms.native_session_reopen import NativeSessionIdentity

@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Literal
 
 from agent_comms.child_process import Platform
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText, Sha256Text, WireName
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs, built_tree_pin
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole

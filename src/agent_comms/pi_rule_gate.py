@@ -23,6 +23,7 @@ from agent_comms_hooks.skill import (
 )
 
 from .bus_publication import Delivered
+from .nominal.field_codec import ThreadLookup
 from .rule_deal import DealTrigger, DealtRuleGate, Redeals
 from .tool_denial import SelectedToolDenied
 
@@ -80,7 +81,7 @@ class PiRedeal(PiRuleGate, Redeals):
         snapshot = self.comms.registry.snapshot()
         snapshot.commander_project.deal_rules(
             self,
-            self.thread.incarnation,
+            snapshot.born(self.thread.incarnation.require_recorded().lookup),
             commander=commander,
             commanded=commanded,
             prompts=self.owner_words(snapshot),
@@ -99,7 +100,7 @@ class PiRedeal(PiRuleGate, Redeals):
             for delivery in self.typed_by(user, lookup)
         )[:self.owner_prompts]))
 
-    def typed_by(self, user: Thread, lookup: str) -> Iterator[Delivered]:
+    def typed_by(self, user: Thread, lookup: ThreadLookup) -> Iterator[Delivered]:
         """The human's own messages to this thread, newest first, read a page at a time
         until the deal has its prompts or his history ends."""
         sender = (user.incarnation.require_recorded().lookup,)

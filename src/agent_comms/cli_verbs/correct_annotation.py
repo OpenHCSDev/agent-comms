@@ -6,8 +6,8 @@ from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Editor
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Editor
 from agent_comms.target_fields import ChoiceTargetField
 from agent_comms.working_memory_labels import ModelLabel
 from agent_comms.working_memory_questions import SpanAnswer

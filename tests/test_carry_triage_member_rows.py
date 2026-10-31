@@ -8,7 +8,7 @@ from cutover.carry_triage_member_rows import TriageMemberRows
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.field_codec import AssignmentId, InputId
+from agent_comms.nominal.field_codec import AssignmentId, InputId
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.triage_native_sources import TriageNativeSource
 

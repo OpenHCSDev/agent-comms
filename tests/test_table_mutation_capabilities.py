@@ -15,7 +15,7 @@ from agent_comms.locked_store import SQLiteFile
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.execution_states import (
     ActiveExecution,
     CompletedExecution,

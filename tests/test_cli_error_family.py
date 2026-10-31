@@ -1,6 +1,5 @@
 """Core's error declaration controls encoding and read-watch recovery."""
 from __future__ import annotations
-from pathlib import Path
 
 from agent_comms.repo import Checkout
 import asyncio
@@ -15,7 +14,7 @@ from agent_comms.cli import _fail, main
 from agent_comms.cli_bridges.shared import Binding, GivenBinding, StoredBinding
 from agent_comms.cli_protocol import WATCH_LINE, FailedCoreError, UnavailableCoreError
 from agent_comms.coordination_errors import CoordinationReadUnavailable
-from agent_comms.field_codec import RecordProblems
+from agent_comms.nominal.field_codec import RecordProblems
 from agent_comms.locked_store import SQLiteFile
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
@@ -69,9 +68,10 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 from agent_comms.cli_bridges.shared import Binding
+from agent_comms.store_files import LendingConnection
 
 connect = sqlite3.connect
-class PausedConnection(sqlite3.Connection):
+class PausedConnection(LendingConnection):
     first_create = True
     def execute(self, statement, *args, **kwargs):
         if self.first_create and statement.startswith('CREATE TABLE '):
@@ -80,7 +80,7 @@ class PausedConnection(sqlite3.Connection):
             assert sys.stdin.readline() == 'go\n'
         return super().execute(statement, *args, **kwargs)
 
-with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, factory=PausedConnection, **k)):
+with patch('sqlite3.connect', side_effect=lambda *a, **k: connect(*a, **{**k, 'factory': PausedConnection})):
     with Binding.open(Path(sys.argv[1])):
         pass
 print('opened', flush=True)
@@ -116,7 +116,7 @@ print('opened', flush=True)
         assert binding.bind(db) == binding
     await open_together(fresh=False)
     with Binding.open(tmp_path) as db:
-        assert StoredBinding().bind(db) == binding.address()
+        assert StoredBinding().bind(db) == binding
 
 
 @pytest.mark.parametrize('conflicting', [False, True])
@@ -134,7 +134,7 @@ def test_concurrent_initial_binding_preserves_one_identity(
     with Binding.open(tmp_path) as db:
         winner, = Binding.select(db)
         assert winner in (first, other)
-        assert StoredBinding().bind(db) == winner.address()
+        assert StoredBinding().bind(db) == winner
         assert winner.bind(db) == winner
         loser = other if winner == first else first
         with pytest.raises(ValueError):
@@ -151,33 +151,11 @@ def test_existing_binding_lookup_does_not_acquire_a_writer(tmp_path, bus):
         db.set_trace_callback(statements.append)
         with closing(SQLiteFile.writer(tmp_path / 'delivery.sqlite3')) as writer:
             writer.execute('BEGIN IMMEDIATE')
-            assert StoredBinding().bind(db) == binding.address()
+            assert StoredBinding().bind(db) == binding
             assert writer.in_transaction
         assert not any(sql.startswith(('BEGIN', 'COMMIT', 'ROLLBACK')) for sql in statements)
 
 
-
-
-@pytest.mark.asyncio
-async def test_watched_record_crosses_the_watch_line_as_its_envelope(root):
-    """The bridge's watch child writes what bus.watch yields; the bridge decodes that same line."""
-    from contextlib import aclosing
-
-    from goal_owner_fixture import canonical_goal_wire
-
-    from agent_comms.cli_protocol import ArrivedMessage
-    from agent_comms.threads import Thread
-
-    comms = canonical_goal_wire(root)
-    for name in ("a", "b"):
-        comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path('/wt'))))
-    sent = comms.messaging.send("a", "b", "crosses").message
-    async with aclosing(comms.watch("b")) as watched:
-        async with asyncio.timeout(5):
-            record = await anext(watched)
-    line = WATCH_LINE.validate_json(ArrivedMessage(message=record).model_dump_json())
-    assert isinstance(line, ArrivedMessage)
-    assert line.message.to_wire() == sent.to_wire() == record.to_wire()
 
 
 def test_given_binding_fields_override_the_stored_binding(tmp_path, comms):

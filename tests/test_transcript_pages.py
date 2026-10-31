@@ -1,3 +1,4 @@
+from agent_comms.transcripts import RecordedPageSource
 from agent_comms.repo import Checkout
 from conftest import transcript_records
 from agent_comms.session_file import RegistrySessionLocation
@@ -10,8 +11,14 @@ import pytest
 from conftest import installed_comms
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import NativeTranscriptCursor, WireTranscriptCursor
+from agent_comms.transcripts import EarlierThan, LaterThan, NativeTranscriptCursor, Through, WireTranscriptCursor
 from agent_comms.thread_text import ForkedParent, GivenThreadText
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.ui_model.observation import ReadTranscript
 
 
 def transcript(path, count):
@@ -39,7 +46,7 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     assert seen == [f"Record {i}" for i in range(85, 105)]
     while page.has_older:
         page = comms.transcripts.capture_page_read(
-            "worker", before=page.before).read()
+            "worker", position=EarlierThan(page.before)).read()
         seen[:0] = [event.text for event in page.events]
     assert seen == [f"Record {i}" for i in range(105)]
     assert page.before.offset == 0
@@ -52,9 +59,47 @@ def test_pages_reach_beginning_and_return_to_tail_without_duplicates(tmp_path):
     seen = [event.text for event in page.events]
     while page.has_newer:
         page = comms.transcripts.capture_page_read(
-            "worker", after=page.after, through=through).read()
+            "worker", position=LaterThan(page.after), limit=Through(through)).read()
         seen.extend(event.text for event in page.events)
     assert seen == [f"Record {i}" for i in range(105)]
+
+
+def shared_page(comms, operation: TranscriptPageRead) -> TranscriptSnapshotUpdate:
+    """One page operation served directly, inside the UI's root-bound envelope and through MCP:
+    all three carry the same page, draft and witness as the domain capture."""
+    expected = TranscriptSnapshotUpdate.from_read(comms.transcripts.capture_page_read(
+        operation.thread, position=operation.position, limit=operation.limit,
+        page_source=operation.page_source))
+    direct = operation.read(comms)
+    assert ReadTranscript(str(comms.root), operation).read(comms) == direct == expected
+    assert invoke_tool(comms, operation.declared_name, FieldCodec.encode_fields(operation),
+                       caller=ThreadCaller(operation.thread)) == FieldCodec.encode(direct)
+    return direct
+
+
+def test_one_page_operation_pages_alike_for_the_ui_and_mcp(tmp_path):
+    path = tmp_path / "session.jsonl"
+    transcript(path, 45)
+    comms = installed_comms(tmp_path / "wire")
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path), session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+    snapshot = shared_page(comms, TranscriptPageRead(thread="worker"))
+    through = snapshot.page.after
+    seen = [event.text for event in snapshot.page.events]
+    pages = 1
+    while snapshot.page.has_older:
+        snapshot = shared_page(comms, TranscriptPageRead(thread="worker", position=EarlierThan(snapshot.page.before)))
+        seen[:0] = [event.text for event in snapshot.page.events]
+        pages += 1
+    assert pages > 1 and seen == [f"Record {i}" for i in range(45)]
+    seen = [event.text for event in snapshot.page.events]
+    while snapshot.page.has_newer:
+        snapshot = shared_page(comms, TranscriptPageRead(
+            thread="worker", position=LaterThan(snapshot.page.after), limit=Through(through)))
+        seen.extend(event.text for event in snapshot.page.events)
+    assert seen == [f"Record {i}" for i in range(45)]
+    comms.registry.declare(Thread('quiet', frozenset(), Checkout(tmp_path)))
+    empty = shared_page(comms, TranscriptPageRead(thread="quiet"))
+    assert not empty.page.events and not empty.page.has_older and not empty.page.has_newer
 
 
 def test_oversized_message_and_file_identity(tmp_path):
@@ -71,9 +116,9 @@ def test_oversized_message_and_file_identity(tmp_path):
     assert not page.has_older
     comms.registry.declare(replace(thread, session_file=RegistrySessionLocation.from_path(str(tmp_path / "other.jsonl"), comms.root)))
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.capture_page_read("worker", before=page.before).read()
+        comms.transcripts.capture_page_read("worker", position=EarlierThan(page.before)).read()
     with pytest.raises(TranscriptChanged):
-        comms.transcripts.capture_page_read("worker", before=NativeTranscriptCursor(str(path), -1)).read()
+        comms.transcripts.capture_page_read("worker", position=EarlierThan(NativeTranscriptCursor(str(path), -1))).read()
 
 
 def test_empty_transcript_and_non_message_records(tmp_path):
@@ -135,7 +180,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     seen = [event.text for event in page.events if event.declared_name == "assistant"]
     while page.has_older:
         page = comms.transcripts.capture_page_read(
-            "child", before=page.before, through=through).read()
+            "child", position=EarlierThan(page.before), limit=Through(through)).read()
         seen[:0] = [event.text for event in page.events if event.declared_name == "assistant"]
     assert seen == [f"Record {i}" for i in range(35)]
     assert comms.transcripts.capture_page_read("child").read().after.session_file == str(own_path)
@@ -143,7 +188,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     transcript(unrelated, 1)
     with pytest.raises(TranscriptChanged):
         comms.transcripts.capture_page_read(
-            "child", through=NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size)).read()
+            "child", limit=Through(NativeTranscriptCursor(str(unrelated), unrelated.stat().st_size))).read()
 
 
 def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
@@ -160,7 +205,7 @@ def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
 
 def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_path):
     from agent_comms.cli_verbs.register import RegisterCliCommand
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.thread_execution import NativeThreadExecution
     from agent_comms.transcripts import NoNativeTranscriptCursor, TranscriptCursor
 

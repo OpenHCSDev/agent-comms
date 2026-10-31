@@ -7,12 +7,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 TREE = """import subprocess,sys,os,time,json
 from pathlib import Path
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 grandchild = ('import signal,time,sys; '
               'stop = signal.SIGBREAK if sys.platform=="win32" else signal.SIGTERM; '
               'signal.signal(stop, signal.SIG_IGN); print("ready",flush=True); time.sleep(60)')

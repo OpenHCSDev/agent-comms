@@ -5,7 +5,7 @@ from agent_comms.lifecycle_capability import Terminal
 
 
 from agent_comms.goal_attempts import GoalAttemptStore
-from agent_comms.field_codec import TurnId, GoalId
+from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.goal_generation import (
     CompletedGeneration, ReadyGeneration,
 )

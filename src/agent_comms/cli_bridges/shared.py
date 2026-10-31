@@ -16,8 +16,8 @@ import time
 import traceback
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator, Mapping
-from contextlib import AbstractContextManager, ExitStack, closing, contextmanager, suppress
+from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
+from contextlib import AbstractContextManager, ExitStack, aclosing, closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from functools import cached_property, partial
@@ -26,38 +26,39 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, Self, T
 
 from pydantic import Field, InstanceOf, PlainSerializer, PlainValidator, model_validator
 
-from agent_comms import field_codec, messages
+from agent_comms.nominal import field_codec
+from agent_comms import messages
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import (
-    AttachedChild,
     OutlivesLauncherLifetime,
     Platform,
     ProcessIdentity,
     SpawnedProcess,
-    StreamingChildStdio,
 )
 from agent_comms.cli_arguments import CliArguments
-from agent_comms.cli_protocol import TaggedWire, WatchLine, raise_child_exit
+from agent_comms.cli_protocol import CoreError, EarlierItems, TaggedWire
 from agent_comms.harness_delivery_states import (
     DeliveredOutcome, EmittedOutcome, FilteredOutcome, MismatchedMonitor, ObservedMonitor,
     Outcome, ReceivingMonitor, UnconfirmedOutcome,
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
-    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
+from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, PathText, SubclassUnion, ThreadLookup
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.private_path import PrivateDirectoryRole, PrivateFileRole, TrustedAncestorRole
 from agent_comms.store_files import ExclusiveDirectoryAtomicFile
 from agent_comms.message_reference import (
@@ -92,14 +93,19 @@ from agent_comms.typed_table import (
 )
 from agent_comms.wire_models import WireModel
 from agent_comms_hooks.board import BoardEntry, SessionBoard
-from agent_comms_hooks.watch import (
-    HeldClaim, NoSessionBridge, SessionCommandError, SessionConnectionClosed,
-    SessionFailure, SessionRequestTimeout, WatchClaim, WatchRecord,
-)
 
+from .session_watch import (
+    HeldClaim,
+    SessionConnectionClosed,
+    SessionFailure,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
+)
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
+    BRIDGE_FAILURES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -240,10 +246,10 @@ class GivenBinding(BindingRequest):
 
     def bind(self, db: sqlite3.Connection) -> BindingAddress:
         stored = Binding.select(db)
+        root = FieldCodec.record_key(BindingAddress, 'root')
         defaults: dict[str, object] = (FieldCodec.encode_fields(stored[0].address()) if stored else {
-            'start': FieldCodec.encode(Binding.bus_head(
-                self.given[FieldCodec.record_key(BindingAddress, 'root')])),
-        })
+            'start': FieldCodec.encode(Binding.bus_head(self.given[root])),
+        } if root in self.given else {})
         return FieldCodec.decode_record(BindingAddress, {**defaults, **self.given})
 
 
@@ -420,7 +426,7 @@ class Options:
         commands = parser.add_subparsers(required=True)
         for operation in Operation.offered(bridge_type):
             command = commands.add_parser(
-                operation.__name__.lower(), parents=[common],
+                operation.command_name(), parents=[common],
                 help=operation.help, description=operation.help)
             Binding.add_arguments(command, operation.binding_session, operation.binding_request)
             operation.add_arguments(command)
@@ -445,6 +451,10 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
 
     binding_session: ClassVar[type[BindingSession]] = EnvironmentSession
     binding_request: ClassVar[type[GivenBinding]] = ResolvedBinding
+
+    @classmethod
+    def command_name(cls) -> str:
+        return cls.__name__.lower()
 
     @abstractmethod
     async def execute(self, bridge: OperationBridge) -> None: ...
@@ -596,7 +606,7 @@ class Serve(Watch):
     def command(self, record: WatchRecord, runtime: LaunchRuntime) -> tuple[str, ...]:
         return (
             str(runtime.interpreter.with_name(Path(record.command[0]).name)),
-            type(self).__name__.lower(), *record.command[2:], *self.arguments(),
+            self.command_name(), *record.command[2:], *self.arguments(),
         )
 
     def arguments(self) -> tuple[str, ...]:
@@ -618,6 +628,11 @@ class Serve(Watch):
             lambda: cls(owner=owner(), transcript=transcript),
             lambda operation: VerifySession(owner=operation.owner),
         )
+
+    @classmethod
+    def relaunch(cls, claim: WatchClaim, session: SessionInformation) -> None:
+        """The reader's way back from a dead bridge: the session it last saw, through launch."""
+        cls.launch(claim, lambda: session.owner, session.transcript)
 
     def launch_record(self, claim: WatchClaim, record: WatchRecord,
                       request: SessionRequest) -> None:
@@ -647,7 +662,7 @@ class Serve(Watch):
         with log.open('rb') as recorded:
             recorded.seek(offset)
             appended = recorded.read().decode(errors='replace').strip()
-        raise RuntimeError(
+        raise SessionCommandError(
             f'Session bridge PID {child.pid} exited before answering ({summary}): {appended}'
         )
 
@@ -1031,7 +1046,9 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         return ProcessIdentity.capture(os.getpid())
 
     async def session_worktree(self) -> Checkout:
-        return self.comms.registry.require(self.binding.bus).worktree
+        """Only a thread not yet registered asks, before any binding exists: the session runs
+        where its bridge was started."""
+        return Checkout(Path.cwd())
 
     async def registered_watch(self, operation: Inbox) -> None:
         with ExitStack() as endpoint:
@@ -1099,6 +1116,18 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
                 return operation(db)
         return await self.comms.bus.when_open(read)
 
+    async def once_available[Result](
+        self, waiting: str, attempt: Callable[[], Awaitable[Result]],
+    ) -> Result:
+        """The bridge's one wait on a busy store: no write began and no snapshot was acquired,
+        so the attempt is whole and runs again. A write that began keeps its own error."""
+        while True:
+            try:
+                return await attempt()
+            except CoordinationReadUnavailable as error:
+                self.log(f'{waiting} waits for the store: {error}')
+                await asyncio.sleep(Platform.current().store_lock_interval)
+
     async def attempts(self, message_id: MessageId) -> tuple[HarnessDelivery, ...]:
         return await self.coordinator_read(lambda db: tuple(HarnessDelivery.select(
             db, bridge=type(self), recipient_lookup=self.recipient_lookup, message_id=message_id)))
@@ -1147,16 +1176,13 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         begin, the attempt is exactly as stored; contention leaves it uncertain, never re-sent."""
         conversation = message.type.conversation_message
         outcome = UnconfirmedOutcome if conversation else FilteredOutcome
-        while True:
+
+        async def begin() -> bool:
             # A detached reader creates no attempt for a message it has not reached.
             await self.prepare_delivery()
-            try:
-                begun = await self.coordinator_write(self.attempt(message, outcome).begin)
-                break
-            except CoordinationBeginUnavailable as error:
-                self.log(f'Message {message.message_id} waits for the coordinator: {error}')
-                await asyncio.sleep(Platform.current().store_lock_interval)
-        if not begun:
+            return await self.coordinator_write(self.attempt(message, outcome).begin)
+
+        if not await self.once_available(f'Message {message.message_id}', begin):
             return
         with self.uncertain_on_contention(message.message_id):
             result = await message.task.delivered_by(self, message) if conversation else outcome
@@ -1166,26 +1192,51 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
         await self.prepare_delivery()
         self.log(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay')
         while True:
-            await self.comms.bus.when_open(self.watch_child)
+            await self.comms.bus.when_open(self.watch_bus)
 
-    async def watch_child(self) -> None:
-        """One child stream; the bus owns waiting and its next attempt after a hold."""
-        child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(await self.resume_after()))),
-            stdio=StreamingChildStdio(input_enabled=False, limit=64 * 1024 * 1024))
+    async def watch_bus(self) -> None:
+        """The message read in this process: one line at a time reaches delivery, so the attempts
+        keep owning the resume position and a bridge restart reads from the same place."""
+        lines: asyncio.Queue[Callable[[], Awaitable[None]]] = asyncio.Queue()
         try:
-            async for item in WatchLine.stream(child):
-                await item.handle(self, child)
-            outcome = await child.wait()
-            if outcome.interrupted:
-                self.log(f'Core watch PID {child.pid} {outcome.summary}; '
-                         'reopening its subscription, retaining delivery attempts.')
-                return
-            await raise_child_exit(child, '')
-        finally:
-            await child.stop()
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(self.read_messages(lines))
+                tasks.create_task(self.read_requests(lines))
+                tasks.create_task(self.deliver_lines(lines))
+        except* MaintenanceHeldError as held:  # the bus owns waiting and its next attempt
+            raise held.exceptions[0] from None
+
+    async def read_messages(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        """A busy store repeats the whole subscription: every message already read has its
+        attempt, because the next read waits for its delivery, so the resume position skips it."""
+        async def subscription() -> None:
+            arrived = self.comms.watch(self.binding.bus, after=await self.resume_after())
+            async with aclosing(arrived) as messages:
+                async for message in messages:
+                    lines.put_nowait(partial(self.accept, message))
+                    await lines.join()
+
+        with core_watch_failure(lines):
+            await self.once_available('Watch read', subscription)
+            # Nothing else would say so: delivery alone would keep the session deaf and silent.
+            raise CoreWatchEnded('The bus read ended on its own')
+
+    async def read_requests(self, lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        async def subscription() -> None:
+            source = await Coordination.run_worker(
+                partial(self.comms.history_source, self.binding.bus))
+            await source.watch_requests(lambda row: lines.put_nowait(
+                partial(EarlierItems.from_row(row).handle, self)))
+
+        with core_watch_failure(lines):
+            await self.once_available('Watch requests', subscription)
+
+    @staticmethod
+    async def deliver_lines(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> None:
+        while True:
+            line = await lines.get()
+            await line()
+            lines.task_done()
 
     async def run(self) -> None:
         current = asyncio.current_task()
@@ -1195,7 +1246,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             await self.options.operation.execute(self)
         except* (BlockingIOError, SessionFailure):
             raise
-        except* (OSError, ValueError, CoordinationError) as group:
+        except* BRIDGE_FAILURES as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
@@ -1204,6 +1255,29 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             self.log(failure)
             await self.report_failure(failure + '\nNo message was retried.')
             raise
+
+
+class CoreWatchEnded(OSError):
+    """The bus read stopped for a reason other than maintenance; no message was retried."""
+
+
+async def raised(error: Exception) -> None:
+    raise error
+
+
+@contextmanager
+def core_watch_failure(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> Iterator[None]:
+    """A read failure takes its turn in the delivery line, so a delivery under way finishes
+    before the group stops. A hold reaches the bus's own wait; every other failure stops the
+    bridge loudly through its one report, and anything outside that family crashes."""
+    try:
+        yield
+    except MaintenanceHeldError as held:
+        lines.put_nowait(partial(raised, held))
+    except BRIDGE_FAILURES as error:
+        ended = CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}')
+        ended.__cause__ = error
+        lines.put_nowait(partial(raised, ended))
 
 
 class BridgeDeliveryStore(WriterOwnedStore):
@@ -1295,7 +1369,8 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
             await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
-        await comms.bus.when_open(output.transcript.end_turn)
+        await self.once_available('Transcript start', partial(
+            comms.bus.when_open, output.transcript.end_turn))
         # Each CLI reports its own initial state. Disk writes never stop the
         # event reader from receiving a newer whole draft of the same item.
         queue: asyncio.Queue[RuntimeUpdate] = asyncio.Queue()
@@ -1316,7 +1391,8 @@ class TranscriptBridge(PublishesTranscript, CliBridge[BridgeOptions]):
                     break
                 while not queue.empty():
                     pending.append(queue.get_nowait())
-                await comms.bus.when_open(partial(output.publish_batch, pending))
+                await self.once_available('Transcript update', partial(
+                    comms.bus.when_open, partial(output.publish_batch, pending)))
 
 
 class MonitorFrame(TaggedWire, ABC, affix=""):
@@ -1324,10 +1400,6 @@ class MonitorFrame(TaggedWire, ABC, affix=""):
     async def confirm(
         self, bridge: LineMonitorBridge, record: ObservedMonitor,
     ) -> tuple[MessageReference, ...]:
-        return ()
-
-    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
-        """Only a body part of that message counts when read back from its export."""
         return ()
 
 
@@ -1374,7 +1446,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
     @classmethod
     def naming(cls, directory: Path, reference: MessageReference) -> Self:
         return cls.model_validate(dict(
-            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.jsonl')))
+            reference=reference, path=str(directory / f'{reference.seq}-{reference.message_id}.txt')))
 
     @classmethod
     def exported_at(cls, directory: Path, path: str) -> tuple[Self, ...]:
@@ -1383,7 +1455,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
         if not seq.isdecimal():
             return ()
         try:
-            identity = FieldCodec.decode(MessageId, name.removesuffix('.jsonl'))
+            identity = FieldCodec.decode(MessageId, name.removesuffix('.txt'))
         except field_codec.MalformedRecord:
             return ()
         notice = cls.naming(directory, MessageReference(int(seq), identity))
@@ -1404,7 +1476,7 @@ class MonitorReadFile(MonitorProtocolFrame, declared_name='read-file'):
             os.close(directory)
 
     def export(self, lines: tuple[str, ...]) -> None:
-        """Publish every encoded part, one per line, once. A file already at this path must
+        """Publish the message's lines once. A file already at this path must
         hold exactly these bytes: the bus message stays the source, never the file."""
         data = ''.join(line + '\n' for line in lines).encode()
         path = Path(self.path)
@@ -1472,9 +1544,6 @@ class MonitorPart(MonitorFrame, declared_name='part'):
         if self.number > self.total:
             raise ValueError('Monitor part number exceeds total')
         return self
-
-    def exported_part(self, message_id: MessageId) -> tuple[MonitorPart, ...]:
-        return (self,) if self.id == message_id else ()
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> tuple[MessageReference, ...]:
         """The whole confirmation (attempt read, observed parts, mismatch, final outcome) is one
@@ -1561,6 +1630,10 @@ class MonitorIncomingFrame(IncomingFrame):
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
         """Put the whole message on the reader as one event."""
 
+    @abstractmethod
+    def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
+        """The parts a visible Read of this message's export showed."""
+
 
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
@@ -1586,14 +1659,14 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return DeliveredBoardContent.deliver(self.db, entries, time.time()).lines
 
     def watch_record(self, binding: SessionBinding) -> WatchRecord:
-        command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
+        command = (str(Path(sys.argv[0]).absolute()), Watch.command_name(),
                    '--state', str(self.options.state.absolute()))
         return WatchRecord(binding.bus, binding.root, command, self.options.base_state)
 
     async def watch_operation(self, operation: Watch) -> None:
         await read_monitor(
             WatchClaim(self.binding.thread), MonitorBridgeStopped.announce,
-            MonitorBridgeSwapping.announce,
+            MonitorBridgeSwapping.announce, Serve.relaunch,
         )
 
     async def accept(self, message: messages.Message) -> None:
@@ -1650,25 +1723,23 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         """A visible Read of this session's own export confirms the parts it shows, through the
         same all-parts gate a Monitor event uses. The export names an exact reference: only the
         attempt at that reference takes its parts, so a file at another sequence with the same
-        message id confirms nothing. Any other file, or a read whose every line is not a part of
-        the exported message, confirms nothing either. The export goes once that attempt, reread,
+        message id confirms nothing. Any other file, or a read showing anything but the exported
+        message's own lines, confirms nothing either. The export goes once that attempt, reread,
         is consumed and no other Read of it is still running."""
         references: list[MessageReference] = []
         for notice in MonitorReadFile.exported_at(self.exports, read.path):
             identity = notice.reference.message_id
-            frames = read.frames()
-            parts = tuple(part for frame in frames for part in frame.exported_part(identity))
-            if len(parts) != len(frames):
-                continue
+            rows = read.rows()
             with self.uncertain_on_contention(identity):
                 attempted = await self.attempts(identity)
                 for exact in (attempt for attempt in attempted
                               if attempt.reference == notice.reference):
-                    for part in parts:
+                    message = await self.message(exact.reference)
+                    for part in self.incoming_frame(message).read_parts(rows):
                         references.extend(await part.confirm(self, read.record))
                     for unread in read.closing(notice):
                         for stored in await self.coordinator_read(exact.stored):
-                            stored.outcome.finished_with(unread)
+                            stored.monitor.finished_with(unread)
         return tuple(references)
 
     def new_attachment(self, peer: MonitorPeer, token: str) -> MonitorAttachment:

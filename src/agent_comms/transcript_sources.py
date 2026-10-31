@@ -33,8 +33,8 @@ if TYPE_CHECKING:
 from .bus import Bus
 from .bus_publication import Delivered
 from .coordination_errors import StaleRevision, TranscriptChanged
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting

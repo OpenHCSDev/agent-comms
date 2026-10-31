@@ -7,12 +7,12 @@ import pytest
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.channels import AnyChannel
 from agent_comms.connector_caller import DirectorCaller
-from agent_comms.errors import ToolRefusedError
 from agent_comms.presentation import MessageNotification, SentMessageSummary
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.tools import invoke_tool
+from agent_comms_hooks import ToolRefusedError
 
 
 class TestToolCatalog:
@@ -164,7 +164,8 @@ class TestToolCatalog:
         presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
         outcomes = presentation.notification_window.outcomes[sent.seq, sent.message_id]
-        assert [summary.reference for summary in SentMessageSummary.recent(presentation)] == [sent.reference]
+        assert [summary.reference for summary in SentMessageSummary.for_sources(
+            presentation.sent_notifications())] == [sent.reference]
 
         result = invoke_tool(comms, "comms_threads", {}, caller=ThreadCaller("sender"))
         # One row per sent message, never one per recipient, and never the message body.

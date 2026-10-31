@@ -19,7 +19,7 @@ from .acp_extension import (
     decode_request,
     encode_request,
 )
-from .field_codec import AcpSessionId, MalformedRecord
+from .nominal.field_codec import AcpSessionId, MalformedRecord
 
 
 class AcpRequestConsumer(MroDispatch):

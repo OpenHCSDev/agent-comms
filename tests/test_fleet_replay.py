@@ -26,14 +26,14 @@ from commander_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_
 from agent_comms.commander_hud import CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
-from agent_comms.field_codec import ToolCallId
+from agent_comms.nominal.field_codec import ToolCallId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.heartbeat_frame import CommanderInputs
 from agent_comms.launch_runtime import LaunchRoot
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.repo import Checkout, Repo, UnpushedHead
+from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
@@ -206,10 +206,11 @@ class Fleet:
         return claimed
 
     def pull_request(self, number: int, branch: str, head: str, *,
-                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest) -> None:
+                     kind: type[UnmergedListedPullRequest] = UnmergedListedPullRequest,
+                     queued: bool = False) -> None:
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
         self.github.put(self.repository, kind(
-            number, branch, head, stamp, "main", reviewable_times=(stamp,),
+            number, branch, head, stamp, "main", reviewable_times=(stamp,), queued=queued,
         ))
 
 
@@ -459,6 +460,24 @@ def test_every_held_branch_rule_has_a_seed():
     assert set(HeldBranchRule.members_with(HeldBranchRule)) <= set(IncidentSeed.seeds)
 
 
+def test_a_queued_request_is_not_told_to_merge_main_into_its_locked_branch(fleet):
+    built, _ = fleet
+
+    def behind(name, number, queued):
+        worktree = built.worktree(name, base=built.old_main)
+        head = built.commit(worktree, f"{name}.py", f"{name} = 1\n")
+        built.push(worktree)
+        todo = built.unit(name, worktree)
+        built.pull_request(number, name, head, queued=queued)
+        built.claim(todo, number, head, at=time.time())
+        return todo
+
+    queued, unqueued = behind("in-queue", 31, True), behind("not-queued", 32, False)
+    told = {rule.problem for rule in built.observe().rules if isinstance(rule, BranchBehindMain)}
+    assert unqueued.id in told
+    assert queued.id not in told
+
+
 def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     built, _ = fleet
     home = built.worktree('old-home', base=built.old_main)
@@ -511,8 +530,8 @@ def test_new_allocated_branch_after_upstream_capture_is_one_unreadable_holder(fl
         assert tuple(card for card in observed.states if card.unit.name != 'unpushed') == healthy
         completed_after = time.time()
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(built.comms)))
-        assert ServicePassStore.at(built.comms.root).read().completed_since(
-            built.thread(Fleet.commander).incarnation, completed_after)
+        assert ServicePassStore.at(built.comms.root).read().heartbeat_completed_at(
+            built.thread(Fleet.commander).incarnation).since(completed_after)
         recovered = observe_commander(built.comms, built.thread(Fleet.commander),
                                       ProgressRead(), plans=plans)
         assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
@@ -606,7 +625,7 @@ def test_allocated_clone_owns_its_custom_upstream_not_the_primary(fleet, configu
     built.git(path, 'config', f'branch.{branch}.merge', 'refs/heads/main')
     head = built.commit(path, 'clone_only.py', 'clone_work = 1\n')
     assert Repo.of(path).github == built.repository
-    assert storage.owns_present_checkout(built.thread('unpushed'), path)
+    assert storage.owns_present_checkout(built.thread('unpushed'), path, RepositoryReads())
     assert built.git(path, 'rev-parse', '--path-format=absolute', '--git-common-dir') != (
         built.git(built.source.checkout, 'rev-parse', '--path-format=absolute', '--git-common-dir'))
     plans = CommanderHeartbeat()

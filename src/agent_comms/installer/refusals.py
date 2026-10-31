@@ -38,6 +38,18 @@ class InterpreterWorkerDied(UpgradeRefused):
         self.errors = errors
 
 
+class OwnersNotRestarted(UpgradeRefused):
+    """The install failed, then starting its stopped owners again failed too. The install's
+    own failure is the cause; the refused restart only follows from it, so both are named
+    (run 040380a8, 2026-10-30: the restart's "not retired yet" was the only line printed)."""
+
+    def __init__(self, cause: BaseException, restart: UpgradeRefused) -> None:
+        self.cause = cause
+        self.restart = restart
+        super().__init__(f"{type(cause).__name__}: {cause}; then restarting the stopped "
+                         f"owners failed: {restart}")
+
+
 class InstallRolledBack(UpgradeRefused):
     """The original installation was restored after a failed live pass."""
 

@@ -25,9 +25,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 from pydantic import JsonValue
 
 from .child_process import Platform
-from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
 from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (
@@ -200,8 +200,10 @@ class RootFile:
         yield
 
     @staticmethod
-    def settle(path: Path) -> None:
-        """A plain file keeps no committed bytes beside it, so there is nothing to settle."""
+    @contextmanager
+    def pinned(path: Path) -> Iterator[None]:
+        """A plain file's bytes move only when something writes it; there is nothing to pin."""
+        yield
 
     @staticmethod
     def digest(path: Path) -> str:
@@ -292,13 +294,12 @@ class RootFile:
     @classmethod
     def installation_declarations(cls, files: FilesRequest) -> dict[Path, type[RootFile]]:
         root = files.root
-        declarations = {
-            member: owner.declaring_owner()
-            for owner, directory in cls.declarations_in(root)
-            for member in owner.files_in(directory)
-        }
-        declarations.update((path, owner.declaring_owner())
-                            for path, owner in cls.primaries_in(root).items())
+        declarations = {}
+        for owner, directory in cls.declarations_in(root):
+            declarations.update(dict.fromkeys(owner.files_in(directory), owner.declaring_owner()))
+        primaries = cls.primaries_in(root)
+        declaring = {owner: owner.declaring_owner() for owner in set(primaries.values())}
+        declarations.update((path, declaring[owner]) for path, owner in primaries.items())
         declarations.update(cls.external_declarations(files))
         return declarations
 
@@ -919,8 +920,12 @@ class SQLiteStorage(RootFile, SqliteStore):
     @classmethod
     @contextmanager
     def write_transaction(cls, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """The one write transaction: committed when the block returns, rolled back when it raises."""
-        cls._begin_transaction(connection)
+        """The one write transaction: committed when the block returns, rolled back when it raises.
+
+        A busy BEGIN is CoordinationBeginUnavailable: the block never ran. Past BEGIN, every
+        error keeps its own type."""
+        with CoordinationBeginUnavailable.checking():
+            cls._begin_transaction(connection)
         try:
             yield connection
             connection.execute("COMMIT")
@@ -1013,14 +1018,15 @@ class SQLiteFile(SQLiteStorage):
                 held.execute("ROLLBACK")
 
     @classmethod
-    def settle(cls, path: Path) -> None:
-        wal = cls.wal_path(path)
-        if not (wal.is_file() and wal.stat().st_size):
-            return
-        with cls.exclusive_writer(path) as db:
-            busy, _, _ = db.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchone()
-        if busy:
-            raise sqlite3.OperationalError(f"Another connection holds the WAL of {path}")
+    @contextmanager
+    def pinned(cls, path: Path) -> Iterator[None]:
+        """Keep the file's bytes where they are while held. Only a database's last close
+        checkpoints its WAL into the file (new bytes, same rows); one open connection means
+        no other close is the last. It holds no transaction, so it waits on and blocks no
+        reader or writer, and a read-only close never checkpoints."""
+        with closing(cls._open_reader(path, DEFAULT_STORE_CONTENTION)) as db:
+            db.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+            yield
 
     @classmethod
     def digest(cls, path: Path) -> str:

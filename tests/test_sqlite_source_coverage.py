@@ -11,7 +11,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_owner import UnstartedCursor
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.messages import InfoKind, Message
 from agent_comms.proven_source_coverage import SourceCoverage, SourcePrefix
 from bus_record_fixture import prepare_native_comms, record_from

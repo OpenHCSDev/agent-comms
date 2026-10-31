@@ -10,22 +10,22 @@ from agent_comms.command import Command
 from agent_comms.comms import Comms
 from agent_comms.repo import Checkout
 from agent_comms.config_options import ConfigOptions
-from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
+from agent_comms.nominal.field_codec import FieldCodec, RecordMember, WireValue
 from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.lifecycle_capability import LifecycleCapability, Successful
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.target_fields import TargetField
 from agent_comms.thread_model import CatalogSelection
 from dataclasses import dataclass, field, replace
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 from collections.abc import Mapping
 from typing import Annotated, Generic, Self, TypeVar
 
 from agent_comms.channel_targets import OneChannel, ResolvedChannel, ResolvedThread
 from agent_comms.declared_verb import DeclaredCommand
-from agent_comms.declared_family import ModuleMembers
-from agent_comms.field_codec import FieldPlan, TargetBound
+from agent_comms.nominal.declared_family import ModuleMembers
+from agent_comms.nominal.field_codec import FieldPlan, TargetBound
 from agent_comms.launch_root import LaunchRoot
 from functools import singledispatchmethod
 from inspect import iscoroutinefunction, signature

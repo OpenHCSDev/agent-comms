@@ -15,7 +15,7 @@ import sys
 from dataclasses import dataclass
 from typing import ClassVar, Never
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import LaunchedPhaseTiming
 from agent_comms.installer.runtime_stack import RuntimeStack

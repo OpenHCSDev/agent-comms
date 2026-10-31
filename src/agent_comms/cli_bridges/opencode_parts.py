@@ -8,7 +8,7 @@ from typing import ClassVar, Literal
 from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.cli_protocol import Declared, TaggedWire, TextWire, WireHeader
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     ToolCallId,
 )

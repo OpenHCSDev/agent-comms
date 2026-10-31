@@ -46,9 +46,9 @@ from typing import (
 )
 
 from .class_fact import ClassFact
-from .declared_family import DeclaredFamily, FamilyMember, declared_words
+from .nominal.declared_family import DeclaredFamily, FamilyMember, declared_words
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     FieldDirective,
     FieldPlan,
@@ -143,6 +143,11 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
         return value
 
     @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The stored value as JSON text, without a domain-object round trip."""
+        return f"json_quote({expression})"
+
+    @classmethod
     def for_type(cls, annotation: object) -> type[SqlStorage]:
         annotation, _ = _base_type(annotation)
         if get_origin(annotation) is Literal:
@@ -181,6 +186,12 @@ class RealStorage(SqlStorage):
     def accepts(cls, annotation: object) -> bool:
         return annotation is float
 
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        """The codec owns exact float spelling; SQLite's formatters differ."""
+        db.create_function(cls.declared_name, 1, FieldCodec.compact, deterministic=True)
+        return f'"{cls.declared_name}"({expression})'
+
 
 class BooleanStorage(SqlStorage):
     sql_type = "INTEGER"
@@ -196,6 +207,10 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def to_sql(cls, value: object) -> int | None:
         return None if value is None else int(value)
+
+    @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"CASE {expression} WHEN 1 THEN 'true' WHEN 0 THEN 'false' ELSE 'null' END"
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -268,6 +283,10 @@ class JsonStorage(SqlStorage):
         return None if value is None else FieldCodec.compact(value, allow_nan=False)
 
     @classmethod
+    def json_text(cls, db: sqlite3.Connection, expression: str) -> str:
+        return f"COALESCE({expression}, 'null')"
+
+    @classmethod
     def from_sql(cls, value: object) -> object:
         if type(value) is not str:
             raise MalformedRecord("SQLite JSON must be text")
@@ -297,6 +316,16 @@ class TableReference(Reference):
             f" REFERENCES {_identifier(self.target.declared_name)} "
             f"({self.target._column_list(self.target_columns)})"
         )
+
+
+@dataclass(frozen=True, slots=True)
+class RequestedKeys:
+    """One batch of distinct declared keys: the ``requested`` VALUES table they bind, and
+    the null-safe join that drives the table's index from it."""
+
+    values: str
+    join: str
+    bindings: tuple[object, ...]
 
 
 @dataclass(frozen=True)
@@ -492,6 +521,20 @@ class _Field(SqlValue):
 
     def reference(self, alias: str) -> str:
         return f"{alias}.{_identifier(self.wire_name)}"
+
+    def wire_record(self, db: sqlite3.Connection, plan: FieldPlan, alias: str) -> str:
+        expression = self.reference(alias)
+        projected = plan.project_encoded(self.storage.json_text(db, expression), self.json_record)
+        if not plan.constructor_required and plan.omitted(plan.default()):
+            default = SQLiteLiteral.of(self.encode(plan.default()))
+            return f"CASE WHEN {expression} IS {default} THEN '{{}}' ELSE {projected} END"
+        return projected
+
+    @staticmethod
+    def json_record(values: Mapping[str, str]) -> str:
+        pieces = [sql_literal(json.dumps(key) + ':') + ' || ' + expression
+                  for key, expression in values.items()]
+        return "'{' || " + " || ',' || ".join(pieces) + " || '}'" if pieces else "'{}'"
 
     @property
     def lifecycle_family(self) -> type[LifecycleState]:
@@ -2355,9 +2398,20 @@ class TypedTable(
         """Rows equal to any of these named keys under the same null-safe IS equality select()
         uses: the requested keys drive an indexed join, one batch per the connection's own
         variable limit, each distinct key probed once."""
+        return [row for requested in cls.requested_keys(db, keys) for row in cls.iterate(db.execute(
+            f"WITH {requested.values} "
+            f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
+            requested.bindings))]
+
+    @classmethod
+    def requested_keys(cls, db: sqlite3.Connection,
+                       keys: Sequence[Mapping[str, object]]) -> Iterator[RequestedKeys]:
+        """The distinct named keys, encoded by their declared columns, in batches that fit the
+        connection's own variable limit; each batch joins this table as ``FROM requested
+        JOIN <table> ON ...`` under select()'s null-safe IS equality."""
         bound = tuple(dict.fromkeys(cls._bound(key) for key in keys))
         if not bound:
-            return []
+            return
         field_sets = {tuple(item.name for item in selected) for selected, _ in bound}
         if len(field_sets) != 1:
             raise ValueError(f"{cls.__name__} keys name different fields: {sorted(field_sets)}")
@@ -2368,11 +2422,11 @@ class TypedTable(
                               for item, alias in zip(selected, aliases, strict=True))
         probe = "(" + ",".join("?" for _ in selected) + ")"
         batch = db.getlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER) // len(selected)
-        return [row for chunk in batched(bound, batch) for row in cls.iterate(db.execute(
-            f"WITH requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)}) "
-            f"SELECT {cls.qualified(*cls.column_projection())} FROM requested "
-            f"JOIN {table} ON {joined}",
-            tuple(value for _, values in chunk for value in values)))]
+        for chunk in batched(bound, batch):
+            yield RequestedKeys(
+                f"requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)})",
+                f"FROM requested JOIN {table} ON {joined}",
+                tuple(value for _, values in chunk for value in values))
 
     @classmethod
     def _query(
@@ -2452,10 +2506,25 @@ class TypedTable(
         return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
 
     @classmethod
+    def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
+        """Project one declared field's stored value into its public wire record."""
+        item, = cls._fields_named((plan.name,))
+        return item.wire_record(db, plan, cls.declared_name)
+
+    @classmethod
     def qualified(cls, *names: str) -> str:
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)
         return ", ".join(f"{table}.{_identifier(item.wire_name)}" for item in cls._fields_named(names))
+
+    @classmethod
+    def join_to(cls, other: type[TypedTable]) -> str:
+        """Join a capability to the other table's declared primary key."""
+        keys = tuple(item.name for item in other._fields if item.column.primary_key)
+        if not keys:
+            raise TypeError(f"{other.__name__} declares no join key")
+        condition = " AND ".join(f"{cls.qualified(name)} = {other.qualified(name)}" for name in keys)
+        return f'JOIN {_identifier(cls.declared_name)} ON {condition}'
 
     @classmethod
     def decode_at(cls, row: tuple[object, ...], offset: int) -> Self:

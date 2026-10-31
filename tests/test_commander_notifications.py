@@ -14,7 +14,7 @@ import pytest
 
 from agent_comms.registry_document import RegisteredCommanderProject
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
@@ -32,13 +32,18 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import ProgressRead, UnitOccupied
 from agent_comms.ui_model import observation
 from agent_comms.ui_model.observation import CommanderHudObserved, ObservationService, ObserveCommanderHud
-from agent_comms.ui_model.observation import ReadCommanderUnit, ReadRefused
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.order_tools import CommanderUnitRead
+from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import invoke_tool
+from agent_comms.work_branches import WorkBranchError
+from agent_comms.ui_model.observation import ReadOperation, ReadRefused
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, StandingRule, UndatedStandingRule
 from agent_comms.ui_model.unit_state import (
     Spinning, UnitState, UrgentGroup,
 )
-from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget
@@ -119,9 +124,16 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     hud = beat(comms, states=state_cards(comms, UnitState))
     ServicePassStore.at(comms.root).heartbeat_passed((hud.commander,), (hud.commander,))
     card = next(card for card in hud.units if card.unit.name == 'worker')
-    request = ReadCommanderUnit(str(comms.root), hud.commander, card.unit,
-                               tuple(dict.fromkeys(order.order for order in card.orders)))
+    operation = CommanderUnitRead(commander=hud.commander, unit=card.unit,
+                                  orders=tuple(dict.fromkeys(order.order for order in card.orders)))
+    request = ReadOperation(str(comms.root), operation)
+    direct = operation.read(comms)
     detail = pickle.loads(pickle.dumps(request.read(comms)))
+    # The shared operation, the UI's root-bound envelope and the MCP boundary answer the same
+    # selected card with the same bounded records.
+    assert detail == direct
+    assert invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
+                       caller=ThreadCaller("lead")) == FieldCodec.encode(direct)
     assert detail.unit == card
     assert {order.card.problem for order in detail.orders} == {'P1', 'P2'}
     for order in detail.orders:
@@ -133,10 +145,10 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     assert 'contents' not in json.dumps(detail.activity)
     assert (comms.root / 'state-source.jsonl').read_bytes() == original
     for stale in (
-        replace(request, orders=()),
+        replace(request, operation=replace(operation, orders=())),
         replace(request, root=str(comms.root / 'other')),
-        replace(request, unit=replace(card.unit, created_at=card.unit.wire_birth + 1)),
-        replace(request, commander=card.unit),
+        replace(request, operation=replace(operation, unit=replace(card.unit, created_at=card.unit.wire_birth + 1))),
+        replace(request, operation=replace(operation, commander=card.unit)),
     ):
         assert isinstance(stale.answer(comms), ReadRefused)
     checkout = comms.goals.todos.get('P1').order.checked().check.directory
@@ -146,6 +158,10 @@ def test_expanded_unit_reads_original_orders_and_bounded_activity_then_refuses_s
     try:
         metadata.write_text('gitdir: ./missing-original-git\n')
         assert isinstance(request.answer(comms), ReadRefused)
+        # MCP reaches the same nominal refusal, which the connector answers as a failed call.
+        with pytest.raises(WorkBranchError):
+            invoke_tool(comms, CommanderUnitRead.declared_name, FieldCodec.encode_fields(operation),
+                        caller=ThreadCaller("lead"))
     finally:
         metadata.unlink()
         saved.rename(metadata)
@@ -443,7 +459,7 @@ def test_frame_puts_hands_first_and_folds_finished_phases_per_plan(notification_
 
 
 def test_frame_keeps_original_ping_order_and_folded_idle_records(tmp_path):
-    from agent_comms.field_codec import OrderId
+    from agent_comms.nominal.field_codec import OrderId
     from agent_comms.thread_identity import RecordedThreadIncarnation
     from agent_comms.ui_model.unit_state import Idle, IdleGroup, NoPendingClock, PendingClock, Stuck
 
@@ -710,7 +726,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     import json
     from datetime import datetime
     from agent_comms.cli_bridges.codex_protocol import RateLimitsResponse
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     reply = FieldCodec.decode(RateLimitsResponse, json.loads('''{
         "rateLimits": {"primary": {
@@ -719,7 +735,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     }'''))
     usage = CodexUsage(reply.rate_limits)
     reset = datetime.fromtimestamp(1793513456).strftime('%a %b %d %H:%M')
-    assert usage.line() == f'usage 37% weekly, resets {reset}'
+    assert usage.line() == f'Codex usage 37% weekly, resets {reset}'
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
     refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
@@ -743,21 +759,15 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
     packet = CommanderDecisions(
         original.task.commander, original.task.handled, (), original.task.handled,
     )
-    from agent_comms.task_attachments.commander_pings import AlarmOverflow
-
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
     message = packet.send(comms, time.time(), hud.hud_text(time.time()))
     for frame in (lead_hud(comms), hud):
-        assert len(frame.alarm_text(frame.alarms, time.time())) < len(rules)
-        overflow = tuple(row for section in frame.alarms for table in section.tables(time.time())
-                         if table.record is AlarmOverflow for row in table.records)
-        assert sum(row.more for row in overflow) == len(rules) - 1
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
         assert all(section.heading() not in original_lines for section in frame.alarms)
         assert all(rule.line() in "\n".join(original_lines) for rule in rules)
-    assert rules[0].line() in original.body
-    assert rules[0].line() in message.body
+    assert all(rule.line() in original.body for rule in rules)
+    assert all(rule.line() in message.body for rule in rules)
     assert len(message.task.handled) == 12
     assert {entry.text for entry in message.task.board(comms)} == {rule.line() for rule in rules}
     assert len(pickle.loads(pickle.dumps(message.task)).handled) == 12
@@ -859,7 +869,7 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.task_attachments.commander_pings import PublishedFacts, UnpublishedFacts
 
     comms = notification_bus
@@ -890,6 +900,24 @@ def test_a_commander_that_stood_down_keeps_its_requests_but_gets_no_heartbeat(no
     assert CommanderHeartbeat.requested_by(comms.registry.require("lead"), comms.goals)
     assert "lead" not in {
         thread.name for thread in CommanderHeartbeat.boards(comms.registry, comms.goals)}
+
+
+def test_a_closed_lead_session_leaves_the_board_for_the_live_commanders(notification_bus):
+    """The lead's process going away must not empty the heartbeat for #commanders still running."""
+    comms = notification_bus
+    comms.registry.register(replace(
+        comms.registry.require("worker"), tags=frozenset({"comms", CommandersTag.declared_name}),
+        process_identity=ProcessIdentity.capture(os.getpid())))
+    comms.registry.register(replace(comms.registry.require("lead"),
+                                    process_identity=NoProcess()))
+    lead = comms.registry.require("lead")
+    assert not lead.process_alive
+    assert CommanderHeartbeat.boards(comms.registry, comms.goals) == (lead,)
+    beat(comms, (ServicePassFailing(watch="following-rule", since=time.time(),
+                                    error="independent source", failed_at=time.time()),))
+    worker = comms.registry.require("worker").incarnation
+    assert CommanderUpdate.latest(comms, worker)
+    assert CommanderFrame.current(comms, "worker").commander == worker
 
 
 def test_one_pass_gives_every_commander_its_own_packet(notification_bus):

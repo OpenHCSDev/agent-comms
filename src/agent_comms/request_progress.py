@@ -5,11 +5,15 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Annotated, Literal
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .child_process import ProcessIdentity
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiModel, PiPayload, UnreportedModel
+from .pi_payloads import (
+    PiModel,
+    PiPayload,
+    UnreportedModel,
+)
 from .turn_item import NativeTurnIdText
 
 

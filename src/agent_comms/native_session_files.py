@@ -15,15 +15,15 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.child_process import Platform, ProcessIdentity
-from agent_comms.locked_store import DurableFile, PatternFile, SQLiteFile
+from agent_comms.locked_store import DurableFile, PatternFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms_hooks.process_claim import ProcessSingleton
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
-from .process_claim import ProcessSingleton
-from agent_comms.typed_table import ReconciledFile, TableSchema
+from .native_input_proof import NativeInputProof
 
 
 class SessionFiles:
@@ -245,20 +245,6 @@ class NativeSessionFiles(NativeSessionIdentity, NativeTranscriptFiles):
         return NativeInputProof.path_in(
             self.root, lookup=self.owner.lookup, name=key,
         )
-
-
-class NativeInputProof(DurableFile, ReconciledFile, PatternFile):
-    """One thread's native-session proof, retained and copied with its bus; the installer
-    reconciles each onto NativeContextJournal like every other declared store."""
-
-    __slots__ = ()
-    filename = "input-proofs/{lookup}/{name}.sqlite"
-
-    @classmethod
-    def table_schema(cls) -> type[TableSchema]:
-        from .native_pi import NativeContextJournal
-
-        return NativeContextJournal
 
 
 class BusTranscriptFile(PatternFile):

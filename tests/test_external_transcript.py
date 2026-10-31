@@ -6,9 +6,9 @@ import pytest
 from agent_comms.bus import Bus
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
-from agent_comms.transcripts import TranscriptReadIdentity, UnreadTranscriptCursor
+from agent_comms.transcripts import LatestPage, TranscriptReadIdentity, UnreadTranscriptCursor
 from agent_comms.turn_digests import LastTurns
 from agent_comms.threads import Thread
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -269,13 +269,13 @@ def test_a_thread_with_nothing_read_pages_older_and_newer_from_its_cursor(tmp_pa
         return comms.transcripts.capture_page_read("codex", **bounds).read()
 
     unread = UnreadTranscriptCursor()
-    newest = asyncio.run(unread.read_page(loader))
-    older = asyncio.run(unread.read_page(loader, before=newest.before))
-    later = asyncio.run(unread.read_page(loader, after=older.after))
+    newest = asyncio.run(unread.read_page(loader, LatestPage()))
+    older = asyncio.run(unread.read_page(loader, newest.before.earlier_page()))
+    later = asyncio.run(unread.read_page(loader, older.after.later_page()))
     # An unread page's own edges are not bounds: an agent tab opened before any
     # read still gets the newest page instead of a refused source.
-    assert asyncio.run(unread.read_page(loader, before=unread)).events == newest.events
-    assert asyncio.run(newest.after.read_page(loader, before=unread)).events == newest.events
+    assert asyncio.run(unread.read_page(loader, unread.earlier_page())).events == newest.events
+    assert asyncio.run(newest.after.read_page(loader, unread.earlier_page())).events == newest.events
     assert [event.text for event in newest.events] == [f"item {number}" for number in range(1, 21)]
     assert [event.text for event in older.events] == ["item 0"]
     assert later.events == newest.events

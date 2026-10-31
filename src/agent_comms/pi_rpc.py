@@ -1,7 +1,7 @@
 """Pi JSON-line transport; tolerant discovery and strict native proof share one decoder."""
 
 from __future__ import annotations
-from .field_codec import FieldCodec, MalformedRecord
+from .nominal.field_codec import FieldCodec, MalformedRecord
 from .jsonl_stream import JsonlStreamReader
 from .pi_events import PiEvent, Response
 from contextlib import asynccontextmanager
@@ -11,7 +11,7 @@ import json
 from typing import TYPE_CHECKING
 
 from .pending_requests import PendingRequest, PendingRequests
-from .sealed import Sealed
+from .nominal.sealed import Sealed
 
 if TYPE_CHECKING:
     from .pi_commands import PiCommand

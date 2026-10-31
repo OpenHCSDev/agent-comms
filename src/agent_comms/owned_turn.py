@@ -13,7 +13,6 @@ from dataclasses import (
     replace,
 )
 from functools import partial
-from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
 from agent_comms.following_inputs import OwnerFollowingInputs
@@ -26,7 +25,8 @@ from .channel_coding_tools import CodingToolMode
 from .channel_input_batch import InputBatch
 from .coordination_errors import CoordinationError, Refused
 from .coordinator import Coordination
-from .field_codec import AcpSessionId, GoalId, TurnId
+from .cursor_publication import CursorDelivery
+from .nominal.field_codec import AcpSessionId, FieldCodec, GoalId, TurnId
 from .goals import Goal
 from .image_input import ImageInput
 from .input_attempt import ReservedInput
@@ -83,6 +83,7 @@ class TurnDelivery:
     finish_event: asyncio.Event
     send_boundary: SendBoundary
     input_start: InputStartListener
+    cursor_delivery: CursorDelivery
     request_progress: Callable[..., None]
     ui_request: Callable[[DialogUiRequest], Awaitable[ExtensionUiChoice]]
     tool_mode: NativeToolMode
@@ -132,7 +133,7 @@ class OwnedTurn:
         dependency: InputDependency = NoInputDependency(),
     ) -> None:
         self.runner = runner
-        self.session_id = session_id
+        self.session_id = FieldCodec.decode(AcpSessionId, session_id)
         self.thread_name = thread_name
         self.task = task
         self.origins = origins
@@ -381,6 +382,7 @@ class OwnedTurn:
             finish_event=self.finish_event,
             send_boundary=sender,
             input_start=sender,
+            cursor_delivery=self.runner.inputs.effects.cursors.delivery(self.session_id),
             request_progress=self.progress.record_request_progress,
             ui_request=lambda request: self.runner.extension_ui_permission(
                 self.session_id, self.turn_id, self.controller, request
@@ -415,11 +417,10 @@ class OwnedTurn:
         return True
 
     async def run(self) -> None:
-        async with AsyncExitStack() as resources:
-            async with AsyncExitStack() as permit_cleanup:
-                if not await self.acquire(resources, permit_cleanup):
-                    return
-                await self.run_native()
+        async with AsyncExitStack() as resources, AsyncExitStack() as permit_cleanup:
+            if not await self.acquire(resources, permit_cleanup):
+                return
+            await self.run_native()
 
     def settle_unbound(self):
         """Read the result of the input owner's exact retirement transaction."""

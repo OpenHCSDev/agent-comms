@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
+from agent_comms_hooks import ToolRefusedError
+
 from .connector_caller import CALLER, ConnectorCaller, ForkingCaller
-from .errors import ToolRefusedError
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 from .locked_store import DocumentChange
 from .maintenance_barrier import CarriedDocument
 from .store_files import DependentStateTier, SingleFileStore

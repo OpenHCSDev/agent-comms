@@ -3,7 +3,7 @@
 import pytest
 
 from agent_comms.commander.judge import Edit
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.recorded_time import EventTime, RecordedEventTime
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.turn_digests import UnjudgedEdits

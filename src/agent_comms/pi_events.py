@@ -10,21 +10,25 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 from . import agent_events as events
 from . import turn_phase as phases
 from .acp_failure import UnrecordedFailureSource
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     DeclaredWireType,
     FieldCodec,
     FieldPlan,
+    InputId,
+    MalformedRecord,
     ToolCallId,
     TurnId,
     WireName,
     WireNullDefault,
     WireOmitDefault,
+    boundary_decoder,
 )
 from .native_failures import NativePiUnavailable
-from .native_input_record import NativeInputCommit, NativeInputLocation
+from .native_input_proof import NativeContextRecord, NativeInputCommit, NativeInputLocation
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
+from .native_session_reopen import PiSessionId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -273,7 +277,7 @@ class AgentStart(phases.AcceptsPrompt, NativePiEvent):
 
 @dataclass(frozen=True, kw_only=True)
 class ModelRequestProgress(NativePiEvent):
-    progress: "RequestProgress"
+    progress: RequestProgress
 
     def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
         observer(self.progress)
@@ -420,6 +424,35 @@ class ContextCommitted(NativePiEvent, NativeInputCommit):
         PiOmitted()
     )
     committed_at_ms: Annotated[int | PiOmitted, WireName("committedAtMs")] = PiOmitted()
+
+    @boundary_decoder
+    def record_for(
+        self,
+        input_id: InputId,
+        session_id: PiSessionId,
+    ) -> NativeContextRecord:
+        """Normalize the optional native acknowledgement into its required record.
+
+        This event is not durable proof. The acquired evidence reader must corroborate
+        the complete located record independently.
+        """
+        emitted = FieldCodec.encode(self)
+        try:
+            record = FieldCodec.decode(
+                NativeContextRecord,
+                {
+                    key: emitted[key]
+                    for _, key in FieldCodec.record_fields(NativeContextRecord)
+                    if key in emitted
+                },
+            )
+        except MalformedRecord as error:
+            raise NativePiUnavailable(
+                "Native Pi input/context acknowledgement is malformed"
+            ) from error
+        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
+            raise NativePiUnavailable("Native Pi context names another original input")
+        return record
 
 
 @dataclass(frozen=True, kw_only=True)

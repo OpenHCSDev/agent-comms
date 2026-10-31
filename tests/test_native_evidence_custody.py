@@ -13,8 +13,11 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordinator import Coordination
 from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
 from agent_comms.native_failures import NativePiUnavailable
-from agent_comms.native_input_record import NativeInputLocation
-from agent_comms.native_pi import NativeContextJournal, NativeContextProof, PrivateEvidenceRead
+from agent_comms.native_input_proof import NativeContextJournal, NativeInputLocation
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.native_session_reopen import PiSessionId
+from agent_comms.turn_item import FreshNativeId
+from agent_comms.native_pi import PrivateEvidenceRead
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.store_files import (
     ExclusiveLock,
@@ -65,9 +68,9 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
                 .replace(INPUT_ID.encode(), restored_input.encode())
                 .replace(b"separate", b"restored"))
     _header, original = NativeTranscript(session).forward(0, session.stat().st_size)
-    location = NativeInputLocation(INPUT_ID, "sid", original.entry.require_entry_id(), session_entry_start=original.start)
+    location = NativeInputLocation(INPUT_ID, PiSessionId("sid"), original.entry.id.require_present(), session_entry_start=original.start)
     restored_location = NativeInputLocation(
-        restored_input, "new", location.session_entry_id, session_entry_start=original.start,
+        InputId(restored_input), PiSessionId("new"), location.session_entry_id, session_entry_start=original.start,
     )
     with NativeEvidenceScope() as scope:
         evidence = scope.for_source(session)
@@ -118,7 +121,7 @@ def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):
     files = _evidence(tmp_path)
     original = sqlite3.OperationalError("consumer transaction refused")
     with pytest.raises(sqlite3.OperationalError) as caught:
-        with NativeContextJournal.open_evidence(files) as db:
+        with NativeContextJournal.open_evidence(files.input_proof) as db:
             assert NativeContextJournal.for_input(db, INPUT_ID) is not None
             raise original
     assert caught.value is original
@@ -189,13 +192,13 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                         store.participants.get(OWNER_LOOKUP).owner_identity.owner_lookup
                         == OWNER_LOOKUP
                     )
-                    NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
-                                                     session_entry_start=input_record.start)
+                    evidence.context_proof(files, INPUT_ID,
+                                           session_entry_start=input_record.start)
                     entered.set()
                     assert release.wait(2), 'bounded fixture release missing'
                     assert not evidence.source.stream.closed
-                    NativeContextProof.read_evidence(files, INPUT_ID, evidence=evidence,
-                                                     session_entry_start=input_record.start)
+                    evidence.context_proof(files, INPUT_ID,
+                                           session_entry_start=input_record.start)
 
             pending = asyncio.create_task(Coordination.run_async(path, observe,
                 clock_ms=original.session.now))

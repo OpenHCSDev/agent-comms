@@ -12,7 +12,7 @@ from agent_comms.channel_targets import CommandersTag
 from agent_comms.cli_command import PendingCommandBinding
 from agent_comms.cli_verbs.fork import ForkCliCommand
 from agent_comms.cli_verbs.new import NewThreadCliCommand
-from agent_comms.field_codec import MalformedRecord, compile_decoder
+from agent_comms.nominal.field_codec import MalformedRecord, compile_decoder
 from agent_comms.target_fields import UnsuppliedTargetField
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Checkout

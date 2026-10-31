@@ -9,19 +9,23 @@ no acceptance and are never retried. The reserved input remains unreplayable.
 from __future__ import annotations
 
 import asyncio
-from abc import ABC, abstractmethod
 import os
 import select
 import sqlite3
 import threading
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
 from typing import TYPE_CHECKING
-from .publication_measurements import PublicationMeasurements
-from .field_codec import AcpSessionId
-from .coordination_errors import CoordinationError
+
 from agent_comms.errors import RelationViolationError
+
+from .coordination_errors import CoordinationError
+from .nominal.field_codec import AcpSessionId
+from .native_entries import NativeEvidenceScope
+from .native_input_proof import NativeContextProof
+from .publication_measurements import PublicationMeasurements
 
 if TYPE_CHECKING:
     from .input_drain import InputDrain
@@ -34,6 +38,13 @@ _MAX_SEND_SECONDS = 5.0
 class PromptBoundary(ABC):
     @abstractmethod
     async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
+
+    async def context_committed(
+        self,
+        context: NativeContextProof,
+        source_reads: NativeEvidenceScope,
+    ) -> None:
+        """An unowned prompt has no durable recipient acknowledgement to advance."""
 
     def following_sender(self, inputs: InputDrain, session_id: AcpSessionId, prompt: str) -> OwnedSend:
         raise RelationViolationError("An unowned prompt cannot authorize following input")

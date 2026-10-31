@@ -22,7 +22,7 @@ import sqlite3
 import stat
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, NoReturn
 
@@ -35,7 +35,7 @@ from .coordination_schema import CoordinatorTable
 from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import RootId, ThreadLookup
+from .nominal.field_codec import RootId, ThreadLookup
 from .locked_store import RollbackRetained, WireWakeFile
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
@@ -47,11 +47,11 @@ from .private_path import FileObservation, PrivateFileRole
 from .private_runtime_schema import PrivateCoordinatorTable
 from .thread_identity import ClaimedIdentity
 from .notification_evidence import NotificationAssignmentRead
+from .notification_evidence import NotificationSelection
 
 
 if TYPE_CHECKING:
     from .acp_extension import CursorAdvancedUpdate, CursorScope
-    from .bus_publication import Delivered
     from .cursor_publication import CursorPublication
     from .historical_native_inputs import HistoricalNativeAnswers
     from .messages import MessageReference
@@ -175,7 +175,7 @@ class RegistryPrivacy(ABC):
 
     @abstractmethod
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead: ...
 
     @abstractmethod
@@ -215,9 +215,9 @@ class PublicRegistry(RegistryPrivacy):
         return "0"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
-        return NotificationAssignmentRead(tuple(sources), ())
+        return NotificationAssignmentRead(selection, ())
 
     def cursor_scope(
         self, snapshot: RegistrySnapshot, thread_name: str, session_id: str,
@@ -306,7 +306,7 @@ class PrivateRegistryGuard(RollbackRetained, WireWakeFile, RegistryPrivacy):
         return f"EXISTS (SELECT 1 {NativeRuntimeInput.context_entered_from(members, assignment)})"
 
     def missing_notification_assignments(
-        self, sources: Sequence[Delivered],
+        self, selection: NotificationSelection,
     ) -> NotificationAssignmentRead:
         raise PublicationActivationBlocked("Private notification coordinator is missing")
 

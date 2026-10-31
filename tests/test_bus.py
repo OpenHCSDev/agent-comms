@@ -50,7 +50,7 @@ from agent_comms.errors import (
     RelationViolationError,
     UnclaimedError,
 )
-from agent_comms.field_codec import GitCommitText, MessageId, MessageIdText
+from agent_comms.nominal.field_codec import GitCommitText, MessageId, MessageIdText
 from agent_comms.message_reference import MessageReference
 from agent_comms.read_basis import RepliesDisplayScope
 from agent_comms.response_acknowledgement import (

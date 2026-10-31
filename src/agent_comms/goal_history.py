@@ -17,19 +17,19 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Annotated, Self
 
-from agent_comms.field_codec import WireOmitDefault
+from agent_comms.nominal.field_codec import WireOmitDefault
 from agent_comms.owner_requests import NoRequestRevision, RequestRevision
 
 from .child_process import Platform
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, HistoryExclude, MalformedRecord
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, HistoryExclude, MalformedRecord
 from .goal_failure_observation import FailedTurnEvidence
 from .goal_scope import GoalScope
 from .goals import GoalDeclaration, NoGoal
 from .locked_store import DurableFile
 from .private_registry_guard import PrivateRegistryGuard
 from .store_files import AtomicFile
-from .tool_result import DeclaredReply
+from .tool_result import ToolResult
 from .typed_table import (
     Column,
     DurableTables,
@@ -169,7 +169,7 @@ class RegistryWriterObserver(JournalObserver):
 
 
 @dataclass(frozen=True)
-class RecordedGoalHistory(DeclaredReply):
+class RecordedGoalHistory(ToolResult):
     """A thread's goal revisions beside the attempt ledger's failures, which only the ledger writes."""
 
     history: tuple[RecordedGoalRevision, ...]

@@ -43,7 +43,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
 )
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -170,14 +170,14 @@ def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
 @pytest.fixture
 def claim_order(held_bus):
     """Publish the real order and claim messages, using their retained identities."""
-    def claim(problem):
+    def claim(problem, *, pull_request=1, head="a" * 40):
         todo = held_bus.goals.todos.get(problem)
         lead = held_bus.registry.require("lead").incarnation
         worker = held_bus.registry.require("worker").incarnation
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
-        claimed = OrderClaim.for_order(todo, worker, 1, "a" * 40,
+        claimed = OrderClaim.for_order(todo, worker, pull_request, head,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(

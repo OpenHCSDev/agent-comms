@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from agent_comms.field_codec import AttemptId, GoalId
+from agent_comms.nominal.field_codec import AttemptId, GoalId
 
 
 class FailureNotObserved(ValueError):

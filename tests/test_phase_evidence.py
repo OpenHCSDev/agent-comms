@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.head_review import HeadReview
+from agent_comms.head_review import HeadReview, MergeHeadReview
 from agent_comms.phase_evidence import (
     AllEvidence,
     ClassDeclared,
@@ -36,6 +36,7 @@ from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.work_branches import WorkBranches
 from fixture_git import IDENTITY
 
 
@@ -168,6 +169,31 @@ def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_p
     assert len(tuple(current.main.modules(("src",)))) == 1
 
 
+@pytest.mark.parametrize("paths", [
+    ("src",), ("src/kept.py",), ("src/nested",), ("src", "src2"), ("src2/kept.py", "src/kept.py"),
+    ("src/nested.py",), ("gone",),
+])
+def test_modules_answer_the_listing_git_gives_for_their_paths(tmp_path, paths):
+    """A directory named like a module, and a sibling sharing a path's prefix, are not modules."""
+    main = main_of(tmp_path, {
+        "src/kept.py": "kept = 1\n", "src/nested/inner.py": "inner = 1\n",
+        "src/nested.py/held.py": "held = 1\n", "src/notes.md": "notes\n", "src2/kept.py": "other = 1\n",
+    }).main
+    listed = git(tmp_path, "ls-tree", "-r", "--name-only", main.commit, "--", *paths).splitlines()
+    assert [module.file_path for module in main.modules(paths)] == [
+        name for name in listed if name.endswith(".py")]
+
+
+def test_changed_paths_between_commits_and_of_a_commit_against_itself(tmp_path):
+    first = main_of(tmp_path, {"src/kept.py": "kept = 1\n"}).main.commit
+    (tmp_path / "src/kept.py").write_text("kept = 2\n")
+    git(tmp_path, "commit", "-qam", "next")
+    second = git(tmp_path, "rev-parse", "HEAD")
+    branches = WorkBranches(tmp_path)
+    assert branches.changed(first, second) == {"src/kept.py"}
+    assert branches.changed(second, second) == frozenset()
+
+
 def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
     reading = main_of(tmp_path, {
         "src/phase.py": "from agent_comms.phase_evidence import BusStorageAbsent\n"
@@ -266,30 +292,37 @@ def test_only_foreign_comparison_refusal_exempts_an_owned_type_check(source, all
     assert (not checks.owned()) is allowed
 
 
-@pytest.mark.parametrize(("required", "actors", "expected"), (
-    ((HeadReview.context,), [], True),
-    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5}], True),
-    ((HeadReview.context,), [{"actor_type": "Integration", "actor_id": 15368}], False),
-    ((HeadReview.context,), [{"actor_type": "RepositoryRole", "actor_id": 5},
-                             {"actor_type": "Team", "actor_id": 9}], False),
-    (("review-verdict",), [], False),
-    (("smoke",), [], False),
+@pytest.mark.parametrize(("required", "queue", "actors", "expected"), (
+    (MergeHeadReview.required_contexts(), True, [], True),
+    (MergeHeadReview.required_contexts(), False, [], False),
+    (MergeHeadReview.required_contexts(), True, [{"actor_type": "RepositoryRole", "actor_id": 5}], False),
+    (MergeHeadReview.required_contexts(), True, [{"actor_type": "Integration", "actor_id": 15368}], False),
+    ((HeadReview.context,), True, [], False),
+    ((MergeHeadReview.context,), True, [], False),
+    (("review-verdict",), True, [], False),
+    (("smoke",), True, [], False),
 ))
-def test_ruleset_requires_exact_review_context_with_owner_only_bypass(
-    tmp_path, required, actors, expected,
+def test_ruleset_requires_both_owned_contexts_and_actual_queue_without_bypass(
+    tmp_path, required, queue, actors, expected,
 ):
     main = main_of(tmp_path, {"src/a.py": "x = 1\n"}).main
-    rules = [{"ruleset": 7, "required": ["smoke"]},
-             {"ruleset": 8, "required": list(required)}]
-    answers = {"rules/branches/main": rules, "rulesets/8": actors}
+    # The real API may split independent requirements across rulesets.
+    rules = [{"ruleset": 7, "required": ["smoke"], "queue": False},
+             *({"ruleset": 8, "required": [context], "queue": False} for context in required),
+             {"ruleset": 9, "required": [], "queue": queue}]
+    answers = {"rules/branches/main": rules, "rulesets/7": [],
+               "rulesets/8": actors, "rulesets/9": []}
+    reads = []
 
     class Answered(RulesetGates):
         @staticmethod
         def api(main, path, query):
+            reads.append(path)
             return answers[path]
 
     assert Answered().holds(PlanReading((), main)) is expected
-    assert HeadReview.context in RulesetGates().describe()
+    assert reads.count("rulesets/8") == 1
+    assert all(context in RulesetGates().describe() for context in MergeHeadReview.required_contexts())
 
 
 def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
@@ -393,7 +426,7 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
 
     counted = Counted("x = 1")
     assert reading.holds(counted)
-    again = reading.following(())
+    again = reading.following((), reading.main)
     assert again.holds(counted)
     assert len(reads) == 1
 
@@ -404,7 +437,7 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     unreadable = Unreadable("x")
     assert not reading.holds(unreadable)
     assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
-    assert unreadable not in reading.following(()).reads
+    assert unreadable not in reading.following((), reading.main).reads
 
 
 def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp_path):

@@ -7,17 +7,18 @@ writing verbs. No process-local cache owns any of it.
 """
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.channel_targets import ThreadTarget
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
-from agent_comms.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
+from agent_comms.nominal.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
@@ -66,6 +67,10 @@ class Ping(DeclaredFamily, affix="Ping"):
         return False
 
     @property
+    def owner_flagged(self) -> bool:
+        return False
+
+    @property
     @abstractmethod
     def key(self) -> object: ...
 
@@ -104,7 +109,7 @@ class Ping(DeclaredFamily, affix="Ping"):
             key: value for key, value in FieldCodec.encode(self).items() if key not in ignored
         }))
         since = self.since.recorded_at("A heartbeat line")
-        return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds)
+        return BoardEntry(content.value, self.text, since, since + AwaitingCommander.seconds, self.owner_flagged)
 
     def render(self, now: float) -> str:
         return f"{self.text} ({self.since.age(now)})"
@@ -121,6 +126,10 @@ class RulePing(Ping):
     @property
     def urgent(self) -> bool:
         return self.rule.urgent
+
+    @property
+    def owner_flagged(self) -> bool:
+        return self.rule.owner_flagged
 
     @property
     def alarm_kind(self) -> type[StandingRule]:
@@ -238,6 +247,8 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     def body(self, hud: tuple[str, ...]) -> str:
         """The existing HUD owns presentation; this packet owns publication and history."""
         return "\n".join((
+            "BOARD (Core heartbeat; Tristan's own words never arrive in this format)",
+            "Each rule prints its shared words once; '…' in a header is each row's own words.",
             *hud, "",
             "Full evidence: comms_hud board/open_pings, or Toad /commander original details",
         ))
@@ -371,8 +382,9 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                 opened: tuple[Ping, ...], new: tuple[Ping, ...]) -> tuple[Ping, ...]: ...
 
     @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings
+    def needs_disposal(cls) -> bool:
+        """The heartbeat prints these above the unit tables; the rest follow them."""
+        return True
 
     @classmethod
     def sections(cls, packets: tuple[CommanderUpdate, ...],
@@ -384,17 +396,7 @@ class AlarmGroup(ViewHeading, affix="Alarms"):
                      for members in (group.members(packets, opened, new),) if members)
 
 
-class CompactAlarms:
-    """Sections keep actionable representatives and explicit per-kind overflow."""
-
-    maximum_per_kind: ClassVar[int] = 1
-
-    @classmethod
-    def visible(cls, pings: tuple[Ping, ...]) -> tuple[Ping, ...]:
-        return pings[:cls.maximum_per_kind]
-
-
-class NewAlarms(CompactAlarms, AlarmGroup):
+class NewAlarms(AlarmGroup):
     tone = AccentTone
 
     @classmethod
@@ -403,7 +405,7 @@ class NewAlarms(CompactAlarms, AlarmGroup):
         return new
 
 
-class StillOpenAlarms(CompactAlarms, AlarmGroup):
+class StillOpenAlarms(AlarmGroup):
     tone = WarningTone
 
     @classmethod
@@ -413,8 +415,12 @@ class StillOpenAlarms(CompactAlarms, AlarmGroup):
         return tuple(line for ping in opened for line in ping.alarm_pings() if line not in new_members)
 
 
-class WatchingAlarms(CompactAlarms, AlarmGroup):
+class WatchingAlarms(AlarmGroup):
     """A still-failing source remains visible, but it has no commander disposal to wake for."""
+
+    @classmethod
+    def needs_disposal(cls) -> bool:
+        return False
 
     @classmethod
     def members(cls, packets: tuple[CommanderUpdate, ...],
@@ -432,13 +438,6 @@ class AlarmLine:
 
 
 @dataclass(frozen=True)
-class AlarmOverflow:
-    kind: type[DeclaredFamily]
-    more: int
-    oldest_age: Annotated[str, PublicationExclude()]
-
-
-@dataclass(frozen=True)
 class AlarmSection:
     group: type[AlarmGroup]
     pings: tuple[Ping, ...]
@@ -446,22 +445,158 @@ class AlarmSection:
     def heading(self) -> str:
         return self.group.count_heading(len(self.pings))
 
-    def tables(self, now: float) -> tuple[ViewTable[AlarmLine] | ViewTable[AlarmOverflow], ...]:
+    def by_kind(self) -> Mapping[type[DeclaredFamily], tuple[Ping, ...]]:
+        """Rows of one rule share what they ask, so the reader takes them as one decision."""
         grouped: dict[type[DeclaredFamily], list[Ping]] = {}
         for ping in self.pings:
             grouped.setdefault(ping.alarm_kind, []).append(ping)
-        lines: list[AlarmLine] = []
-        overflow: list[AlarmOverflow] = []
-        for kind, members in grouped.items():
-            shown = self.group.visible(tuple(members))
-            lines.extend(AlarmLine(kind, ping.text, ping.since.age(now)) for ping in shown)
-            rest = members[len(shown):]
-            if rest:
-                overflow.append(AlarmOverflow(kind, len(rest), min(
-                    rest, key=lambda ping: ping.since.chronology()).since.age(now)))
-        tables: list[ViewTable[AlarmLine] | ViewTable[AlarmOverflow]] = [
-            ViewTable(AlarmLine, HudExclude, tuple(lines)),
-        ]
-        if overflow:
-            tables.append(ViewTable(AlarmOverflow, HudExclude, tuple(overflow)))
-        return tuple(tables)
+        return {kind: tuple(pings) for kind, pings in grouped.items()}
+
+    def digest(self, now: float) -> str:
+        """The section in one line: how many of each rule, and the line left longest, so the
+        reader sees what is owed and for how long before reading any row."""
+        oldest = min(self.pings, key=lambda ping: ping.since.chronology())
+        words = oldest.text.partition(FoldedRule.arrow)[0].split(" ")
+        named = " ".join(words[:14]) + (" …" if len(words) > 14 else "")
+        counts = ", ".join(f"{len(pings)} {kind.declared_name.replace('_', ' ')}"
+                           for kind, pings in self.by_kind().items())
+        return f"{self.heading()}: {counts}. Oldest, {oldest.since.age(now)}: {named}"
+
+    def text_lines(self, now: float) -> tuple[str, ...]:
+        """Every line of every rule, its shared words printed once in the rule's header."""
+        return tuple(line for kind, pings in self.by_kind().items()
+                     for line in FoldedRule.of(kind, pings).lines(now))
+
+    def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
+        return (ViewTable(AlarmLine, HudExclude, tuple(
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)
+
+
+class ActionWord(ABC):
+    """One word of an action a rule's rows share: written once in the rule's header."""
+
+    @abstractmethod
+    def label(self) -> str:
+        """How the header prints this word."""
+
+    def filled(self, row: RuleRow) -> tuple[str, ...]:
+        """The row's own value for this word; a word every row shares has none."""
+        return ()
+
+
+@dataclass(frozen=True)
+class SharedWord(ActionWord):
+    word: str
+
+    def label(self) -> str:
+        return self.word
+
+
+@dataclass(frozen=True)
+class RowWord(ActionWord):
+    """A word each row fills; the header prints its place."""
+
+    position: int
+
+    def label(self) -> str:
+        return "…"
+
+    def filled(self, row: RuleRow) -> tuple[str, ...]:
+        return (row.action[self.position],)
+
+
+@dataclass(frozen=True)
+class FlagValue(RowWord):
+    """A word each row fills after a shared ``--flag``: the header names it by the flag, and a
+    row whose own words already show it prints nothing more."""
+
+    flag: str
+
+    def label(self) -> str:
+        return self.flag.upper()
+
+    def filled(self, row: RuleRow) -> tuple[str, ...]:
+        value = row.action[self.position]
+        return () if value in row.shown() else (f"{self.flag}={value}",)
+
+
+@dataclass(frozen=True)
+class RuleRow:
+    """One ping's own words: what differs from the rest of its rule's rows."""
+
+    ping: Ping
+    words: tuple[str, ...]
+    action: tuple[str, ...]
+
+    def shown(self) -> str:
+        """Its own words, each short commit spelled in full when its action names that commit,
+        so the line carries the full head once instead of twice."""
+        return " ".join(next((value for value in self.action if len(word) >= 7 and value.startswith(word)),
+                             word) for word in self.words)
+
+
+@dataclass(frozen=True)
+class FoldedRule:
+    """A rule's rows share their opening, their closing question and the shape of their action:
+    those print once in the header, and each row keeps only its own words and values."""
+
+    kind: type[DeclaredFamily]
+    prefix: tuple[str, ...]
+    suffix: tuple[str, ...]
+    template: tuple[ActionWord, ...]
+    rows: tuple[RuleRow, ...]
+
+    arrow: ClassVar[str] = " -> "
+
+    @classmethod
+    def of(cls, kind: type[DeclaredFamily], pings: tuple[Ping, ...]) -> FoldedRule:
+        split = tuple(ping.text.partition(cls.arrow) for ping in pings)
+        words = tuple(tuple(observed.split(" ")) for observed, _, _ in split)
+        actions = tuple(tuple(action.split(" ")) if arrow else () for _, arrow, action in split)
+        # A lone row shares nothing with anyone: it keeps every word it has.
+        room = min(len(row) for row in words) - 1 if len(pings) > 1 else 0
+        prefix = cls.common(words, room)
+        suffix = cls.common(tuple(row[::-1] for row in words), room - len(prefix))[::-1]
+        template = cls.shared_action(actions) if len(pings) > 1 else ()
+        return cls(kind, prefix, suffix, template, tuple(
+            RuleRow(ping, row[len(prefix):len(row) - len(suffix)], action)
+            for ping, row, action in zip(pings, words, actions)))
+
+    @staticmethod
+    def common(rows: tuple[tuple[str, ...], ...], room: int) -> tuple[str, ...]:
+        shared: list[str] = []
+        for column in zip(*rows):
+            if len(shared) >= room or len(set(column)) != 1:
+                break
+            shared.append(column[0])
+        return tuple(shared)
+
+    @staticmethod
+    def shared_action(actions: tuple[tuple[str, ...], ...]) -> tuple[ActionWord, ...]:
+        """Actions of one length align word for word; any other set stays on its rows."""
+        if len({len(action) for action in actions}) != 1 or not actions[0]:
+            return ()
+        template: list[ActionWord] = []
+        for position, column in enumerate(zip(*actions)):
+            before = template[-1].label() if template else ""
+            template.append(
+                SharedWord(column[0]) if len(set(column)) == 1
+                else FlagValue(position, before[2:]) if before.startswith("--")
+                else RowWord(position))
+        return tuple(template)
+
+    def header(self) -> str:
+        head = f"{self.kind.declared_name} · {len(self.rows)}"
+        shape = " ".join((*self.prefix, "…", *self.suffix)) if self.prefix or self.suffix else ""
+        action = (f"{self.arrow}{' '.join(word.label() for word in self.template)}"
+                  if self.template else "")
+        return f"{head}: {shape}{action}" if shape or action else head
+
+    def row_line(self, row: RuleRow, now: float) -> str:
+        values = tuple(value for word in self.template for value in word.filled(row))
+        own = f"{self.arrow}{' '.join(row.action)}" if row.action and not self.template else ""
+        tail = f" [{' '.join(values)}]" if values else ""
+        return f"  {row.shown()}{tail}{own} · {row.ping.since.age(now)}"
+
+    def lines(self, now: float) -> tuple[str, ...]:
+        return (self.header(), *(self.row_line(row, now) for row in self.rows))

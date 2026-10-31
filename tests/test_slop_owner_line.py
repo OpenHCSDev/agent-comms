@@ -9,7 +9,7 @@ import pytest
 from agent_comms.build_identity import RecordedBuildIdentity
 from agent_comms.change_report import FileLine
 from agent_comms.commander.order import OrderFile
-from agent_comms.field_codec import FieldCodec, MalformedRecord
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.progress_claims import MergedClaim
 from agent_comms.slop import CreatedLine, DeclarationDerivation, ExistingLine, OwnerLine, Slop
 from agent_comms.thread_execution import CommanderForkExecution

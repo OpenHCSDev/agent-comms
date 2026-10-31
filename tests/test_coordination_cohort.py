@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import AssignmentId
+from agent_comms.nominal.field_codec import AssignmentId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import (
     DeferredAssignment,
@@ -232,7 +232,8 @@ def test_legacy_preexisting_claim_blocks_entire_batch_and_rollback(tmp_path: Pat
 
 def test_no_wake_observer_cannot_gain_legacy_claim_after_seal(tmp_path: Path) -> None:
     comms, store, root_id, lookups = _root(tmp_path)
-    from agent_comms.audience_manifest import FrozenRecipient, freeze_audience
+    from agent_comms.audience_manifest import freeze_audience
+    from agent_comms.frozen_recipient import FrozenRecipient
     from agent_comms.bus import PrivateRecord
     from agent_comms.mentions import ThreadMention
     from agent_comms.wake import OrdinaryControl

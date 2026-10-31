@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration
 from agent_comms.queued_input import InitialInput

@@ -10,6 +10,7 @@ import sys
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterable
+from contextlib import ExitStack
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import cache, partial
@@ -25,7 +26,7 @@ from agent_comms.active_route import (
     active_route_path,
 )
 from agent_comms.child_process import Platform
-from agent_comms.field_codec import FieldCodec, MalformedRecord, PathText
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.locked_store import (
     DeclaredFile,
@@ -125,19 +126,31 @@ def bus_paths(files: FilesRequest, external: tuple[type[ExternalStore], ...]) ->
                          for resource in store.resources(files)))
 
 
-def settle_bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()) -> None:
-    """Each selected declaration owns whether settling is valid for its file."""
-    paths = bus_paths(files, external)
-    for resource in RootFile.owned_files(files, paths):
-        resource.owner.settle(files.location(resource))
+def bus_resources(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()
+                  ) -> tuple[DeclaredFile | UndeclaredFile, ...]:
+    """One declaration-derived inventory for bus and writer-owned resources."""
+    return RootFile.owned_files(files, bus_paths(files, external))
+
+
+def pinned_bus_files(files: FilesRequest, resources: tuple[DeclaredFile | UndeclaredFile, ...]) -> ExitStack:
+    """Hold every selected file's bytes still until the returned stack closes; each
+    declaration owns how its file is pinned."""
+    with ExitStack() as pins:
+        for resource in resources:
+            pins.enter_context(resource.owner.pinned(files.location(resource)))
+        return pins.pop_all()
 
 
 def bus_files(files: FilesRequest, external: tuple[type[ExternalStore], ...] = ()
               ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
-    """One declaration-derived inventory for bus and writer-owned resources."""
-    paths = bus_paths(files, external)
+    return saved_bus_files(files, bus_resources(files, external))
+
+
+def saved_bus_files(files: FilesRequest, resources: tuple[DeclaredFile | UndeclaredFile, ...]
+                    ) -> dict[DeclaredFile | UndeclaredFile, dict[Path, SavedFile]]:
+    """Each resource's members as they are now, read after any pin they need."""
     saved = {}
-    for resource in RootFile.owned_files(files, paths):
+    for resource in resources:
         source = files.location(resource)
         observed = {member: member.stat() for member in resource.owner.files(source) if member.is_file()}
         saved[resource] = {

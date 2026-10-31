@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
-from agent_comms.field_codec import AbsolutePathText, Argument, FieldCodec, Normalize, WireName
+from agent_comms.nominal.field_codec import AbsolutePathText, Argument, FieldCodec, Normalize, WireName
 from agent_comms.install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from agent_comms.installer.probes.harnesses import HarnessInstallation
 

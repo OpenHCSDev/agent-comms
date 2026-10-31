@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms_hooks import ToolRefusedError
+from agent_comms.nominal.field_codec import WireExclude
 
 from .input_key import InputKeyText
 from .agent_inbox import TakenInputStart
@@ -40,8 +41,8 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from .cli_result import CliResult
 from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
-from .errors import ToolRefusedError
-from .field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
+from .errors import RelationViolationError
+from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
 from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
@@ -58,7 +59,9 @@ from .owner_launch import HostResources
 from .page_traversal import NewestCursor, PageCursor
 from .pi_payloads import PublishedGoalToolDetails
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .presentation import AfterRecipient, ChannelView, FirstRecipient, MessageNotification, RecipientCursor
+from .notification_evidence import AfterRecipient, FirstRecipient, RecipientCursor
+from .presentation import ChannelView, MessageNotification
+from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
 from .read_basis import NamedViewer
 from .relationships import (
@@ -80,16 +83,13 @@ from .task_sources import (
     TaskChange,
     TaskScopeSelection,
 )
-from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .progress_claims import ProgressClaim
-from .relationships import RelationshipEdit
 from .thread_execution import ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl, StartOwnerControl
 from .thread_management import InheritedTags, RenameThreadResult, TagChoice
 from .thread_model import ThreadModel
 from .threads import NextTurnConfiguration
 from .tool_caller import ThreadCaller, ThreadListing, ToolCaller
-from .ui_model.observation import ReadNotifications
 from .tool_result import ToolResult
+from .notification_reads import LiveNotificationRead
 from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
@@ -162,21 +162,6 @@ class GoalProgress(OwnGoalPublication, GoalSnapshot):
 @dataclass(frozen=True)
 class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
-
-
-@dataclass(frozen=True)
-class GoalHistory(ToolResult, RecordedGoalHistory):
-    pass
-
-
-
-
-
-
-
-
-
-
 
 
 @dataclass(frozen=True)
@@ -619,8 +604,8 @@ class CommsGoalHistoryTool(ThreadReadTool):
         OneGoal | AllGoals, *tool_field("Optional goal ID; omit for this thread's full history")
     ] = AllGoals()
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
-        return comms.goals.recorded_history(GoalHistory, caller.subject(self.thread), self.goal_id)
+    def apply(self, comms: Comms, caller: ToolCaller) -> RecordedGoalHistory:
+        return comms.goals.recorded_history(caller.subject(self.thread), self.goal_id)
 
 
 
@@ -704,24 +689,20 @@ class CommsMessageOutcomesTool(ReadTool, ToolRequest):
     reference: Annotated[
         MessageReference, *tool_field("The message's seq and message_id, as comms_threads lists them")
     ]
-    limit: Annotated[int, *tool_field("Maximum recipient rows in this page")] = 100
+    limit: Annotated[RecipientLimit, *tool_field("Maximum recipient rows in this page")] = RecipientLimit()
     after: Annotated[
         RecipientCursor, *tool_field("The previous page's next cursor; omit for the first page")
     ] = FirstRecipient()
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessageOutcomes:
-        if self.limit < 1:
-            raise ToolRefusedError("limit must be positive.")
         source, = comms.bus.bus.deliveries_for_references((self.reference,))
-        viewer = caller.outcome_viewer(comms)
-        if not viewer.sees(source):
+        if not caller.outcome_viewer(comms.registry).sees(source):
             raise ToolRefusedError(f"Message {source.message.seq} is not readable by this caller.")
-        window = ReadNotifications(str(comms.root), (self.reference,), viewer=viewer).read(comms)
-        following = self.after.following(
-            window.outcomes.get((source.message.seq, source.message.message_id), ()))
-        page = following[:self.limit]
+        window = LiveNotificationRead(
+            (self.reference,), after=self.after, limit=self.limit).apply(comms, caller)
+        page = window.outcomes.get((source.message.seq, source.message.message_id), ())
         return MessageOutcomes(
-            source.message, page, len(following) - len(page),
+            source.message, page, window.remaining(self.reference),
             AfterRecipient(page[-1].recipient_identity) if page else self.after,
         )
 

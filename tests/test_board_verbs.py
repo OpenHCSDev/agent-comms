@@ -16,7 +16,7 @@ from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
@@ -217,8 +217,10 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
         "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
-    command = next(command for command in re.findall(r"`([^`]+)`", rule.line())
-                   if command.startswith("judge ok "))
+    # One printed command offers every verb that takes the same arguments: `judge ok|back ARGS`.
+    tool, verbs, arguments = next(command.split(" ", 2) for command in re.findall(r"`([^`]+)`", rule.line())
+                                  if command.startswith("judge ") and "ok" in command.split(" ")[1].split("|"))
+    command = f"{tool} ok {arguments}"
     judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
@@ -283,3 +285,13 @@ def test_every_commander_of_the_project_may_review_its_heads(board_review):
     with pytest.raises(TodoError, match="Only a commander of this project"):
         NoHeadOrder().require_reviewer(comms.goals, request,
                                        comms.registry.require("worker").incarnation)
+
+
+def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:
+    from agent_comms.head_review import PullRequestHead
+    from agent_comms.repository_name import RepositoryName
+    from agent_comms.standing_rules import OrderlessUnreviewedHead
+
+    head = "a" * 40
+    line = OrderlessUnreviewedHead(request=PullRequestHead(RepositoryName.from_wire("o/r"), 7, head), due_at=0).line()
+    assert line.count("judge ") == 1 and all(part in line for part in ("--pr 7", f"--head {head}", "--repo o/r"))

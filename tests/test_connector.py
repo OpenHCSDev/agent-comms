@@ -1,6 +1,7 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 
+from agent_comms.transcripts import EarlierThan
 from agent_comms.repo import Checkout
 import asyncio
 import base64
@@ -22,6 +23,7 @@ from aiohttp import ClientSession, CookieJar, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from connector_readiness import ConnectorReadiness
+from conftest import transcript_records
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
@@ -33,22 +35,27 @@ from agent_comms.connector import (
     ConnectorVerb,
     ServeVerb,
     RevokeVerb,
+    ToolsCallResult,
 )
 from agent_comms.connector_caller import CALLER
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
     IssuedCode, TrustedBrowser, digest,
 )
+from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.coordinator import Coordination
 from agent_comms.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.field_codec import FieldCodec, RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems
 from agent_comms.host_services import ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
+from agent_comms.native_transcript import NativeTranscript
+from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
     ReadyPhase,
@@ -266,6 +273,65 @@ async def test_expected_tool_argument_refusal_keeps_its_mcp_reply(client, comms,
     assert reply["id"] == 31
     assert reply["result"]["isError"] is True
     assert json.loads(reply["result"]["content"][0]["text"])["error"]
+
+
+async def tool_call(client: TestClient, token: str, call_id: int, name: str, arguments: dict):
+    response = await client.post("/mcp", headers={"Authorization": f"Bearer {token}"}, json={
+        "jsonrpc": "2.0", "id": call_id, "method": "tools/call",
+        "params": {"name": name, "arguments": arguments},
+    })
+    return response.status, await response.json()
+
+
+def bind_worker_session(comms: Comms, path: Path) -> None:
+    worker = comms.registry.require("worker")
+    comms.registry.declare(replace(
+        worker, session_file=RegistrySessionLocation.from_path(str(path), comms.root)))
+
+
+def saved_session(path: Path, *entries: bytes) -> Path:
+    header = json.dumps(transcript_records.session(id="session").to_wire()).encode()
+    path.write_bytes(b"".join((header + b"\n", *entries)))
+    return path
+
+
+async def test_an_unreadable_transcript_is_a_failed_call_and_the_connector_keeps_serving(
+    client, comms, tmp_path,
+):
+    """A corrupt complete native entry escaped tools/call as an HTTP 500 with no id."""
+    path = saved_session(tmp_path / "corrupt.jsonl", b'{"type":"message"\n')
+    bind_worker_session(comms, path)
+    with pytest.raises(MalformedRecord) as unreadable:
+        tuple(NativeTranscript(path).tail())
+    token = await approved_token(client, comms)
+    status, reply = await tool_call(
+        client, token, 41, TranscriptPageRead.declared_name, {"thread": "worker"})
+    assert (status, reply["id"]) == (200, 41)
+    # The domain's own MalformedRecord, with its JSONDecodeError cause, is the failed result.
+    assert reply["result"] == FieldCodec.encode(ToolsCallResult.failed(unreadable.value))
+    assert reply["result"]["isError"] is True and "structuredContent" not in reply["result"]
+    assert "JSONDecodeError" in reply["result"]["content"][0]["text"]
+    status, served = await tool_call(client, token, 42, CommsChannelsTool.declared_name, {})
+    assert (status, served["id"], served["result"]["isError"]) == (200, 42, False)
+
+
+async def test_a_stale_transcript_cursor_is_a_failed_call_with_its_coordination_cause(
+    client, comms, tmp_path,
+):
+    message = transcript_records.message({"role": "assistant", "content": [{"type": "text", "text": "held"}]})
+    bind_worker_session(comms, saved_session(
+        tmp_path / "session.jsonl", json.dumps(message).encode() + b"\n"))
+    page = comms.transcripts.capture_page_read("worker").read()
+    bind_worker_session(comms, saved_session(tmp_path / "other.jsonl"))
+    stale = TranscriptPageRead(thread="worker", position=EarlierThan(page.before))
+    with pytest.raises(TranscriptChanged) as changed:
+        stale.read(comms)
+    token = await approved_token(client, comms)
+    status, reply = await tool_call(
+        client, token, 43, stale.declared_name, FieldCodec.encode_fields(stale))
+    assert (status, reply["id"]) == (200, 43)
+    assert reply["result"] == FieldCodec.encode(ToolsCallResult.failed(changed.value))
+    assert "structuredContent" not in reply["result"]
 
 
 async def test_request_log_names_the_route_and_never_its_values(client, store, root, comms, caplog):

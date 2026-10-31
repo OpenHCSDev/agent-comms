@@ -23,7 +23,7 @@ from .coordination_session import ReadNativeCoordinationSession
 from .coordination_tables.participants import OwnerGenerations
 from .coordinator import Coordination
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     MalformedRecord,
@@ -189,6 +189,8 @@ def record_selected_terminal(
     try:
         with Coordination(str(coordination_path)) as store, store.session.writing() as db:
             SelectedToolSlot.require(db, slot_id=slot_id).acknowledge(db, call_id)
+    except CoordinationBeginUnavailable:
+        raise  # Nothing was written, so the acknowledgement is not UNKNOWN.
     except sqlite3.Error as error:
         raise SelectedToolDenied("Selected tool terminal acknowledgement UNKNOWN; no retry") from error
 
@@ -264,8 +266,6 @@ def _require_sent_full_input(
         raise SelectedToolDenied("Selected tool does not match the exact sent FULL input")
     if not row.sent_owner_claimed_generation.matches(claim_scope.owner_claimed_generation):
         raise SelectedToolDenied("Selected tool names another sending claim_scope")
-    if row.reference.recorded or row.verdict.decided:
-        raise SelectedToolDenied("Selected input was already settled")
 
 
 def verify_selected_terminal(

@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands
@@ -42,7 +42,7 @@ from agent_comms.installer.upgrade import (
 )
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier
-from agent_comms.messages import Message
+from agent_comms.messages import CommanderUpdatePosition, Message
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import ScratchCheckout
 from agent_comms.root_runtime import RootRuntime
@@ -121,9 +121,12 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
     runtime = LaunchRuntime((home / ".local/share/agent-comms/current").resolve() / "bin/python")
     foreign = shared_clone(tmp_path / "review").path
     source = foreign / "src/agent_comms/messages.py"
-    source.write_text(source.read_text().replace(
-        '"""Reverse lookups are derived from the record, in its append transaction."""',
-        '"""A dirty review changes this producer declaration."""', 1))
+    # A producer digest covers column declarations, not reader source (P978), so the
+    # dirty review retypes one projection column.
+    declared = '    commander_lookup: ThreadLookup\n    indexes = (Index(("commander_lookup", "seq")),)\n'
+    text = source.read_text()
+    assert text.count(declared) == 1
+    source.write_text(text.replace(declared, declared.replace("ThreadLookup", "str")))
     environment = {**installed_home, "PYTHONPATH": str(foreign / "src")}
     with InstallCommands() as commands:
         commands.probe(PrepareProducerDigestsProbe(), runtime.interpreter, cwd=home,
@@ -155,7 +158,8 @@ print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
     assert reviewed["stamp"] == "CheckoutStamp"
     assert Path(reviewed["source"]).is_relative_to(foreign)
     assert reviewed["computed"] == reviewed["read"]
-    assert reviewed["read"] != own["read"]
+    assert {name for name, digest in own["read"].items()
+            if reviewed["read"][name] != digest} == {CommanderUpdatePosition.declared_name}
     assert path.read_bytes() == original
     print(json.dumps({"runtime": own, "review": reviewed, "file_unchanged": True}))
 
@@ -364,6 +368,9 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
+    # The installer no longer waits on a commander pass, so neither its phases nor its post claim one.
+    assert not any("heartbeat" in timing.line().lower() for timing in result.phases)
+    assert "heartbeat" not in history[-1].body.lower()
     if not fresh:
         assert history[0].body.startswith("Install starting")
     assert scratch.is_dir() and not tuple(scratch.iterdir())

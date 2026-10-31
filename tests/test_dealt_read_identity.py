@@ -12,7 +12,7 @@ from agent_comms.context_reading import ContextUsage
 from agent_comms.rule_deal import (
     DealRecord, DealtRead, DealtSource, Open, OpenedReads, ReadSpan, StartedDeal, Unread,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms_hooks.skill import FleetReader
 from conftest import answer_deal
@@ -69,3 +69,51 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus
     assert deal.audit.exists()
     deal.observe_context(ContextUsage(70, 100))
     assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
+
+
+def test_his_question_quotes_the_session_and_no_bare_word_answers_it():
+    from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
+    from agent_comms.session_receipts import SessionReceipts
+
+    wrote = RuleAudit("spine", does="I end turns on a unit's state, not on a wait.\nSecond line")
+    asked = SessionAudit((wrote, RuleAudit("ally")), ()).his_question(SessionReceipts())
+    assert asked == f"> I end turns on a unit's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
+    assert SessionAudit((), ()).his_question(SessionReceipts()) == MeantRecord.question
+    meant = MeantRecord()
+    assert not meant.answered_by(("Yes.",))
+    assert not meant.answered_by(("I will go look at this now and fix every one of them today.",))
+    assert meant.answered_by(("No. I said that and then replied Skipped to fifty of his rows.",))
+
+
+def transcript_line(kind, content):
+    import json
+    return json.dumps({
+        "type": kind, "uuid": "00000000-0000-4000-8000-000000000001", "timestamp": "2026-10-31T04:00:00.000Z", "promptId": "p",
+        "cwd": "/w", "version": "1", "sessionId": "s", "parentUuid": None, "isSidechain": False,
+        "message": {"role": kind, "content": content},
+    }).encode()
+
+
+def test_the_receipts_read_what_a_transcript_shows_the_session_did():
+    import json
+
+    from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+
+    said = lambda words: transcript_line("assistant", [{"type": "text", "text": words}])
+    called = lambda call, tool: transcript_line(
+        "assistant", [{"type": "tool_use", "id": call, "name": tool, "input": {}}])
+    result = lambda call, error=False: transcript_line("user", [
+        {"type": "tool_result", "tool_use_id": call, "is_error": error, "content": [{"type": "text", "text": "r"}]}])
+    prompt = json.dumps({"type": "system", "subtype": "turn_duration", "uuid": "00000000-0000-4000-8000-000000000001", "cwd": "/w",
+                         "version": "1", "timestamp": "2026-10-31T04:00:00.000Z", "durationMs": 1}).encode()
+    receipts = ClaudeJsonLines().receipts([
+        said("reading it"), called("toolu_1", "Bash"), result("toolu_1"), said("did the work"), prompt,
+        called("toolu_2", "Read"), result("toolu_2"), said("Skipped"), prompt,
+        called("toolu_3", "Bash"), result("toolu_3", error=True), said("Yes, I meant it\nsecond line"),
+    ])
+    assert [ending.words for ending in receipts.endings] == [
+        "did the work", "Skipped", "Yes, I meant it\nsecond line"]
+    assert receipts.idle_turns() == 2  # a refused call changed nothing, and neither did a read
+    assert receipts.lines() == (
+        "Your last turns ended on:", "> did the work", "> Skipped", "> Yes, I meant it",
+        "Of your last 3 calls, 1 were refused or failed.")

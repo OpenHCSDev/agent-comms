@@ -12,8 +12,11 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .message_reference import MessageReference
-from .declared_family import DeclaredFamily
-from .field_codec import TranscriptRecordId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import TranscriptRecordId
+from .notification_evidence import ConsumptionEvidence
+from .recorded_time import Timestamped
+from .notification_progress import HarnessConsumedProgress
 
 if TYPE_CHECKING:
     from .assignment_states import AssignmentState
@@ -27,26 +30,11 @@ class Outcome(DeclaredFamily, affix="Outcome"):
     """Stored spellings stay the same; the stored outcome decides what may follow it."""
 
     @classmethod
-    def claim_steps(cls, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
-        """The claim steps this outcome proves; an attempt that proves nothing moves no claim."""
-        return ()
-
-    @classmethod
     def settle(cls, successor: HarnessDelivery, assignments: AssignmentStore,
                db: sqlite3.Connection) -> HarnessDelivery:
         """An open attempt takes the successor and the claim steps its outcome proves."""
         successor.record(assignments, db)
         return successor
-
-    @classmethod
-    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
-        """The recipient's progress after this attempt; an emitted, unconfirmed or filtered
-        attempt proves no context entry and leaves it."""
-        return progress
-
-    @classmethod
-    def finished_with(cls, export: MonitorReadFile) -> None:
-        """An unconsumed body keeps its export for a later Read."""
 
 
 class FilteredOutcome(Outcome):
@@ -63,17 +51,19 @@ class UnconfirmedOutcome(Outcome):
 
 
 class DeliveredOutcome(FilteredOutcome):
-    @classmethod
-    def claim_steps(cls, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
-        return state.harness_delivery()
+    """An original harness response, not evidence that a model took the body.
 
-    @classmethod
-    def consumed_progress(cls, progress: DeliveryProgress) -> DeliveryProgress:
-        return progress.harness_consumed()
+    Older generic responses retain this spelling and their actual monitor proof.
+    A producer name alone cannot upgrade their evidence to model context.
+    """
 
-    @classmethod
-    def finished_with(cls, export: MonitorReadFile) -> None:
-        export.retire()
+
+class AcceptedOutcome(DeliveredOutcome):
+    pass
+
+
+class PersistedOutcome(AcceptedOutcome):
+    pass
 
 
 class EmittedOutcome(UnconfirmedOutcome):
@@ -81,7 +71,7 @@ class EmittedOutcome(UnconfirmedOutcome):
 
 
 @dataclass(frozen=True)
-class MonitorEvidence(DeclaredFamily):
+class MonitorEvidence(ConsumptionEvidence, DeclaredFamily):
     """Unsent and terminal observations cannot accept another delivery."""
 
     async def confirm(self, bridge: LineMonitorBridge, delivery: HarnessDelivery,
@@ -92,6 +82,15 @@ class MonitorEvidence(DeclaredFamily):
         """The outcome this observation proves, with the observation that proves it; one that
         proves nothing leaves the recorded outcome."""
         return recorded, self
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress
+
+    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return ()
+
+    def finished_with(self, export: MonitorReadFile) -> None:
+        """A body without a complete original transcript proof keeps its export."""
 
 
 @dataclass(frozen=True)
@@ -125,10 +124,19 @@ class MismatchedMonitor(MonitorEvidence):
 
 
 @dataclass(frozen=True)
-class ObservedMonitor(MonitorEvidence):
+class ObservedMonitor(MonitorEvidence, Timestamped):
     record_id: TranscriptRecordId
     timestamp: float
 
     def evidence(self, recorded: type[Outcome]) -> tuple[type[Outcome], MonitorEvidence]:
         """Only a complete, matching confirmation stores this, so the message entered context."""
         return DeliveredOutcome, self
+
+    def consumed_progress(self, progress: DeliveryProgress) -> DeliveryProgress:
+        return progress.model_consumed(HarnessConsumedProgress(self.at_ms))
+
+    def claim_steps(self, state: AssignmentState) -> tuple[type[AssignmentState], ...]:
+        return state.harness_delivery()
+
+    def finished_with(self, export: MonitorReadFile) -> None:
+        export.retire()

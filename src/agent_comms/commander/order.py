@@ -38,10 +38,11 @@ from agent_comms.commander.standing import (
     UnownedWheelSpin,
 )
 from agent_comms.comms import Comms, wire
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.coordination_errors import DeferredRead
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
 from agent_comms.messaging import CommanderReceipts
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument,
     FieldCodec,
     MalformedRecord,
@@ -76,10 +77,11 @@ from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, Reques
 from agent_comms.nominal_census import NominalPlanReadings
 from agent_comms.phase_evidence import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
-from agent_comms.presentation import AllOutcomes, MessageNotification
+from agent_comms.notification_evidence import AllOutcomes
+from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms.repo import Checkout, Repo
+from agent_comms.repo import Checkout, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import Slop
 from agent_comms.standing_rules import (
@@ -445,10 +447,14 @@ class CommanderContext(BaseModel):
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
 
-        A publish alone is only queued."""
-        outcomes = MessageNotification.references(
-            self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,),
-            viewer=AllOutcomes())
+        A publish alone is only queued. The message is already published when this reads, so a
+        busy read leaves its delivery unread and never refuses what was sent."""
+        try:
+            outcomes = MessageNotification.references(
+                self.comms.root, self.comms.registry, self.comms.bus.bus, (reference,),
+                viewer=AllOutcomes())
+        except DeferredRead as unread:
+            return f'delivery unread: {unread}'
         return MessageNotification.summary(outcomes.outcomes.get((reference.seq, reference.message_id), ()))
 
     def call(self, tool):
@@ -1166,11 +1172,11 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
-        if not source.holds(todo):
+        if source.github != todo.repo:
             sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
                      f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
-            todo, source.checkout, title, Path(body_file).read_text(),
+            todo, source, title, Path(body_file).read_text(),
             ctx.comms.goals.todos, ctx.incarnation)
 
 
@@ -1217,7 +1223,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
         storage = ctx.comms.registry.storage_rule
-        if not storage.owns_checkout(holder, source.checkout, source.github):
+        if not storage.owns_checkout(holder, source.checkout, source.github, RepositoryReads()):
             raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
@@ -1361,10 +1367,9 @@ class SessionEndVerb(OrderVerb, declared_name="session-end"):
 
     def run(self, ctx: Commander) -> None:
         """A session's subagents end with it, whether or not each one stopped on its own."""
-        registered = tuple(fork for fork in self.forks if fork in ctx.comms.registry)
-        for fork in registered:
-            CommanderForkCaller(fork).end(ctx.comms)
-        print(f'session forks ended: {" ".join(registered)}')
+        registered = CommanderForkCaller.end_session(
+            ctx.comms, tuple(CommanderForkCaller(fork) for fork in self.forks))
+        print(f'session forks ended: {" ".join(caller.name for caller in registered)}')
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1511,9 +1516,8 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        scan = HeldOrders.read(ctx.comms, ctx.commander)
-        for thread in UnownedWheelSpin.idle(ctx.comms, ctx.commander, scan):
-            print(thread.name)
+        for unit in UnownedWheelSpin.read_idle(ctx.comms, ctx.project.commander):
+            print(unit.name)
 
 
 

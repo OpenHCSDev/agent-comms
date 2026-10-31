@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from agent_comms.cli_command import CliCommand
-from agent_comms.cli_commands import RegisteredResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.thread_text import SubagentRole
 from dataclasses import dataclass
 from typing import Annotated
+
+from ..cli_result import RegisteredResult
 
 
 @dataclass(frozen=True, kw_only=True)

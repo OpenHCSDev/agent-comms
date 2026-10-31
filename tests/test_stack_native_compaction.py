@@ -1,7 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.lifecycle_capability import Unresolved
@@ -88,7 +88,7 @@ def _is_summary(request: dict) -> bool:
     "summary_failure", "post_compaction_tool_rounds",
 ])
 async def test_pi_engine_compacts_inside_a_core_turn(
-        case: str, monkeypatch, native_runtime_package, private_directory) -> None:
+        case: str, monkeypatch, native_runtime_package, private_directory, cursor_delivery) -> None:
     native_bin = os.environ.get("AC_NATIVE_STACK_BIN")
     if not native_bin:
         pytest.skip("Set AC_NATIVE_STACK_BIN to the prepared pinned Pi launcher")
@@ -230,6 +230,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(
                         root=project, owner=NativeBackendFixture.participant_at(project, project),
                         env_extra=child_env, session_file=str(session),
                         input_start=AnnouncedInputStart(),
+                        cursor_delivery=cursor_delivery,
                         persistent_session=pi_session,
                         package=native_runtime_package,
                         tool_mode=NoSelectedTools(),

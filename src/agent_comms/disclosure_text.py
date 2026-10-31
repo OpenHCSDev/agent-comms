@@ -13,8 +13,8 @@ from typing import ClassVar, Hashable
 
 from metaclass_registry.mro_dispatch import handles
 
-from agent_comms.declared_family import DeclaredFamily, FamilyMeta
-from agent_comms.field_codec import FieldCodec, FieldPlan, PublicationExclude, ValueDescription, ViewColumn, ViewExclusion
+from agent_comms.nominal.declared_family import DeclaredFamily, FamilyMeta
+from agent_comms.nominal.field_codec import FieldCodec, FieldPlan, PublicationExclude, ValueDescription, ViewColumn, ViewExclusion
 
 
 class DisclosureKey:
@@ -212,6 +212,52 @@ class ViewTable[R]:
                          for parts in zip_longest(*wrapped, fillvalue=""))
             lines.extend(self.row_separator)
         return tuple(lines)
+
+    def plain_lines(self) -> tuple[str, ...]:
+        """One line per row, every cell kept, for a reader with no columns to align to."""
+        return tuple(" · ".join(" / ".join(cell.splitlines()) for cell in row if cell)
+                     for row in self.texts)
+
+    def folded_lines(self) -> tuple[str, ...]:
+        """Every cell of ``plain_lines``, with each repeated value printed once.
+
+        A column whose value repeats across rows is a shared fact of those rows, not a fact of
+        each row: rows agreeing on every repeated column print under one labelled line, and
+        each row keeps only its own cells. Nineteen units awaiting the same proof read as one
+        line and nineteen names, not nineteen copies of the same sentence.
+        """
+        rows = tuple(tuple(" / ".join(cell.splitlines()) for cell in row) for row in self.texts)
+        shared = tuple(index for index, column in enumerate(zip(*rows))
+                       if len(set(column)) < len(rows))
+        if len(rows) < 2 or not shared:
+            return self.plain_lines()
+        groups: dict[tuple[str, ...], list[tuple[tuple[str, ...], ...]]] = {}
+        for row in self.texts:
+            cells = tuple(tuple(cell.splitlines()) for cell in row)
+            groups.setdefault(tuple(" / ".join(cells[index]) for index in shared), []).append(cells)
+        lines: list[str] = []
+        for values, members in groups.items():
+            own = tuple(index for index in range(len(self.columns)) if index not in shared)
+            # A cell listing items that all share one state (`P821 merged…`, `P847 merged…`)
+            # names the state once in the group's line, and the cell keeps the item names.
+            tails = {index: self.shared_tail(tuple(line for row in members for line in row[index]))
+                     for index in own}
+            label = " · ".join((*(f"{self.columns[index].label}: {value}"
+                                  for index, value in zip(shared, values) if value),
+                                *(f"{self.columns[index].label}: … {tail}"
+                                  for index, tail in tails.items() if tail)))
+            lines.append(f"{label} ({len(members)})")
+            lines.extend("  " + " · ".join(
+                " / ".join(line.removesuffix(f" {tails[index]}") if tails[index] else line
+                           for line in row[index])
+                for index in own if row[index]) for row in members)
+        return tuple(lines)
+
+    @staticmethod
+    def shared_tail(lines: tuple[str, ...]) -> str:
+        """The words after the first that every one of at least two lines ends with."""
+        tails = {line.partition(" ")[2] for line in lines}
+        return tails.pop() if len(lines) > 1 and len(tails) == 1 else ""
 
     def labelled_lines(self) -> tuple[str, ...]:
         """Compact strips use declared labels too, not another list of metric names."""

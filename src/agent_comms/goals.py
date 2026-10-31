@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 from agent_comms.lifecycle_capability import Active
+from agent_comms_hooks.shell_commands import ShellCommand
 
 from .child_process import (
     BoundedRun,
@@ -26,12 +27,11 @@ from .child_process import (
     TimedOutOutcome,
 )
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RejectedEnforcementError, RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     GoalId,
-    GoalWaitId,
     MalformedRecord,
     NullMember,
     PathText,
@@ -44,7 +44,6 @@ from .goal_states import ActiveGoal, GoalState
 from .registration_inheritance import RegistrationInheritance
 from .repo import DetachedStart, GitCommandError, Repo, ScratchCheckout
 from .reported_turn import NoReportedTurn, ReportedTurnState
-from .shell_commands import ShellCommand
 from .shell_effects import shell_storage_effects
 from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -443,13 +442,13 @@ class CheckedCommit:
     def stored(cls, repository: Path, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
-            Repo.git(repository, *cls.NOTES, "list", sha)
+            note = Repo.git(repository, *cls.NOTES, "show", sha)
         except GitCommandError as failure:
             if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise
-        return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
-                     Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
+        return tuple(FieldCodec.decode(cls, FieldCodec.parse(line))
+                     for line in note.splitlines() if line)
 
     def store(self, repository: Path, sha: str) -> None:
         Repo.git(repository, *self.NOTES, "append", "-m",
@@ -645,9 +644,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     @abstractmethod
     def clear_wait(self, waits: GoalWaits) -> bool: ...
 
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return False
-
     def require_active(self) -> Goal:
         goal = self.require()
         goal.state.require(Active, RelationViolationError(goal.state.activity_refusal()))
@@ -786,9 +782,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def clear_wait(self, waits: GoalWaits) -> bool:
         return waits.clear(self.id)
-
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return waits.consume(self.id, wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)

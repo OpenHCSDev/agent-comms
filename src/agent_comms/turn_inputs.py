@@ -20,7 +20,7 @@ from . import pi_commands as commands
 from . import turn_failure as failures
 from .acp_failure import UnrecordedFailureSource
 from .turn_inbox import ClearQueue, InputRequest, SendNow, TurnInbox, TurnInboxItem, UseSettings
-from .field_codec import InputId
+from .nominal.field_codec import InputId
 from .locked_store import RegistryFile
 from .maintenance_barrier import MaintenanceBarrier
 from .native_failures import NativePiUnavailable
@@ -239,6 +239,7 @@ class InputForwarding(MroDispatch):
             if not session.input_start.following(public_id, native_id, entry.content.text):
                 return ()
             self.retire(native_id)
+            session.following_started(command)
             self.started = True
             return (public_id,)
         return ()

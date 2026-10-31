@@ -8,9 +8,6 @@ from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.coordination_contracts import (
-    MAX_IDENTIFIER_CHARS,
-    require_bounded,
-    require_nonempty,
     validate_execution_id,
 )
 from agent_comms.coordination_errors import (
@@ -21,14 +18,14 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.coordination_tables.attempts import (
     APPROVED_REPLAY_FACT_MASK,
     AttemptRecord,
     ReplayFact,
 )
 from agent_comms.execution_states import ExecutionState
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     MalformedRecord,
     NullMember,
     SingleFieldValue,
@@ -234,8 +231,6 @@ class CurrentExecutions(
     pointer_revision: Annotated[int, Column(check="pointer_revision >= 0")]
 
     def __post_init__(self) -> None:
-        require_nonempty(self.owner_lookup, "owner_lookup")
-        require_bounded(self.owner_lookup, "owner_lookup", MAX_IDENTIFIER_CHARS)
         if self.execution_id.pointed != self.attempt_ordinal.pointed:
             raise IntegrityViolationError("pointer execution and ordinal must pair")
         if self.pointer_revision < 0:
@@ -364,11 +359,6 @@ class ExecutionRecord(
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        for field, value in (
-            ("owner_lookup", self.owner_lookup),
-        ):
-            require_nonempty(value, field)
-            require_bounded(value, field, MAX_IDENTIFIER_CHARS)
         if self.revision <= 0 or self.max_attempts <= 0:
             raise ValueError("revision and max_attempts must be positive")
         self.lifecycle.validate_budget(self.max_attempts)

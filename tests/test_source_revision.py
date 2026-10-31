@@ -1,5 +1,6 @@
 """Citations use fetched Git objects, not whichever source is on disk."""
 from dataclasses import replace
+from pathlib import Path
 import shutil
 
 import pytest
@@ -11,7 +12,7 @@ from agent_comms.change_report import (
 )
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
-from agent_comms.field_codec import OwnerRequestKey
+from agent_comms.nominal.field_codec import OwnerRequestKey
 from agent_comms.goal_actions import OrderGoalAction
 from agent_comms.repo import GitCommandError
 from agent_comms.owner_requests import OwnerRequestId
@@ -26,6 +27,43 @@ def test_source_creation_does_not_reuse_a_retired_directory(tmp_path):
     replacement = SourceRepository.create(tmp_path)
     replacement.scope().require_references(replacement.roots, MainRevision())
     assert replacement.git(replacement.checkout, 'rev-parse', 'HEAD').strip() == replacement.main_commit
+
+
+def test_seeded_source_publishes_descendants_and_merges_main_without_replacing_a_pr(tmp_path: Path) -> None:
+    files = {
+        Path("pyproject.toml"): SourceRepository.package_project("source-package"),
+        Path("src/api.py"): 'def old_api() -> str:\n    return "baseline"\n',
+    }
+    source = SourceRepository.create(tmp_path, baseline_files=files)
+    main, feature = source.main_commit, source.branch_commit
+    assert source.git(source.checkout, "rev-parse", "HEAD").strip() == main
+    assert source.git(source.checkout, "show", f"{main}:owner.py") == source.main_source
+    assert source.git(source.checkout, "show", f"{feature}:owner.py") == (
+        source.main_source + 'class Member(Parent):\n    pass\n')
+    assert source.git(source.checkout, "show", f"{feature}:branch.py") == '@decorated\nclass BranchOnly:\n    pass\n'
+    for revision in (main, feature):
+        for path, text in files.items():
+            assert source.git(source.checkout, "show", f"{revision}:{path}") == text
+    assert source.descends(source.checkout, main, feature)
+    source.git(source.checkout, "switch", "feature")
+    candidate = source.publish_change("Replace the seeded API", *source.write_files({
+        Path("src/api.py"): 'def new_api() -> str:\n    return "candidate"\n'}))
+    assert source.descends(source.checkout, feature, candidate)
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == candidate
+    source.git(source.checkout, "switch", "main")
+    advanced = source.commit_change("Advance main independently", *source.write_files({
+        Path("main_only.py"): "advanced = True\n"}))
+    source.git(source.checkout, "push", "origin", "main")
+    assert source.git(source.remote_path, "rev-parse", "main").strip() == advanced
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == candidate
+    source.git(source.checkout, "switch", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    final = source.publish_change("Publish the merged descendant", *source.write_files({
+        Path("src/next.py"): "next_value = 2\n"}))
+    for ancestor in (candidate, advanced):
+        assert source.descends(source.checkout, ancestor, final)
+    assert source.git(source.remote_path, "rev-parse", "refs/pull/7/head").strip() == final
+    assert source.git(source.checkout, "show", f"{final}:main_only.py") == "advanced = True\n"
 
 
 def test_main_revision_refuses_branch_lines_and_ignores_dirty_disk(tmp_path):

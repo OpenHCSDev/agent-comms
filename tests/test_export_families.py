@@ -23,7 +23,7 @@ from agent_comms.exporting import (
     WireExportScope,
     WireTranscriptExporter,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.messages import Message, InfoKind
 
 FIXTURES = Path(__file__).parent / "fixtures" / "wire_exports"
@@ -71,10 +71,9 @@ def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, fo
 
 
 def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
-    # Exercise the real family, restoring its registry after the extension experiment.
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(WireExportLimit, "__registry__", dict(WireExportLimit.__registry__))
-
+    # Exercise the real family: the metaclass registers into the root's own dict, so the
+    # extension experiment removes its member from that dict when it ends.
+    try:
         @dataclass(frozen=True)
         class LastMessagesLimit(WireExportLimit):
             count: int
@@ -101,6 +100,8 @@ def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
             2,
         )
         assert acknowledgement.truncated
+    finally:
+        WireExportLimit.__registry__.pop("last_messages", None)
 
 
 def test_public_families_require_their_behavior_hooks():

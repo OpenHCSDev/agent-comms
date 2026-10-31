@@ -6,7 +6,7 @@ import json
 import pytest
 
 from agent_comms.cli_options import JsonFlagRecord
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_model import DeclaredModel

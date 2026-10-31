@@ -16,33 +16,30 @@ from __future__ import annotations
 import inspect
 import json
 from datetime import datetime
-import sys
 from abc import abstractmethod
-from collections.abc import Iterator, Mapping
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import CommanderAudience, FleetAudience, RuleAudience, RuleFile
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.held_orders import HeldOrders
 from agent_comms.pattern_sources import PostmortemFailure
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.threads import Thread
+from agent_comms.comms import Comms
+from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, RuleDeal, StartedDeal,
-    UnstampedCompactionDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
+    StartedDeal, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
-from agent_comms.todos import TodoStore
-from agent_comms_hooks import ClaudeHookProgram, ClaudeSubagentHook, ClaudeTranscriptHook
-from agent_comms_hooks.watch import WatchClaim
-
-if TYPE_CHECKING:
-    from agent_comms.registry_document import RegistrySnapshot
-    from agent_comms.threads import Thread
-
+from agent_comms_hooks import ClaudeSubagentHook
+from agent_comms.cli_bridges.session_watch import WatchClaim
+from agent_comms.cli_bridges.hook_read_gate import TranscriptWords
 
 class DeckReader(DealtSources):
     """Which packaged sources a bound session is dealt, by the audience its rules declare, on
@@ -72,6 +69,11 @@ class DeckReader(DealtSources):
         return CommanderPackage.paper()
 
     @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        """The record of what the reader actually did; a fleet session is dealt none."""
+        return ()
+
+    @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
         return tuple(rule for rule in RuleFile.packaged() if rule.audience in cls.audiences)
 
@@ -81,12 +83,12 @@ class DeckReader(DealtSources):
         """The slice streams this reader's deck interleaves, one slice of each per round."""
 
     @abstractmethod
-    def header(self, start: DeckStart) -> str:
+    def header(self, start: DeckStart, comms: Comms, snapshot: RegistrySnapshot,
+               commanders: tuple[Thread, ...]) -> str:
         """The line after the read order: what the summary cannot be trusted to hold."""
 
     def deaf(self, session: str) -> tuple[str, ...]:
-        """A fleet session is not told to re-arm the commander's watch."""
-        return ()
+        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
 
     def board(self, session: str) -> tuple[str, ...]:
         """A fleet session has no commander board."""
@@ -164,7 +166,8 @@ class FleetReader(DeckReader, audience=FleetAudience):
             Path(inspect.getfile(PostmortemFailure)),
         )
 
-    def header(self, start: DeckStart) -> str:
+    def header(self, start: DeckStart, comms: Comms, snapshot: RegistrySnapshot,
+               commanders: tuple[Thread, ...]) -> str:
         return ("FUCK YOUR COMPACTION. Your summary is a paraphrase of these rules, and a"
                 " paraphrase drops the exact words they turn on. The files above are the source;"
                 " where your summary disagrees with them, the summary is wrong.")
@@ -177,9 +180,15 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
     deck_suffix = ".deck.json"
 
     @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return (CommanderPackage.indictment(),)
+
+    @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
-        indictment = cls.paragraphs(CommanderPackage.indictment().read_text(encoding="utf-8"))
-        return (cls.voice(), indictment, cls.tells(), cls.failures())
+        indictment = tuple(paragraph for path in cls.indictment()
+                           for paragraph in cls.paragraphs(path.read_text(encoding="utf-8")))
+        return tuple(stream for stream in (cls.voice(), indictment, cls.tells(), cls.failures())
+                     if stream)
 
     @classmethod
     def leading(cls) -> tuple[Path, ...]:
@@ -187,7 +196,7 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         indictment after them: read once every proof and rule is understood, it is the record of
         what the model still did anyway, never a preface to skim (Tristan, 2026-10-30)."""
         return (*super().leading(), CommanderPackage.skill(), Slop.catalog() / "README.md",
-                CommanderPackage.indictment())
+                *cls.indictment())
 
     @classmethod
     def answered(cls) -> frozenset[str]:
@@ -196,11 +205,9 @@ class CommanderReader(FleetReader, audience=CommanderAudience):
         review fork at load 104 (bus 46591)."""
         return super().answered() | {CommanderPackage.skill().stem}
 
-    def header(self, start: DeckStart) -> str:
-        return start.held()
-
-    def deaf(self, session: str) -> tuple[str, ...]:
-        return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
+    def header(self, start: DeckStart, comms: Comms, snapshot: RegistrySnapshot,
+               commanders: tuple[Thread, ...]) -> str:
+        return start.held(comms, snapshot, commanders)
 
     def board(self, session: str) -> tuple[str, ...]:
         return WatchClaim(session).state().board()
@@ -223,8 +230,60 @@ class CommanderRulesReader(RulesOnly, CommanderReader, audience=CommanderAudienc
     """The commander's refresh."""
 
 
+class IndictmentFree(DeckReader, audience=FleetAudience):
+    """A prime asked for mid-context without the indictment, so it does not fill the window."""
+
+    @classmethod
+    def indictment(cls) -> tuple[Path, ...]:
+        return ()
+
+
+class CommanderIndictmentFreeReader(IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's papers and rules without the indictment."""
+
+
+class CommanderLightReader(RulesOnly, IndictmentFree, CommanderReader, audience=CommanderAudience):
+    """The commander's rules alone: no papers, no indictment."""
+
+
+class Prime(DeclaredFamily):
+    """A deal the owner asks for on demand (/prime, `agent-comms-prime`). Each member names
+    the readers it deals by role; the readers own which files those are, so a variant is a
+    selection over the one dealt order, never a second list."""
+
+    fleet: ClassVar[type[DeckReader]]
+    commander: ClassVar[type[DeckReader]]
+
+    @classmethod
+    def trigger(cls) -> PrimedDeal:
+        """Why this variant's deal was dealt: the owner asked for it by this variant's name."""
+        return PrimedDeal(cls.declared_name)
+
+
+class FullPrime(Prime, declared_name="full"):
+    """Papers, rules and, for a commander, the indictment: the same deal as a compaction."""
+
+    fleet = FleetReader
+    commander = CommanderReader
+
+
+class PaperlessPrime(Prime, declared_name="no-papers"):
+    fleet = FleetRulesReader
+    commander = CommanderRulesReader
+
+
+class IndictmentlessPrime(Prime, declared_name="no-indictment"):
+    fleet = FleetReader
+    commander = CommanderIndictmentFreeReader
+
+
+class LightPrime(Prime, declared_name="light"):
+    fleet = FleetRulesReader
+    commander = CommanderLightReader
+
+
 @dataclass(frozen=True)
-class DealtDeck(ClaudeTranscriptHook, RuleDeal):
+class DealtDeck(TranscriptWords):
     """The deal and the slices the session start hook dealt beside the transcript."""
 
     def deck(self, reader: DeckReader) -> Path:
@@ -234,9 +293,10 @@ class DealtDeck(ClaudeTranscriptHook, RuleDeal):
 class StartReason(DeclaredFamily):
     """Why Claude Code started the session; a member declares Claude Code's own spelling."""
 
-    def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
+    def deal(self, start: DeckStart, reader: DeckReader, comms: Comms,
+             snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """The context is gone: the deck is dealt from its start and every file is read again."""
-        return start.dealt(reader)
+        return start.dealt(reader, self.trigger(start), comms, snapshot)
 
     def trigger(self, start: DeckStart) -> DealTrigger:
         """The cause every refusal of this deal opens with."""
@@ -268,8 +328,9 @@ class Resume(StartReason, declared_name="resume"):
     07:17 re-dealt claude-code mid-gate: its answered audit was unlinked and 23 read files
     were demanded again."""
 
-    def deal(self, start: DeckStart, reader: DeckReader) -> tuple[str, ...]:
-        return start.current().resume(lambda: start.dealt(reader), ())
+    def deal(self, start: DeckStart, reader: DeckReader, comms: Comms,
+             snapshot: RegistrySnapshot) -> tuple[str, ...]:
+        return start.current().resume(lambda: start.dealt(reader, self.trigger(start), comms, snapshot), ())
 
 
 class SessionSource(str):
@@ -283,49 +344,52 @@ class SessionSource(str):
 class DeckStart(DealtDeck):
     """A session start, resume or compaction: the deal, its order and the deck."""
 
-    source: SessionSource = SessionSource("startup")
+    source: SessionSource = field(default=SessionSource("startup"), kw_only=True)
 
     @classmethod
-    def of(cls, record: Mapping[str, object]) -> DeckStart:
-        return (SubagentDeckStart if cls.raised_by_subagent(record) else cls).decode(record)
+    def of(cls, record: Mapping[str, object], **context: object) -> DeckStart:
+        return (SubagentDeckStart if cls.raised_by_subagent(record) else cls).decode(record, **context)
 
-    def take(self) -> tuple[str, ...]:
-        """What this hook says: nothing to a session no bus binding names, the fleet's deck to
-        a bound session, and the commander's deck to the one the registry names commander now."""
-        return WatchClaim(self.session_id).state().by_role(
-            unbound=tuple, fleet=lambda record: self.taken(FleetReader()),
-            commander=lambda record: self.taken(CommanderReader()))
+    def take(self, comms: Comms, binding: Binding, number: int = 0) -> tuple[str, ...]:
+        """The supplied resident binding selects a reader at one registry cut."""
+        snapshot = comms.registry.snapshot()
+        reader = snapshot.commander_project.by_role(
+            snapshot.born(binding.owner.require_recorded().lookup),
+            commander=CommanderReader(), commanded=FleetReader())
+        return self.taken(reader, number, comms, snapshot)
 
-    def taken(self, reader: DeckReader) -> tuple[str, ...]:
-        """A start that lost the context deals the deck; a resume keeps the deal it holds."""
-        return self.source.reason().deal(self, reader)
+    def taken(self, reader: DeckReader, number: int, comms: Comms,
+              snapshot: RegistrySnapshot) -> tuple[str, ...]:
+        return self.source.reason().deal(self, reader, comms, snapshot)
 
-    def dealt(self, reader: DeckReader) -> tuple[str, ...]:
+    def primed(self, prime: type[Prime], comms: Comms, binding: Binding) -> tuple[str, ...]:
+        """The owner-selected variant, dealt through the same bound resident context."""
+        snapshot = comms.registry.snapshot()
+        reader = snapshot.commander_project.by_role(
+            snapshot.born(binding.owner.require_recorded().lookup),
+            commander=prime.commander(), commanded=prime.fleet())
+        return self.dealt(reader, prime.trigger(), comms, snapshot)
+
+    def dealt(self, reader: DeckReader, trigger: DealTrigger, comms: Comms,
+              snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """The order to read every dealt file, once, by its packaged path, opening with why."""
         prompts = self.prompts()
-        trigger = self.source.reason().trigger(self)
         self.prepare(reader, prompts, trigger)
         sources = reader.sources()
+        commanders = tuple(snapshot.commander_project.commanders(snapshot))
         return (
-            trigger.reason() + " " + self.notice() + f" Read each of these {len(sources)} files in full with the Read tool before any other"
+            trigger.reason() + " " + self.notice(commanders) + f" Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
-            " a time, and answer those in the audit: greentext lines it holds quoted verbatim, what they did, and why"
-            " it holds. Check what you did since your last start or compaction against it and"
-            " name every action that broke it, and fix what you can: reading alone is passive, the"
-            " audit is what finds the breaks (on 2026-10-27 one reread found six broken rules in"
-            " one session). That audit is not optional: every tool but Read, and Write or Edit of"
-            f" {self.audit}, is refused until the audit is written there as JSON:"
-            ' {"rules": [{"rule": NAME, "quote": WHOLE GREENTEXT LINES OF IT VERBATIM, "does": what they did,'
-            ' "why": why it holds, "broke": [each action since the last start or compaction that'
-            ' broke it; empty means kept]}, one entry for every rule you were dealt],'
-            ' "owner_words": [{"words": EACH PROMPT QUOTED BELOW, "doing": what you are doing about'
-            " it right now}]}. This order is given once per session start or"
-            " compaction; a short slice of them comes back inline every few tool calls.\n"
+            " a time, and answer those in the audit: reading alone is passive. Every tool but"
+            " Read, and Write or Edit of"
+            f" {self.audit}, is refused until it answers. This order is given once per session"
+            " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
+            self.template_once(self.current().due),
             self.owner_words(prompts),
-            reader.header(self),
+            reader.header(self, comms, snapshot, commanders),
         )
 
     def owner_words(self, prompts: tuple[str, ...]) -> str:
@@ -359,29 +423,22 @@ class DeckStart(DealtDeck):
             return ClaudeJsonLines().owner_words(
                 stream, transcript.stat().st_size, self.owner_prompts)
 
-    def held(self) -> str:
-        """Every order the units hold, from the Todo store: a summary is a paraphrase."""
+    def held(self, comms: Comms, snapshot: RegistrySnapshot,
+             commanders: tuple[Thread, ...]) -> str:
+        """Held orders from the same bus and cut that selected the reader."""
         return "\n".join((
             "FUCK YOUR COMPACTION. Your summary is a paraphrase. What your units actually hold:",
-            *(hold.recalled()
-              for root, snapshot, commander in self.commanders()
-              for hold in HeldOrders.of(TodoStore(root), snapshot, commander.name).live),
+            *(hold.recalled() for commander in commanders
+              for hold in HeldOrders.of(comms.goals.todos, snapshot, commander.name).live),
         ))
-
-    def commanders(self) -> Iterator[tuple[Path, RegistrySnapshot, Thread]]:
-        """Each commander registered on a bus this session is bound to, with that bus's cut."""
-        for record in WatchClaim(self.session_id).state().bindings():
-            root = Path(record.root)
-            snapshot = RegistryStore.at(root).snapshot()
-            for thread in snapshot.commander_project.commanders(snapshot):
-                yield root, snapshot, thread
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...], trigger: DealTrigger) -> None:
         """The deal, and the deck dealt again from its start."""
         self.deal(type(reader), prompts, trigger)
         self.deck(reader).write_text(json.dumps(reader.slices()), encoding="utf-8")
 
-    def widened(self, reader: DeckReader) -> tuple[str, ...]:
+    def widened(self, reader: DeckReader, comms: Comms,
+                snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """The deck of this session's role is the one record of the role it was dealt. A
         session whose role changed finds none of its kind and is dealt only the files the role
         adds, keeping what it read and wrote, since its context was never lost; a session bound
@@ -389,12 +446,14 @@ class DeckStart(DealtDeck):
         deck = self.deck(reader)
         if deck.exists():
             return ()
-        said = self.current().widen(self, type(reader), lambda: self.dealt(reader), ())
+        said = self.current().widen(
+            self, type(reader), lambda: self.dealt(reader, self.source.reason().trigger(self), comms, snapshot), ())
         deck.write_text(json.dumps(reader.slices()), encoding="utf-8")
         return said
 
-    def notice(self) -> str:
-        names = [thread.name for _, _, thread in self.commanders()]
+    @staticmethod
+    def notice(commanders: tuple[Thread, ...]) -> str:
+        names = [thread.name for thread in commanders]
         return ("Commander: " + ", ".join(names) + "." if names
                 else "No commander project is registered for this session.")
 
@@ -403,20 +462,3 @@ class DeckStart(DealtDeck):
 class SubagentDeckStart(DeckStart, ClaudeSubagentHook):
     """A subagent's compaction deals the subagent's own deck: on 2026-10-30 a commander fork's
     compaction dealt the main agent's stem, whose audit was then mid-answer."""
-
-
-class SkillText(ClaudeHookProgram):
-    events = ("SessionStart",)
-
-    @classmethod
-    def command(cls) -> str:
-        return cls.console_script(f"{main.__module__}:{main.__name__}")
-
-
-def main() -> None:
-    start = DeckStart.of(json.load(sys.stdin))
-    start.warn(*start.take())
-
-
-if __name__ == "__main__":
-    main()

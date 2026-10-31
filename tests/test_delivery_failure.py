@@ -12,8 +12,8 @@ from agent_comms.errors import (
     HumanClaimBlockedError,
     HumanSendError,
     HumanSendRefusedError,
-    ToolRefusedError,
 )
+from agent_comms_hooks import ToolRefusedError
 
 
 @pytest.mark.parametrize(

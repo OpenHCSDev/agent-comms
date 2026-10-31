@@ -18,7 +18,7 @@ Usage:
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 
 import asyncio
@@ -42,6 +42,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
 
+from agent_comms_hooks import ToolRefusedError
 from aiohttp import web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
@@ -54,10 +55,14 @@ from .command import Command
 from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .comms import Comms, client_wire, wire
 from .repo import Checkout
-from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
+from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
+from .errors import (
+    RelationViolationError,
+    UnregisteredThreadError,
+)
 from .coordination_errors import CoordinationError, Refused
-from .field_codec import (
+from .work_branches import WorkBranchError
+from .nominal.field_codec import (
     Argument, FieldCodec, GitCommitText, MalformedRecord, PathText, WireName, WireOmitDefault,
     RecordMember, boundary_decoder, projected,
 )
@@ -462,7 +467,10 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         try:
             reply = await connector.call(tool, self.params.arguments, caller)
             return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
-        except (ToolRefusedError, RelationViolationError, CoordinationError) as error:
+        except (
+            ToolRefusedError, RelationViolationError, CoordinationError, WorkBranchError,
+            MalformedRecord, Refused, ConnectionError, TimeoutError,
+        ) as error:
             logging.exception("Connector tool %s failed", self.params.name)
             return ToolsCallResult.failed(error)
 

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Annotated, Self
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import Participants
-from agent_comms.field_codec import MessageId, ThreadLookup, TranscriptRecordId
+from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
@@ -77,7 +77,7 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
         native queue, then took the steps this outcome proves. Each phase reads the claim as it
         stands, so a claim accepted after the attempt ends where one that existed before it
         would; a claim already settled keeps its state."""
-        for steps in (lambda state: state.harness_handoff(), self.outcome.claim_steps):
+        for steps in (lambda state: state.harness_handoff(), self.monitor.claim_steps):
             assignments.settle_harness_inputs(db, self.recipient_lookup, (self.reference,), steps)
 
     def begin(self, assignments: AssignmentStore, db: sqlite3.Connection) -> bool:

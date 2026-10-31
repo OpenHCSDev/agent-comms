@@ -16,8 +16,9 @@ from agent_comms.messaging import CommanderReceipts
 from agent_comms.repo import Checkout
 from agent_comms.thread_execution import ExternalThreadExecution, SubagentExecution
 from agent_comms.thread_model import DeclaredModel
+from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.threads import Thread
-from agent_comms.todos import NoHeadOrder, ReviewedHeadVerdict, VerdictAudience, VerdictReason
+from agent_comms.todos import NoHeadOrder, RequestDirective, ReviewedHeadVerdict, VerdictAudience, VerdictReason
 from agent_comms.tool_caller import CommanderForkCaller, CommanderPeerCaller
 
 from test_commander_forks import command, fork_bus  # noqa: F401  (fixture)
@@ -42,6 +43,28 @@ def test_a_successor_answers_directives_its_retired_predecessor_received(fork_bu
     reply = comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
                                  answerer=ctx.receipts).message
     assert comms.bus.bus.lookup(reply.seq).answers == (ask.reference,)
+
+
+def test_one_peers_answer_clears_a_retired_commanders_directive_for_every_peer(fork_bus):
+    comms, source, _ = fork_bus
+    for name in ("peer-one", "peer-two"):
+        comms.registry.declare(Thread(
+            name, frozenset({"comms", CommandersTag.declared_name}), Checkout(source.checkout),
+            model=DeclaredModel("anthropic/claude-opus-4-6"), execution=ExternalThreadExecution))
+    retired = comms.registry.require("retained").incarnation
+    request = comms.goals.todos.add_request(retired, "The retired commander's request")
+    ask = comms.messaging.send_user_message(
+        CommandTarget.named("retained"), "Ship the retired commander's fix",
+        worktree=Checkout(source.checkout))
+    comms.goals.todos.record_directive(
+        request.id, RequestDirective(ask.seq, ask.timestamp + RequestDirective.window))
+    owed = lambda name: {rule.message.message_id for rule in DirectiveUnacted.opened(comms, name)}
+    assert ask.message_id in owed("peer-one") & owed("peer-two")
+    ctx = CommanderContext.read_root(comms.root).model_copy(
+        update={"actor": CommanderPeerCaller("peer-one")})
+    comms.messaging.send("peer-one", "lead", "Answered", answers=(ask.reference,),
+                         answerer=ctx.receipts)
+    assert ask.message_id not in owed("peer-one") | owed("peer-two")
 
 
 @pytest.mark.parametrize("fork_count", (1, 3))

@@ -21,7 +21,7 @@ from agent_comms.coordination_tables.participants import (
     OwnerRecord,
     Participants,
 )
-from agent_comms.field_codec import SnapshotExclude, ThreadLookup, projected
+from agent_comms.nominal.field_codec import SnapshotExclude, ThreadLookup, projected
 from agent_comms.owner_fence import AttemptAuthority
 from agent_comms.reason_codes import ReasonCode
 from agent_comms.typed_table import (
@@ -216,12 +216,8 @@ class AttemptRecord(
 
     def __post_init__(self) -> None:
         validate_execution_id(self.execution_id)
-        for field, value in (
-            ("owner_lookup", self.owner_lookup),
-            ("owner_token_digest", self.owner_token_digest),
-        ):
-            require_nonempty(value, field)
-            require_bounded(value, field, MAX_IDENTIFIER_CHARS)
+        require_nonempty(self.owner_token_digest, "owner_token_digest")
+        require_bounded(self.owner_token_digest, "owner_token_digest", MAX_IDENTIFIER_CHARS)
         if min(self.attempt_ordinal, self.owner_generation, self.revision) <= 0:
             raise ValueError("attempt identity/generation/revision must be positive")
         if self.created_at_ms < 0 or self.updated_at_ms < self.created_at_ms:

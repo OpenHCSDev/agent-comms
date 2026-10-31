@@ -20,7 +20,7 @@ from agent_comms.attempt_resolution import (
 )
 from agent_comms.bus import Bus
 from agent_comms.bus_tables import MessageIdentitySource
-from agent_comms.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, MessageId, OrderId, RetryDecisionId, TurnId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
@@ -94,7 +94,10 @@ class AttemptResolutions(Carry):
         counts: Counter[str] = Counter()
         rewritten: list[Path] = []
         changed = 0
-        for path in self.input_files():
+        # The bus and todo stores are inputs too, but only goal ledgers carry attempts,
+        # and only their reader may open them.
+        for path in sorted(GoalAttemptStore.matching_in(GoalAttemptStore.directory_in(self.root))):
+            self.require_confined(path)
             with closing(GoalAttemptStore.read_snapshot(path)) as db:
                 if not AttemptRecord.present(db):
                     continue

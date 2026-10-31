@@ -36,7 +36,7 @@ from agent_comms.child_process import (
     SystemdUserManager,
     TimedOutOutcome,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from process_tree_fixture import TREE, identities, ready
 
@@ -425,7 +425,7 @@ time.sleep(60)
 LAUNCHER = """import json,sys,time
 from pathlib import Path
 from agent_comms.child_process import OutlivesLauncherLifetime, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 children = (SpawnedProcess.launch(sleeper),
             SpawnedProcess.launch(sleeper, lifetime=OutlivesLauncherLifetime))
@@ -462,7 +462,7 @@ async def test_killed_launcher_takes_its_child_and_leaves_its_resident(tmp_path:
 UNIT_LAUNCHER = """import json,subprocess,sys
 from pathlib import Path
 from agent_comms.child_process import OutlivesLauncherLifetime, Platform, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 sleeper = (sys.executable, '-c', 'import time; time.sleep(60)')
 # A new session and a reparent to init leave the process tree, never the unit's cgroup.
 plain = Platform.current().identity(subprocess.Popen(sleeper, start_new_session=True).pid)
@@ -509,8 +509,9 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
         assert child.identity.alive()
     try:
         stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
-        with pytest.raises(IdentityMismatchError):
+        with pytest.raises(ChildRetirementFailed) as failure:
             stale.stop_sync()
+        assert isinstance(failure.value.__cause__, IdentityMismatchError)
         assert child.alive()
     finally:
         child.stop_sync()
@@ -594,8 +595,9 @@ async def test_parent_process_reaps_but_observation_cannot_claim_exit_code(exit_
     try:
         assert child.reap() == ExitedOutcome(7)
         assert await observed.wait() == DetachedExitOutcome()
-        with pytest.raises(IdentityMismatchError):
+        with pytest.raises(ChildRetirementFailed) as failure:
             observed.stop_sync()
+        assert isinstance(failure.value.__cause__, IdentityMismatchError)
     finally:
         child.close()
 

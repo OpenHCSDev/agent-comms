@@ -18,14 +18,14 @@ from agent_comms.coordinator import Coordination
 from agent_comms.lifecycle_capability import Active
 from agent_comms.native_runtime_input import NativeRuntimeTable
 
-from .audience_manifest import FrozenRecipient
+from .frozen_recipient import FrozenRecipient
 from .bus import Bus
 from .bus_publication import Delivered
 from .bus_source_page import CoveragePage
 from .cohort_schema import ClaimBatchAcknowledgements, CohortTable
 from .coordination_cohort import AcceptedCohort, _claim_record
 from .coordination_session import NativeCapture
-from .field_codec import FieldCodec, RootId, ThreadLookup
+from .nominal.field_codec import FieldCodec, RootId, ThreadLookup
 from .historical_native_inputs import HistoricalNativeInput, read_historical_native_inputs
 from .message_bus import MessageBus
 from .native_input_record import NumberNativeColumn, TextNativeColumn, UnrecordedNativeColumn

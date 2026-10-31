@@ -39,6 +39,7 @@ class BoardEntry:
     text: str
     since: float
     alarm_at: float
+    owner_flagged: bool = False
 
     def minutes(self, now: float) -> int:
         return int((now - self.since) // 60)
@@ -57,10 +58,22 @@ class BoardSummary:
     entries: Sequence[BoardEntry]
     now: float
 
+    shown_chars: ClassVar[int] = 160
+
+    @property
+    def flagged(self) -> tuple[BoardEntry, ...]:
+        return tuple(entry for entry in self.entries if entry.owner_flagged)
+
+    @property
+    def shown(self) -> BoardEntry:
+        """Tristan's lines lead; each minute names the next, so no row becomes wallpaper."""
+        rotation = self.flagged or tuple(self.entries)
+        return rotation[int(self.now // 60) % len(rotation)]
+
     def line(self) -> str:
-        oldest = min(self.entries, key=lambda entry: entry.since)
-        return (f"BOARD: {len(self.entries)} unchanged (oldest: {oldest.text[:60]}, "
-                f"seen {oldest.minutes(self.now)} min)")
+        shown = self.shown
+        return (f"BOARD: {len(self.entries)} unchanged, {len(self.flagged)} from Tristan: "
+                f"{shown.text[:self.shown_chars]} (seen {shown.minutes(self.now)} min)")
 
 
 @dataclass(frozen=True)

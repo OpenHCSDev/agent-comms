@@ -24,7 +24,7 @@ from agent_comms.pi_payloads import PiOmitted, PiResponseData
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
 from .turn_inbox import InputContent
 from .coordinator import Coordination
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_failures import NativePiUnavailable
@@ -279,6 +279,7 @@ class PiNativeBackend(
             finish_event=delivery.finish_event,
             send_boundary=delivery.send_boundary,
             input_start=delivery.input_start,
+            cursor_delivery=delivery.cursor_delivery,
             request_observer=delivery.request_progress,
             persistent_session=self,
             package=package,

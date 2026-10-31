@@ -12,7 +12,7 @@ from typing import Annotated, ClassVar, Literal, Type
 
 import pytest
 
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     AttemptId, BoundedText, FieldCodec, GitCommitText, GoalId, Id128Text, MalformedRecord, NoAttemptId, NullMember,
 )
 from agent_comms.store_files import DEFAULT_STORE_CONTENTION
@@ -182,12 +182,19 @@ def test_declared_table_family(tmp_path):
         for row in (parent, child):
             row.insert(db)
             assert type(row).select(db) == [row]
+        # Requested keys join under IS, so a null key selects the null row, once.
+        null_key = {"key": "c", "weight": None}
+        assert TableChildRow.select_keys(db, (null_key, null_key)) == [child]
+        assert TableChildRow.select_keys(db, ({"key": "c", "weight": 3.25},)) == []
         with pytest.raises(sqlite3.IntegrityError):
             replace(child, key="bad", parent="missing").insert(db)
         with pytest.raises(TypeError):
             replace(parent, key="bool", count=True).insert(db)
         replace(child, weight=3.25).upsert(db)
         assert TableChildRow.one(db, key="c").weight == 3.25
+        assert TableChildRow.select_keys(db, (null_key,)) == []
+        assert TableChildRow.select_keys(db, ({"key": "c", "weight": 3.25},)) == [
+            replace(child, weight=3.25)]
         child.upsert(db)
         assert TableChildRow.one(db, key="c") == child
         TableChildRow.update(db, where="key=?", parameters=("c",), enabled=False)
@@ -398,7 +405,7 @@ def test_durable_writer_drops_a_declared_dropped_field_and_keeps_rows():
 
 
 def test_atomic_creation_preserves_declared_indexes_triggers_and_strict_creation():
-    from agent_comms.native_pi import NativeContextJournal
+    from agent_comms.native_input_proof import NativeContextJournal
 
     with sqlite3.connect(':memory:') as db:
         NativeContextJournal.create(db, if_not_exists=True)

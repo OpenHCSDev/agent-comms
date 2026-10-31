@@ -25,7 +25,7 @@ from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, Any, Self
 
 from pydantic import BaseModel
 
@@ -41,7 +41,7 @@ from acp.schema import (
 from .controller import (
     ACP_PERMISSION_TIMEOUT_SECONDS, UNBOUND_CONTROLLER, Controller, SessionUpdateSink,
 )
-from .field_codec import AcpSessionId, FieldCodec, MalformedRecord, WireName
+from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, WireName
 from .owner_protocol import (
     ClientLine,
     IncompatibleOwnerError,
@@ -422,16 +422,6 @@ class RuntimeConnection(OwnerConnection):
         return RuntimeRequest.member_named(action).proxy_payload(
             self._identity.name, self.controller_token, parameters,
         )
-
-
-class OwnerReplyConnection(RuntimeConnection):
-    """Bound only the live owner's response after a request has been dispatched."""
-
-    REPLY_TIMEOUT: ClassVar[float] = 3
-
-    async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
-        async with asyncio.timeout(self.REPLY_TIMEOUT):
-            return await super()._read_response(reader)
 
 
 @dataclass(frozen=True)

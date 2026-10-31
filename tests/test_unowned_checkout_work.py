@@ -1,7 +1,7 @@
 """Checkout allocation and unpublished-file protection at their storage owner."""
 
 
-from agent_comms.repo import Checkout
+from agent_comms.repo import Checkout, RepositoryReads
 from agent_comms.bus import Bus
 
 import asyncio
@@ -26,7 +26,7 @@ from agent_comms.commander_heartbeat import (
 from agent_comms.task_attachments.commander_pings import CommanderUpdate, RulePing
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.comms import Comms, wire
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
@@ -78,13 +78,13 @@ def test_one_problem_owns_a_checkout_in_each_repository_it_changes(checkout_bus,
 
     assert checkout.name == 'worker--P1'
     assert lockstep.name == 'worker--P1--toad'
-    assert rule.owns_present_checkout(worker, checkout)
-    assert rule.owns_checkout(worker, lockstep, RepositoryName('OpenHCSDev', 'toad'))
-    assert not rule.owns_checkout(worker, misnamed, RepositoryName('OpenHCSDev', 'toad'))
+    assert rule.owns_present_checkout(worker, checkout, RepositoryReads())
+    assert rule.owns_checkout(worker, lockstep, RepositoryName('OpenHCSDev', 'toad'), RepositoryReads())
+    assert not rule.owns_checkout(worker, misnamed, RepositoryName('OpenHCSDev', 'toad'), RepositoryReads())
     assert rule.problem_checkouts(
         rule.initial_roots('worker'), 'P1') == (checkout, misnamed, lockstep)
-    assert lockstep in rule.checkouts_of(worker)
-    assert misnamed not in rule.checkouts_of(worker)
+    assert lockstep in rule.checkouts_of(worker, RepositoryReads())
+    assert misnamed not in rule.checkouts_of(worker, RepositoryReads())
 
 
 @pytest.fixture
@@ -325,9 +325,10 @@ def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
         rule.roots_of(renamed), 'P1', RepositoryName('OpenHCSDev', 'toad'))
     assert checkout == tmp_path / 'checkouts' / 'unit-mi--P1'
     assert lockstep.name == 'unit-mi--P1--toad'
-    assert rule.owns_present_checkout(renamed, checkout)
+    assert rule.owns_present_checkout(renamed, checkout, RepositoryReads())
     assert not rule.owns_present_checkout(
-        replace(born, name='codex-mi', storage_roots=rule.initial_roots('codex-mi')), checkout)
+        replace(born, name='codex-mi', storage_roots=rule.initial_roots('codex-mi')), checkout,
+        RepositoryReads())
 
 
 def test_fire_refuses_while_the_holders_checkout_retains_work(checkout_bus: Comms):

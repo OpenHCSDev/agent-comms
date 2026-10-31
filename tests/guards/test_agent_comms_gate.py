@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.child_process import ObservedProcess, SpawnedProcess
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms_project import AgentCommsProject, ClientTypeErrors
 from nominal_refactor_advisor import audit
 from fixture_git import IDENTITY
@@ -289,12 +289,12 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(
 
 def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decoder(repo):
     marked = (
-        "from agent_comms.field_codec import boundary_decoder\n\n\n"
+        "from agent_comms.nominal.field_codec import boundary_decoder\n\n\n"
         "@boundary_decoder\ndef decoded(value: str):\n    return value\n"
     )
     files = {
         "plan.py": marked,
-        "foreign.py": marked.replace("agent_comms.field_codec", "elsewhere"),
+        "foreign.py": marked.replace("agent_comms.nominal.field_codec", "elsewhere"),
         "owner.py": "def owner(value: str):\n    return value\n",
     }
     base = repo.commit(files)
@@ -312,30 +312,30 @@ def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decod
 
 
 @pytest.mark.parametrize("declaration,expected", [
-    pytest.param("from agent_comms.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+    pytest.param("from agent_comms.nominal.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
                  id="imported"),
-    pytest.param("from agent_comms.field_codec import boundary_decoder as decode\n@decode\n{function}", 0,
+    pytest.param("from agent_comms.nominal.field_codec import boundary_decoder as decode\n@decode\n{function}", 0,
                  id="aliased"),
-    pytest.param("import agent_comms.field_codec as codec\n@codec.boundary_decoder\n{function}", 0,
+    pytest.param("import agent_comms.nominal.field_codec as codec\n@codec.boundary_decoder\n{function}", 0,
                  id="qualified"),
-    pytest.param("import agent_comms.field_codec\n@agent_comms.field_codec.boundary_decoder\n{function}", 0,
+    pytest.param("import agent_comms.nominal.field_codec\n@agent_comms.nominal.field_codec.boundary_decoder\n{function}", 0,
                  id="module"),
-    pytest.param("from .field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
+    pytest.param("from .nominal.field_codec import boundary_decoder\n@boundary_decoder\n{function}", 0,
                  id="relative"),
     pytest.param("{function}", 1, id="undecorated"),
     pytest.param("from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
                  id="different-owner"),
-    pytest.param("from agent_comms.field_codec import boundary_decoder\n"
+    pytest.param("from agent_comms.nominal.field_codec import boundary_decoder\n"
                  "from elsewhere import boundary_decoder\n@boundary_decoder\n{function}", 1,
                  id="duplicate"),
-    pytest.param("if enabled:\n    from agent_comms.field_codec import boundary_decoder\n"
+    pytest.param("if enabled:\n    from agent_comms.nominal.field_codec import boundary_decoder\n"
                  "@boundary_decoder\n{function}", 1, id="conditional"),
-    pytest.param("from agent_comms.field_codec import *\n@boundary_decoder\n{function}", 1,
+    pytest.param("from agent_comms.nominal.field_codec import *\n@boundary_decoder\n{function}", 1,
                  id="star"),
-    pytest.param("from agent_comms.field_codec import boundary_decoder\nclass Decoder:\n"
+    pytest.param("from agent_comms.nominal.field_codec import boundary_decoder\nclass Decoder:\n"
                  "    boundary_decoder = lambda function: function\n    @boundary_decoder\n"
                  "    def decode(external):\n        return external.marker\n", 1, id="class-shadowed"),
-    pytest.param("from agent_comms.field_codec import boundary_decoder\ndef outer(boundary_decoder):\n"
+    pytest.param("from agent_comms.nominal.field_codec import boundary_decoder\ndef outer(boundary_decoder):\n"
                  "    @boundary_decoder\n    def decode(external):\n        return external.marker\n", 1,
                  id="parameter-shadowed"),
 ])

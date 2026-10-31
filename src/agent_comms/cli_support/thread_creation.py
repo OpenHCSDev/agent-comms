@@ -11,7 +11,7 @@ from agent_comms.cli_command import CatalogBinding, CliCommand, CommandContext
 from agent_comms.cli_commands import NameArgument, ThreadCreatedResult
 from agent_comms.comms import Comms
 from agent_comms.config_options import ConfigOptions, ModelConfigOption, ThinkingLevelConfigOption
-from agent_comms.field_codec import Argument, Catalog, Multiline
+from agent_comms.nominal.field_codec import Argument, Catalog, Multiline
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.repo import Checkout, LaunchCheckout

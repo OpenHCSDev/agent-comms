@@ -10,8 +10,8 @@ from agent_comms.cli_bridges.claude_protocol import AssistantBlock, ResultPart, 
 from agent_comms.cli_bridges.codex_protocol import UserInput
 from agent_comms.cli_bridges.opencode_parts import Part
 from agent_comms.cli_protocol import TextWire
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import (
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import (
     AcceptsNull,
     BoundedText,
     EnvelopeSequence,
@@ -166,7 +166,6 @@ def test_external_fields_use_their_declared_type_not_their_parent_or_field_name(
         MissingToolResult,
         NoToolDetails,
         PiModel,
-        PiPayload,
         PiToolResult,
         UnreportedModel,
     )
@@ -211,7 +210,7 @@ def test_external_fixed_tuples_refuse_wrong_lengths_at_the_codec_boundary(data):
 
 @pytest.mark.parametrize("family, spelling", [(PiStopReason, "stop"), (CompactionReason, "overflow")])
 def test_external_name_families_derive_one_default_without_accepting_invalid_values(family, spelling):
-    from agent_comms.field_codec import DefaultExternalName
+    from agent_comms.nominal.field_codec import DefaultExternalName
     known = family.member_named(spelling)
     fallback, = family.members_with(DefaultExternalName)
     assert family.from_external(spelling) is known
@@ -264,7 +263,7 @@ def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them(
 
 
 def test_external_null_members_and_nullable_names_use_their_declarations():
-    from agent_comms.field_codec import ExternalNullMember
+    from agent_comms.nominal.field_codec import ExternalNullMember
     from agent_comms.pi_payloads import PiModel, PiToolResult
 
     for family in (PiMessage, PiModel, PiResponseData, PiToolResult, NativeToolDetails):

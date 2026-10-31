@@ -29,8 +29,7 @@ class SourcePrograms:
         return LaunchRuntime(self.prefix / 'bin' / 'python')
 
     def script(self, function: Callable[..., object]) -> Path:
-        target = f'{function.__module__}:{function.__name__}'
-        (entry,) = (entry for entry in self.entries if entry.value == target)
+        (entry,) = (entry for entry in self.entries if entry.load() == function)
         return self.prefix / 'bin' / entry.name
 
     @classmethod
@@ -59,13 +58,16 @@ class SourcePrograms:
         entries = tuple(EntryPoint(name=name, value=value, group='console_scripts')
                         for name, value in scripts.items())
         for entry in entries:
+            target = entry.attr
+            if target is None:
+                raise ValueError(f'Console script has no callable target: {entry}')
+            imported = target.partition('.')[0]
             program = binary / entry.name
             program.write_text(
                 f'#!{interpreter}\nimport sys\n'
                 f'sys.path[:0] = {sources!r}\n'
-                'from importlib.metadata import EntryPoint\n'
-                f'sys.exit(EntryPoint(name={entry.name!r}, value={entry.value!r}, '
-                f'group={entry.group!r}).load()())\n'
+                f'from {entry.module} import {imported}\n'
+                f'sys.exit({target}())\n'
             )
             program.chmod(0o700)
         return cls(prefix, entries, packages)

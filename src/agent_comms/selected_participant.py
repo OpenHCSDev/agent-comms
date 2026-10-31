@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Generator, Sequence
+from collections.abc import Awaitable, Callable, Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -14,7 +14,6 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from .agent_events import CompactionEvent, NativePhaseChanged
-from .bus_publication import Delivered
 from .cohort_schema import CohortTable
 from .comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeTable
@@ -28,7 +27,7 @@ from .coordination_tables.executions import WireOrigin
 from .coordinator import Coordination
 from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
-from .field_codec import TurnId, RootId, ThreadLookup
+from .nominal.field_codec import TurnId, RootId, ThreadLookup
 from .message_bus import MessageBus
 from .message_reference import MessageReference
 from .native_arguments import SelectedModel
@@ -38,10 +37,10 @@ from .notification_assignment import NotificationAssignment
 from .notification_evidence import NotificationAssignmentRead, NotificationWindow
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
+from .notification_evidence import OwnerOutcomes
+from .presentation import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
-from .threads import Thread
 from .turn_phase import PreparingPhase, TurnPhase
 from .turn_goal_permission import OwnerGoalPermission, TurnGoalPermission
 
@@ -203,13 +202,11 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     def capture_sent_outcomes(
-        comms: Comms, owner: Thread, sources: Sequence[Delivered],
-        assignment_read: NotificationAssignmentRead,
+        comms: Comms, assignment_read: NotificationAssignmentRead,
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, OwnerOutcomes.of(owner), sources,
-            assignment_read=assignment_read,
+            comms.root, comms.registry, assignment_read,
         )
         return tuple(
             outcome
@@ -253,12 +250,15 @@ class SelectedParticipant(MroDispatch):
                 store, lookup, after_seq=after_seq
             )
             sent_read = NotificationAssignment.capture(
-                store.session._connection, sent_sources, privacy,
+                store.session._connection,
+                OwnerOutcomes.of(sent_owner.incarnation).selection(sent_sources),
+                privacy,
             )
+        sent_read = NotificationAssignment.capture_detached(comms.root, sent_read)
         if pending:
             participant.pointer.require_idle()
         sent_outcomes = SelectedParticipant.capture_sent_outcomes(
-            comms, sent_owner, sent_sources, sent_read
+            comms, sent_read
         )
         return owner, participant, pending, sent_outcomes
 

@@ -10,7 +10,7 @@ import pytest
 from agent_comms.child_process import NoResidentManager, ResidentManager, SystemdUserManager
 from agent_comms.installer.request import InstallRequest
 from agent_comms.commander import standing
-from agent_comms.field_codec import FieldCodec, Id128
+from agent_comms.nominal.field_codec import FieldCodec, Id128
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs, InstallRunning, InstallUnit

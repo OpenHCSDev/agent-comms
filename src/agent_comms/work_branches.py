@@ -8,7 +8,7 @@ worktrees. Nothing here is stored.
 
 from __future__ import annotations
 
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 
 import subprocess
 from abc import abstractmethod
@@ -23,8 +23,8 @@ from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 
 from .code_lines import CodeLines
-from .declared_family import DeclaredFamily
-from .field_codec import GitCommitText, PathText, projected
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import GitCommitText, PathText, projected
 from .repo import (
     BranchUpstream, Checkout, CheckoutHistory, DetachedHead, GitCommandError, GitHead,
     Repo, RepositoryReads, UnpushedHead,
@@ -69,6 +69,17 @@ class UnrelatedCommitBase(CommitBase):
 
     def description(self, count: int) -> str:
         return f'has unrelated Git history: {count} commits cannot be compared with main'
+
+
+@dataclass(frozen=True)
+class UnservableCommitBase(CommitBase):
+    """The forge names a head the remote no longer serves: nothing can be compared with main."""
+
+    def missing(self, scan: ClosedHeadScan, head: str) -> tuple[str, ...]:
+        return (head,)
+
+    def description(self, count: int) -> str:
+        return 'has a head commit origin no longer serves'
 
 
 class BranchLink(DeclaredFamily, affix="BranchLink"):
@@ -303,12 +314,6 @@ class WorkBranches:
     checkout: Path
     reads: RepositoryReads = field(default_factory=RepositoryReads, compare=False, repr=False,
                                    kw_only=True)
-    _remote_heads: dict[str, dict[str, str]] = field(
-        default_factory=dict,
-        init=False,
-        repr=False,
-        compare=False,
-    )
     main: ClassVar[str] = "main"
     timeout: ClassVar[float] = 60.0
 
@@ -345,6 +350,10 @@ query($owner: String!, $name: String!, $after: String) {
 
     def _git(self, *arguments: str, input: str = "") -> str:
         return Repo.git(self.checkout, *arguments, timeout=self.timeout, input=input)
+
+    @cached_property
+    def _remote_heads(self) -> dict[str, dict[str, str]]:
+        return self.reads.remote_cuts(Checkout(self.checkout))
 
     @cached_property
     def history(self) -> CheckoutHistory:
@@ -389,7 +398,8 @@ query($owner: String!, $name: String!, $after: String) {
         return bool(self.uncommitted()) or bool(self.history.unpublished(self.head.revision()))
 
     def remote_heads(self, remote: str, reference: str) -> tuple[str, ...]:
-        """One complete published-ref cut per remote for this reader, not one call per branch."""
+        """One complete published-ref cut per remote for this pass's repository, not one call per
+        worktree or branch."""
         if remote in self._remote_heads:
             return self.selected_heads(remote, reference)
         with Repo.acquiring():
@@ -416,6 +426,15 @@ query($owner: String!, $name: String!, $after: String) {
             raise WorkBranchError(f"Origin has no pull request base {base!r} in {self.checkout}")
         (base_head,) = published
         return base_head
+
+    def commit_parents(self, head: str) -> tuple[str, ...]:
+        Repo.require_commits(self.checkout, Repo.remote, head)
+        return tuple(self._git("rev-list", "--parents", "-n", "1", head).split()[1:])
+
+    def commit_message(self, head: str) -> str:
+        """Read an immutable commit's message; its domain owner decodes any metadata."""
+        Repo.require_commits(self.checkout, Repo.remote, head)
+        return self._git("show", "--no-patch", "--format=%B", head)
 
     def prepare_pull_request(self, base: str, head: str) -> None:
         with Repo.acquiring():
@@ -528,7 +547,7 @@ query($owner: String!, $name: String!, $after: String) {
 
     @cached_property
     def repository(self) -> tuple[str, str]:
-        repository = Repo.of(self.checkout).github
+        repository = self.reads.repository(self.checkout).github
         return repository.owner, repository.name
 
     @cached_property
@@ -566,6 +585,9 @@ query($owner: String!, $name: String!, $after: String) {
         )
 
     def changed(self, base: str, head: str) -> frozenset[str]:
+        """A commit differs from itself in nothing, so an idle worktree launches no diff."""
+        if base == head:
+            return frozenset()
         return frozenset(path for path in self._git(
             "diff", "--name-only", "-z", "--no-renames", base, head).split("\0") if path)
 

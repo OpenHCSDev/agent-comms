@@ -17,15 +17,20 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, TextIO
 
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
+)
+
 
 from .cli_result import CliResult, ResultShower
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
 from .comms import Comms, wire
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
+from .nominal.field_codec import FieldCodec, RecordMember, RestartId, WireOmitDefault
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .lifecycle_capability import Active, LifecycleCapability, Pending
 from .locked_store import RuntimeFile
@@ -36,7 +41,6 @@ from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
-from .process_claim import ClaimHeldError, ProcessSingleton
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord

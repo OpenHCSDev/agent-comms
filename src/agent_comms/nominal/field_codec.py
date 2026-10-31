@@ -56,7 +56,7 @@ from .sealed import Sealed
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
 
-    from .registration_inheritance import RegistrationInheritance
+    from ..registration_inheritance import RegistrationInheritance
 
 T = TypeVar("T")
 
@@ -705,6 +705,12 @@ class FieldPlan(ViewColumn):
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
+    def project_encoded[V](
+        self, value: V, record: Callable[[Mapping[str, V]], V],
+    ) -> V:
+        """Project an already encoded field through its declared record shape."""
+        return record({self.key: value})
+
     def schema_fields(self):
         annotation, declared = self.annotation, self.declared
         base = FieldCodec.representation(annotation)[0]
@@ -836,6 +842,11 @@ class ContextFieldPlan(DeclaredFieldPlan):
     def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
         return {}
 
+    def project_encoded[V](
+        self, value: V, record: Callable[[Mapping[str, V]], V],
+    ) -> V:
+        return record({})
+
     def decoded(self, data: object) -> dict[str, object]:
         raise MalformedRecord(f"Missing decode context: {self.name}")
 
@@ -895,6 +906,11 @@ class InlineFieldPlan(DeclaredFieldPlan):
         return tuple(entry.key for entry in self.record.fields)
 
     def encoded(self, value, *, key=None):
+        return value
+
+    def project_encoded[V](
+        self, value: V, record: Callable[[Mapping[str, V]], V],
+    ) -> V:
         return value
 
     def captured(self, data: object) -> dict[str, object]:

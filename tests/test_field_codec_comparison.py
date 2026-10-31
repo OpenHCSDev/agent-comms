@@ -7,7 +7,7 @@ from typing import Annotated
 
 import pytest
 
-from agent_comms.field_codec import FieldCodec, WireRequired
+from agent_comms.nominal.field_codec import FieldCodec, WireRequired
 from agent_comms.standing_rules import StandingRule
 from agent_comms.thread_creation import CreationSeconds, CreationTime, RecordedCreationTime
 from agent_comms.thread_identity import RecordedThreadIncarnation

@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 
-from agent_comms.field_codec import ClaimId
+from agent_comms.nominal.field_codec import ClaimId
 from agent_comms.selected_claim import publish_selected_resource_claim
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
 from test_claim_bus_read import claim_originals, settle_failed

@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .field_codec import GoalId, ThreadLookup, TurnId
+from .nominal.field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner
@@ -29,7 +29,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .thread_text import ForkedParent, SubagentRole
-from .repo import Checkout, CheckoutTransfer, Repo
+from .repo import Checkout, CheckoutTransfer, Repo, RepositoryReads
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -112,7 +112,7 @@ class Registration:
             if repository not in edit.document.commander_project.require().repos:
                 raise RelationViolationError('Registered repository changed before checkout transfer')
             rule = self.storage_rule
-            if not rule.owns_checkout(current, destination, repository.github):
+            if not rule.owns_checkout(current, destination, repository.github, RepositoryReads()):
                 raise RelationViolationError('Target is not the caller\'s declared checkout')
             if not source.path.exists() and destination.exists():
                 # No move to replay. Only recognize the caller's current physical allocation,

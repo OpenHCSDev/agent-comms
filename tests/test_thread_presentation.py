@@ -6,8 +6,8 @@ import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.input_key import AcpInputKey
-from agent_comms.field_codec import InputId
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.notification_progress import SendingProgress
@@ -43,7 +43,8 @@ def test_missing_presentation_owns_source_absence_and_retired_status(comms):
     presentations = comms.views.thread_presentations(("missing",))
     absent = presentations.read("missing")
     assert absent == presentations.view("missing") == NoThreadPresentation()
-    assert not absent.notification_window.activity_names()
+    assert absent.published() is absent
+    assert absent.sent_notifications() == ()
     assert absent.label == ""
     painted = ThreadStatusModel.known("missing", absent)
     retired = ThreadStatusModel.retired("missing")

@@ -12,10 +12,11 @@ from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
+from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.comms import Comms
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.standing_rules import (
     DatedStandingRule,
     FamilyScan,
@@ -36,6 +37,8 @@ class UnitTalk:
 
     source: UnitObservation
     window: ClassVar[float] = 3600
+    page: ClassVar[int] = 25
+    pages: ClassVar[int] = 20
 
     @property
     def unit(self) -> ThreadIncarnation:
@@ -45,17 +48,24 @@ class UnitTalk:
     def since(self) -> float:
         return self.source.now - self.window
 
+    def publications(self) -> Iterator[Delivered]:
+        """Its own publications, newest first, one page of the bus's sent index at a time."""
+        bus = self.source.comms.bus.bus
+        lookup = self.unit.require_recorded().lookup
+        before = None
+        for _ in range(self.pages):
+            page = bus.sent(lookup, before=before, limit=self.page)
+            for record in page:
+                yield from record.deliveries()
+            if len(page) < self.page:
+                return
+            before = page[-1].seq
+
     @cached_property
     def messages(self) -> tuple[Delivered, ...]:
-        """Its own publications in the window, newest first, through the bus's sent index."""
-        return tuple(
-            message
-            for record in self.source.comms.bus.bus.sent(
-                self.unit.require_recorded().lookup, limit=500
-            )
-            for message in record.deliveries()
-            if message.timestamp >= self.since
-        )
+        """The window's publications: a quiet unit decodes one page, never its whole history."""
+        return tuple(takewhile(lambda message: message.timestamp >= self.since,
+                               self.publications()))
 
     @cached_property
     def commits(self) -> int:

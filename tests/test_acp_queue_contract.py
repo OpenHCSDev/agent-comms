@@ -10,7 +10,7 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
@@ -30,7 +30,7 @@ from agent_comms.acp_extension import (
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import InputId, RootId, TurnId
+from agent_comms.nominal.field_codec import InputId, RootId, TurnId
 from agent_comms.input_key import AcpInputKey
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.queued_input import QueuedInput, QueuedInputContext
@@ -246,7 +246,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
         prompt="original", original_display=NoDisplayText(), origins=(), dependency=NoInputDependency(),
         batch=SingleInputBatch((row,)),
     )
-    started = await original.acceptance.started_update(original, agent.inputs, "beta", row, scope)
+    started = await original.acceptance.started_update(original, agent.inputs, AcpSessionId("beta"), row, scope)
     assert type(started) is IdentifiedInputStarted
     assert started.input_id == input_id and started.native_id == native_id
 
@@ -256,7 +256,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
         queued_id, "queued text",
     )
     accepted = await AcceptedTurn(queued_id).accepted_start(
-        UnidentifiedInputStarted(None, scope, 1, native_id), agent.inputs, "beta",
+        UnidentifiedInputStarted(None, scope, 1, native_id), agent.inputs, AcpSessionId("beta"),
     )
     assert type(accepted) is IdentifiedInputStarted
     assert accepted.input_id == queued_id and accepted.text == "queued text"
@@ -271,6 +271,6 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
         batch=SingleInputBatch((routed_row,)),
     )
     started = await routed.acceptance.started_update(
-        routed, agent.inputs, "beta", routed_row, scope)
+        routed, agent.inputs, AcpSessionId("beta"), routed_row, scope)
     assert type(started) is UnidentifiedInputStarted
     assert not started.started_request(input_id)

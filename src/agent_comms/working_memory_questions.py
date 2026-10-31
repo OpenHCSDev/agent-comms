@@ -5,7 +5,7 @@ from abc import abstractmethod
 from typing import ClassVar
 
 from .annotation_disclosure import PublicInstructionDisclosure
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 
 
 class SpanAnswer(DeclaredFamily, affix="Answer"):

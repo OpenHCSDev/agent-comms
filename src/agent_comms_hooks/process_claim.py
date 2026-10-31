@@ -1,15 +1,12 @@
-"""One running process per path, held by the kernel.
-
-The standard library only: Claude Code hooks probe these claims on every tool call, and
-the store machinery's imports cost a hook more than the probe it needs.
-"""
-
 from __future__ import annotations
 
 import errno
 import fcntl
 import os
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass

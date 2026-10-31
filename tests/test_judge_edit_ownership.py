@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.errors import TodoError
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     GoalId,
     OrderId,
     ToolCallId,
@@ -103,7 +103,7 @@ def test_an_edit_in_an_unknown_problems_checkout_joins_no_held_order(two_orders,
 
 
 def test_reading_a_stored_reason_never_flags_its_words(capsys):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.todos import VerdictReason
 
     FieldCodec.decode(VerdictReason, "the store cutover happened before this verdict was written")

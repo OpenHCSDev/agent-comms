@@ -44,7 +44,6 @@ from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
 from .native_input_record import FullNativeExecution, TriageNativeExecution
-from .native_pi import NativeContextProof
 from .native_prompt_binding import (
     expected_prompt_bindings,
     expected_prompt_matches_journal,
@@ -57,7 +56,7 @@ from .private_path import (
 from .private_send_stage import TriageNativeSend
 from .lifecycle_capability import Deferred
 from agent_comms.typed_table import RowNotFoundError
-from .field_codec import MalformedRecord, ScratchName, ThreadLookup
+from .nominal.field_codec import MalformedRecord, ScratchName, ThreadLookup
 from .input_disposition import InputDispositions
 from .locked_store import RegistryFile
 from .registration import Registration
@@ -475,10 +474,10 @@ class RecoveryMonitorCapability:
                 if not expected_prompt_matches_journal(session.path, binding, evidence=evidence):
                     raise RecoveryBlocked("native recovery input does not match its binding")
                 try:
-                    proof = NativeContextProof.read_evidence(
+                    proof = evidence.context_proof(
                         NativeSessionFiles.for_identity(session, root=store.session.path.parent,
                                            owner=source.owner_identity),
-                        source.input_id, evidence=evidence,
+                        source.input_id,
                         session_entry_start=source.require_context_proof().session_entry_start,
                     )
                 except (NativePiUnavailable, UnrecordedNativeContext):

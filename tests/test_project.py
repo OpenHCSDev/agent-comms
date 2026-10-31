@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import AcpSessionId, FieldCodec
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from acp import RequestError
 
 from delivery_owner_fixture import canonical_agent

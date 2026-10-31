@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_states import BlockedGoal, GoalState
 from agent_comms.goals import Goal
 from agent_comms.registration import Registration

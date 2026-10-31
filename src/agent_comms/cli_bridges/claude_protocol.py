@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import cached_property
@@ -27,7 +28,7 @@ from agent_comms.cli_protocol import (
     TimestampedWire,
     WireHeader,
 )
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     MalformedRecord,
     MessageId,
@@ -60,6 +61,8 @@ from agent_comms.thread_text import ThreadText
 from agent_comms.tool_calls import CliToolArguments, ToolCall
 from agent_comms.transcript_events import (
     AssistantTranscript,
+    NarrationTranscript,
+    ThinkingTranscript,
     NoticeTranscript,
     TranscriptEvent,
     UserTranscript,
@@ -67,6 +70,7 @@ from agent_comms.transcript_events import (
 from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn, NoSourceTurn, SourceTurn
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
+from ..session_receipts import SessionReceipts
 from ..wire_models import WireModel
 from .shared import (
     MONITOR_FRAME,
@@ -90,6 +94,7 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
     """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
+    READ_LINE_CHARS = 2000
     HEADER = 'Comms in'
     JSON_TEXT = WireModel.adapter(str)
 
@@ -106,42 +111,60 @@ class ClaudeMonitorFrame(MonitorIncomingFrame):
                 f'{self.message.message_id} · {number}/{total}\n')
 
     @cached_property
+    def inline(self) -> str:
+        return self.header(1, 1) + self.message.body
+
+    @cached_property
+    def fits_one_event(self) -> bool:
+        return self.event_size(self.inline) <= self.EVENT_CHARS
+
+    @cached_property
+    def slices(self) -> tuple[str, ...]:
+        """The body as file lines: each keeps its own LF, so joined they are the body. Only a
+        line longer than Read can show is cut, because Read cannot page within one line."""
+        return tuple(
+            line[start:start + self.READ_LINE_CHARS]
+            for line in re.findall(r'[^\n]*\n|[^\n]+', self.message.body)
+            for start in range(0, len(line), self.READ_LINE_CHARS)
+        )
+
+    @cached_property
     def parts(self) -> tuple[str, ...]:
-        # At least one body character fits each part. Using the maximum possible
-        # ordinal width avoids rebuilding the body to discover its final count.
-        upper = len(self.message.body)  # Message already requires a nonempty body.
-        budget = self.EVENT_CHARS - self.event_size(self.header(upper, upper))
-        bodies: list[str] = []
-        current: list[str] = []
-        used = 0
-        for character in self.message.body:
-            size = self.event_size(character) - 2  # JSON quotes belong to the header budget.
-            if size > budget:
-                raise ValueError('Claude Monitor header leaves no room for a body character')
-            if used + size > budget:
-                bodies.append(''.join(current))
-                current, used = [], 0
-            current.append(character)
-            used += size
-        bodies.append(''.join(current))
-        total = len(bodies)
-        return tuple(self.header(number, total) + body
-                     for number, body in enumerate(bodies, 1))
+        return (self.inline,) if self.fits_one_event else self.slices
+
+    @cached_property
+    def export_lines(self) -> tuple[str, ...]:
+        """The readable message: who sent it, then its lines as written."""
+        return (f'{self.HEADER} · {self.message.sender} · {self.message.message_id}',
+                *(part.removesuffix('\n') for part in self.slices))
+
+    def read_parts(self, rows: tuple[tuple[int, str], ...]) -> tuple[MonitorPart, ...]:
+        """The parts a Read showed, judged against the bus message and never decoded from the
+        file. Any shown row that is not this message's line at that number confirms nothing.
+        Only one empty row right after the final LF is Read's terminator."""
+        lines = self.export_lines
+        shown = rows[:-1] if rows and rows[-1] == (len(lines) + 1, '') else rows
+        if any(not 1 <= number <= len(lines) or lines[number - 1] != text for number, text in shown):
+            return ()
+        return tuple(MonitorPart.model_validate(dict(
+                         id=self.message.message_id, sender=self.message.sender,
+                         number=number - 1, total=len(self.slices),
+                         body=self.slices[number - 2]))
+                     for number, _ in shown if number > 1)
 
     async def emit_to(self, attachment: MonitorAttachment, window_bytes: int, exports: Path) -> None:
-        """A body that fits one event goes inline as its one part. Any larger body is exported
-        as all its parts, one per line, and only the notice naming that file is emitted, so no
-        part reaches the model as an instruction on its own."""
-        lines = tuple(LineMonitorBridge.encode(part) for part in self.parts)
-        if len(lines) == 1:
-            await attachment.emit(self.message.message_id, 1, lines[0], window_bytes)
+        """A body that fits one event goes inline. Any larger body is the private file the one
+        notice names, whole and readable, so no piece reaches the model on its own."""
+        if self.fits_one_event:
+            await attachment.emit(self.message.message_id, 1, LineMonitorBridge.encode(self.inline),
+                                  window_bytes)
             return
         notice = MonitorReadFile.naming(exports, self.message.reference)
         line = notice.model_dump_json()
         if self.units(line) > self.EVENT_CHARS:
             raise ValueError(f'The read notice for {self.message.message_id} exceeds one '
                              f'Monitor event: {notice.path}')
-        await asyncio.to_thread(notice.export, lines)
+        await asyncio.to_thread(notice.export, self.export_lines)
         await attachment.emit(self.message.message_id, notice.reservation, line, window_bytes)
 
     @classmethod
@@ -443,11 +466,28 @@ class ClaudeRecord(TaggedWire, ABC, affix=""):
         """What the person typed in this record; most records carry none."""
         return ()
 
+    def said(self) -> tuple[str, ...]:
+        """What the model said to its reader in this record; most records carry none."""
+        return ()
 
-class AssistantBlock(TaggedWire, ABC, affix=""):
+    def tally(self, receipts: SessionReceipts) -> None:
+        """What this record adds to the session's receipts; most records add nothing."""
 
-    @abstractmethod
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
+
+class AssistantBlock(TaggedWire, ABC, affix="", declared_name=None):
+
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
+        return ()
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return ()
+
+    def said(self) -> tuple[str, ...]:
+        """The words this block shows the reader; a tool call or hidden reasoning shows none."""
+        return ()
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.said(self.said())
 
 
 class TextContent(WireModel):
@@ -464,14 +504,20 @@ class ImageContent(WireModel):
 
 class AssistantText(TextWire, AssistantBlock, TextContent, declared_name='text'):
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
+    def said(self) -> tuple[str, ...]:
+        return (self.text,)
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),)
 
 
 class RedactedThinking(AssistantBlock, declared_name='redacted_thinking'):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.turn.active(record.uuid, session.phase, ModelWaitPhase())
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
+        return (ThinkingTranscript('', timestamp=record.timestamp, position=record.position),)
 
 
 class NarrationBlock(RedactedThinking, declared_name='thinking'):
@@ -481,18 +527,23 @@ class NarrationBlock(RedactedThinking, declared_name='thinking'):
 
     thinking: str
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        activity = super().updates(record, session)
+    def said(self) -> tuple[str, ...]:
+        """Saved reasoning is empty; narration is what the reader saw."""
+        return (self.thinking,) if self.thinking else ()
+
+    def events(self, record: TimedRecord) -> tuple[TranscriptEvent, ...]:
         if not self.thinking:
-            return activity
-        return (*activity, *session.finished(
-            record.uuid, (AssistantTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)))
+            return super().events(record)
+        return (NarrationTranscript(self.thinking, timestamp=record.timestamp, position=record.position),)
 
 
 class ToolUse(AssistantBlock, declared_name='tool_use'):
     id: ToolCallId
     name: str
     input: dict[str, JsonValue]
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.called(str(self.id), self.name)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
@@ -528,9 +579,19 @@ class AssistantMessage(WireModel):
 class AssistantRecord(ClaudeRecord, TimedRecord, declared_name='assistant'):
     message: AssistantMessage
 
+    def said(self) -> tuple[str, ...]:
+        return tuple(words for block in self.message.content for words in block.said())
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        for block in self.message.content:
+            block.tally(receipts)
+
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return (*(update for block in self.message.content for update in block.updates(self, session)),
-                *session.answered(self.message))
+        updates = [update for block in self.message.content for update in block.updates(self, session)]
+        events = tuple(event for block in self.message.content for event in block.events(self))
+        if events:
+            updates.extend(session.finished(self.uuid, events))
+        return (*updates, *session.answered(self.message))
 
 
 class ResultPart(TaggedWire, ABC, affix=""):
@@ -652,6 +713,9 @@ class UserBlock(TaggedWire, ABC, affix=""):
     def ends_turn(self) -> bool:
         return False
 
+    def tally(self, receipts: SessionReceipts) -> None:
+        """A prompt's words are not the session's."""
+
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
 
@@ -725,28 +789,19 @@ class ReadResultObserved(ConfirmedDelivery):
         """The export this Read may retire: none while another Read of it is still open."""
         return () if export.path in self.reading else (export,)
 
-    def frames(self) -> tuple[MonitorFrame, ...]:
+    def rows(self) -> tuple[tuple[int, str], ...]:
         """Claude shows each file line as its number, a tab, then the line. The leading
         numbered block is the file; numbers that do not run consecutively make no line count.
-        Records end only at a physical LF: a JSON line may hold U+2028, U+0085 or other
-        characters str.splitlines would split on. A Read reaching the end of a file that ends
-        in LF also numbers the empty row after that LF: once the numbering holds, that one
-        final empty row is the tool's terminator, not a record. Any other row, empty or not,
-        stays a frame the all-lines gate judges."""
-        numbers: list[int] = []
-        lines: list[str] = []
+        Records end only at a physical LF: a line may hold U+2028, U+0085 or other characters
+        str.splitlines would split on."""
+        rows: list[tuple[int, str]] = []
         for row in self.text.split('\n'):
             number, tab, line = row.partition('\t')
             if not (tab and number.isdecimal()):
                 break
-            numbers.append(int(number))
-            lines.append(line)
-        start = numbers[0] if numbers else 0
-        if numbers != list(range(start, start + len(numbers))):
-            return ()
-        if len(lines) > 1 and lines[-1] == '':
-            lines.pop()
-        return tuple(ClaudeMonitorFrame.decode_line(line) for line in lines)
+            rows.append((int(number), line))
+        consecutive = all(later[0] == earlier[0] + 1 for earlier, later in zip(rows, rows[1:], strict=False))
+        return tuple(rows) if consecutive else ()
 
     async def confirmed_by(self, bridge: LineMonitorBridge) -> ConfirmedDelivery:
         return replace(self, references=await bridge.read_export(self))
@@ -757,7 +812,7 @@ class FailedReadObserved(ReadResultObserved):
     """A failed Read's text is its error, never file lines: it confirms no part, and only
     releases the export once no other Read of it is open."""
 
-    def frames(self) -> tuple[MonitorFrame, ...]:
+    def rows(self) -> tuple[tuple[int, str], ...]:
         return ()
 
 
@@ -798,6 +853,9 @@ class ToolResult(UserBlock, ContentBlocks, declared_name='tool_result'):
     tool_use_id: ToolCallId
     content: list[Declared[ResultPart]]
     is_error: bool = False
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.resulted(str(self.tool_use_id), self.is_error)
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.tool_result(
@@ -842,6 +900,10 @@ class UserRecord(PromptRecord, Originated, declared_name='user'):
 
     def owner_words(self) -> tuple[str, ...]:
         return self.origin.owner_words(self.message.text())
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        for block in self.message.content:
+            block.tally(receipts)
 
 
 class CompactSummary(UserRecord, declared_name='compact-summary'):
@@ -1042,6 +1104,14 @@ class ToolsUsed(MetadataRecord, declared_name='tools-used'):
 
 class PrLink(MetadataRecord, declared_name='pr-link'):
     pass
+
+
+class Relocated(MetadataRecord, declared_name='relocated'):
+    """The session moved to another working directory, as entering a worktree does."""
+
+
+class WorktreeState(MetadataRecord, declared_name='worktree-state'):
+    """The worktree the session entered; nothing here reaches the bus."""
 
 
 class FileHistorySnapshot(MetadataRecord, declared_name='file-history-snapshot'):

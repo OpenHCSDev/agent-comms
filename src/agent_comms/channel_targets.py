@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
 from .class_fact import ClassFact
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
-from .field_codec import NullMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .repo import Checkout
@@ -20,7 +20,8 @@ from .typed_table import sql_literal
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 
 if TYPE_CHECKING:
-    from .audience_manifest import AudiencedMessage, FrozenRecipient
+    from .audience_manifest import AudiencedMessage
+    from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand

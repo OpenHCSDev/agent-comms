@@ -1,6 +1,6 @@
 """Channel membership and notifications have one canonical bus authority."""
 
-from agent_comms.presentation import AllOutcomes
+from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.repo import Checkout
 from contextlib import AsyncExitStack
 from dataclasses import replace
@@ -45,7 +45,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
 def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.message_reference import MessageReference
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)

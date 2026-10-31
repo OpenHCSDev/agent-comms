@@ -1,6 +1,7 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
 
+from agent_comms.transcripts import RecordedPageSource
 from agent_comms.repo import Checkout
 import json
 import os
@@ -15,7 +16,7 @@ from agent_comms.bus import Bus, PublicRecord
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import HistoricalSourceChanged
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.historical_views import HistoricalMessage, HistoryArchive, HistorySource
 from agent_comms.installer.backup import bus_files
@@ -226,7 +227,7 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
     declarations = {h.thread.name: h.thread for h in live.views.historical_threads()}
     assert declarations["alice"].created_at == declarations["bob"].created_at == 10.0
     assert live.registry.require("alice").created_at == 20.0
-    page = live.transcripts.capture_page_read("alice", historical_source=source.key).read()
+    page = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key)).read()
     (answer,) = (e for e in page.events if e.declared_name == "assistant")
     assert answer.text == "old answer"
     assert answer.routing == routing
@@ -243,7 +244,7 @@ def test_stale_cursor_is_rejected(migrated):
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
 
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
@@ -261,7 +262,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     original_registry = (old.root / "registry.json").read_bytes()
     original_native = native.read_bytes()
 
-    read = live.transcripts.capture_page_read("alice", historical_source=source.key)
+    read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
     assert isinstance(read.identity, RecordedTranscriptReadIdentity)
     assert read.identity.thread.incarnation == old.registry.require("recorded-alice").incarnation
     decoded = FieldCodec.decode(TranscriptReadIdentity, FieldCodec.encode(read.identity))
@@ -270,6 +271,12 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert FieldCodec.value_schema(type[TranscriptReadIdentity])["enum"] == list(TranscriptReadIdentity.names())
     with pytest.raises(ValueError):
         FieldCodec.decode(TranscriptReadIdentity, {**FieldCodec.encode(read.identity), "kind": "unregistered"})
+    from agent_comms.order_tools import TranscriptPageRead
+    from test_transcript_pages import shared_page
+
+    recorded = shared_page(live, TranscriptPageRead(thread="alice", page_source=RecordedPageSource(source.key)))
+    assert recorded.identity == read.identity
+    assert any(event.text == "original recorded answer" for event in recorded.page.events)
     rebound = live.transcripts.bind_page_read("recorded-alice", decoded)
     assert rebound.current_identity() == decoded
     assert any(event.text == "original recorded answer" for event in rebound.read().events)
@@ -289,7 +296,7 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
     from agent_comms.coordination_errors import StaleRevision
 
     _old, _prior, live, source = migrated
-    read = live.transcripts.capture_page_read("alice", historical_source=source.key)
+    read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
     with pytest.raises(StaleRevision):
         live.transcripts.bind_page_read("bob", read.identity)
     live.bus.history.path.write_text("[]")
@@ -368,7 +375,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
 def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migrated):
     from dataclasses import fields
 
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.registry_provenance import RegistryProvenance
     from agent_comms.threads import ThreadProvenance
 

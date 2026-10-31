@@ -8,13 +8,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, NoReturn
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .child_process import AsyncWork, ReadWork
 from .comms import Comms
-from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     ContextSource,
     DefaultNonNull,
     Description,

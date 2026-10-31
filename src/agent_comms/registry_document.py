@@ -18,9 +18,9 @@ from .activity import ActivityCapture
 from .channel_targets import CommandersTag
 from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import (
+from .nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     MalformedRecord,
@@ -31,6 +31,7 @@ from .field_codec import (
     WireRequired,
     WireValue,
 )
+from .frozen_recipient import FrozenRecipient
 from .registration_change import (
     InitialRegistration,
     RegistrationChange,
@@ -80,7 +81,6 @@ from .turn_lease import (
 if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
-    from .audience_manifest import FrozenRecipient
     from .bus_publication import Delivered
     from .rule_deal import DealTrigger, DealtSources, RuleDeal
 
@@ -596,16 +596,16 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
-    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+    def by_role[Answer](self, thread: Thread, *,
                         commander: Answer, commanded: Answer) -> Answer:
-        """The answer for the commander this project names, or for a thread it commands."""
+        """The resolved thread carries its nominal identity and declared role capabilities."""
         return commanded
 
-    def deal_rules(self, deal: RuleDeal, incarnation: ThreadIncarnation, *,
+    def deal_rules(self, deal: RuleDeal, thread: Thread, *,
                    commander: type[DealtSources], commanded: type[DealtSources],
                    prompts: tuple[str, ...], trigger: DealTrigger) -> None:
         """The fleet's rules are dealt by the role this project gives the thread."""
-        deal.deal(self.by_role(incarnation, commander=commander, commanded=commanded), prompts,
+        deal.deal(self.by_role(thread, commander=commander, commanded=commanded), prompts,
                   trigger)
 
 
@@ -642,9 +642,8 @@ class RegisteredCommanderProject(CommanderProject):
         fork sits in that channel with its commander's tags but acts for it, never as one."""
         return tuple(dict.fromkeys((
             *self.leads(snapshot),
-            *(thread for thread in
-              ChannelMemberIndex(snapshot.threads.values())[CommandersTag.declared_name]
-              if not thread.execution.commander_forks(thread)))))
+            *(thread for thread in snapshot.threads.values()
+              if self.by_role(thread, commander=True, commanded=False)))))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
         """The one registered commander a fork is declared under."""
@@ -678,9 +677,13 @@ class RegisteredCommanderProject(CommanderProject):
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
 
-    def by_role[Answer](self, incarnation: ThreadIncarnation, *,
+    def by_role[Answer](self, thread: Thread, *,
                         commander: Answer, commanded: Answer) -> Answer:
-        return commander if incarnation == self.commander else commanded
+        return commander if (
+            thread.incarnation == self.commander
+            or (CommandersTag.declared_name in thread.tags
+                and not thread.execution.commander_forks(thread))
+        ) else commanded
 
 
 @ThreadSlice.required
@@ -1161,6 +1164,10 @@ class RegistrySnapshot(SnapshotRestored, RegistryPresence[Mapping[str, ThreadSta
     def retired_names(self) -> tuple[str, ...]:
         """Deleted declarations keep their generation without exposing its store."""
         return tuple(name for name in self._claimed_generations if name not in self.threads)
+
+    def commanders_channel(self) -> tuple[Thread, ...]:
+        """Every member of #commanders, forks included: each may answer for any commander."""
+        return tuple(ChannelMemberIndex(self.threads.values())[CommandersTag.declared_name])
 
     def threads_for(self, incarnation: RecordedThreadIncarnation) -> tuple[Thread, ...]:
         return (

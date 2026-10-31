@@ -31,7 +31,7 @@ from agent_comms.ui_model.unit_state import AwaitingCommander
 from agent_comms.commander.standing import RetainedHolderWheelSpin, UnownedOrderWatch, UnownedWheelSpin
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
-from agent_comms.field_codec import FieldCodec, GoalId, OrderId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.held_orders import HeldOrders
 from agent_comms.goals import OrderCheck
@@ -399,7 +399,7 @@ def test_merged_order_refuses_a_new_pull_request(
     with pytest.raises(TodoError, match="merged as 2b9c1f1ab"):
         link.changed(merged)
     with pytest.raises(TodoError, match="Ask the commander for a send-back"):
-        merged.order.open_pull_request(merged, tmp_path, "Title", "Body", store,
+        merged.order.open_pull_request(merged, source_repository, "Title", "Body", store,
                                        held.owner_identity)
     assert github_cli.calls() == ()
     assert link.changed(todo).order.checked().pull_requests == (PullRequestLink(repo, 3085),)

@@ -12,7 +12,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
 from agent_comms.registry_document import ThreadRows
 

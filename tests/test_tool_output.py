@@ -11,7 +11,7 @@ import pytest
 
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_waits import RecordedGoalWait
 from agent_comms.input_attempt import BoundUnknownInput

@@ -2,12 +2,12 @@
 import multiprocessing
 import os
 import sqlite3
-from contextlib import closing
+from contextlib import ExitStack, closing
 from pathlib import Path
 
 import pytest
 
-from agent_comms.installer.backup import BackupName, StoreBackup
+from agent_comms.installer.backup import BackupName, SavedFile, StoreBackup
 from agent_comms.coordination_database import (
     CoordinationStore, InvalidStore, MissingStore, ReadableStore,
 )
@@ -102,6 +102,26 @@ def test_observation_classifies_missing_foreign_and_busy_files_without_inventing
         with pytest.raises(CoordinationReadUnavailable):
             CoordinationStore.observed(path)
         writer.execute("ROLLBACK")
+
+
+def test_a_pinned_store_keeps_its_bytes_through_every_other_close(tmp_path):
+    """Only a database's last close checkpoints its WAL into the file; the pin is never
+    last, and it waits on no reader of the latest snapshot."""
+    path = ExternalTranscript.path_in(tmp_path)
+    members = (path, SQLiteFile.wal_path(path))
+    with ExitStack() as connections:
+        writer = connections.enter_context(closing(sqlite3.connect(path, isolation_level=None)))
+        writer.execute("PRAGMA journal_mode=WAL")
+        writer.execute("PRAGMA wal_autocheckpoint=0")
+        writer.execute("CREATE TABLE events (body TEXT)")
+        writer.execute("INSERT INTO events VALUES ('framed')")
+        connections.enter_context(closing(SQLiteFile.read_snapshot(path)))
+        with SQLiteFile.pinned(path):
+            before = {member: SavedFile.at(member) for member in members}
+            connections.close()
+            assert {member: SavedFile.at(member) for member in members} == before
+    with closing(SQLiteFile.read_snapshot(path)) as reader:
+        assert [tuple(row) for row in reader.execute("SELECT body FROM events")] == [("framed",)]
 
 
 def test_tree_copy_keeps_committed_wal_rows(tmp_path):

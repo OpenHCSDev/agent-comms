@@ -1,6 +1,10 @@
 """Shared fixtures: an isolated Comms wire per test."""
 
 
+from agent_comms.cli_bridges.session_watch import (
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.repo import Checkout
 import asyncio
 import fcntl
@@ -14,7 +18,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pydantic import JsonValue
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.rule_deal import StartedDeal
@@ -57,16 +61,15 @@ from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.registry_document import RegisteredCommanderProject
-from agent_comms_hooks.watch import WatchClaim, WatchRecord
 
-pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "pytest_session")
+pytest_plugins = (goal_owner_fixture.__name__, "github_fixture", "owner_socket_fixture", "pytest_session")
 
 
 class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
     def __init__(self) -> None:
-        from agent_comms.field_codec import RecordedTimestamp
+        from agent_comms.nominal.field_codec import RecordedTimestamp
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 

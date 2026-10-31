@@ -1,27 +1,29 @@
 """Source-bound historical display values. These carry no delivery authority."""
 
 from __future__ import annotations
-from agent_comms.repo import Checkout
 
+import re
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import cache, partial
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.repo import Checkout
+
 from .bus import Bus
-from .child_process import Platform
 from .catalog_store import ChannelCatalog
 from .channel_targets import NamedTarget, ThreadTarget
 from .channels import Channel
+from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .field_codec import FieldCodec, ScratchName
+from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (
@@ -31,9 +33,17 @@ from .message_page import (
     MessagePageRequest,
     PageBounds,
 )
+from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
+from .notification_evidence import (
+    FirstRecipient,
+    NotificationWindow,
+    OutcomeViewer,
+    RecipientCursor,
+    RecipientLimit,
+)
 from .page_traversal import HistoryCursor, OlderTraversal
-from .presentation import MessageNotification, OutcomeViewer
+from .presentation import MessageNotification
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
 from .read_basis import (
     AnonymousViewer,
@@ -253,6 +263,14 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         )
 
 
+class HistorySourceKey(NominalText):
+    """The archive's catalogue identity, distinct from a thread or runtime key."""
+
+
+class HistorySourceKeyText(NominalSpelling[HistorySourceKey]):
+    spelling = re.compile(r"[^\x00]+")
+
+
 @dataclass(frozen=True, slots=True)
 class HistorySource:
     """An immutable bus/registry snapshot attached by the destination MessageBus."""
@@ -270,8 +288,8 @@ class HistorySource:
         object.__setattr__(self, "provenance", self.provenance.bound_to(Path(self.original_root)))
 
     @property
-    def key(self) -> str:
-        return self.root
+    def key(self) -> HistorySourceKey:
+        return HistorySourceKey(self.root)
 
     @classmethod
     def capture_original(cls, root: Path) -> HistorySource:
@@ -345,15 +363,22 @@ class HistorySource:
             raise ValueError("Recorded provenance lost original bus ownership")
 
     @classmethod
-    def require(cls, sources: tuple[HistorySource, ...], key: str) -> HistorySource:
+    def require(cls, sources: tuple[HistorySource, ...], key: HistorySourceKey) -> HistorySource:
         source = next((item for item in sources if item.key == key), None)
         if source is None:
             raise HistoricalSourceChanged("Historical source detached; refresh history")
         source.validate()
         return source
 
-    def notification_references(self, sources: tuple[HistorySource, ...], references,
-                                viewer: OutcomeViewer):
+    def notification_references(
+        self,
+        sources: tuple[HistorySource, ...],
+        references: Sequence[MessageReference],
+        viewer: OutcomeViewer,
+        *,
+        after: RecipientCursor = FirstRecipient(),
+        limit: RecipientLimit = RecipientLimit(),
+    ) -> NotificationWindow:
         """Read this namespace within its archive's current catalogue read, as this viewer
         may see it."""
 
@@ -361,9 +386,16 @@ class HistorySource:
             raise HistoricalSourceChanged("Historical source changed; refresh history")
         root = Path(self.root)
         result = MessageNotification.read_references(
-            Bus(Bus.path_in(root)), references,
-            partial(MessageNotification.recorded_delivery_window, root, self.provenance,
-                    viewer=viewer),
+            Bus(Bus.path_in(root)),
+            references,
+            partial(
+                MessageNotification.recorded_delivery_window,
+                root,
+                self.provenance,
+                viewer=viewer,
+                after=after,
+                limit=limit,
+            ),
         )
         self.validate()
         return result

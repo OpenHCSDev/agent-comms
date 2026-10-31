@@ -43,7 +43,9 @@ class CommanderInputs(HeldOrders):
         pulls.register(holds.todos)
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()
-        for repo in project.repository_names():
+        repositories = project.repository_names()
+        pulls.read_open(repositories)
+        for repo in repositories:
             pulls.carry_reviews(comms.goals, repo)
         repository = Repo.declaring(project.repos, PlanPhase.__module__)
         plan = plans.prepare_reading(

@@ -17,8 +17,9 @@ from pathlib import Path
 from sqlite3 import Connection
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .coordinator import Coordination
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     FieldCodec,
     InputId,
     PageRequestId,
@@ -669,12 +670,15 @@ class ExternalTranscript(TranscriptSource, DurableStore):
             *(FileSource(path) for path in self.source_paths(self.root))
         )) as observations:
             async for _ in observations:
-                with self.reading() as records:
-                    current = records.frames()
+                current = await Coordination.run_worker(self.requested_frames)
                 for frame in current:
                     if frame not in previous:
                         emit(frame)
                 previous = current
+
+    def requested_frames(self) -> tuple:
+        with self.reading() as records:
+            return records.frames()
 
     def draft(self, *, turn_id: NativeTurnId, item_id: NativeItemId,
               events: tuple[TranscriptEvent, ...]) -> None:

@@ -38,6 +38,7 @@ from agent_comms.messages import (
     Claimed,
     ClaimMessage,
     Message,
+    StoredWireHistory,
     MessageKind,
     PublicRecord,
 )
@@ -49,7 +50,7 @@ from agent_comms.envelope_claim_transitions import (
     ResourceClaim,
 )
 from agent_comms.errors import CommittedMessageError, RelationViolationError, UnclaimedError
-from agent_comms.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
+from agent_comms.nominal.field_codec import ClaimId, FieldCodec, MessageId, ThreadLookup
 from agent_comms.locked_store import BusFile, FileStore, SQLiteReader, StoreCommittedError
 from agent_comms.message_reference import MessageReference
 from agent_comms.private_path import FileIdentity, PresentPath
@@ -257,16 +258,23 @@ class BusReader(RouteCounts, ABC):
                 db, where="{seq} < ?", parameters=(before,),
                 order_by=("seq",), descending=True, limit=limit)))
 
+    @contextmanager
+    def stored_message_history(
+        self, predicate: str = "1", parameters: tuple[object, ...] = (),
+        *, through: int,
+    ) -> Iterator[StoredWireHistory]:
+        """The public history selected on one read snapshot; each format reads its own rows."""
+        with self.observing() as db:
+            query = Message.stored_wire_query(db, MessageIdentitySource)
+            query = (f'SELECT seq, timestamp, wire FROM ({query}) '
+                     f'WHERE seq <= ? AND ({predicate})')
+            yield StoredWireHistory(db, query, (through, *parameters))
+
     def message_history(self) -> Iterator[Message]:
         """Public bulk export, paged within one committed SQLite snapshot."""
-        with self.reading() as source:
-            after, through = 0, source.revision()
-            while after < through:
-                records = source.since(after, 100)
-                for record in records:
-                    for message in record.messages():
-                        yield Message.from_message(message)
-                after = records[-1].seq
+        with self.observing() as db:
+            yield from BusCapability.public_messages(
+                db, (row.seq for row in BusRow.stream(db, order_by=("seq",))))
 
     def since(self, after: int, limit: int) -> tuple[BusRecord, ...]:
         """One ascending keyset page after the last scanned bus sequence."""
@@ -397,7 +405,7 @@ class BusReader(RouteCounts, ABC):
 
     def received(
         self, lookup: ThreadLookup, *, after: int = 0, before: int | None = None, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         with self.reading() as source, closing(source._source_sequences(
@@ -408,7 +416,7 @@ class BusReader(RouteCounts, ABC):
 
     def direct_replies(
         self, lookup: ThreadLookup, *, after: int = 0, limit: int = 100,
-        sender_lookups: tuple[str, ...] = (), descending: bool = True,
+        sender_lookups: tuple[ThreadLookup, ...] = (), descending: bool = True,
         sequences: tuple[int, ...] = (),
     ) -> tuple[Delivered, ...]:
         """Read the bounded append-time policy index before loading deliveries."""
@@ -445,6 +453,15 @@ class BusReader(RouteCounts, ABC):
                          for row in AnsweredSource.select(db, original=original.seq)}
             headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
             return BusCapability.at_sequences(db, tuple(header.seq for header in headers))
+
+    def recipient_replies(
+        self, keys: tuple[tuple[ThreadLookup, MessageReference], ...],
+    ) -> tuple[BusRecord, ...]:
+        """Read only the first reply of each bounded original/recipient pair."""
+        with self.observing() as db:
+            sequences = {row.seq for row in AnsweredSource.first_for_recipients(db, keys)}
+            headers = (BusRow.require(db, seq=seq) for seq in sorted(sequences))
+            return tuple(header.kind.read_from(db, header.seq) for header in headers)
 
     def changed_names(self, after: int) -> frozenset[str]:
         with self.observing() as db:

@@ -4,9 +4,9 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import NameArgument
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import FieldCodec
-from agent_comms.field_codec import Normalize
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import Normalize
 from agent_comms.presentation import CountedRead
 from agent_comms.presentation import InboxRead
 from agent_comms.presentation import UncountedRead

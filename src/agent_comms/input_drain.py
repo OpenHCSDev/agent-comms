@@ -43,7 +43,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, InputId, RootId, ThreadLookup
+from .nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -138,9 +138,22 @@ class InputObservation(ABC):
         state = self.state(session_id)
         return state.turn_open() or state.turn_task.busy
 
-    def _retire_observer(self, state: DrainedSession, task: asyncio.Task[None]) -> None:
+    def _retire_observer(self, session_id: AcpSessionId, state: DrainedSession,
+                         task: asyncio.Task[None]) -> None:
+        """Any death but a cancel is recorded as a stopped drain, so the board sees a deaf
+        owner, not an idle one. The task's owner reads what ended it; the loop itself names no
+        error it does not expect (plans/REMAINING-SLOP-PLAN.md, broad except)."""
         if state.observer.owns(task):
             state.observation_watcher = None
+        if not task.cancelled() and (error := task.exception()) is not None:
+            self.runtime.background(self._record_stopped(session_id, error))
+
+    async def _record_stopped(self, session_id: AcpSessionId, error: BaseException) -> None:
+        thread = self.sessions.require(session_id)
+        snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
+        await record_drain_failure(
+            self.comms, thread, snapshot.owner_identity(thread), StoppedDrainDiagnostic, error,
+        )
 
     def wake_observer(self, session_id: AcpSessionId) -> None:
         self.ensure_live_drain(session_id)
@@ -175,7 +188,7 @@ class InputObservation(ABC):
 
         task = self.runtime.background(self.observe(session_id))
         state.observer = RunningBackgroundTask(task)
-        task.add_done_callback(partial(self._retire_observer, state))
+        task.add_done_callback(partial(self._retire_observer, session_id, state))
         state.wake_observer()
         self.root_observer.wake()
 
@@ -263,25 +276,16 @@ class InputObservation(ABC):
     async def observe(self, session_id: AcpSessionId) -> None:
         """Keep this session's input loop alive; observe_root reaches only a live one.
 
-        A contended read restarts recovery at the next real change. Any other death
-        is recorded as a stopped drain, so the board sees a deaf owner, not an idle one.
+        A contended read restarts recovery at the next real change. Any other death ends the
+        task, and `_retire_observer` records it as a stopped drain.
         """
         state = self.state(session_id)
-        try:
-            while True:
-                try:
-                    await self._observe_inbox(session_id, state)
-                except DEFERRED_DRAIN_ERRORS:
-                    await state.observation_ready.wait()
-                    state.observation_ready.clear()
-        except Exception as error:
-            thread = self.sessions.require(session_id)
-            snapshot = await Coordination.run_worker(self.comms.registry.snapshot)
-            await record_drain_failure(
-                self.comms, thread, snapshot.owner_identity(thread),
-                StoppedDrainDiagnostic, error,
-            )
-            raise
+        while True:
+            try:
+                await self._observe_inbox(session_id, state)
+            except DEFERRED_DRAIN_ERRORS:
+                await state.observation_ready.wait()
+                state.observation_ready.clear()
 
     async def _observe_inbox(self, session_id: AcpSessionId, state: DrainedSession) -> None:
         initial = await self._own_entry(session_id)

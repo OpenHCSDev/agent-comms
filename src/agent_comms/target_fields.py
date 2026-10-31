@@ -7,8 +7,8 @@ from functools import singledispatchmethod
 
 from pydantic import JsonValue
 
-from agent_comms import field_codec
-from agent_comms.field_codec import FieldCodec, boundary_decoder
+from agent_comms.nominal import field_codec
+from agent_comms.nominal.field_codec import FieldCodec, boundary_decoder
 from agent_comms.config_options import CatalogChoice, CatalogConfigOption, ConfigOptions
 from agent_comms.thread_model import CatalogSelection
 

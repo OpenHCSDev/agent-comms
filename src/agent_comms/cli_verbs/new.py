@@ -3,7 +3,7 @@ from __future__ import annotations
 from agent_comms.cli_command import PendingCommandBinding
 from agent_comms.cli_support.thread_creation import ThreadCreationCliCommand, ThreadLaunchSettings
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.repo import Checkout
 from agent_comms.thread_management import GivenTags
