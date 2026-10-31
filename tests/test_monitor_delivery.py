@@ -58,6 +58,8 @@ from agent_comms.runtime_updates import (
     AllTurnsEnded, FinishedItem, FinishedTurn, HiddenItem, RuntimeUpdate,
 )
 from agent_comms.turn_item import NativeItemId, NativeTurnId
+from agent_comms.external_transcript import ExternalTurnInput
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.messages import AlertKind, InfoKind, Message, NoticeRole, QuestionKind
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.diagnostics import record_terminal_failure
@@ -135,9 +137,11 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
 
 @pytest.fixture
 def bridge(comms, tmp_path):
-    declare_test_bus(comms, threads=tuple(
-        Thread(name, frozenset(), Checkout(tmp_path))
-        for name in ('claude-code', 'viewer', 'peer')
+    declare_test_bus(comms, threads=(
+        Thread('claude-code', frozenset(), Checkout(tmp_path)),
+        # A production bridge's session is external: its answers live in the external store.
+        Thread('viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution),
+        Thread('peer', frozenset(), Checkout(tmp_path)),
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
     practice.include(tuple(RootFile.existing_in(practice.root)))
@@ -339,7 +343,6 @@ async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.coordinator import Coordination
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
@@ -908,7 +911,6 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     from agent_comms.coordination_database import CoordinationStore
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.coordinator import Coordination
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
@@ -990,7 +992,6 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.coordinator import Coordination
     from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-    from agent_comms.thread_execution import ExternalThreadExecution
 
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
@@ -1042,13 +1043,14 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
             await asyncio.wait_for(pending, 5)
     assert type(claim()) is DeliveredAssignment
 
-@pytest.fixture(params=(FinishedTurn(NativeTurnId('reply-turn')), AllTurnsEnded()))
-def reply_end(request: pytest.FixtureRequest) -> RuntimeUpdate:
+@pytest.fixture(params=(FinishedTurn, lambda _turn: AllTurnsEnded()))
+def reply_end(request: pytest.FixtureRequest) -> Callable[[NativeTurnId], RuntimeUpdate]:
     return request.param
 
 
 async def confirm_and_finish_reply(
-    bridge: ClaudeBridge, message: Message, expected: tuple[str, ...], end: RuntimeUpdate,
+    bridge: ClaudeBridge, message: Message, expected: tuple[str, ...],
+    end: Callable[[NativeTurnId], RuntimeUpdate],
 ) -> None:
     """Real monitor consumption feeds the ordinary staged output and terminal update."""
     output = bridge.output_type.for_comms(
@@ -1075,18 +1077,24 @@ async def confirm_and_finish_reply(
                      if row.sender == bridge.binding.bus)
 
     output.publish_batch(updates)
-    turn, item = NativeTurnId('reply-turn'), NativeItemId('answer')
+    # Only the turn the delivery opened answers it.
+    with output.transcript.snapshot() as connection:
+        opened = ExternalTurnInput.select_keys(connection, (
+            dict(thread=output.transcript.lookup, reference=message.reference),))
+    # A delivery that opens no turn leaves any other turn's final with nothing to answer.
+    turn = next((row.turn_id for row in opened), NativeTurnId('unopened-turn'))
+    item = NativeItemId('answer')
     output.publish_batch([FinishedItem(turn, item, (AssistantTranscript(
-        'unrelated assistant final', timestamp=2., position=item),))])
+        'the opened turn final', timestamp=2., position=item),))])
     assert replies() == ()
-    output.publish_batch([end])
-    assert replies() == tuple((target, 'unrelated assistant final') for target in expected)
+    output.publish_batch([end(turn)])
+    assert replies() == tuple((target, 'the opened turn final') for target in expected)
     # Completion is idempotent, and another turn cannot inherit these routes.
     later, later_item = NativeTurnId('later-turn'), NativeItemId('later-answer')
     output.publish_batch([FinishedTurn(turn), AllTurnsEnded(), FinishedItem(
         later, later_item, (AssistantTranscript(
             'a later final', timestamp=3., position=later_item),)), AllTurnsEnded()])
-    assert replies() == tuple((target, 'unrelated assistant final') for target in expected)
+    assert replies() == tuple((target, 'the opened turn final') for target in expected)
 
 
 @pytest.mark.asyncio
@@ -1109,6 +1117,7 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
 async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
     bridge, reply_end, target, body, kind, expected,
 ):
+    bridge.comms.channels.create_tag('monitor')
     message = bridge.comms.messaging.send('claude-code', target, body, kind).message
     await confirm_and_finish_reply(bridge, message, expected, reply_end)
 
@@ -1126,7 +1135,6 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     mid-turn never receives that turn's answer as a direct message."""
     from agent_comms.registry_document import RegisteredCommanderProject
     from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
-    from agent_comms.thread_execution import ExternalThreadExecution
     from agent_comms.transcript_events import AssistantTranscript
     from agent_comms.turn_item import NativeItemId, NativeTurnId
 
@@ -1135,7 +1143,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
-        original = comms.messaging.send(sender.name, speaker.name, "Open this answer").message
+        original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message
         turn = NativeTurnId(f"{speaker.name}-turn")
         output.delivered(turn, (original.reference,))
         item_id = NativeItemId("a")
