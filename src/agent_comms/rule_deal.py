@@ -771,8 +771,13 @@ class Unmeant(Owed):
 
     @property
     def reason(self) -> str:
+        """Claude Code can run this call's hook before it writes the words sent with the call,
+        so a yes beside the call may not be on record yet. On 2026-10-30 claude-board wrote
+        "Yes." with its next call, was refused as if it had not, and ended its turn sure the gate
+        was stuck. A yes or no counts from the next call on."""
         return (f'Tristan asked you "{MeantRecord.question}" about the answers you just wrote.'
-                " Say yes or no to him before you read on.")
+                " Say yes or no to him before you read on. If you said it in this same message,"
+                " it reaches the gate with your next call: make it.")
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
