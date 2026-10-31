@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.registry_document import NoCommanderProject
-from agent_comms.change_report import ChangedFact, ChangeReport, FileLine, OrderRoots
+from agent_comms.todos import OrderRoots
+from agent_comms.change_report import ChangedFact, ChangeReport, FileLine
 from agent_comms.errors import MissingSourceLine
 from agent_comms.repository_name import RepositoryName
 from source_revision_fixture import SourceRepository

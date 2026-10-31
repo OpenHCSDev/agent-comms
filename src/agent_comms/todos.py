@@ -39,21 +39,7 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import (
-    CitedRevisions,
-    CommitRevision,
-    Declaration,
-    FileLine,
-    MainRevision,
-    NoSourceReference,
-    OrderRoots,
-    PullRequestHeadRevision,
-    SourceReference,
-    SourceRevision,
-    SourceRoots,
-    SourceText,
-    WorkingTree,
-)
+from agent_comms.change_report import CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
 from agent_comms.channel_targets import (
     CommandTarget,
     CommsTag,
@@ -180,6 +166,7 @@ from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
+from agent_comms.change_report import FetchedRevision
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
     from agent_comms.bus import BusReader
@@ -194,6 +181,48 @@ if TYPE_CHECKING:
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
     from agent_comms.registry_document import CommanderProject, RegistrySnapshot
+
+
+@dataclass(frozen=True)
+class PullRequestHeadRevision(FetchedRevision):
+    link: PullRequestLink
+
+    @property
+    def reference(self) -> str:
+        return f'refs/agent-comms/cited/{self.link.number}'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return f'+pull/{self.link.number}/head:{self.reference}'
+
+
+@dataclass(frozen=True)
+class OrderRoots(SourceRoots):
+    """Citations from one checkout, an order's check directory or a unit's worktree:
+    unqualified ones are read there."""
+
+    checkout: Path
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        return self.checkout
+
+
+@dataclass(frozen=True)
+class RegisteredRoots(SourceRoots):
+    """Citations with no order behind them: unqualified ones need exactly one registered
+    repository to name."""
+
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        repositories = self.project.require().repos
+        if len(repositories) != 1:
+            raise ValueError("An unqualified FILE:LINE names no repository when several are "
+                             "registered; cite it as owner/name:FILE:LINE.")
+        return repositories[0].checkout
 
 
 @dataclass(frozen=True)

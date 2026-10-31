@@ -17,7 +17,7 @@ from agent_comms.audience_manifest import freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
-from agent_comms.change_report import OrderRoots
+from agent_comms.todos import OrderRoots
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )

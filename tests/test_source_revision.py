@@ -7,9 +7,8 @@ import pytest
 
 from source_revision_fixture import SourceRepository
 from test_todos import order
-from agent_comms.change_report import (
-    CitedRevisions, FileLine, MainRevision, OrderRoots, PullRequestHeadRevision, RegisteredRoots,
-)
+from agent_comms.todos import OrderRoots, PullRequestHeadRevision, RegisteredRoots
+from agent_comms.change_report import CitedRevisions, FileLine, MainRevision
 from agent_comms.repository_name import RepositoryName
 from agent_comms.errors import MissingSourceLine
 from agent_comms.field_codec import OwnerRequestKey
