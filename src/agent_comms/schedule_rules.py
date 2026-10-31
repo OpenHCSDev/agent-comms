@@ -8,11 +8,11 @@ from typing import TYPE_CHECKING
 
 
 from .coordinator import Coordination
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId
+from .nominal.field_codec import AcpSessionId
 from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn

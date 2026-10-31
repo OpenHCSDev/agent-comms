@@ -28,8 +28,8 @@ from .child_process import NoProcess, ProcessState
 from agent_comms.cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .comms import Comms
-from .declared_family import DeclaredFamily
-from .field_codec import Argument, PathText, WireForm, WireOmitDefault, boundary_decoder
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import Argument, PathText, WireForm, WireOmitDefault, boundary_decoder
 from .history_result import HistoryPageResult
 from .goals import Goal
 from .lifecycle_capability import Complete

@@ -8,7 +8,7 @@ from typing import Annotated
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.field_codec import PathText
 from agent_comms.host_services import HostService
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.service_passes import ServicePassStore

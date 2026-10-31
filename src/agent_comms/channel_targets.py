@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .activity_clocks import ActivityClocks
 from .class_fact import ClassFact
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
-from .field_codec import NullMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
 from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .repo import Checkout

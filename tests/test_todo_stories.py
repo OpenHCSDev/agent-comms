@@ -10,7 +10,7 @@ import pytest
 from cutover.carry_todo_stories import INLINE_FIELDS, TodoStories
 
 from agent_comms.commander.order import Commander
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     MessageId,

@@ -8,7 +8,7 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from .field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import MessageId, NullMember, RecordMember, SingleFieldValue, SubclassUnion
 from .page_traversal import LiveCursor, NewestCursor, PageCursor, PageTraversal
 from .typed_table import TypedRow
 

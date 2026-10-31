@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from dataclasses import field as dataclass_field
 from typing import Annotated
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 from agent_comms.coordination_contracts import (
     MAX_SANITIZED_DETAIL_CHARS,
     validate_execution_id,

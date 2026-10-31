@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .repo import Repo
 from .turn_context import FileProvenance
 

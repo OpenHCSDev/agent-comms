@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms_hooks.shell_commands import ConnectCommand, ShellCommand
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Speaking, Voice
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice

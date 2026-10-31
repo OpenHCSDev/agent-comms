@@ -14,7 +14,7 @@ from agent_comms.envelope_claim_transitions import (
     UnscopedClaims,
     WakeClaims,
 )
-from agent_comms.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, FieldCodec, InputId, MalformedRecord, MessageId, TurnId
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 

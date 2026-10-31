@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING
 
-from .field_codec import AcpSessionId, InputId
+from .nominal.field_codec import AcpSessionId, InputId
 from .acp_extension import LiveQueueScope
 from .turn_inbox import TurnInbox
 from .coordinator import Coordination

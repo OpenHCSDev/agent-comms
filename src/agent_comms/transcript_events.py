@@ -12,8 +12,8 @@ from urllib.parse import quote
 from pydantic import JsonValue
 
 from . import tool_declaration
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     ActivityExclude,
     FieldCodec,
     InputId,

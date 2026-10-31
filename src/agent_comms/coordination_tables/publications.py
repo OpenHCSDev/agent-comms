@@ -17,7 +17,7 @@ from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.executions import ExecutionRecord
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, WireName
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import Message
 from agent_comms.response_acknowledgement import canonical_publication_key

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict, IntegrityViolationError
 from .coordinator_vocabulary import CoordinatorVocabulary
-from .field_codec import AssignmentId, FieldCodec, ThreadLookup
+from .nominal.field_codec import AssignmentId, FieldCodec, ThreadLookup
 from .lifecycle import LifecycleState
 from .lifecycle_capability import Active, Complete, Deferred, Failed, Pending, Terminal
 from .notification_progress import (

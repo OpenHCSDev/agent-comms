@@ -6,8 +6,8 @@ import pytest
 
 from agent_comms.errors import RouteChangedError, UnregisteredThreadError
 from agent_comms.input_key import AcpInputKey
-from agent_comms.field_codec import InputId
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import InputId
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_attempt import UnobservedInputDeliveryScope, UnresolvedInput
 from agent_comms.input_disposition import DeliveryOverview
 from agent_comms.notification_progress import SendingProgress

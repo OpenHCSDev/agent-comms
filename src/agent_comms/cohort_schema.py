@@ -15,7 +15,7 @@ from agent_comms.private_runtime_schema import PrivateCoordinatorTable
 from .audience_manifest import MAX_AUDIENCE_BYTES
 from .coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 from .coordination_schema import CoordinatorTable
-from .field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
+from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion, ThreadLookup, WireName
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (

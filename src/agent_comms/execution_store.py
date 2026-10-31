@@ -23,7 +23,7 @@ from agent_comms.execution_states import (
     PendingExecution,
     QueuedExecution,
 )
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.obligation_states import (
     FailedResponse,
     PendingResponse,

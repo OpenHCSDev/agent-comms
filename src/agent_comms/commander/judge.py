@@ -41,9 +41,9 @@ from agent_comms.commander import order
 from agent_comms.commander.order import CommanderVerb
 from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.comms import Comms
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import TodoError
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     Argument,
     BoundedText,
     FieldCodec,

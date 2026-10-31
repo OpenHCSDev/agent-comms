@@ -18,14 +18,14 @@ from .coordination_errors import Refused
 from .active_route import resolve_comms_route
 from .launch_root import LaunchRoot
 from .bus import Bus
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime, ThreadLaunch
 from .owner_launch import RetainedOwnerLaunch
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .pi_vocabulary import ServiceTier, ThinkingChoice
 from .coordinator import Coordination
-from .field_codec import FieldCodec
+from .nominal.field_codec import FieldCodec
 from .threads import ChosenServiceTier, NextTurnConfiguration
 from .thread_model import CatalogSelection, ThreadModel
 from .pi_commands import (
@@ -37,7 +37,7 @@ from .pi_commands import (
 from .watched import FileSource
 
 if TYPE_CHECKING:
-    from .field_codec import AcpSessionId
+    from .nominal.field_codec import AcpSessionId
     from .session_config_options import SessionConfigOptions
     from .active_route import CommsRoute
     from .native_package import VerifiedNativePackage

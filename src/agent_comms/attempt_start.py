@@ -12,7 +12,7 @@ from .coordination_errors import (
 )
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.attempts import AttemptRecord
-from .field_codec import ThreadLookup
+from .nominal.field_codec import ThreadLookup
 from .owner_fence import OwnerFence, _digest
 from .participant_store import ParticipantSnapshot
 

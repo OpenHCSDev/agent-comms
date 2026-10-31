@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from agent_comms.coordination_contracts import MAX_REASON_CODE_CHARS, MAX_SANITIZED_DETAIL_CHARS
-from agent_comms.field_codec import SubclassUnion
+from agent_comms.nominal.field_codec import SubclassUnion
 from agent_comms.thread_text import AbsentText, GivenText, TextChoice
 
 

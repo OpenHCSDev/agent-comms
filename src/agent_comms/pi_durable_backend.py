@@ -10,7 +10,7 @@ from typing import Annotated
 
 from pydantic import JsonValue
 
-from agent_comms import field_codec
+from agent_comms.nominal import field_codec
 
 from .agent_backend import (
     AgentBackend,

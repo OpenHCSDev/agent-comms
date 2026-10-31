@@ -5,8 +5,8 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from typing import Literal
 
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec
 from .turn_context import ContextSpan
 from .message_reference import MessageReference
 from .working_memory_disclosure import DisclosureState

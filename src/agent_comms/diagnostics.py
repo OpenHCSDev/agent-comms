@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import ArtifactExclude
+from agent_comms.nominal.field_codec import ArtifactExclude
 
 import hashlib
 import json
@@ -22,7 +22,7 @@ from metaclass_registry.mro_dispatch import (
 
 
 from .child_process import Platform, ProcessState
-from .field_codec import FieldCodec, InputId, ScratchName, TurnId
+from .nominal.field_codec import FieldCodec, InputId, ScratchName, TurnId
 from .locked_store import PatternFile, RuntimeFile
 from .native_failures import NativeRequestFailure
 from .publication_measurements import PublicationMeasurements

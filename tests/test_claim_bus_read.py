@@ -30,7 +30,7 @@ from agent_comms.coordination_session import NativeCapture
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
-from agent_comms.field_codec import ClaimId, InputId, TurnId
+from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token

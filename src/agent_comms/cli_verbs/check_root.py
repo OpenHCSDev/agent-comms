@@ -5,9 +5,9 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import _tags
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
-from agent_comms.field_codec import Normalize
-from agent_comms.field_codec import PathText
+from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Normalize
+from agent_comms.nominal.field_codec import PathText
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated

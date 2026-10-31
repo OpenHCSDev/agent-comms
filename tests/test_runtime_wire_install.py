@@ -15,7 +15,7 @@ from module_layers import OutgoingWire
 from agent_comms.bus import Bus
 from agent_comms.cli_bridges.monitor import PauseSession
 from agent_comms.installer.request import InstallRequest
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.target_tree import TargetTree

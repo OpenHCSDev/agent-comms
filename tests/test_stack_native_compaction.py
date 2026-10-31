@@ -1,7 +1,7 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.controller import SessionUpdateSink
 
 from agent_comms.lifecycle_capability import Unresolved

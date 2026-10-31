@@ -16,7 +16,7 @@ from functools import cached_property
 from typing import Final
 
 from .channel_targets import exact_stored_target
-from .field_codec import FieldCodec, MalformedRecord, ThreadLookup
+from .nominal.field_codec import FieldCodec, MalformedRecord, ThreadLookup
 from .frozen_recipient import FrozenRecipient
 from .participant_identity import ParticipantIdentity
 from .messages import BusCapability, CarriesEnvelope, Message

@@ -11,7 +11,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from .bus_publication import AgentOrigin
 from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
-from .field_codec import WireForm
+from .nominal.field_codec import WireForm
 from .launch_root import LaunchRoot
 from .read_basis import OperatorOutcomes, ReadAuthority
 from .registration import Registration

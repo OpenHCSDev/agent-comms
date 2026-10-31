@@ -1,6 +1,6 @@
 """Root-owned controls for the shared heartbeat and native HUD presentation."""
 
-from agent_comms.field_codec import HudExclude
+from agent_comms.nominal.field_codec import HudExclude
 
 from dataclasses import replace
 
@@ -9,7 +9,7 @@ from agent_comms.commander_hud import CommanderHud, CommanderOrder, CommanderUni
 from agent_comms.disclosure_text import (
     DisclosureText, EntityKey, FieldKey, IdentifiedRecordText, MappingText, SequenceText, ViewTable,
 )
-from agent_comms.field_codec import DisclosureIdentity, FieldCodec, OrderId
+from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing
 from agent_comms.task_attachments.commander_pings import CommanderDecisions, FoldedRule, RulePing

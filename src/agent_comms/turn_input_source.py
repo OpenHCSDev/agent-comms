@@ -15,7 +15,7 @@ from .acp_extension import InputStartedUpdate, NoQueueScope, UnidentifiedInputSt
 from .turn_inbox import BusyInputPolicy, SteerInputPolicy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .errors import RelationViolationError
-from .field_codec import AcpSessionId, InputId, TurnId
+from .nominal.field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message

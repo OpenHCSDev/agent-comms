@@ -43,7 +43,7 @@ from .drain_failures import (
     record_drain_failure,
 )
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import AcpSessionId, InputId, RootId, ThreadLookup
+from .nominal.field_codec import AcpSessionId, InputId, RootId, ThreadLookup
 from .image_input import ImageInput
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,

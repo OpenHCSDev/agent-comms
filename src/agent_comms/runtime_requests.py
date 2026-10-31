@@ -30,7 +30,7 @@ from agent_comms.cli_verbs.correct_annotation import CorrectAnnotationCliCommand
 from .context_store import ContextManifestReference
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, WireName, WireValue, GoalId
+from .nominal.field_codec import FieldCodec, WireName, WireValue, GoalId
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal

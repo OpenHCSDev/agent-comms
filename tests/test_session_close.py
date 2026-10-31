@@ -16,7 +16,7 @@ from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.threads import Thread
 
 

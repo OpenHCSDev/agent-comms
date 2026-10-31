@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING, ClassVar, Literal
 from pydantic import Field, JsonValue
 
 from agent_comms.cli_protocol import Declared, TaggedWire
-from agent_comms.declared_family import UnknownFamilyMember
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.declared_family import UnknownFamilyMember
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.runtime_updates import (
     AllTurnsEnded,
     AppendDraftItem,

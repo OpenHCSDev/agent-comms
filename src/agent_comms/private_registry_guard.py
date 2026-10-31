@@ -35,7 +35,7 @@ from .coordination_schema import CoordinatorTable
 from .coordination_tables.participants import Participants
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import RootId, ThreadLookup
+from .nominal.field_codec import RootId, ThreadLookup
 from .locked_store import RollbackRetained, WireWakeFile
 from .native_input_owner import RegistryOwner
 from .native_runtime_input import NativeRuntimeInput, NativeRuntimeTable

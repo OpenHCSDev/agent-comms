@@ -9,7 +9,7 @@ import json
 from dataclasses import dataclass
 from typing import ClassVar
 
-from ..field_codec import FieldCodec
+from ..nominal.field_codec import FieldCodec
 from ..goal_history import GoalHistoryEntry
 from ..goals import GoalPeerChange
 from ..peer_relevance import Informed

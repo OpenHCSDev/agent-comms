@@ -16,7 +16,7 @@ from agent_comms.bus_tables import MessageIdentitySource
 from agent_comms.messages import BusRow, InfoKind, Message
 from agent_comms.comms import wire
 from agent_comms.errors import HumanSendRefusedError
-from agent_comms.field_codec import FieldCodec, MalformedRecord, MessageId
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.locked_store import RegistryFile
 from agent_comms.message_bus import MessageBus

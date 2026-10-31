@@ -48,7 +48,7 @@ from agent_comms.locked_store import DocumentChange
 from agent_comms.message_bus import WatchPass
 from agent_comms.service_passes import ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.field_codec import FieldCodec, MalformedRecord, RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, RecordProblems
 from agent_comms.host_services import ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup

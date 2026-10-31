@@ -2,7 +2,7 @@
 
 import uuid
 
-from agent_comms.field_codec import FieldCodec, TranscriptRecordId
+from agent_comms.nominal.field_codec import FieldCodec, TranscriptRecordId
 
 RECORDS = uuid.UUID("6f8e2a3c-1d4b-4c5a-9e7f-2b1c3d4e5f60")
 

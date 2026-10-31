@@ -5,7 +5,7 @@ from agent_comms.cli_commands import InboxResult
 from agent_comms.cli_commands import ThreadArgument
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.message_reference import NewestUnreadStart
 from agent_comms.page_traversal import NewestCursor
 from agent_comms.page_traversal import PageCursor

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.field_codec import TurnId
+from agent_comms.nominal.field_codec import TurnId
 from agent_comms.threads import ParkedThreadWorkState
 
 from agent_comms.active_route import ActiveRoute, read_active_route, route_new_bus
@@ -156,7 +156,7 @@ def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
 def test_install_report_encodes_its_registered_harnesses() -> None:
     # The live install printed nothing: its report's field type had no codec.
     from agent_comms.installer.probes.harnesses import InstallResult
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
 
     for config in (RegisteredCommanderProject(RecordedThreadIncarnation("lead", 1.0), ()),
                    NoCommanderProject()):

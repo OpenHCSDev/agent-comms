@@ -17,7 +17,7 @@ from conftest import installed_comms
     (None, ()),
 ])
 def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire(wire, arguments):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.native_arguments import NativeArguments
     from agent_comms.thread_model import ThreadModel
     from agent_comms.threads import ModelChoice
@@ -30,7 +30,7 @@ def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire
 
 
 def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_it(tmp_path):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.threads import ModelChoice, Thread
 
     thread = Thread('worker', frozenset(), Checkout(tmp_path), model=DeclaredModel('test/one'))

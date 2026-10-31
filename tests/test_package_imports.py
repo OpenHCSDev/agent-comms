@@ -42,7 +42,7 @@ def test_saved_tool_record_acquires_its_family_without_package_bootstrap():
 import sys
 sys.path.insert(0, {str(source)!r})
 from dataclasses import dataclass
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 goal_id = GoalId.mint()
 from agent_comms.tool_declaration import ToolDeclaration
 assert 'agent_comms.tools' not in sys.modules

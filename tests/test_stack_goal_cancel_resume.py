@@ -1,6 +1,6 @@
 """Real native Pi and owner socket: cancelled goals need an explicit fresh grant."""
 from agent_comms.controller import SessionUpdateSink
-from agent_comms.field_codec import InputId
+from agent_comms.nominal.field_codec import InputId
 from agent_comms.input_key import AcpInputKey
 
 import asyncio
@@ -10,7 +10,7 @@ import os
 import pytest
 from acp.schema import SessionNotification
 
-from agent_comms.field_codec import FieldCodec, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, ReadyGeneration, ReservedGeneration
 from agent_comms.goals import Goal

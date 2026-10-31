@@ -26,8 +26,8 @@ from pydantic import JsonValue
 
 from .child_process import Platform
 from .coordination_errors import CoordinationReadUnavailable
-from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
 from .private_path import FileObservation, FileRevision, MissingFile, PrivateDirectoryRole, PrivateFileRole
 from .store_files import (

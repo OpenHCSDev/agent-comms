@@ -37,7 +37,7 @@ from .acp_extension import (
 )
 from .context_reading import ContextUsage, UnsizedContext
 from .coordinator import Coordination
-from .field_codec import AcpSessionId, TurnId
+from .nominal.field_codec import AcpSessionId, TurnId
 from .tool_declaration import (
     EditAction,
     ExecuteAction,

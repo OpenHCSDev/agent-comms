@@ -18,7 +18,7 @@ import tempfile
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from pydantic import JsonValue
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
 from agent_comms.rule_deal import StartedDeal
@@ -69,7 +69,7 @@ class TranscriptRecords:
     """Fixed test time, projected through each record's declared constructor."""
 
     def __init__(self) -> None:
-        from agent_comms.field_codec import RecordedTimestamp
+        from agent_comms.nominal.field_codec import RecordedTimestamp
 
         self.timestamp = RecordedTimestamp("2026-10-01T00:00:00.000Z")
 

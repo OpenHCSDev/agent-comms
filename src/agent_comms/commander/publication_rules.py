@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Self
 
-from agent_comms.field_codec import OrderId, PathText
+from agent_comms.nominal.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
 from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.repo import UnpushedHead

@@ -6,7 +6,7 @@ from typing import Annotated
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import ToolCatalogResult
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument, FieldCodec, Normalize
+from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_declaration import NativeRequestTools
 

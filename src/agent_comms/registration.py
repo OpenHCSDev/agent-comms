@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Concatenate
 from .catalog_store import ChannelCatalog
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
-from .field_codec import GoalId, ThreadLookup, TurnId
+from .nominal.field_codec import GoalId, ThreadLookup, TurnId
 from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .goal_scope import AllGoals, GoalScope
 from .native_input_owner import RegistryOwner

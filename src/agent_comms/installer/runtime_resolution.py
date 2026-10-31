@@ -27,8 +27,8 @@ from packaging.utils import canonicalize_name, parse_wheel_filename
 from packaging.version import Version
 from pydantic import BaseModel, ConfigDict, Field, RootModel
 
-from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, GitCommitText, boundary_decoder
+from agent_comms.nominal.declared_family import DeclaredFamily
+from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
 from agent_comms.installer.probes.packages import (

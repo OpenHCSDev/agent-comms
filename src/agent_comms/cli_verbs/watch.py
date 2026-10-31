@@ -5,7 +5,7 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import ThreadArgument
 from agent_comms.cli_commands import WatchStream
 from agent_comms.comms import Comms
-from agent_comms.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument
 from agent_comms.agent_inbox import TakenInputStart
 from agent_comms.message_reference import InboxStart
 from dataclasses import dataclass

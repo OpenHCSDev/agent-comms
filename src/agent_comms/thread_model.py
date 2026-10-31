@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms.field_codec import SubclassUnion, boundary_decoder
+from agent_comms.nominal.field_codec import SubclassUnion, boundary_decoder
 from agent_comms.native_arguments import NativeArguments, SelectedModel
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice

@@ -12,8 +12,8 @@ from functools import partial
 from typing import TYPE_CHECKING
 
 from .message_reference import MessageReference
-from .declared_family import DeclaredFamily
-from .field_codec import TranscriptRecordId
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import TranscriptRecordId
 from .notification_evidence import ConsumptionEvidence
 from .recorded_time import Timestamped
 from .notification_progress import HarnessConsumedProgress

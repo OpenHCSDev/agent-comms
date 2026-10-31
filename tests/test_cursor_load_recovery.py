@@ -9,7 +9,7 @@ import os
 
 import pytest
 
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates

@@ -1,6 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 from pathlib import Path
-from agent_comms.field_codec import AcpSessionId
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.repo import Checkout
 from agent_comms.controller import Controller, SessionUpdateSink
 
@@ -17,7 +17,7 @@ from acp.schema import TextContentBlock
 
 from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode_request
 from agent_comms.errors import RelationViolationError
-from agent_comms.field_codec import FieldCodec, InputId, MessageId, TurnId, GoalId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, TurnId, GoalId
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput

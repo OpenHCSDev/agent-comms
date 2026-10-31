@@ -12,7 +12,7 @@ import pytest
 from agent_comms.active_route import LocalRoute
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference

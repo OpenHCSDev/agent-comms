@@ -17,7 +17,7 @@ from collections.abc import Iterator
 
 from nominal_refactor_advisor import audit
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 
 
 def stored_format(record: type) -> Iterator[audit.project.StoredFormat]:

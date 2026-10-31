@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_comms.field_codec import SnapshotExclude
+from agent_comms.nominal.field_codec import SnapshotExclude
 
 from agent_comms.lifecycle_capability import Active, Complete
 
@@ -36,7 +36,7 @@ from agent_comms.coordination_tables.executions import (
 from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
-from agent_comms.field_codec import (
+from agent_comms.nominal.field_codec import (
     boundary_decoder,
     projected,
     SnapshotName,

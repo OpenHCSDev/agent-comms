@@ -2,7 +2,7 @@ from dataclasses import replace
 
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import Bus, DisplayUnread
-from agent_comms.field_codec import ThreadLookup
+from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.notification_progress import UnrecordedProgress
 from agent_comms.presentation import MessageNotification

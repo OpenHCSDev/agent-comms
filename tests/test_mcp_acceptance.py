@@ -37,7 +37,7 @@ from agent_comms.native_build_inputs import DetachedChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
-from agent_comms.field_codec import AcpSessionId, FieldCodec
+from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.thread_identity import NoObservedTurn, TurnFence
 from delivery_owner_fixture import canonical_agent

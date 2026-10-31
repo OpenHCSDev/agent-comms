@@ -7,8 +7,8 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
-from .declared_family import DeclaredFamily
-from .field_codec import (
+from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import (
     AcceptsNull,
     DefaultExternalName,
     ExternalName,

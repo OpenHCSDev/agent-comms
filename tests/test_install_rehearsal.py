@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.locked_store import LiveFilesRequest
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.history_result import ChannelHistoryPageResult
 from agent_comms.installer.backup import bus_files
 from agent_comms.installer.commands import InstallCommands

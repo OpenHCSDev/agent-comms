@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
 from agent_comms.agent_backend import NewThreadBackend
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend

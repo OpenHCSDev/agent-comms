@@ -12,7 +12,7 @@ from typing import Annotated, ClassVar, Self
 from .coordinator import Coordination
 from .locked_store import DocumentChange, DurableFile, LockedStore
 from agent_comms_hooks import ToolRefusedError
-from .field_codec import WireExclude, WireTransient, projected
+from .nominal.field_codec import WireExclude, WireTransient, projected
 from .tool_result import ToolResult
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .store_files import DependentStateTier, SingleFileStore

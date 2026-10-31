@@ -5,7 +5,7 @@ import pytest
 from agent_comms.cli_bridges.codex_protocol import (
     BusClientId, BusInput, ForeignClientId, ItemsPage, NoClientId, UserItem,
 )
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.transcript_events import UserTranscript
 from agent_comms.threads import Thread
 from agent_comms.turn_item import NativeItemId, NativeTurnId

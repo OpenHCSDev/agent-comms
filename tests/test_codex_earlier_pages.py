@@ -10,7 +10,7 @@ from aiohttp import web
 
 from agent_comms.cli_bridges.codex import CodexBridge, CodexOptions
 from agent_comms.cli_bridges.codex_protocol import BusClientId
-from agent_comms.field_codec import MessageId
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.cli_bridges.shared import Binding, StoredBinding, Watch
 from agent_comms.cli_protocol import WATCH_LINE, EarlierItems
 from agent_comms.comms import wire

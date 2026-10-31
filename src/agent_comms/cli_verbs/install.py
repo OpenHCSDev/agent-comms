@@ -4,7 +4,7 @@ from agent_comms.active_route import CommsRoute
 from agent_comms.active_route import RouteFile
 from agent_comms.active_route import active_route_path
 from agent_comms.cli_command import CliCommand
-from agent_comms.field_codec import WireExclude
+from agent_comms.nominal.field_codec import WireExclude
 from agent_comms.installer.interpreter_operation import ProcessLauncherPhase
 from agent_comms.installer.launch import InstallRun
 from agent_comms.installer.logs import InstallLogs

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated, cast
 from pydantic import JsonValue
 
 from .errors import RelationViolationError
-from .field_codec import (
+from .nominal.field_codec import (
     FieldCodec,
     FieldRepresentation,
     NullMember,

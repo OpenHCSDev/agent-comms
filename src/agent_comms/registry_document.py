@@ -18,9 +18,9 @@ from .activity import ActivityCapture
 from .channel_targets import CommandersTag
 from .channels import ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
-from .declared_family import DeclaredFamily
+from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
-from .field_codec import (
+from .nominal.field_codec import (
     ExternalJsonShape,
     FieldCodec,
     MalformedRecord,

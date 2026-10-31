@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.turn_inbox import SteerInputPolicy
-from agent_comms.field_codec import InputId, TurnId
+from agent_comms.nominal.field_codec import InputId, TurnId
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import TurnInputKey
 from agent_comms.native_arguments import SelectedModel

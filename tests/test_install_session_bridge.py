@@ -33,7 +33,7 @@ from agent_comms.cli_bridges.shared import (
     ReleasedSessionBridge, UnacknowledgedPause, UnobservedBridge,
 )
 from conftest import installed_comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.root_runtime import RootRuntime

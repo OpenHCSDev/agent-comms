@@ -2,7 +2,7 @@
 import hashlib
 import json
 
-from agent_comms.field_codec import FieldCodec, InputId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, InputId, TurnId
 from agent_comms.image_input import ImageInput
 from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.pi_commands import Prompt

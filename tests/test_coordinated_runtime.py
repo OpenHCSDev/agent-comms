@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.field_codec import GoalId
+from agent_comms.nominal.field_codec import GoalId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import SelectedWakeSegment

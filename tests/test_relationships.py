@@ -322,7 +322,7 @@ def test_retained_alias_contact_without_projected_person_is_unavailable(tmp_path
 
 
 def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
-    from agent_comms.field_codec import FieldCodec
+    from agent_comms.nominal.field_codec import FieldCodec
     from agent_comms.relationships import (
         InboundRelationshipGroup, RelationshipGroup, SortableRelationshipGroup,
     )
