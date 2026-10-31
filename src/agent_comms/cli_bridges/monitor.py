@@ -9,6 +9,7 @@ import secrets
 import select
 import socket
 import sys
+import traceback
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
@@ -476,13 +477,15 @@ class MonitorService:
                 reply: SessionReply
                 try:
                     request = await asyncio.to_thread(SessionRequest.from_wire_line, await peer.read())
-                except (MalformedRecord, TimeoutError) as error:
+                    reply = await request.handle(self, peer)
+                except (MalformedRecord, TimeoutError, SessionFailure) as error:
                     reply = SessionRefused(error=str(error))
-                else:
-                    try:
-                        reply = await request.handle(self, peer)
-                    except SessionFailure as error:
-                        reply = SessionRefused(error=str(error))
+                except Exception:
+                    # This is the foreign request boundary, not a successful default:
+                    # fail this call loudly without cancelling every client in the TaskGroup.
+                    failure = traceback.format_exc()
+                    self.bridge.log(f"Session request failed:\n{failure}")
+                    reply = SessionRefused(error=failure)
                 await reply.publish(peer)
             finally:
                 await peer.close()

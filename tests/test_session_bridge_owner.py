@@ -29,6 +29,8 @@ from agent_comms.root_runtime import RootRuntime
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.cli_bridges import hook_session
+from agent_comms.cli_bridges.hook_requests import SkillRequest
+from agent_comms.cli_bridges.session_watch import SessionRefusedError
 from agent_comms_hooks.shell_commands import ConnectCommand
 from agent_comms_hooks.watch import HookAnswer, SessionHookProgram
 from agent_comms_hooks.read_gate import ReadGateProgram
@@ -94,6 +96,14 @@ def test_session_start_hook_exit_preserves_the_recorded_owner_for_install_pause(
             observed = InspectSession().information(claim.socket_path)
             assert observed.owner == expected
             assert owner.poll() is None
+            assert observed.process.alive()
+            # An unexpected exception in one real request must not cancel the resident group.
+            with pytest.raises(SessionRefusedError, match='FileNotFoundError'):
+                SkillRequest(payload=dict(
+                    session_id=session, hook_event_name='SessionStart', source='compact',
+                    transcript_path=str(tmp_path / 'missing-transcript.jsonl'),
+                )).exchange(claim.socket_path)
+            assert InspectSession().information(claim.socket_path).process == observed.process
             assert observed.process.alive()
             with pytest.raises(ProcessLookupError):
                 ProcessIdentity.capture(hook_pid)
