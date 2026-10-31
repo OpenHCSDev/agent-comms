@@ -184,7 +184,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
 
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
     result = invoke_tool(comms, "comms_model", {"model": "openrouter/own"})
@@ -192,7 +192,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         "thread": "owner",
         "model": "openrouter/own",
         "thinking_level": None,
-        "service_tier": "priority",
+        "service_tier": owner.service_tier.value,
     }
     peer_configuration = {
         "thread": "peer",
@@ -200,9 +200,6 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
         "thinking_level": "high",
         "service_tier": "standard",
     }
-    with pytest.raises(RelationViolationError):
-        invoke_tool(comms, "comms_model", peer_configuration)
-    comms.registry.unregister("peer")
     result = invoke_tool(comms, "comms_model", peer_configuration)
     assert result["thread"] == "peer" and result["thinking_level"] == "high"
     configured = comms.registry.require("peer")

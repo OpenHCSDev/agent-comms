@@ -29,17 +29,17 @@ async def accepted_channel_post(comms, root_id, body):
 
 
 async def test_agent_channel_post_joins_a_busy_turn(tmp_path):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, session_id = _session(tmp_path)
     try:
         comms.agents.begin_turn("beta", TurnId("5c1f0e2b9d8a4f6e8b7c6d5e4f3a2b1c"), "Existing work")
-        state = agent.inputs.state("beta")
+        state = agent.inputs.state(session_id)
         inbox = state.open_inbox()
         state.capture_first_source(SelectedOriginalInput.answering(
             "Existing work", TurnGoalPermission(InactiveGoalPermission())))
         owner, message, pending = await accepted_channel_post(comms, root_id, "arrived mid-turn")
         assert [row.audience for row in pending] == [MessageAudience.COLLECTIVE]
         await DeliveredInput.deliver_pending(
-            agent.inputs, "beta", owner, comms.bus, root_id, after_seq=0)
+            agent.inputs, session_id, owner, comms.bus, root_id, after_seq=0)
         delivered = inbox.get_nowait()
         assert "arrived mid-turn" in delivered.content.text
         assert f'"source_seq":{message.seq}' in delivered.content.text
@@ -48,7 +48,7 @@ async def test_agent_channel_post_joins_a_busy_turn(tmp_path):
 
 
 async def test_agent_channel_post_waits_as_wake_work_for_an_idle_unit(tmp_path):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, _session_id = _session(tmp_path)
     try:
         _owner, message, pending = await accepted_channel_post(comms, root_id, "wake me")
         assert [(row.wire_seq, row.audience) for row in pending] == [
