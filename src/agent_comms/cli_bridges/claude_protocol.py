@@ -1055,6 +1055,14 @@ class PrLink(MetadataRecord, declared_name='pr-link'):
     pass
 
 
+class Relocated(MetadataRecord, declared_name='relocated'):
+    """The session moved to another working directory, as entering a worktree does."""
+
+
+class WorktreeState(MetadataRecord, declared_name='worktree-state'):
+    """The worktree the session entered; nothing here reaches the bus."""
+
+
 class FileHistorySnapshot(MetadataRecord, declared_name='file-history-snapshot'):
     pass
 
