@@ -580,11 +580,8 @@ def answer_deal(deal: PiRedeal) -> None:
         deal.record_read(source, ReadSpan(1, sys.maxsize, sys.maxsize))
         if source.stem in record.due.rules:
             answered.append(engaged(source.stem, source))
-        deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
-    deal.audit.write_text(json.dumps({
-        "rules": answered,
-        "owner_words": [{"words": words, "doing": "testing"} for words in record.due.owner_words],
-    }))
+        deal.audit.write_text(json.dumps({"rules": answered}))
+    deal.audit.write_text(json.dumps({"rules": answered}))
 
 
 @pytest.fixture

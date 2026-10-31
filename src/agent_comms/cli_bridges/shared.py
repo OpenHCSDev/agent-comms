@@ -1576,6 +1576,10 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         await self.comms.bus.when_open(lambda: self.comms.registry.register(
             self.comms.registry.require(self.binding.bus), status))
 
+    @abstractmethod
+    def owner_said(self, transcript: Path) -> tuple[str, ...]:
+        """What the person last typed in this session's transcript."""
+
     async def board(self) -> tuple[str, ...]:
         """The commander board this session's tool calls print, derived from Core when asked."""
         entries = await self.comms.bus.when_open(partial(

@@ -1,10 +1,10 @@
 """The Claude Code leaf of the rule gate (agent_comms.rule_deal): its deal lives beside the
 transcript, and a refusal is a PreToolUse denial.
 
-PreToolUse only judges: it refuses any tool but reading a dealt file and answering it while one is
-unread or unanswered, or the audit does not answer the deal. PostToolUse, which Claude Code sends
-only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
-Read leaves the gate closed.
+PreToolUse only judges: it refuses any tool but reading a dealt file, answering it, hearing the
+bus and arming the watch while one is unread or unanswered, or the audit does not answer the deal.
+PostToolUse, which Claude Code sends only after a tool completes, records a Read that covered a
+whole dealt file; a failed or partial Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
 it may not write the main agent's audit, and it reports its tool activity through its seat.
 
@@ -21,12 +21,23 @@ import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, ReadSpan, RuleDeal, Speaking, Voice
+from agent_comms.rule_deal import (
+    Asked,
+    AuditDue,
+    DealtRuleGate,
+    Mute,
+    ReadSpan,
+    RuleDeal,
+    Speaking,
+    Voice,
+)
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeHookProgram, ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms_hooks.seats import SeatedSubagent
+from agent_comms_hooks.watch import WatchClaim
 
 
 @dataclass(frozen=True)
@@ -98,6 +109,48 @@ class EditTool(WriteTool, declared_name="Edit"):
     """Answering one rule edits the audit in place; an edit is judged like a write."""
 
 
+class HearingTool(ToolMeaning):
+    """The bus stays open during a deal: on 2026-10-30 the commander's watch expired mid-deal and
+    could not be re-armed, and Tristan's orders waited unread behind the files he had it reading."""
+
+    def judge(self, call: GatedCall) -> None:
+        return
+
+
+class BusInbox(HearingTool, declared_name="mcp__comms__comms_inbox"):
+    """What the bus delivered to this session."""
+
+
+class BusHistory(HearingTool, declared_name="mcp__comms__comms_history"):
+    """What was said on a thread or channel."""
+
+
+class BusThreads(HearingTool, declared_name="mcp__comms__comms_threads"):
+    """Who is on the bus."""
+
+
+class BusSend(HearingTool, declared_name="mcp__comms__comms_send"):
+    """Answering him. Orders and verdicts wait for the deal; a word to the bus does not."""
+
+
+class WatchArming(ToolMeaning):
+    """The one command that re-arms this session's watch runs; any other waits like the rest."""
+
+    command: ClassVar[str] = "agent-comms-claude-bridge watch"
+
+    def judge(self, call: GatedCall) -> None:
+        if call.tool_input.get("command") != self.command:
+            super().judge(call)
+
+
+class BashTool(WatchArming, declared_name="Bash"):
+    """The shell, which may arm the watch."""
+
+
+class MonitorTool(WatchArming, declared_name="Monitor"):
+    """The Monitor, which is how the watch is held."""
+
+
 class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
     """A Claude deal reads its session's own words from the transcript beside it: the one
     record of what the model said, written before each tool call it makes."""
@@ -121,11 +174,16 @@ class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
         from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 
         decoder = ClaudeJsonLines()
-        return tuple(words for position, line in self.complete_lines(offset)
-                     for words in decoder.decode_line(line, position).said())
+        return tuple(
+            words
+            for position, line in self.complete_lines(offset)
+            for words in decoder.decode_line(line, position).said()
+        )
 
     def delivered(self, asked: Asked) -> bool:
-        return any(asked.message_id.encode() in line for _, line in self.complete_lines(asked.offset))
+        return any(
+            asked.message_id.encode() in line for _, line in self.complete_lines(asked.offset)
+        )
 
 
 @dataclass(frozen=True)
@@ -164,6 +222,14 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate):
         """PostToolUse: what this completed call records."""
         ToolMeaning.of(self.tool_name).completed(self)
 
+    def owner_said(self, due: AuditDue) -> tuple[str, ...]:
+        """His last prompt as this call runs, not as the deal showed it. The bridge holds the
+        transcript's decoder, which would cost this hook 3 s of imports; a session with no
+        bridge has the deal's copy."""
+        return WatchClaim(self.session_id).state().owner_said(
+            Path(self.transcript_path)
+        ) or super().owner_said(due)
+
     def refuse(self, reason: str) -> None:
         self.respond(permissionDecision="deny", permissionDecisionReason=reason)
 
@@ -171,8 +237,13 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate):
         """The bus seat this session is bound to speaks for Tristan; an unbound one is mute."""
         from agent_comms_hooks.watch import WatchClaim
 
-        return next((OwnerVoice(record.bus, record.root)
-                     for record in WatchClaim(self.session_id).state().bindings()), Mute())
+        return next(
+            (
+                OwnerVoice(record.bus, record.root)
+                for record in WatchClaim(self.session_id).state().bindings()
+            ),
+            Mute(),
+        )
 
 
 @dataclass(frozen=True)

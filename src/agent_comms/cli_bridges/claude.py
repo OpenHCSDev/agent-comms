@@ -42,6 +42,13 @@ class ClaudeBridge(ClaudeJsonLines, ClaudeHistory, LineMonitorBridge):
         await asyncio.to_thread(state.rearm, partial(Connect().begin, self))
         await super().watch_operation(operation)
 
+    def owner_said(self, transcript: Path) -> tuple[str, ...]:
+        """A new session starts before Claude Code writes its transcript: nobody has spoken."""
+        if not transcript.exists():
+            return ()
+        with transcript.open('rb') as stream:
+            return self.owner_words(stream, transcript.stat().st_size, 1)
+
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """Retain the recent window's owning occurrence, never an arbitrary mid-turn prefix."""
         start = max(0, boundary - self.RECENT_BYTES)

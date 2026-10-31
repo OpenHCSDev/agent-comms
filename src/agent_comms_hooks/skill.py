@@ -395,7 +395,7 @@ class DeckStart(DealtDeck):
             " or memory of them does not count as reading them, and every other tool is refused"
             " until each one is read. Read them in order, at most four unanswered rule files at"
             " a time, and answer those in the audit: reading alone is passive. Every tool but"
-            " Read, and Write or Edit of"
+            " Read, the bus, your watch, and Write or Edit of"
             f" {self.audit}, is refused until it answers. This order is given once per session"
             " start or compaction; a short slice of them comes back inline every few tool calls.\n"
             + "\n".join(str(source) for source in sources),
@@ -410,8 +410,7 @@ class DeckStart(DealtDeck):
         paraphrase while his words sat unanswered."""
         return "\n\n".join((
             "WHAT TRISTAN ACTUALLY SAID LAST, verbatim, oldest first. Not your summary of it."
-            " Your audit answers each one, and your next action serves them, not the summary's"
-            " next step:",
+            " Your next action serves them, not the summary's next step:",
             *(f"> {words}" for words in prompts),
         ))
 

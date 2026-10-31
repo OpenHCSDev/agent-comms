@@ -20,7 +20,10 @@ import pytest
 from agent_comms.rule_deal import (CompactedDeal, StartedDeal, Unengaged,
                                    UnstampedCompactionDeal)
 
-from agent_comms.cli_bridges.monitor import BoardReply, ReadBoard, SessionRefused, SessionRequest
+from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.codex import CodexBridge
+from agent_comms.cli_bridges.opencode import OpenCodeBridge
+from agent_comms.cli_bridges.monitor import BoardReply, OwnerSaidReply, ReadBoard, ReadOwnerSaid, SessionRefused, SessionRequest
 from agent_comms.cli_bridges.shared import Binding, DeliveredBoardContent
 from agent_comms.heartbeat_subjects import UnitSubject
 from agent_comms.channel_targets import CommandersTag
@@ -56,11 +59,11 @@ from agent_comms_hooks.board import (
 from agent_comms_hooks.reread import BoardReminder, DeafReminder, SliceReminder
 from agent_comms_hooks.deferral import StopHook
 from agent_comms_hooks.forks import SubagentHook
-from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
+from agent_comms.rule_deal import AuditDue, ReadSpan, RuleAudit, SessionAudit
 from agent_comms_hooks.read_gate import GatedCall
 from agent_comms_hooks.skill import (CommanderReader, DeckReader, DeckStart, FleetReader, FullPrime,
                                      Prime, UnboundPrimeError)
-from agent_comms_hooks.watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
+from agent_comms_hooks.watch import DeafWatch, LiveWatch, UnclaimedWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_commander_notifications import beat, lead_hud
 from test_head_review import ACCEPTED, invoke
@@ -596,13 +599,12 @@ def refused(capsys, call):
     return out and json.loads(out)["hookSpecificOutput"]["permissionDecision"] == "deny"
 
 
-def answered_audit(reader, read=None, owner_words=()):
+def answered_audit(reader, read=None):
     """The audit answering every dealt file owed an answer among `read`, by default every one
     the reader owes (its rules and, for a commander, its skill), as a session writes it."""
     owed = reader.answered() if read is None else {rule.name for rule in read}
     return json.dumps({"rules": [engaged(source.stem, source.resolve())
-                                 for source in reader.sources() if source.stem in owed],
-                       "owner_words": list(owner_words)})
+                                 for source in reader.sources() if source.stem in owed]})
 
 
 @pytest.fixture
@@ -715,7 +717,7 @@ def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session):
         read_whole(transcript, rule.path.resolve())
     wrong = [{**engaged(rule.name, rule.path), "quote": "no rule file holds this line"}
              for rule in rules[:2]]
-    start.audit.write_text(json.dumps({"rules": wrong, "owner_words": []}))
+    start.audit.write_text(json.dumps({"rules": wrong}))
     gated(transcript, "Read", {"file_path": str(rules[2].path)}).judge()
     reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
     assert all(f"entry for {rule.path.stem}" in reason for rule in rules[:2])
@@ -733,7 +735,7 @@ def test_an_answer_that_does_not_hold_keeps_the_next_file_shut(capsys, dealt_ses
     rules = CommanderReader.rules()
     read_whole(transcript, rules[0].path.resolve())
     written = {**engaged(rules[0].name, rules[0].path), **change}
-    start.audit.write_text(json.dumps({"rules": [written], "owner_words": []}))
+    start.audit.write_text(json.dumps({"rules": [written]}))
     gated(transcript, "Read", {"file_path": str(rules[1].path)}).judge()
     reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
     assert says in reason
@@ -760,7 +762,7 @@ def test_a_quote_outside_the_greentext_is_refused(tmp_path, quote):
     assert RuleAudit("rule", quote="> the greentext", does="d", why="w").unengaged(source) == ""
 
 
-def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, commanding_session):
+def test_the_full_audit_opens_the_gate(capsys, tmp_path, commanding_session):
     transcript = tmp_path / "session.jsonl"
     words = ("fix the gate",)
     transcript.write_text(json.dumps({"type": "user", "message": {"content": words[0]}}) + "\n")
@@ -770,22 +772,100 @@ def test_the_full_audit_and_the_owners_words_open_the_gate(capsys, tmp_path, com
     for source in CommanderReader.sources():
         read_whole(transcript, source.resolve())
     start.audit.write_text(answered_audit(CommanderReader))
-    assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # his words unanswered
-    answers = ({"words": words[0], "doing": "editing rule_deal"},)
-    start.audit.write_text(answered_audit(CommanderReader, owner_words=answers))
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
 
 
-def test_the_deal_teaches_the_three_fields_by_a_real_answer_once(tmp_path, capsys, commanding_session):
+def test_the_template_shows_no_answer_to_copy_and_asks_only_for_the_three_fields(
+        tmp_path, commanding_session):
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    said = DeckStart.decode(hook_record(transcript, "SessionStart")).take()
+    template = next(part for part in said if "{\n" in part)
+    assert '"does": "It' not in template
+    written = json.loads(template[template.index("{\n"):])
+    assert set(written) == {"rules"}
+    assert set(written["rules"][0]) == {"rule", "quote", "does", "why"}
+
+
+def test_a_refusal_quotes_what_the_bridge_says_he_said_last(tmp_path, capsys, monkeypatch):
+    """Refusals kept quoting the prompt frozen at the deal while he typed new orders."""
+    transcript = tmp_path / "session.jsonl"
+    transcript.write_text("")
+    start = DeckStart.decode(hook_record(transcript, "SessionStart"))
+    start.prepare(CommanderReader(), ("the old order",), StartedDeal())
+    gated(transcript, "Bash", {}).judge()  # no bridge: the deal's copy stands
+    assert "the old order" in capsys.readouterr().out
+    monkeypatch.setattr(UnclaimedWatch, "owner_said", lambda self, path: ("the new order",))
+    gated(transcript, "Bash", {}).judge()
+    reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "Tristan told you, verbatim:\nthe new order\nYou did not." in reason
+    assert "the old order" not in reason
+
+
+def test_the_bridge_answers_his_last_prompt_over_the_session_socket(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    claim = WatchClaim("spoken")
+    claim.path.parent.mkdir(parents=True)
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    transcript = tmp_path / "session.jsonl"
+    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server:
+        server.bind(str(claim.socket_path))
+        server.listen()
+        server.settimeout(5)
+        with ThreadPoolExecutor(1) as pool:
+            said = pool.submit(LiveWatch(claim, record).owner_said, transcript)
+            peer, _ = server.accept()
+            with peer, peer.makefile("rwb") as stream:
+                asked = FieldCodec.decode(SessionRequest, FieldCodec.parse(stream.readline()))
+                assert asked == ReadOwnerSaid(transcript)
+                reply = OwnerSaidReply(("the new order",))
+                stream.write(FieldCodec.compact(FieldCodec.encode(reply)).encode() + b"\n")
+            assert said.result(timeout=5) == ("the new order",)
+
+
+def test_every_bridge_stays_constructible_with_the_owner_said_request():
+    """Only a line-monitor bridge serves ReadOwnerSaid; declaring it above that made the Codex
+    and OpenCode bridges abstract, and no check noticed."""
+    assert not (CodexBridge.__abstractmethods__ | OpenCodeBridge.__abstractmethods__
+                | ClaudeBridge.__abstractmethods__)
+    assert not hasattr(CodexBridge, "owner_said") and not hasattr(OpenCodeBridge, "owner_said")
+
+
+def test_a_refusal_lands_when_the_bridge_is_swapping(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", "home")
+    record = WatchRecord("lead", str(tmp_path), ("watch",), tmp_path / "inbox")
+    assert LiveWatch(WatchClaim("swapping"), record).owner_said(tmp_path / "s.jsonl") == ()
+
+
+def test_the_bus_and_the_watch_stay_open_during_a_deal(capsys, dealt_session):
+    transcript, _ = dealt_session
+    watch = {"command": "agent-comms-claude-bridge watch"}
+    for tool, tool_input in (("mcp__comms__comms_inbox", {}), ("mcp__comms__comms_history", {}),
+                             ("mcp__comms__comms_threads", {}), ("mcp__comms__comms_send", {}),
+                             ("Bash", watch), ("Monitor", watch)):
+        assert not refused(capsys, gated(transcript, tool, tool_input))
+    for tool, tool_input in (("mcp__comms__comms_order", {}), ("Bash", {"command": "ls"}),
+                             ("Bash", {"command": f"{watch['command']} | head"}),
+                             ("Monitor", {"command": "tail -f x"})):
+        assert refused(capsys, gated(transcript, tool, tool_input))
+
+
+def test_an_audit_written_before_owner_words_and_broke_left_still_answers(tmp_path):
+    audit = tmp_path / "s.audit.json"
+    audit.write_text(json.dumps({
+        "rules": [{"rule": "voice", "broke": ["x"], "quote": "> q", "does": "d", "why": "w"}],
+        "owner_words": [{"words": "w", "doing": "d"}]}))
+    assert SessionAudit.read(audit) == SessionAudit((RuleAudit("voice", "> q", "d", "w"),))
+
+
+def test_the_deal_prints_the_template_once(tmp_path, capsys, commanding_session):
     """The hook's order prints the one template; the first refusal does not print it again."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     said = DeckStart.decode(hook_record(transcript, "SessionStart")).take()
     template = next(part for part in said if "{\n" in part)
-    example = AuditDue.worked_answer
-    assert json.dumps(FieldCodec.encode(example), ensure_ascii=False) in template
-    spine = next(rule for rule in CommanderReader.rules() if rule.name == example.rule)
-    assert example.unengaged(spine.path) == ""
     assert {"quote", "does", "why"} <= json.loads(template[template.index("{\n"):])["rules"][0].keys()
     gated(transcript, "Bash", {}).judge()
     assert "{\n" not in json.loads(capsys.readouterr().out)["hookSpecificOutput"]["permissionDecisionReason"]
@@ -813,8 +893,7 @@ def test_every_tool_but_read_waits_for_each_dealt_rule_file_then_its_audit(
     audit = transcript.with_suffix(".audit.json")
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # no audit yet
     assert not refused(capsys, gated(transcript, "Write", {"file_path": str(audit)}))
-    audit.write_text(json.dumps({"rules": [{"rule": rule.name} for rule in CommanderReader.rules()],
-                                 "owner_words": []}))
+    audit.write_text(json.dumps({"rules": [{"rule": rule.name} for rule in CommanderReader.rules()]}))
     assert refused(capsys, gated(transcript, "Bash", {"command": "ls"}))  # read, never answered
     audit.write_text(answered_audit(CommanderReader))
     assert not refused(capsys, gated(transcript, "Bash", {"command": "ls"}))
@@ -846,10 +925,8 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
         gated(transcript, "Read", {"file_path": str(source)}).completed()
     due = start.current().due
     assert {entry.rule for entry in template.rules} == due.rules
-    assert tuple(answer.words for answer in template.owner_words) == words
-    assert all(not answer.doing for answer in template.owner_words)
-    assert due.refusal(template)  # the blank template cannot count as the completed audit
-    for invalid in ("not JSON", '{"rules": [], "owner_words": []}'):
+    assert {entry.rule for entry in template.rules} == due.rules
+    for invalid in ("not JSON", '{"rules": []}'):
         start.audit.write_text(invalid)
         gated(transcript, "Bash", {}).judge()
         output = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
@@ -860,18 +937,10 @@ def test_refusal_counts_names_tool_and_prefills_the_owned_audit(
     assert "Call #1 since this deal, refused." in capsys.readouterr().out
 
 
-def test_the_audit_answers_each_shown_prompt_by_its_own_words_with_an_action():
-    due = AuditDue(frozenset({"voice"}), ("fix the gate", "land the queue"))
-    audited = (RuleAudit("voice"),)
-    duplicated = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),) * 2)
-    assert "land the queue" in due.refusal(duplicated)
-    idle = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
-                                  OwnerWordsAnswer("land the queue", "  ")))
-    assert "no action" in due.refusal(idle)
-    answered = SessionAudit(audited, (OwnerWordsAnswer("fix the gate", "editing read_gate"),
-                                      OwnerWordsAnswer("land the queue", "merging #3572")))
-    assert due.refusal(answered) == ""
-    assert "voice" in due.refusal(SessionAudit((), answered.owner_words))
+def test_the_audit_owes_only_its_rules():
+    due = AuditDue(frozenset({"voice"}), ("fix the gate",))
+    assert due.refusal(SessionAudit((RuleAudit("voice"),))) == ""
+    assert "voice" in due.refusal(SessionAudit(()))
 
 
 def test_a_subagent_and_an_unbound_session_are_never_gated(
@@ -924,7 +993,7 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
     start = DeckStart.decode(hook_record(transcript, "SessionStart"))
     first = start.current().paths[0]
     start.record_read(first, ReadSpan(1, sys.maxsize, sys.maxsize))
-    start.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    start.audit.write_text('{"rules": []}', encoding="utf-8")
     if retired:
         old = start.current()
         start.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
@@ -944,7 +1013,7 @@ def test_a_subagent_compaction_deals_the_subagent_not_its_session(tmp_path, comm
     transcript.write_text("")
     assert session_start(transcript, "compact").returncode == 0
     main = DeckStart.decode(hook_record(transcript, "SessionStart"))
-    main.audit.write_text('{"rules": [], "owner_words": []}', encoding="utf-8")
+    main.audit.write_text('{"rules": []}', encoding="utf-8")
     dealt = main.record.read_bytes()
     result = session_start(transcript, "compact", agent_id="a9")
     assert result.returncode == 0, result.stderr

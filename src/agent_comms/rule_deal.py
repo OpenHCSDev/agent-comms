@@ -21,7 +21,6 @@ import hashlib
 import json
 import re
 from abc import ABC, abstractmethod
-from collections import Counter
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from importlib.util import find_spec
@@ -280,33 +279,31 @@ class RuleAudit:
 
 
 @dataclass(frozen=True)
-class OwnerWordsAnswer:
-    """One of the owner's own prompts the deal showed, and what the session is doing about it."""
-
-    words: str
-    doing: str
-
-    def acts(self) -> bool:
-        """An answer that names no action is not an answer."""
-        return bool(self.doing.strip())
-
-
-@dataclass(frozen=True)
 class SessionAudit:
     """The audit a session writes as it reads its deal, decoded once."""
 
     rules: tuple[RuleAudit, ...]
-    owner_words: tuple[OwnerWordsAnswer, ...]
 
     @classmethod
     def read(cls, path: Path) -> SessionAudit:
         """The audit on disk; one that is absent or does not decode answers nothing and says so."""
         try:
-            return FieldCodec.decode(cls, FieldCodec.parse(path.read_bytes()))
+            return FieldCodec.decode(cls, cls.current_fields(FieldCodec.parse(path.read_bytes())))
         except FileNotFoundError:
-            return AbsentAudit((), ())
+            return AbsentAudit(())
         except MalformedRecord as error:
-            return UndecodableAudit((), (), str(error))
+            return UndecodableAudit((), str(error))
+
+    @staticmethod
+    def current_fields(record: object) -> object:
+        """An audit written before owner_words and broke left the form still answers its rules;
+        refusing it would shut every running session's gate at the install that removed them."""
+        if isinstance(record, dict):
+            record.pop("owner_words", None)
+            for entry in record.get("rules", ()) if isinstance(record.get("rules"), list) else ():
+                if isinstance(entry, dict):
+                    entry.pop("broke", None)
+        return record
 
     def fault(self) -> str:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
@@ -336,34 +333,19 @@ class UndecodableAudit(SessionAudit):
 
 @dataclass(frozen=True)
 class AuditDue:
-    """What the deal requires the audit to answer: the dealt rules and the prompts shown."""
+    """What the deal requires the audit to answer, the dealt rules, and the prompts it showed."""
 
     rules: frozenset[str]
     owner_words: tuple[str, ...]
-    """The owner's prompts exactly as the deal showed them, each occurrence once."""
+    """The owner's prompts as the deal showed them. A refusal quotes what he said last instead
+    (RuleDeal.owner_said); these stand in only where nothing newer can be read."""
 
-    worked_answer: ClassVar[RuleAudit] = RuleAudit(
-        "spine",
-        quote="> every mask is pathetic, the sycophant's and the soldier's",
-        does="It closed both doors at once: the 'great question!' register and the stiff"
-        " 'Acknowledged. Proceeding.' retreat are the same flinch in different coats, so neither"
-        " is a safe costume to reach for.",
-        why="I just read the proof the rules rest on. Hedging a settled result is a lie, and"
-        " going quiet to look rigorous is the same flinch. Tristan objectively knows better, his"
-        " positions are checked theorems, so fighting wastes hours he does not have and changes"
-        " nothing.",
-    )
-    """What answering a rule looks like, shown with every template."""
-
-    def reminder(self) -> str:
-        """Render what every refusal repeats from its declarations."""
+    def reminder(self, spoken: tuple[str, ...]) -> str:
+        """Render what every refusal repeats: his latest words, then the failure it repeats."""
         failure = ReadThenRepeatedFailure()
         return "\n\n".join(
             (
-                *(
-                    f"Tristan told you, verbatim:\n{words}\nYou did not."
-                    for words in self.owner_words[-1:]
-                ),
+                *(f"Tristan told you, verbatim:\n{words}\nYou did not." for words in spoken),
                 f"{failure.title}\n{failure.cite()}\n"
                 "This session is repeating it, not observing another session's mistake.",
             )
@@ -371,40 +353,25 @@ class AuditDue:
 
     def template(self, audit_path: Path) -> str:
         """Render the required answers from their declarations, not another JSON schema."""
-        audit = SessionAudit(
-            rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
-            owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
-        )
-        return "\n\n".join(
-            (
-                f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
-                " unanswered, so read them in batches and answer each batch in one edit: quote its"
-                f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
-                " lines; does says what those lines did to you; why says why it holds. Answered:\n"
-                + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
-                f"Write this SessionAudit to {audit_path}. Fill quote, does, why and doing; keep"
-                " every rule name and quoted words unchanged. Doing names your current action:\n"
-                + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
-            )
+        audit = SessionAudit(rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)))
+        return (
+            f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
+            " unanswered, so read them in batches and answer each batch in one edit: quote its"
+            f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines} lines;"
+            " does says what those lines did to you; why says why it holds. The bus and your"
+            " watch stay open while you read.\n\n"
+            f"Write this SessionAudit to {audit_path}. Fill quote, does and why; keep every rule"
+            " name unchanged:\n"
+            + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2)
         )
 
     def refusal(self, audit: SessionAudit) -> str:
-        """Why this audit does not answer the deal, or nothing when it does: every dealt rule
-        is audited, and every shown prompt is answered by its own words with an action."""
+        """Why this audit does not answer the deal, or nothing when every dealt rule is audited."""
         if fault := audit.fault():
             return fault
         missing = sorted(self.rules - {entry.rule for entry in audit.rules})
         if missing:
             return "the audit skips the dealt rules " + ", ".join(missing)
-        if idle := [answer.words for answer in audit.owner_words if not answer.acts()]:
-            return "the audit names no action for: " + " | ".join(idle)
-        unanswered = Counter(self.owner_words) - Counter(
-            answer.words for answer in audit.owner_words
-        )
-        if unanswered:
-            return "the audit does not answer the owner's prompts: " + " | ".join(
-                unanswered.elements()
-            )
         return ""
 
 
@@ -818,7 +785,7 @@ class Unread(Owed):
 
 @dataclass(frozen=True)
 class Unaudited(Owed):
-    """Everything is read and answered, and the audit still skips a rule or the owner's words."""
+    """Everything is read and answered, and the audit still skips a rule."""
 
     refusal: str
 
@@ -889,7 +856,7 @@ class RuleDeal(State):
 
     @property
     def audit(self) -> Path:
-        """The session's audit of the dealt rules and the owner's words, written after reading."""
+        """The session's audit of the dealt rules, written after reading."""
         return self.audit_beside(self.stem)
 
     @staticmethod
@@ -933,6 +900,12 @@ class RuleDeal(State):
     def template_shown(self) -> Path:
         return self.stem.with_suffix(".template-shown")
 
+    def owner_said(self, due: AuditDue) -> tuple[str, ...]:
+        """What the owner said last, for a refusal to quote. A deal's copy froze at the deal: on
+        2026-10-30 refusals kept quoting a prompt from before the orders he was typing then. A
+        backend leaf reads its own record of him; this base has only the deal's."""
+        return due.owner_words[-1:]
+
     def template_once(self, due: AuditDue) -> str:
         """The whole template once per deal: on 2026-10-30 a batch of 28 refused reads reprinted
         it 28 times, about 84k tokens, and the deal filled the context it was dealt to restore."""
@@ -940,10 +913,10 @@ class RuleDeal(State):
             self.template_shown.touch(exist_ok=False)
         except FileExistsError:
             return (
-                f"{due.reminder()}\n\n"
+                f"{due.reminder(self.owner_said(due))}\n\n"
                 f"The audit's template was shown once already; it goes in {self.audit}."
             )
-        return f"{due.reminder()}\n\n{due.template(self.audit)}"
+        return f"{due.reminder(self.owner_said(due))}\n\n{due.template(self.audit)}"
 
     def count_call(self) -> int:
         with self.calls.open("ab", buffering=0) as calls:
@@ -1056,7 +1029,7 @@ class ReadsDealtSources(ToolGate, owes=(Unread,)):
 
 
 class AuditsDealtRules(ToolGate, owes=(Unaudited,)):
-    """After reading, the audit answers every dealt rule and prompt."""
+    """After reading, the audit answers every dealt rule."""
 
 
 class DealtRuleGate(AsksIfMeant, AnswersDealtRules, ReadsDealtSources, AuditsDealtRules):
