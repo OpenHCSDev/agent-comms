@@ -585,6 +585,9 @@ query($owner: String!, $name: String!, $after: String) {
         )
 
     def changed(self, base: str, head: str) -> frozenset[str]:
+        """A commit differs from itself in nothing, so an idle worktree launches no diff."""
+        if base == head:
+            return frozenset()
         return frozenset(path for path in self._git(
             "diff", "--name-only", "-z", "--no-renames", base, head).split("\0") if path)
 

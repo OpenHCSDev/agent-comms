@@ -36,6 +36,7 @@ from agent_comms.nominal_census import NominalCensus
 from agent_comms.plan_phases import BusDeletionPhase, FLAG, ExternalBoundariesPhase, PlanPhase, RostersPhase
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
+from agent_comms.work_branches import WorkBranches
 from fixture_git import IDENTITY
 
 
@@ -166,6 +167,31 @@ def test_main_tree_grep_uses_the_same_repository_tree_as_its_module_reader(tmp_p
     assert current.holds(RostersPhase.evidence)
     assert not current.main.matching_lines(r"declared", ("src",))
     assert len(tuple(current.main.modules(("src",)))) == 1
+
+
+@pytest.mark.parametrize("paths", [
+    ("src",), ("src/kept.py",), ("src/nested",), ("src", "src2"), ("src2/kept.py", "src/kept.py"),
+    ("src/nested.py",), ("gone",),
+])
+def test_modules_answer_the_listing_git_gives_for_their_paths(tmp_path, paths):
+    """A directory named like a module, and a sibling sharing a path's prefix, are not modules."""
+    main = main_of(tmp_path, {
+        "src/kept.py": "kept = 1\n", "src/nested/inner.py": "inner = 1\n",
+        "src/nested.py/held.py": "held = 1\n", "src/notes.md": "notes\n", "src2/kept.py": "other = 1\n",
+    }).main
+    listed = git(tmp_path, "ls-tree", "-r", "--name-only", main.commit, "--", *paths).splitlines()
+    assert [module.file_path for module in main.modules(paths)] == [
+        name for name in listed if name.endswith(".py")]
+
+
+def test_changed_paths_between_commits_and_of_a_commit_against_itself(tmp_path):
+    first = main_of(tmp_path, {"src/kept.py": "kept = 1\n"}).main.commit
+    (tmp_path / "src/kept.py").write_text("kept = 2\n")
+    git(tmp_path, "commit", "-qam", "next")
+    second = git(tmp_path, "rev-parse", "HEAD")
+    branches = WorkBranches(tmp_path)
+    assert branches.changed(first, second) == {"src/kept.py"}
+    assert branches.changed(second, second) == frozenset()
 
 
 def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(tmp_path):
@@ -400,7 +426,7 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
 
     counted = Counted("x = 1")
     assert reading.holds(counted)
-    again = reading.following(())
+    again = reading.following((), reading.main)
     assert again.holds(counted)
     assert len(reads) == 1
 
@@ -411,7 +437,7 @@ def test_main_evidence_reads_once_per_commit_and_unknown_is_reported(tmp_path):
     unreadable = Unreadable("x")
     assert not reading.holds(unreadable)
     assert reading.describe(unreadable).startswith("unknown (GitHub is down)")
-    assert unreadable not in reading.following(()).reads
+    assert unreadable not in reading.following((), reading.main).reads
 
 
 def test_document_landing_evidence_reads_main_without_counting_quoted_source(tmp_path):

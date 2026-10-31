@@ -91,6 +91,11 @@ class MainTree:
         """This tree's membership, including directories, without requiring blob contents."""
         return Repo.tree_objects(self.repo.checkout, self.commit, (), "-r", "-t")
 
+    @cached_property
+    def directories(self) -> frozenset[str]:
+        """The members of ``objects`` that hold other members."""
+        return frozenset(str(PurePosixPath(name).parent) for name in self.objects)
+
     def missing(self, paths: tuple[str, ...]) -> tuple[bool, ...]:
         """Tree membership does not require a present path's promised contents."""
         return tuple(path not in self.objects for path in paths)
@@ -152,8 +157,9 @@ class MainTree:
         ``git cat-file --batch``."""
         for deleted in self.parsed.keys() - self.objects.keys():
             del self.parsed[deleted]
-        listed = Repo.tree_objects(self.repo.checkout, self.commit, paths, "-r")
-        blobs = [(self.objects[name], name) for name in listed if name.endswith(self.source)]
+        blobs = [(blob, name) for name, blob in self.objects.items()
+                 if name.endswith(self.source) and name not in self.directories
+                 and any(name == path or name.startswith(f"{path}/") for path in paths)]
         fresh = [(blob, name) for blob, name in blobs
                  if self.parsed.get(name, ("", None))[0] != blob]
         contents = Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh))
