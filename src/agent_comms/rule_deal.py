@@ -163,7 +163,7 @@ class MeantRecord:
 
     def next_line(self, words: tuple[str, ...]) -> str:
         """The first dodge is told off; each later one hears its own newest words first."""
-        if len(self.open) == 1 or not words:
+        if len(self.open) == 1:
             return "fuck you"
         quoted = words[-1].strip().splitlines()[0][:200]
         return f"> {quoted}\n\nfuck you. it's literally your default"
@@ -212,15 +212,18 @@ class Speaking(Voice):
         deal.meant.update(asked)
 
     def escalate(self, deal: RuleDeal) -> None:
-        """A call refused while the question stands: once the last line has reached the
-        session, it is a dodge, and the next line goes out. Until then the refusal itself
-        carries the question, so a session whose bridge is down can still answer."""
+        """A call refused while the question stands is a dodge only once the session has
+        written words after the last line reached it, and none of them answer. A refused call
+        alone proves nothing: Claude Code can run the hook before it writes the words sent with
+        the call, and on 2026-10-30 claude-code got three "fuck you"s while it was typing yes.
+        Until then the refusal itself carries the question, so a session whose bridge is down
+        can still answer."""
 
         def escalated(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
-            if not meant.open or not deal.delivered(meant.open[-1]):
+            words = deal.said_after(meant.open[-1]) if meant.open else ()
+            if not words:
                 return DocumentChange.to(meant)
-            line = meant.next_line(deal.said_since(meant.open[-1].offset))
-            return DocumentChange.to(meant.said(self.say(line, deal)))
+            return DocumentChange.to(meant.said(self.say(meant.next_line(words), deal)))
 
         deal.meant.update(escalated)
 
@@ -919,9 +922,9 @@ class RuleDeal(State):
         deal never asks, so it has none to read."""
         return ()
 
-    def delivered(self, asked: Asked) -> bool:
-        """Whether this line has reached the session."""
-        return False
+    def said_after(self, asked: Asked) -> tuple[str, ...]:
+        """The session's words after this line reached it; none before it arrives."""
+        return ()
 
     def audit_written(self) -> None:
         """An audit edit completed: the rules it now answers are each asked about once."""
