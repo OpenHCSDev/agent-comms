@@ -5,7 +5,7 @@ from agent_comms.channels import AnyChannel
 from agent_comms.cli_command import CliCommand
 from agent_comms.comms import Comms
 from agent_comms.field_codec import Argument
-from agent_comms.history_result import HistoryPageResult
+from agent_comms.history_result import DmHistoryPageResult, HistoryPageResult
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import NewestCursor
 from agent_comms.page_traversal import PageCursor
@@ -44,4 +44,6 @@ class HistoryCliCommand(CliCommand):
         target = CommandTarget.named(self.target)
         bounds = PageBounds(self.before.older(), self.limit)
         page = ctx.views.history_page(target, bounds, viewer=self.me)
-        return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
+        return target.history_result(
+            ctx.bus.require_channel, DmHistoryPageResult, tuple(reversed(page.messages)), page.has_older,
+        )

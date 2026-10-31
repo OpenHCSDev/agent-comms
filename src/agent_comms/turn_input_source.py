@@ -19,20 +19,16 @@ from .field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
-from .ordinary_turn_rules import (
-    AcceptedInputCheck,
-    MissingAcceptedInputCheck,
-    OrdinaryOwnerCheck,
-    RunningOrdinaryOwnerCheck,
-    UnboundOrdinaryInputRule,
-    UnconsumedDependencyRule,
-)
+from .ordinary_turn_rules import MissingAcceptedInputCheck, UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from .reservation_rules import ReservationViolationError
 from .routing import NoTurnRouting, TurnRouting
 from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .started_input import StartedInput
 from .transcript_routes import DisplayText, NoDisplayText, SentInputText
 
+from .reservation_rules import ReservationRule, RuleCheck
+from .registry_document import RegistrySnapshot
+from .threads import Thread
 if TYPE_CHECKING:
     from .acp_extension import QueueScope
     from .comms import Comms
@@ -44,7 +40,112 @@ if TYPE_CHECKING:
     from .owned_send import OwnedSend
     from .runtime import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation
-    from .threads import Thread
+    from .queued_input import QueuedInput
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrdinaryOwnerCheck(RuleCheck):
+    expected: Thread
+    current: Thread
+    registry: RegistrySnapshot
+    canonical: str
+    claim_generation: int
+    turn: TurnId
+
+    def worktree_matches(self) -> bool:
+        return self.current.worktree == self.expected.worktree
+
+
+class RunningOrdinaryOwnerCheck(OrdinaryOwnerCheck):
+    """The running turn retains its project; a selection is for the next turn."""
+
+    def worktree_matches(self) -> bool:
+        return self.current.continues_running_project(self.expected)
+
+
+class OrdinaryIncarnationRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The captured ordinary thread incarnation changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.expected.incarnation.current(check.registry)
+
+
+class OrdinaryRunningRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner is no longer running."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.registry.status(check.canonical).running
+
+
+class OrdinaryClaimRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner claim_scope generation changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return check.registry.claim_generation(check.canonical) != check.claim_generation
+
+
+class OrdinaryProcessRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary turn belongs to another process incarnation."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return check.current.process_identity != check.expected.process_identity
+
+
+class OrdinaryWorktreeRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner's worktree changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.worktree_matches()
+
+
+class OrdinaryTurnRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The captured ordinary turn is no longer the active turn."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return (
+            not check.current.turn_record.read().matches(check.turn)
+        )
+
+
+@dataclass(frozen=True, kw_only=True)
+class AcceptedInputCheck(RuleCheck):
+    acknowledgement: QueuedInput
+    current: Thread
+    claim_generation: int
+    input_id: InputId
+    keys: tuple[InputKey, ...]
+    inputs: InputDrain
+    session_id: str
+
+
+class AcceptedInputAuthorityRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The live input's accepted owner or goal authority changed."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return not check.acknowledgement.current(check.current, check.claim_generation)
+
+
+class AcceptedInputKeyRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The input does not name its exact accepted ACP acknowledgement."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return (check.input_id, check.keys) != (check.acknowledgement.input_id, (check.acknowledgement.key,))
+
+
+class AcceptedInputSourceRule(ReservationRule):
+    check_type = AcceptedInputCheck
+    explanation = "The captured accepted input source is no longer live."
+
+    def violated(self, check: AcceptedInputCheck) -> bool:
+        return not check.acknowledgement.is_live(check.inputs, check.session_id)
 
 
 class TurnAcceptance(ABC):

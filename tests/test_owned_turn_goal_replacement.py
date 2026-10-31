@@ -8,6 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms import backend
+from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.acp import CommsAgent
 from agent_comms.turn_inbox import InputContent
 from agent_comms.channel_input_batch import InputBatch
@@ -87,7 +88,7 @@ async def test_turn_after_order_replacement_is_allowed(tmp_path, native_runtime_
                     order=replace(order(source), id=OrderId.mint()),
                 ))
                 # A replaced order keeps the running turn's authority; only following input waits.
-                sender.goal_permission.require_current(replaced)
+                OrdinaryGoalRule.require(sender.goal_permission, replaced)
                 async with QueuedInput.reserve(
                     agent.inputs, session_id, worker, text='Following input after replacement',
                     prompt='Following input after replacement', echo=True, images=(), controller=None,
@@ -154,14 +155,14 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
                     acceptance=NoTurnAcceptance())
     async with AsyncExitStack() as resources, AsyncExitStack() as permits:
         assert await old.acquire(resources, permits)
-        old.original.goal_permission.require_current(initial)
+        OrdinaryGoalRule.require(old.original.goal_permission, initial)
         todo = comms.goals.todos.get('P1')
         replaced = comms.goals.update_goal('worker', OrderGoalAction(
             problem='P1', expected_revision=todo.revision, assigner=actor,
             commander='lead', request=request, review_at=RecordedEventTime(2000),
             order=replace(order(source), id=OrderId.mint()),
         ))
-        old.original.goal_permission.require_current(replaced)
+        OrdinaryGoalRule.require(old.original.goal_permission, replaced)
 
     # Exercise the real lease-to-reservation boundary without replacing any methods.
     # A second commander publication during preparation makes the leased snapshot stale.
@@ -188,7 +189,7 @@ async def test_goal_published_during_preparation_is_current_at_reservation(tmp_p
         try:
             assert current.original.keys != old.original.keys
             # This is the same goal check CodingToolOwner.allow runs before a tool.
-            current.original.goal_permission.require_current(comms.registry.require('worker').goal)
+            OrdinaryGoalRule.require(current.original.goal_permission, comms.registry.require('worker').goal)
         finally:
             current.settle_unbound()
 
@@ -226,4 +227,4 @@ async def test_order_reactivating_a_blocked_goal_keeps_the_running_turn(tmp_path
         ))
         assert retried.state == ActiveGoal()
         # The same check CodingToolOwner.allow runs before each of the turn's tool calls.
-        turn.original.goal_permission.require_current(comms.registry.require('worker').goal)
+        OrdinaryGoalRule.require(turn.original.goal_permission, comms.registry.require('worker').goal)

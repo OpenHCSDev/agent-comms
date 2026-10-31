@@ -1,43 +1,26 @@
 """History result declarations own their wire keys and target context."""
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .cli_result import CliResult
 from .field_codec import FieldCodec
+from .messages import Message
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .page_traversal import PageCursor
 
 
-class HistoryEntry(ABC):
-    """What a history page reads from each entry it reports."""
-
-    __slots__ = ()
-
-    @property
-    @abstractmethod
-    def view_cursor(self) -> PageCursor: ...
-
-    @property
-    @abstractmethod
-    def display_metadata(self) -> dict: ...
-
-    @abstractmethod
-    def to_wire(self) -> dict: ...
-
-
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult, ToolResult):
     messages_key: ClassVar[str] = "messages"
-    messages: tuple[HistoryEntry, ...]
+    messages: tuple[Message, ...]
     has_older: bool
 
     @classmethod
-    def for_target(cls, name: str, messages: tuple[HistoryEntry, ...], has_older: bool) -> Self:
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
         return cls(messages, has_older)
 
     @property
@@ -62,7 +45,7 @@ class ChannelHistoryPageResult(HistoryPageResult):
     channel: str
 
     @classmethod
-    def for_target(cls, name: str, messages: tuple[HistoryEntry, ...], has_older: bool) -> Self:
+    def for_target(cls, name: str, messages: tuple[Message, ...], has_older: bool) -> Self:
         return cls(messages, has_older, name)
 
     def to_wire(self) -> dict[str, object]:

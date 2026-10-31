@@ -8,9 +8,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.field_codec import GoalId
 from .goal_authority import GoalTurnAuthority
-from .ordinary_turn_rules import OrdinaryGoalRule
-from .reservation_rules import ReservationViolationError
-from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .goal_waits import GoalWait
@@ -88,10 +85,6 @@ class TurnGoalPermission(GoalPermission):
 
     def dependency_current(self, dependency: InputDependency, wait: GoalWait) -> bool:
         return self.captured.dependency_current(dependency, wait)
-
-    def require_current(self, current: GoalDeclaration) -> None:
-        if not self.allows(current):
-            raise SelectedToolDenied(str(ReservationViolationError(OrdinaryGoalRule())))
 
     def published(self, goal: GoalDeclaration) -> None:
         self.captured = PublishedGoalPermission(goal.authority)

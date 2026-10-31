@@ -8,14 +8,8 @@ from dataclasses import dataclass
 from functools import partial
 from typing import TYPE_CHECKING
 
-from agent_comms.ordinary_turn_rules import (
-    InputKeysCheck,
-    MissingAcceptedInputRule,
-    MissingTurnOwnerCheck,
-    OrdinaryContextCheck,
-    OrdinaryOwnerCheck,
-    RunningOrdinaryOwnerCheck,
-)
+from agent_comms.turn_input_source import OrdinaryOwnerCheck, RunningOrdinaryOwnerCheck
+from agent_comms.ordinary_turn_rules import MissingAcceptedInputRule, MissingTurnOwnerCheck
 from agent_comms.send_outcome import AuthorityChangedSend, SendBoundary, SendOutcome
 
 from . import agent_events as events
@@ -38,12 +32,28 @@ from .turn_input_source import (
     TurnInputSource,
 )
 
+from .reservation_rules import RuleCheck
+from .goal_waits import GoalWait
 if TYPE_CHECKING:
-    from .goal_waits import GoalWait
+    from agent_comms.channel_coding_tools import OrdinaryContextCheck
     from .registry_document import RegistrySnapshot
     from .turn_goal_permission import TurnGoalPermission
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True, kw_only=True)
+class InputKeysCheck(RuleCheck):
+    source: TurnInputSource
+    text: str
+
+
+class InputKeysRule(ReservationRule):
+    check_type = InputKeysCheck
+    explanation = "The input keys do not prove this exact original channel batch."
+
+    def violated(self, check: InputKeysCheck) -> bool:
+        return not check.source.valid_keys(check.text)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -46,10 +46,63 @@ from .threads import Thread
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
 
+from .reservation_rules import ReservationRule, ReservationViolationError
+from .turn_input_source import TurnInputSource
+from .reservation_rules import RuleCheck
+from .goals import GoalDeclaration
+from .goal_waits import GoalWait
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .coordination_tables.assignments import WakeAssignment
     from .pi_payloads import PiToolResult
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrdinaryContextCheck(RuleCheck):
+    source: TurnInputSource
+    owner: Thread
+    goal: GoalDeclaration
+    wait: GoalWait
+    comms: Comms
+
+
+class OrdinaryGoalRule(ReservationRule):
+    check_type = OrdinaryContextCheck
+    explanation = "The input's captured goal permission no longer applies."
+
+    def violated(self, check: OrdinaryContextCheck) -> bool:
+        return not check.source.goal_permission.allows(check.goal)
+
+    @classmethod
+    def require(cls, permission: TurnGoalPermission, current: GoalDeclaration) -> None:
+        if not permission.allows(current):
+            raise SelectedToolDenied(str(ReservationViolationError(cls())))
+
+
+class OrdinaryDependencyRule(ReservationRule):
+    check_type = OrdinaryContextCheck
+    explanation = "The original dependency wait was removed or replaced."
+
+    def violated(self, check: OrdinaryContextCheck) -> bool:
+        return not check.source.dependency_current(check.wait)
+
+
+class OrdinaryWaitRule(ReservationRule):
+    check_type = OrdinaryContextCheck
+    explanation = "The current dependency wait does not authorize this input."
+
+    def violated(self, check: OrdinaryContextCheck) -> bool:
+        return not check.source.allows_wait(
+            check.wait, check.comms, check.owner.incarnation.require_recorded()
+        )
+
+
+class OrdinaryGoalInputRule(ReservationRule):
+    check_type = OrdinaryContextCheck
+    explanation = "An active goal does not authorize this routed input."
+
+    def violated(self, check: OrdinaryContextCheck) -> bool:
+        return not check.source.allows_goal_input(check.goal)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,7 +134,7 @@ class CodingToolOwner(ABC):
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
         def check(store: Coordination) -> None:
             snapshot = self.comms.registry.snapshot()
-            self.goal_permission.require_current(snapshot.require(self.owner_name).goal)
+            OrdinaryGoalRule.require(self.goal_permission, snapshot.require(self.owner_name).goal)
             self.verify(store, turn, snapshot)
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(store, slot, call.call_id)
