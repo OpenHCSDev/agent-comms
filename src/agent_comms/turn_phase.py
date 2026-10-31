@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
+from .activity import Activity, ActivityState, ObservedActivity
 from .declared_family import DeclaredFamily
 from .field_codec import ToolCallId
 from .pi_payloads import ProviderDiagnosticError
@@ -14,16 +14,6 @@ from .pi_payloads import ProviderDiagnosticError
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
-
-
-@dataclass(frozen=True)
-class TurnPhaseOutput(ThreadOutput):
-    agents: AgentActivity
-    lease: TurnLeaseFence
-
-    @property
-    def activity_thread(self) -> str:
-        return self.lease.identity.incarnation.name
 
 
 class StallExempt:
@@ -135,7 +125,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return f"Model produced no RPC progress for {budget:g} seconds."
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        TurnPhaseOutput(agents, lease).enter(self)
+        agents.enter_phase(lease.identity.incarnation.name, self)
 
 
 class Excursion(TurnPhase, declared_name=None):
