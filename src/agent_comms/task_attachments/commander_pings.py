@@ -407,7 +407,6 @@ class CommanderUpdateStore(PatternFile, SingleFileStore, DurableFile,
     @classmethod
     def record(cls, root: Path, packet: CommanderUpdate) -> None:
         store = cls.at(root, packet.commander)
-        store.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         store.update(lambda previous: DocumentChange.to((packet,)))
 
 

@@ -22,10 +22,10 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObserva
 from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.commander_hud import (
-    CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
+    CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, CommanderUpdateStore, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, CommanderUpdateStore, PublishedFacts, RulePing
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
@@ -411,18 +411,18 @@ def everything_to_lead(comms):
     return {message.reference for message in page.messages}
 
 
-def test_hidden_tool_time_does_not_append_quiet_bus_history(notification_bus):
+def test_hidden_tool_time_keeps_publication_display_facts(notification_bus):
     comms = notification_bus
     recorded_turn(comms, (False,))
     hud = beat(comms, states=state_cards(comms, UnitState))
     first, = notifications(comms)
-    assert isinstance(first.task, CommanderNotice)
     for _ in range(2):
         recorded_turn(comms, (False,))
         later = beat(comms, states=state_cards(comms, UnitState))
         assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
         assert hud.display_facts == later.display_facts
-    assert tuple(message.reference for message in notifications(comms)) == (first.reference,)
+        # A unit may still need a commander action; a hidden clock is not a new display fact.
+        assert first.task.publication == PublishedFacts.of(later.display_facts)
 
 
 def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
@@ -444,12 +444,15 @@ def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notificati
     assert len(hud.board) == 1
 
     publish(comms, "lead", "worker", time.time())
+    cleared = beat(comms, (rule,))
+    assert not cleared.packets[0].role.counts_as_conversation()
+    assert cleared.board == ()
+    # ReviewTimerUp is already shown in the unit row, not as a separate alarm. Its
+    # disposal advances the retained board without publishing an identical quiet display.
+    assert cleared.display_facts == hud.display_facts
+    assert len(notifications(comms)) == 2
     beat(comms, (rule,))
-    _, _, cleared = notifications(comms)
-    assert isinstance(cleared.task, CommanderNotice)
-    assert CommanderFrame.current(comms, "lead").board == ()
-    beat(comms, (rule,))
-    assert len(notifications(comms)) == 3
+    assert len(notifications(comms)) == 2
 
 
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):

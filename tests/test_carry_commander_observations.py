@@ -31,7 +31,7 @@ def carry_bus(comms: Comms) -> Comms:
     commander = comms.registry.require("carry-lead").incarnation
     now = time.time()
     original = CommanderNotice(commander, ())
-    original.send(comms, now, ("original quiet publication",))
+    original.send(comms, ("original quiet publication",))
     CommanderFrame.replace_all(comms.root, (CommanderHud(
         commander=commander, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
@@ -43,7 +43,7 @@ def carry_bus(comms: Comms) -> Comms:
     latest, = CommanderUpdate.report_failure(
         commander, failure, (original,), published=(original,), now=now,
     )
-    latest.send(comms, now, ("failure after the older HUD was saved",))
+    latest.send(comms, ("failure after the older HUD was saved",))
     return comms
 
 
