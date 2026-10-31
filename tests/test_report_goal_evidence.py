@@ -1,10 +1,14 @@
 """Report completion verifies original content before changing the real goal."""
 
 import hashlib
+from functools import partial
 
 import pytest
 
+from agent_comms.coordination_errors import Refused
+from agent_comms.errors import GoalRefused
 from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import ProblemGoalOrder
 from agent_comms.progress_claims import ProgressClaim, ReportClaim
@@ -67,5 +71,15 @@ def test_report_is_not_implementation_order_completion(comms, tmp_path, report_g
     path.write_text("Delivered analysis, not an implemented fix")
     claim = ReportClaim(FileProvenance(str(path), hashlib.sha256(path.read_bytes()).hexdigest()))
     ProgressClaim.require_all((claim,), comms, tmp_path)
-    with pytest.raises(ValueError, match="checked delivered commit"):
-        ProblemGoalOrder().require_completion(report_goal, comms.goals, comms.registry.require("editor").incarnation)
+    policy = ProblemGoalOrder()
+    for operation in (
+        partial(policy.require_completion, report_goal, comms.goals, comms.registry.require("editor").incarnation),
+        policy.require_edit,
+        policy.require_model_block,
+    ):
+        with pytest.raises(GoalRefused) as denied:
+            operation()
+        with pytest.raises(Refused) as reply:
+            OwnerLine.read(OwnerFailure.refused(denied.value).wire()).reply()
+        assert reply.value.code == denied.value.code == Refused.INVALID_PARAMS
+        assert str(reply.value) == str(denied.value)

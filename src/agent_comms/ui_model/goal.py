@@ -33,9 +33,6 @@ class GoalDisplay(ABC):
     @abstractmethod
     def standby(self, execution: GoalExecution) -> bool: ...
 
-    @abstractmethod
-    def action_failure(self, error: Exception) -> str: ...
-
 
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay):
@@ -51,9 +48,6 @@ class GoalUnavailable(GoalDisplay):
 
     def standby(self, execution: GoalExecution) -> bool:
         return False
-
-    def action_failure(self, error: Exception) -> str:
-        return str(error)
 
     def heading(self, execution: GoalExecution) -> str:
         return self.last_confirmed.unavailable_heading

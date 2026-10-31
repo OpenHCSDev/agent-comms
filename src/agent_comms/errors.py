@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination_errors import DrainUnavailable
+from agent_comms.coordination_errors import DrainUnavailable, Refused
 from agent_comms_hooks import ToolRefusedError
 
 
@@ -55,6 +55,13 @@ class RouteChangedError(ValueError):
 
 class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
+
+
+class GoalRefused(Refused, RelationViolationError):
+    """A goal relation refused the action; preserve that refusal across owner RPC."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(self.INVALID_PARAMS, message)
 
 
 class UnclaimedError(RelationViolationError):

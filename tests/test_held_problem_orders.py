@@ -14,7 +14,11 @@ from agent_comms.commander.request import RequestAddVerb
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, OrderId
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.coordination_errors import Refused
+from agent_comms.errors import GoalRefused
+from agent_comms.goal_actions import ClearGoalAction, SetGoalAction
+from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (
     DeliveredProblemOrder, MergedListedPullRequest, OrderMessage, PullRequestCommit,
@@ -62,6 +66,24 @@ def held_commander(pr_commander, cited_source):
     ctx = source.model_copy(update={"root": root, "state": root / "state"})
     yield ctx
     assert source.comms.goals.todos.get(todo.id) == original
+
+
+def test_held_goal_replacement_is_a_preserved_refusal_without_writes(held_commander):
+    ctx = held_commander
+    comms = ctx.comms
+    todo = comms.goals.todos.get("P1")
+    goal = comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=todo.held().generation,
+    ))
+    for action in (ClearGoalAction(), SetGoalAction(text="Replace the held work")):
+        with pytest.raises(GoalRefused) as denied:
+            comms.goals.update_goal("worker", action)
+        with pytest.raises(Refused) as reply:
+            OwnerLine.read(OwnerFailure.refused(denied.value).wire()).reply()
+        assert reply.value.code == denied.value.code == Refused.INVALID_PARAMS
+        assert str(reply.value) == str(denied.value)
+        assert comms.registry.require("worker").goal == goal
+        assert comms.goals.todos.get("P1") == todo
 
 
 def link_pull_request(ctx, pid, number):
