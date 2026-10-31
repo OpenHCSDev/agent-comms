@@ -26,7 +26,8 @@ from .hook_reread import ReminderCall
 from agent_comms_hooks.skill import DeckStart, Prime
 from ..cli_verbs.merge_review import ReviewedMerge
 from .shared import Binding
-from .monitor import MonitorPeer, MonitorService, SessionReady, SessionRefused, SessionReply, SessionRequest
+from .shared import MonitorService
+from .monitor import MonitorPeer, SessionReady, SessionRefused, SessionReply, SessionRequest
 
 
 @dataclass

@@ -84,7 +84,7 @@ from .shared import (
 )
 
 if TYPE_CHECKING:
-    from .monitor import MonitorAttachment
+    from .shared import MonitorAttachment
 
 
 class ClaudeMonitorFrame(MonitorIncomingFrame):

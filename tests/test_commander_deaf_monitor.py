@@ -14,7 +14,8 @@ from agent_comms.cli_bridges.session_watch import WatchClaim
 from agent_comms.task_attachments.commander_pings import CommanderNotice
 from agent_comms.task_attachments.owner_notices import FleetNotice
 from agent_comms.cli_bridges.claude import ClaudeBridge
-from agent_comms.cli_bridges.monitor import AttachMonitor, MonitorService, SessionReady
+from agent_comms.cli_bridges.shared import MonitorService
+from agent_comms.cli_bridges.monitor import AttachMonitor, SessionReady
 from agent_comms.cli_bridges.shared import Binding, MonitorProbe, Options, Serve, StoredBinding
 from agent_comms.commander_heartbeat import CommanderHeartbeat
 from agent_comms.field_codec import FieldCodec

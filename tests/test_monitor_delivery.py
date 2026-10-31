@@ -27,7 +27,8 @@ from agent_comms.locked_store import RootFile
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.cli_bridges.monitor import MonitorPeer, MonitorService
+from agent_comms.cli_bridges.shared import MonitorService
+from agent_comms.cli_bridges.monitor import MonitorPeer
 from agent_comms.cli_bridges.claude_protocol import (
     ClaudeSession, ClaudeMonitorFrame, ForeignTaskNotification, ReadResultObserved,
     ForeignAttachment, KnownTurn,
