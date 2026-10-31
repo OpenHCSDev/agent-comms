@@ -45,19 +45,15 @@ from .native_input_owner import GoalLaunchOwner
 from .owner_requests import NewestOpenRequest, RequestDirective
 from .registration import Registration
 
+from dataclasses import dataclass
+from .goal_failure_observation import GoalFailureEvidence
 if TYPE_CHECKING:
     from .agent_events import GoalChange
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
-from .goal_presentation import (
-    GoalExecution,
-    GoalExecutionSource,
-    GoalPublicationSnapshot,
-    GoalSnapshot,
-    GoalWaitTarget,
-    IdleGoalExecution,
-)
+    from .turn_lease import TurnDeclaration
+from .goal_presentation import GoalExecution, GoalPublicationSnapshot, GoalSnapshot, GoalWaitTarget, IdleGoalExecution
 from .goals import Goal, GoalDeclaration
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
@@ -72,6 +68,30 @@ from .errors import TodoError
 from .todos import SendBackVerdict, StrikeReason, Todo, JudgedCall, TodoBatch, TodoCommand, TodoStore
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class GoalExecutionSource:
+    """One read's original owners; never persisted or used as launch authority."""
+
+    goal: Goal
+    wait: GoalWait
+    generation: Generation
+    evidence: GoalFailureEvidence
+    owner: Thread
+    snapshot: RegistrySnapshot
+    agents: AgentActivity
+
+    @cached_property
+    def turn(self) -> TurnDeclaration:
+        return self.owner.turn_record.read()
+
+    @cached_property
+    def owner_alive(self) -> bool:
+        return self.owner.process_alive
+
+    def execution(self) -> GoalExecution:
+        return self.goal.state.execution(self)
 
 
 class Goals(GoalWaitRecovery):

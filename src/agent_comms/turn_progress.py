@@ -36,7 +36,7 @@ from .turn_phase import PublishingPhase
 if TYPE_CHECKING:
     from .owned_turn import OwnedTurn
     from .turn_failure import TurnFailure
-    from .turn_goal_account import TurnGoalAccount
+    from agent_comms.owned_turn import TurnGoalAccount
 
 
 @dataclass(kw_only=True)

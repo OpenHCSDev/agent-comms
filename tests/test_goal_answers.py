@@ -24,7 +24,7 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 from agent_comms.goal_turn_permit import NoLaunchPermit
 from agent_comms.goals import NoGoal
 from agent_comms.pi_payloads import PiUsage
-from agent_comms.turn_goal_account import TurnGoalAccount
+from agent_comms.owned_turn import TurnGoalAccount
 from agent_comms.turn_terminal import EndedWithoutResult, OperatorStopped
 from agent_comms.threads import Thread
 

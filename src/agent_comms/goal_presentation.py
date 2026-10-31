@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
-from functools import cached_property
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember, WireValue, GoalId
-from .goal_failure_observation import FailedTurnEvidence, GoalFailureEvidence
+from .goal_failure_observation import FailedTurnEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
@@ -17,14 +16,8 @@ from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
-    from .agent_activity import AgentActivity
     from .bus_publication import Delivered
     from .goal_actions import GoalAction
-    from .goal_attempts import Generation
-    from .goal_waits import GoalWait
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
-    from .turn_lease import TurnDeclaration
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,30 +37,6 @@ class GoalWaitTarget(WireValue):
     @classmethod
     def schema(cls) -> dict:
         return RecordedThreadIncarnation.schema()
-
-
-@dataclass(frozen=True)
-class GoalExecutionSource:
-    """One read's original owners; never persisted or used as launch authority."""
-
-    goal: Goal
-    wait: GoalWait
-    generation: Generation
-    evidence: GoalFailureEvidence
-    owner: Thread
-    snapshot: RegistrySnapshot
-    agents: AgentActivity
-
-    @cached_property
-    def turn(self) -> TurnDeclaration:
-        return self.owner.turn_record.read()
-
-    @cached_property
-    def owner_alive(self) -> bool:
-        return self.owner.process_alive
-
-    def execution(self) -> GoalExecution:
-        return self.goal.state.execution(self)
 
 
 class GoalExecution(DeclaredFamily, affix="Execution"):

@@ -14,7 +14,7 @@ from .bus_publication import Delivered
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import GoalId, GoalWaitId, NullMember, ThreadLookup, TurnId
-from .goal_presentation import GoalExecution, GoalExecutionSource, GoalWaitTarget, StandbyExecution
+from .goal_presentation import GoalExecution, GoalWaitTarget, StandbyExecution
 from .goals import Goal, GoalDeclaration
 from .input_key import InputKey, InputKeyText
 from .input_attempt import StoredInput, UnresolvedInput
@@ -30,6 +30,7 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
+    from agent_comms.goal_management import GoalExecutionSource
     from .agent_activity import AgentActivity
     from .registration import Registration
     from .message_bus import MessageBus

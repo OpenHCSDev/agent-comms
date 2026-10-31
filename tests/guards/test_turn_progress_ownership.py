@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.channel_input_batch import InputBatch
 from agent_comms.owned_turn import OwnedTurn
-from agent_comms.turn_goal_account import TurnGoalAccount
+from agent_comms.owned_turn import TurnGoalAccount
 from agent_comms.turn_progress import TurnEventPublication, TurnProgress
 
 pytestmark = pytest.mark.refactor_guard

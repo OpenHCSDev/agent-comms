@@ -11,7 +11,7 @@ from .turn_failure import BackendFailed, TurnFailure
 if TYPE_CHECKING:
     from .agent_events import Done
     from .maintenance_barrier import MaintenanceBarrier
-    from .turn_goal_account import TurnGoalAccount
+    from agent_comms.owned_turn import TurnGoalAccount
     from .turn_progress import TurnProgress
 
 
