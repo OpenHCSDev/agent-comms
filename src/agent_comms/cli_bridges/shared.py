@@ -46,7 +46,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
-    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
@@ -104,6 +104,7 @@ from .session_watch import (
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
+    BRIDGE_FAILURES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -975,10 +976,6 @@ class Enrol(Operation):
         """Enrolment alone starts nothing."""
 
 
-# What a bridge reports and stops on; anything else is a defect and crashes.
-REPORTED_FAILURES = (OSError, ValueError, CoordinationError)
-
-
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: messages.Message
@@ -1229,7 +1226,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             await self.options.operation.execute(self)
         except* (BlockingIOError, SessionFailure):
             raise
-        except* REPORTED_FAILURES as group:
+        except* BRIDGE_FAILURES as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,
@@ -1257,7 +1254,7 @@ def core_watch_failure(lines: asyncio.Queue[Callable[[], Awaitable[None]]]) -> I
         yield
     except MaintenanceHeldError as held:
         lines.put_nowait(partial(raised, held))
-    except REPORTED_FAILURES as error:
+    except BRIDGE_FAILURES as error:
         ended = CoreWatchEnded(f'Core watch ended\n{CoreError.from_exception(error).error}')
         ended.__cause__ = error
         lines.put_nowait(partial(raised, ended))
