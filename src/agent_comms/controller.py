@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from acp.schema import PermissionOption, ToolCallUpdate
 
     from .runtime import RuntimeServer
-    from .selected_write_authority import AcpSelectedWriteAuthority
+    from agent_comms.acp import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
 
 ACP_PERMISSION_TIMEOUT_SECONDS = 14.0

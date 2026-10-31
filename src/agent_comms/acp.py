@@ -91,7 +91,6 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
-from .selected_write_authority import AcpSelectedWriteAuthority
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
@@ -109,12 +108,48 @@ from .reservation_rules import ReservationViolationError
 from agent_comms.input_drain import SchedulesWake, SessionScheduleCheck, WakeDue, WakeHeld, WakeOutcome
 from .thread_identity import OwnerIdentity
 
+from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
-    from .selected_write_authority import AcpSelectedWriteAuthority
+    from .coordination_tables.assignments import WakeAssignment
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
+
+
+@dataclass
+class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
+    agent: CommsAgent
+    session_id: str
+    plans: SelectedWritePlans
+
+    def select(self, assignment, owner, generation, action):
+        plan = self.plans.load(assignment, owner, generation)
+        if plan is None:
+            return action
+        self.require_current(assignment, owner, plan.operation_id)
+        return action.with_plan(self, plan, assignment, owner)
+
+    def require_current(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> None:
+        bound = self.agent._selected_write_controllers.get((owner.name, assignment.wire_seq))
+        if bound is None or bound[0] != operation_id:
+            raise IdentityConflict("Selected write original controller is no longer bound")
+        controller = bound[1]
+        controller.require_current(self, self.session_id)
+
+    @contextmanager
+    def writing(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> Iterator[None]:
+        self.require_current(assignment, owner, operation_id)
+        try:
+            yield
+            self.plans.applied(assignment, owner, operation_id)
+        finally:
+            # An accepted intent is never retried, so a failed write ends its binding too.
+            del self.agent._selected_write_controllers[(owner.name, assignment.wire_seq)]
 
 
 @dataclass(frozen=True, kw_only=True)

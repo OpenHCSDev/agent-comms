@@ -63,7 +63,7 @@ from .private_path import PrivateSocketRole
 
 if TYPE_CHECKING:
     from .acp import CommsAgent
-    from .selected_write_authority import AcpSelectedWriteAuthority
+    from agent_comms.acp import AcpSelectedWriteAuthority
     from .turn_runner import TurnRunner
 
 
