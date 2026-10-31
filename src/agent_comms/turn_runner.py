@@ -79,7 +79,7 @@ RELAY_PREFIX = "!relay "
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerTurnScheduleCheck(SessionScheduleCheck):
-    turns: "TurnRunner"
+    turns: TurnRunner
 
 
 class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):

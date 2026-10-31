@@ -111,7 +111,7 @@ class BackgroundWake(RuleCheck):
 @dataclass(frozen=True, kw_only=True)
 class SessionScheduleCheck(RuleCheck):
     session_id: AcpSessionId
-    inputs: "InputDrain"
+    inputs: InputDrain
 
 
 class SchedulesWake(SessionScheduleCheck, ABC):
@@ -177,7 +177,7 @@ class WakeScheduleCheck(SchedulesWake, BackgroundWake):
         return WakeDue()
 
     @staticmethod
-    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "GoalDeclaration") -> None:
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: GoalDeclaration) -> None:
         """Discard stale goal work without dropping independent incoming turns."""
         active_ids = frozenset(current.id for current in goal)
         pending[:] = [

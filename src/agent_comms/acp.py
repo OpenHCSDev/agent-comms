@@ -153,9 +153,9 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
 class SelectedWakeCheck(SchedulesWake):
     """A selected turn runs beside the owner's observation, which hands it later messages."""
 
-    execution: "SelectedExecution"
+    execution: SelectedExecution
     thread: str
-    owner: "OwnerIdentity"
+    owner: OwnerIdentity
 
     async def run(self) -> WakeOutcome:
         inputs, session_id = self.inputs, self.session_id

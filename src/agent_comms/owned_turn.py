@@ -63,6 +63,7 @@ from .turn_terminal import EndedWithoutResult, TurnTerminal
 from agent_comms.errors import GoalAttemptError
 from dataclasses import field
 from .turn_item import UsageChargeId
+from .tools import CommsSetGoalTool
 from .turn_lease import TurnLeaseFence
 from .threads import Thread
 from agent_comms.pi_wire import PiUsage
@@ -120,7 +121,7 @@ class TurnGoalAccount:
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         self.has_productive_tool |= bool(event.ok)
-        if event.name != "comms_set_goal" or event.ok is not True:
+        if event.name != CommsSetGoalTool.declared_name or event.ok is not True:
             return
         with self.comms.registry.store.current_snapshot() as cut:
             owner = cut.snapshot.require(self.owner.name)
