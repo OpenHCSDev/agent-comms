@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from .registry_document import RegistryEntry, RegistrySnapshot
     from .turn_input_source import TurnInputSource
     from .turn_runner import TurnRunner
-    from .runtime import RuntimeServer
+    from .runtime_server import RuntimeServer
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -17,13 +17,8 @@ from . import launch_runtime
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary, NativeArguments
 from .registry_document import RegistryEntry, RegistrySnapshot
 from .field_codec import AcpSessionId, FieldCodec
-from .owner_connection import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequestContext,
-    OwnerConnection,
-    ResultRuntimeRequest,
-    RuntimeRequestContext,
-)
+from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext, ResultRuntimeRequest, RuntimeRequestContext
+from .owner_connection import OwnerConnection
 from .thread_identity import ClaimedIdentity, OwnerIdentity
 from .tool_result import DeclaredReply
 from .tool_result import ToolResult
@@ -31,7 +26,7 @@ from .registry_store import RegistryReadCounts
 
 if TYPE_CHECKING:
     from .owner_lifecycle import OwnerRestartSelection
-    from .runtime import RuntimeServer, SocketClient
+    from .runtime_server import RuntimeServer, SocketClient
     from .threads import Thread
     from .session_lifecycle import SessionLifecycle
     from .input_drain import OwnerSession

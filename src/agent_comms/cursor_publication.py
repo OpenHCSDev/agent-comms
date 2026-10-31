@@ -31,7 +31,7 @@ from .field_codec import InputId
 from .message_bus import MessageBus
 from .native_entries import NativeEvidenceScope
 from .publisher import ResponseWrites
-from .runtime import RuntimeServer
+from .runtime_server import RuntimeServer
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant

@@ -16,7 +16,7 @@ from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination
 from agent_comms.owner_protocol import OwnerLine, OwnerUpdate
-from agent_comms.runtime import SocketClient
+from agent_comms.runtime_server import SocketClient
 from agent_comms.threads import Thread
 
 

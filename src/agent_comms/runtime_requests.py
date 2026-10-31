@@ -37,12 +37,8 @@ from .goal_scope import AllGoals, OneGoal
 from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .order_tools import OwnerGoalRead
-from .owner_connection import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequest,
-    AttachedRuntimeRequestContext,
-    NoControllerToken,
-)
+from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext
+from .owner_connection import NoControllerToken
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerReady
 from .pi_payloads import NativeContextData
 from .thread_identity import ThreadIncarnation

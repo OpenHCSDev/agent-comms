@@ -24,7 +24,7 @@ from agent_comms.native_arguments import (
     InheritedArguments,
 )
 from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.owner_connection import RuntimeRequest
+from agent_comms.runtime_server import RuntimeRequest
 from agent_comms.runtime_requests import PromptRuntimeRequest
 from agent_comms.threads import Thread
 
