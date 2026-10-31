@@ -23,24 +23,9 @@ from agent_comms.field_codec import (
 )
 from agent_comms.native_startup import NativeStartupPolicy
 from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate
-from agent_comms.pi_payloads import (
-    ContentDelta,
-    NativeToolDetails,
-    Opaque,
-    PiContent,
-    PiDelta,
-    PiDiagnostic,
-    PiMessage,
-    PiPayload,
-    PiResponseData,
-    SessionSwitchData,
-    StateData,
-    StrictFields,
-    TextContent,
-    UnknownContent,
-    UnknownData,
-    UnknownPayload,
-)
+from agent_comms.pi_wire import PiDiagnostic, PiPayload
+from agent_comms.pi_wire import Opaque, UnknownPayload
+from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, StrictFields, TextContent, UnknownContent, UnknownData
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase, PromptAcceptancePhase
@@ -225,7 +210,8 @@ def test_external_name_families_derive_one_default_without_accepting_invalid_val
 
 @pytest.mark.parametrize("value", [None, False, "3", {}, 1.5, 0, -1, 2])
 def test_measured_totals_share_one_declared_integer_policy(value):
-    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+    from agent_comms.pi_wire import PiUsage
+    from agent_comms.pi_payloads import PiContextUsage
 
     totals = (PiUsage.from_wire({"totalTokens": value}).total_tokens,
               PiContextUsage.from_wire({"tokens": value}).tokens)
@@ -234,7 +220,8 @@ def test_measured_totals_share_one_declared_integer_policy(value):
 
 @pytest.mark.parametrize("value", [False, "3", {}, 1.5])
 def test_retained_totals_reject_values_only_external_ingress_may_treat_as_unreported(value):
-    from agent_comms.pi_payloads import PiContextUsage, PiUsage
+    from agent_comms.pi_wire import PiUsage
+    from agent_comms.pi_payloads import PiContextUsage
 
     for family, key in ((PiUsage, "totalTokens"), (PiContextUsage, "tokens")):
         with pytest.raises(MalformedRecord):

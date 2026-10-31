@@ -42,7 +42,7 @@ from agent_comms.context_reading import UnmeasuredContext
 from agent_comms.field_codec import AcpSessionId, AssignmentId, ClaimId, InputId, MessageId, RootId, TurnId
 from agent_comms.goal_presentation import IdleGoalExecution
 from agent_comms.goals import NoGoal
-from agent_comms.pi_payloads import McpLiveAcknowledgement
+from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import Thread
 from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage

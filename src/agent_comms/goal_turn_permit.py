@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from agent_comms.goal_attempts import GoalAttemptStore, LaunchPermit
     from agent_comms.goal_management import Goals
     from agent_comms.goals import GoalDeclaration
-    from agent_comms.pi_payloads import PiUsage
+    from agent_comms.pi_wire import PiUsage
     from agent_comms.threads import Thread
     from agent_comms.turn_context import TurnContext
     from agent_comms.owned_turn import TurnGoalAccount

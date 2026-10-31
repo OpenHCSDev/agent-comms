@@ -49,7 +49,7 @@ from .input_attempt import InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
-from .pi_payloads import McpLiveAcknowledgement
+from agent_comms.pi_wire import McpLiveAcknowledgement
 from .reported_turn import ReportedTurn, ReportedTurnState
 from .routing import MessageRoute, NoMessageRoute
 from .thread_identity import ClaimScoped, ThreadIncarnation

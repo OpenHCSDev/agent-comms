@@ -40,7 +40,7 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.pi_payloads import RequestId
+from agent_comms.pi_wire import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands

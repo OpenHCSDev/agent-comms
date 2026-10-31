@@ -31,29 +31,9 @@ from .native_pi import NativePiOperationFailed
 from .native_session_reopen import PiSessionId
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
-from .pi_payloads import (
-    AbsentMessage,
-    AnonymousRequest,
-    CompactionData,
-    MissingData,
-    MissingToolResult,
-    NoDelta,
-    Opaque,
-    OpenPayload,
-    PiDelta,
-    PiMessage,
-    PiOmitted,
-    PiRequestId,
-    PiResponseData,
-    PiToolResult,
-    PiUsage,
-    ProviderRetryOutcome,
-    ReportedCompaction,
-    ReportedFlag,
-    ReportedText,
-    UnknownPayload,
-    UnreportedUsage,
-)
+from agent_comms.pi_wire import AnonymousRequest, OpenPayload, PiOmitted, PiRequestId, PiUsage
+from agent_comms.pi_wire import Opaque, UnknownPayload
+from .pi_payloads import AbsentMessage, CompactionData, MissingData, MissingToolResult, NoDelta, PiDelta, PiMessage, PiResponseData, PiToolResult, ProviderRetryOutcome, ReportedCompaction, ReportedFlag, ReportedText, UnreportedUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .tool_declaration import ToolDeclaration

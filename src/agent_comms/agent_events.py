@@ -40,7 +40,7 @@ from .input_attempt import InputAttempt
 from .native_failures import NativePiUnavailable
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiRequestId, PiUsage
+from agent_comms.pi_wire import McpLiveAcknowledgement, PiDiagnostic, PiOmitted, PiRequestId, PiUsage
 from .rule_deal import CompactedDeal
 from .pi_vocabulary import (
     CompactionReason,
@@ -500,6 +500,10 @@ class AgentInfo(NativeMetadataObservation, ContextSizeObservation):
 class ProviderUsage(AgentEvent):
     response_id: UsageChargeId
     usage: PiUsage
+
+    @classmethod
+    def charges(cls, usage: PiUsage, identity: UsageChargeId | PiOmitted) -> tuple[ProviderUsage, ...]:
+        return tuple(cls(response_id=key, usage=usage) for key in usage.charged(identity))
 
 
 @dataclass(frozen=True)

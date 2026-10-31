@@ -6,25 +6,14 @@ from dataclasses import dataclass
 
 import pytest
 
+from agent_comms.agent_events import ProviderUsage
 from agent_comms.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.tool_results import NoToolDiff
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
 from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_payloads import (
-    AssistantMessage,
-    MissingData,
-    MissingToolResult,
-    PiPayload,
-    ProvidedToolResult,
-    ReportedModel,
-    StateData,
-    TextContent,
-    ToolCallContent,
-    UnknownData,
-    UnreportedModel,
-    UnreportedUsage,
-)
+from agent_comms.pi_wire import PiPayload
+from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_usage import UsageAccount
 from agent_comms.thread_model import DeclaredModel, UndeclaredModel
@@ -324,7 +313,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
         assert isinstance(event, MessageUpdate) and isinstance(event.usage, UnreportedUsage)
         account = UsageAccount()
         event.message.measured_tokens.confirm(account)
-        charged = event.message.usage.charges(event.message.response_id)
+        charged = ProviderUsage.charges(event.message.usage, event.message.response_id)
         if usage is None:
             assert isinstance(event.message.usage, UnreportedUsage) and charged == ()
         else:

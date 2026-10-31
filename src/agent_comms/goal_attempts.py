@@ -63,7 +63,7 @@ from .lifecycle_capability import Failed
 from .locked_store import FileStore, GoalWakeFile, SQLiteReader
 from .maintenance_barrier import DrainSettledFile
 from .pi_counts import PiCount, UnreportedCount
-from .pi_payloads import PiUsage
+from agent_comms.pi_wire import PiUsage
 from .store_files import AtomicFile
 from .attempt_resolution import (
     AttemptResolution,

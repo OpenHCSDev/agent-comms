@@ -117,7 +117,7 @@ def test_declared_provider_retry_exhaustion_owns_execution_retry_classification(
     )
     assert type(transient.declared_failure) is ProviderRetryExhausted
 
-    from agent_comms.pi_payloads import PiDiagnostic
+    from agent_comms.pi_wire import PiDiagnostic
     from agent_comms.turn_failure import ProviderTransportFailed
 
     transport = PiDiagnostic.from_wire({

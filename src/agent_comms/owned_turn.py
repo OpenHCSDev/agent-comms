@@ -67,7 +67,7 @@ if TYPE_CHECKING:
     from .turn_runner import TurnRunner
     from .goal_attempts import LaunchPermit
     from .comms import Comms
-    from .pi_payloads import PiUsage
+    from agent_comms.pi_wire import PiUsage
     from .threads import Thread
     from .turn_lease import TurnLeaseFence
 

@@ -8,11 +8,8 @@ import pytest
 
 import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
-from agent_comms.acp_failure import (
-    NativeMessageFailureSource,
-    NativeTurnError,
-    ProviderQuotaFailure,
-)
+from agent_comms.pi_payloads import NativeMessageFailureSource
+from agent_comms.acp_failure import NativeTurnError, ProviderQuotaFailure
 from agent_comms.controller import SessionUpdateSink
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.pi_native_backend import PiNativeBackend

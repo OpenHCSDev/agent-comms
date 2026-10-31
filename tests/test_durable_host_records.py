@@ -25,7 +25,8 @@ from agent_comms.pi_durable_backend import (
     Settle,
 )
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText, RequestId
+from agent_comms.pi_wire import RequestId
+from agent_comms.pi_payloads import PiContextUsage, ReportedContextUsage, ReportedText
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.recorded_time import UnrecordedTimeError
 from agent_comms.session_file import RegistrySessionLocation

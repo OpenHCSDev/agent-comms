@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .pi_events import CancelledUiChoice, DialogUiRequest, ExtensionUiChoice
-from .pi_payloads import McpLiveAcknowledgement
+from agent_comms.pi_wire import McpLiveAcknowledgement
 from .turn_failure import ExtensionUiFailed
 
 if TYPE_CHECKING:

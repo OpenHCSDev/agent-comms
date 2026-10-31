@@ -45,7 +45,9 @@ from .native_input_proof import (
     NativeInputLocation,
 )
 from .native_session_reopen import PiSessionId
-from .pi_payloads import Opaque, PiField, PiMessage, PiOmitted, PiPayload, ReportedText
+from agent_comms.pi_wire import PiField, PiOmitted, PiPayload
+from agent_comms.pi_wire import Opaque
+from .pi_payloads import PiMessage, ReportedText
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .recorded_time import GeneratedTimestamp
 from .routing import NoTurnRouting, Routing
