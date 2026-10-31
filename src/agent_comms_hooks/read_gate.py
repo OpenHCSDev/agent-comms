@@ -17,6 +17,7 @@ them.
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -50,6 +51,30 @@ class WriteInput(HookRecord):
     file_path: Path
 
 
+@dataclass(frozen=True)
+class MonitorInput(HookRecord):
+    """The Monitor tool's input: the command it watches."""
+
+    command: str
+
+    options: ClassVar[frozenset[str]] = frozenset({"--state"})
+    """The watch's own options, each taking one value."""
+    shell: ClassVar[frozenset[str]] = frozenset(";|&$`<>()\n")
+
+    def watches_bus(self) -> bool:
+        """Exactly the session bridge's watch, bare or with its state directory: Monitor runs
+        any shell command, so anything else is a tool like the rest."""
+        from agent_comms.cli_bridges.claude import main as bridge
+
+        if self.shell & set(self.command):
+            return False
+        words = shlex.split(self.command)
+        program = ClaudeHookProgram.console_script(f"{bridge.__module__}:{bridge.__name__}")
+        options = words[2:]
+        return (len(words) >= 2 and Path(words[0]).name == program and words[1] == "watch"
+                and len(options) % 2 == 0 and set(options[::2]) <= self.options)
+
+
 class ToolMeaning(DeclaredFamily):
     """What one Claude tool means to the gate; a member names its tool in its declaration."""
 
@@ -80,6 +105,16 @@ class ReadTool(ToolMeaning, declared_name="Read"):
     def completed(self, call: GatedCall) -> None:
         read = ReadInput.decode(call.tool_input)
         call.record_read(read.file_path.resolve(), read.span())
+
+
+class MonitorTool(ToolMeaning, declared_name="Monitor"):
+    """The bus watch is how Tristan's lines reach the session, his question included, so a
+    deal never refuses it: on 2026-10-30 claude-board and claude-nra sat in the gate with
+    expired watches and every line to them waited unread. Any other Monitor waits."""
+
+    def judge(self, call: GatedCall) -> None:
+        if not MonitorInput.decode(call.tool_input).watches_bus():
+            call.judge_tool(call.tool_name)
 
 
 class WriteTool(ToolMeaning, declared_name="Write"):
