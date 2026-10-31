@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Self, TypeVar
 from pydantic import JsonValue
 
 from .child_process import Platform
-from .coordination_errors import CoordinationReadUnavailable
+from .coordination_errors import CoordinationBeginUnavailable, CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .errors import RelationViolationError
@@ -920,8 +920,12 @@ class SQLiteStorage(RootFile, SqliteStore):
     @classmethod
     @contextmanager
     def write_transaction(cls, connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
-        """The one write transaction: committed when the block returns, rolled back when it raises."""
-        cls._begin_transaction(connection)
+        """The one write transaction: committed when the block returns, rolled back when it raises.
+
+        A busy BEGIN is CoordinationBeginUnavailable: the block never ran. Past BEGIN, every
+        error keeps its own type."""
+        with CoordinationBeginUnavailable.checking():
+            cls._begin_transaction(connection)
         try:
             yield connection
             connection.execute("COMMIT")

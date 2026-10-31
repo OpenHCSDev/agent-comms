@@ -215,9 +215,28 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
 async def begin_waits(capsys, message):
     """The bridge's own log names the held message once the store's declared wait expires."""
     seen = ''
-    while f'Message {message.message_id} waits for the coordinator' not in seen:
+    while f'Message {message.message_id} waits for the store' not in seen:
         await asyncio.sleep(.01)
         seen += capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_busy_read_holds_the_watch_resume_until_the_store_frees(bridge, capsys):
+    """Real contention on the read that opens the core watch: the wait keeps the bridge up."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    with closing(sqlite3.connect(path, isolation_level=None)) as held:
+        held.execute('BEGIN EXCLUSIVE')
+        resuming = asyncio.create_task(bridge.once_available('Watch resume', bridge.resume_after))
+        seen = ''
+        async with asyncio.timeout(60):
+            while 'Watch resume waits for the store' not in seen:
+                await asyncio.sleep(.01)
+                seen += capsys.readouterr().err
+        assert not resuming.done()
+        held.execute('ROLLBACK')
+    assert await asyncio.wait_for(resuming, 30) == bridge.binding.start
 
 
 @pytest.mark.asyncio
