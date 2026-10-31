@@ -307,9 +307,10 @@ def test_board_decoder_names_a_refusal_instead_of_a_constructor_error():
     assert refused.error in str(caught.value)
 
 
-def test_board_read_failure_is_a_typed_hook_failure(tmp_path):
+def test_board_read_failure_is_a_typed_hook_failure(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
     with pytest.raises(AbsentSessionSocket) as caught:
-        SessionBoard.asked(tmp_path / "missing.socket")
+        SessionBoard.asked(Path("missing.socket"))
     assert caught.value.__cause__ is not None
 
 

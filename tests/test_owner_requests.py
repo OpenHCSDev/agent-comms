@@ -17,7 +17,7 @@ from agent_comms.connector import ConnectorSendTool
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.connector_caller import DirectorCaller
 from agent_comms.connector_caller import CALLER
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RejectedEnforcementError, RelationViolationError
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
@@ -73,8 +73,9 @@ def test_retired_commander_requests_follow_peer_authority(
     request_main(["list"], peer_context)
     assert first.id.value in capsys.readouterr().out
     outsider_context = Commander.on_root(outsider.name, (repository,), comms.root)
-    with pytest.raises(TodoError, match="belongs to another commander"):
+    with pytest.raises(RejectedEnforcementError, match="belongs to another commander") as refused:
         request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
+    assert isinstance(refused.value, TodoError)
     peer_context = Commander.on_root(peer.name, (repository,), comms.root)
     request_main(
         ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
