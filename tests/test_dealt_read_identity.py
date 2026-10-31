@@ -69,3 +69,16 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus
     assert deal.audit.exists()
     deal.observe_context(ContextUsage(70, 100))
     assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
+
+
+def test_his_question_quotes_the_session_and_no_bare_word_answers_it():
+    from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
+
+    wrote = RuleAudit("spine", does="I end turns on a unit's state, not on a wait.\nSecond line")
+    asked = SessionAudit((wrote, RuleAudit("ally")), ()).his_question()
+    assert asked == f"> I end turns on a unit's state, not on a wait.\n\nyou wrote that. {MeantRecord.question}"
+    assert SessionAudit((), ()).his_question() == MeantRecord.question
+    meant = MeantRecord()
+    assert not meant.answered_by(("Yes.",))
+    assert not meant.answered_by(("I will go look at this now and fix every one of them today.",))
+    assert meant.answered_by(("No. I said that and then replied Skipped to fifty of his rows.",))
