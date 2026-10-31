@@ -291,6 +291,11 @@ class HistorySource:
     def key(self) -> HistorySourceKey:
         return HistorySourceKey(self.root)
 
+    @property
+    def snapshot_identity(self) -> tuple[HistorySourceKey, int, FileObservation]:
+        """One root is captured again at later revisions, and those captures record other names."""
+        return self.key, self.snapshot_bus_revision, self.snapshot_registry_revision
+
     @classmethod
     def capture_original(cls, root: Path) -> HistorySource:
         """The original namespace and file revision come from the same retained document."""
