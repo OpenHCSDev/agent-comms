@@ -1037,11 +1037,11 @@ class UnreviewedHead(AskedOnce, HeadLine, HeadReviewCommands, DatedStandingRule,
     def began(self) -> float:
         return self.due_at
 
-    ask: ClassVar[str] = ("JUDGE: sitting there unjudged. you read it yet?"
-                          " -> judge ok/back/reviewing/superseded --repo REPO --pr N --head HEAD")
+    ask: ClassVar[str] = "JUDGE: sitting there unjudged. you read it yet? -> judge ok/back/reviewing/superseded"
 
     def facts(self) -> str:
-        return f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head}"
+        """The arguments each verb takes, ready to run after the ask's verb."""
+        return " ".join(f"--{name} {value}" for name, value in self.command_values().items())
 
 
 @dataclass(frozen=True)
