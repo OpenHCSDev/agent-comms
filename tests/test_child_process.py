@@ -509,8 +509,9 @@ def test_detached_reserves_identity_before_child_can_execute(tmp_path: Path) -> 
         assert child.identity.alive()
     try:
         stale = ObservedProcess(replace(child.identity, start_time=child.identity.start_time + 1))
-        with pytest.raises(IdentityMismatchError):
+        with pytest.raises(ChildRetirementFailed) as failure:
             stale.stop_sync()
+        assert isinstance(failure.value.__cause__, IdentityMismatchError)
         assert child.alive()
     finally:
         child.stop_sync()
@@ -594,8 +595,9 @@ async def test_parent_process_reaps_but_observation_cannot_claim_exit_code(exit_
     try:
         assert child.reap() == ExitedOutcome(7)
         assert await observed.wait() == DetachedExitOutcome()
-        with pytest.raises(IdentityMismatchError):
+        with pytest.raises(ChildRetirementFailed) as failure:
             observed.stop_sync()
+        assert isinstance(failure.value.__cause__, IdentityMismatchError)
     finally:
         child.close()
 
