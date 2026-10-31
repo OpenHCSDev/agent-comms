@@ -720,6 +720,7 @@ class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="Pull
     orders: tuple[OrderId, ...] = ()
     base: str = field(default=WorkBranches.main, kw_only=True)
     problems: tuple[str, ...] = field(default=(), kw_only=True)
+    queued: bool = field(default=False, kw_only=True)
 
     def as_ready(self) -> tuple[PullRequest, ...]:
         return (self,)
@@ -761,7 +762,8 @@ class UnmergedPullRequest(PullRequest):
     def from_listed(cls, row: ListedPullRequest, problems: tuple[str, ...],
                     orders: tuple[OrderId, ...]) -> Self:
         return cls(row.number, row.branch, row.head, row.updated_at, orders,
-                   base=row.base, problems=problems, status_contexts=row.status_contexts)
+                   base=row.base, problems=problems, status_contexts=row.status_contexts,
+                   queued=row.queued)
 
 
 class DraftPullRequest(UnmergedPullRequest):
@@ -927,6 +929,7 @@ class ListedPullRequest(HeadReviewStatus, DeclaredFamily, affix="ListedPullReque
     armed_times: tuple[str, ...] = field(default=(), kw_only=True)
     merge_blocks: tuple[MergeBlock, ...] = field(default=(), kw_only=True)
     required_times: tuple[str, ...] = field(default=(), kw_only=True)
+    queued: bool = field(default=False, kw_only=True)
 
     def retained_assignments(self, assignment: Assignment) -> tuple[Assignment, ...]:
         """Open work and merged work awaiting acceptance stay with their recorded holder."""
@@ -1231,7 +1234,7 @@ class PullRequests(RepositoryReads):
             'merged: mergedAt closed_at: closedAt updated: updatedAt created: createdAt '
             'ready_events: timelineItems(itemTypes: [READY_FOR_REVIEW_EVENT], last: 1) '
             '{ nodes { ... on ReadyForReviewEvent { createdAt } } } '
-            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus '
+            'auto: autoMergeRequest { enabledAt } merge_state: mergeStateStatus queued: isInMergeQueue '
             'head_statuses: commits(last: 1) { nodes { commit { committedDate status { contexts { context state } } '
             'statusCheckRollup { contexts(first: 100) { nodes { '
             f'... on CheckRun {{ name conclusion completedAt isRequired(pullRequestNumber: {number}) }} '

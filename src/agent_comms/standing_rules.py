@@ -473,6 +473,7 @@ class HeldBranch(HolderBranch):
     worktree: Path
     repository: PresentCheckout = field(compare=False, repr=False)
     source: UnitObservation = field(compare=False, repr=False)
+    queued: bool = field(compare=False)
 
     @property
     def problem(self) -> str:
@@ -548,6 +549,7 @@ class HeldBranchRule(HolderLine, UndatedStandingRule, FamilyScan, declared_name=
                                 todo, unit, frame.pulls.require_branch_difference(path), path,
                                 frame.pulls.checkout(todo.order.checked().check.directory),
                                 state.source,
+                                any(request.queued for request in frame.pulls.open_for(todo)),
                             ))
         ordered = tuple(sorted(branches, key=lambda held: (
             held.difference.repository.to_wire(), held.difference.branch,
@@ -582,7 +584,7 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
         return tuple(cls(problem=held.problem, holder=held.holder,
                          repository=held.difference.repository,
                          branch=held.difference.branch, behind=held.difference.behind)
-                     for held in branches if held.difference.behind)
+                     for held in branches if held.difference.behind and not held.queued)
 
     def line(self) -> str:
         return (f"MERGE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
