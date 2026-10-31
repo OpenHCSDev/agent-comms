@@ -31,10 +31,8 @@ from agent_comms.message_bus import Watch
 from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
 from agent_comms.nominal_census import NominalCensus, NominalPlanReadings
-from agent_comms.phase_evidence import (
-    BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent,
-    RetainedPlanReadings,
-)
+from agent_comms.plan_reading import RetainedPlanReadings
+from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches

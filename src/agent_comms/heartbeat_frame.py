@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.head_review import PullRequestHead
 from agent_comms.held_orders import HeldOrders
-from agent_comms.phase_evidence import PlanReading, PlanReadings
+from agent_comms.plan_reading import PlanReading, PlanReadings
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Repo
 from agent_comms.recorded_time import RecordedEventTime

@@ -40,7 +40,7 @@ from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.message_bus import WatchPass
 from agent_comms.messages import Message
 from agent_comms.owner_requests import OwnerRequestId
-from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import DEFAULT_ROSTER, RegistrySnapshot

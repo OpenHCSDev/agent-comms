@@ -21,34 +21,11 @@ from agent_comms.tool_calls import CliToolArguments
 from agent_comms_hooks.process_claim import ProcessSingleton
 from agent_comms_hooks.queue_bypass import QueueBypassGuard
 from agent_comms.field_codec import Id128, MessageId, NominalSpelling, NominalText
-from agent_comms.phase_evidence import (
-    AllEvidence,
-    AuditPatternPresent,
-    BusStorageAbsent,
-    ClassFlagsAbsent,
-    QualifiedName,
-    ClassDeclared,
-    ClassRostersAbsent,
-    CommitMerged,
-    FunctionDeclared,
-    NoAbsenceProbes,
-    NoExactCopies,
-    NoGodFunction,
-    OwnClassChecksAbsent,
-    ParentsShared,
-    ParityEvidence,
-    PathsAbsent,
-    DocumentPatternPresent,
-    PatternAbsent,
-    PatternPresent,
-    PhaseEvidence,
-    PlanReading,
-    RestatedMembersAbsent,
-    RulesetGates,
-)
+from agent_comms.phase_evidence import AllEvidence, AuditPatternPresent, BusStorageAbsent, ClassFlagsAbsent, QualifiedName, ClassDeclared, ClassRostersAbsent, CommitMerged, FunctionDeclared, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, ParityEvidence, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent, RulesetGates
 from agent_comms.phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
 if TYPE_CHECKING:
+    from agent_comms.plan_reading import PlanReading
     from agent_comms.todos import Todo
 
 

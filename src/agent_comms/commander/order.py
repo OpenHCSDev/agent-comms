@@ -76,7 +76,7 @@ from agent_comms.order_tools import (
 )
 from agent_comms.owner_requests import NewestOpenRequest, OwnerRequestId, RequestSelection
 from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.phase_evidence import PlanReading
+from agent_comms.plan_reading import PlanReading
 from agent_comms.plan_phases import OrderPhase, PlanPhase
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.presentation import MessageNotification

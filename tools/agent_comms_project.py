@@ -47,7 +47,8 @@ from agent_comms.installer.carry import STEPS
 from agent_comms.installer.probes.carry import Carry
 from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.nominal_census import NominalCensus
-from agent_comms.phase_evidence import MainTree, PlanReading
+from agent_comms.plan_reading import PlanReading
+from agent_comms.phase_evidence import MainTree
 from agent_comms.plan_phases import PlanPhase
 from agent_comms.repo import Checkout, Repo
 

@@ -5,31 +5,8 @@ from pathlib import Path
 import pytest
 
 from agent_comms.head_review import HeadReview, MergeHeadReview
-from agent_comms.phase_evidence import (
-    AllEvidence,
-    ClassDeclared,
-    ClassFlagsAbsent,
-    ClassChecks,
-    ClassRostersAbsent,
-    CommitMerged,
-    FunctionDeclared,
-    MainEvidence,
-    MainTree,
-    NoAbsenceProbes,
-    NoExactCopies,
-    NoGodFunction,
-    OwnClassChecksAbsent,
-    ParentsShared,
-    PathsAbsent,
-    DocumentPatternPresent,
-    PatternAbsent,
-    PatternPresent,
-    PhaseEvidence,
-    PlanReading,
-    RestatedMembersAbsent,
-    RulesetGates,
-    UnreadableEvidenceError,
-)
+from agent_comms.plan_reading import PlanReading
+from agent_comms.phase_evidence import AllEvidence, ClassDeclared, ClassFlagsAbsent, ClassChecks, ClassRostersAbsent, CommitMerged, FunctionDeclared, MainEvidence, MainTree, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent, RulesetGates, UnreadableEvidenceError
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 from agent_comms.nominal_census import NominalCensus

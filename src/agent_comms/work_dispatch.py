@@ -35,7 +35,7 @@ from .todos import PendingProblemOrder
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .phase_evidence import PlanReading
+    from .plan_reading import PlanReading
     from .plan_phases import PlanPhase
 
 
