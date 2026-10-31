@@ -13,7 +13,6 @@ from agent_comms.cli_commands import BusReadBack
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
-from agent_comms.installer.probes.services import CommanderHeartbeatProbe
 from agent_comms.registry_document import NoCommanderProject
 from agent_comms.repo import GitCommandError
 from agent_comms.field_codec import FieldCodec
@@ -40,7 +39,6 @@ from source_revision_fixture import SourceRepository
 
 
 RESTARTED = RestartedService("Connector on port 1 for /bus", Path("/runtime/bin/python"))
-HEARTBEAT = CommanderHeartbeatProbe(Path("/bus"), 1.0)
 
 
 @pytest.mark.parametrize("flags, mode, serialized", (
@@ -82,12 +80,12 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
         read=BusReadBack(2), stopped=("worker",), services=(RESTARTED,),
         started=(StartedOwner("worker"), RefusedOwner("busy", "already running")),
         restore_space=RestoreSpace(1024, 4096),
-        backup=BackupReport("saved-before-install", 1024), retired_backups=(), heartbeat=HEARTBEAT,
+        backup=BackupReport("saved-before-install", 1024), retired_backups=(),
     ),
     UnchangedRun(),
-    CreatedRun((RESTARTED,), "created route", heartbeat=HEARTBEAT),
+    CreatedRun((RESTARTED,), "created route"),
     RetiredRun(services=(RESTARTED,), route="created route", stopped=("worker",),
-               retired=Path("retired-bus"), heartbeat=HEARTBEAT),
+               retired=Path("retired-bus")),
 ), ids=("carried", "unchanged", "created", "retired"))
 def test_typed_results_publish_as_installer_and_survive_history_read(private_comms, live):
     comms = declare_test_bus(private_comms, channels=("comms",))

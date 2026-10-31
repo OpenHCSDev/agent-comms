@@ -368,6 +368,9 @@ def test_installed_entry_reports_completion_after_target_source_retirement(
     assert len(history) == (1 if fresh else 2)
     assert history[-1].sender == "installer"
     assert history[-1].body.startswith("Install finished")
+    # The installer no longer waits on a commander pass, so neither its phases nor its post claim one.
+    assert not any("heartbeat" in timing.line().lower() for timing in result.phases)
+    assert "heartbeat" not in history[-1].body.lower()
     if not fresh:
         assert history[0].body.startswith("Install starting")
     assert scratch.is_dir() and not tuple(scratch.iterdir())
