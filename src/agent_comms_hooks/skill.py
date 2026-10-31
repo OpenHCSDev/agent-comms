@@ -296,7 +296,10 @@ class StartReason(DeclaredFamily):
     def deal(self, start: DeckStart, reader: DeckReader, comms: Comms,
              snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """The context is gone: the deck is dealt from its start and every file is read again."""
-        return start.dealt(reader, self.trigger(start), comms, snapshot)
+        trigger = self.trigger(start)
+        return trigger.deliver(
+            start.current().mode, lambda: start.dealt(reader, trigger, comms, snapshot), (),
+        )
 
     def trigger(self, start: DeckStart) -> DealTrigger:
         """The cause every refusal of this deal opens with."""
