@@ -373,7 +373,7 @@ class ModelOutput:
 
 
 class NarrationTranscript(ModelOutput, AgentTextTranscript):
-    """Visible assistant progress closes admission but is not an answer or DM final."""
+    """Visible assistant progress closes the window for new automatic replies but is not an answer or DM final."""
 
 
 class AssistantTranscript(ModelOutput, AgentTextTranscript):
