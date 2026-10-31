@@ -32,7 +32,6 @@ from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
     FieldCodec,
     GoalId,
-    GoalWaitId,
     MalformedRecord,
     NullMember,
     PathText,
@@ -645,9 +644,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     @abstractmethod
     def clear_wait(self, waits: GoalWaits) -> bool: ...
 
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return False
-
     def require_active(self) -> Goal:
         goal = self.require()
         goal.state.require(Active, RelationViolationError(goal.state.activity_refusal()))
@@ -786,9 +782,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def clear_wait(self, waits: GoalWaits) -> bool:
         return waits.clear(self.id)
-
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return waits.consume(self.id, wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)
