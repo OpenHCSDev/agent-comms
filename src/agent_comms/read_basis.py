@@ -926,11 +926,6 @@ class MessageDisplayScope(DeclaredFamily, ABC, ProjectionSource, affix="DisplayS
             sender, snapshot, ChannelConversation, DMConversation
         )
 
-    def has_read(self, seen: ReadCursor, message: Message,
-                 snapshot: RegistryProvenance) -> bool:
-        conversation = self.read_key(message.sender, message.target, snapshot)
-        return message.seq in seen.for_conversation(conversation)
-
     def records(
         self, source: BusReader, *, lower: int = 0, upper: int | None = None,
         descending: bool = False, limit: int = 100, kinds: tuple[type[MessageKind], ...] = (),
