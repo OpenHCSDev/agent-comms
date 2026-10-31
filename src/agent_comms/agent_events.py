@@ -66,7 +66,6 @@ if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .input_drain import InputDrain
     from .native_turn_context import NativeContextManifestData
-    from .pi_commands import PiCommand
     from .rule_deal import Redeals
     from .runtime_info import AgentRuntimeInfo
     from .started_input import StartedInput
@@ -423,7 +422,6 @@ class Error(AgentEvent):
     # its resolution; a recovered turn never publishes an interim refusal.
     text: str
     reason_code: str | None = None
-    command: PiCommand | None = None
     diagnostics: tuple[PiDiagnostic, ...] = ()
     source: FailureSource = UnrecordedFailureSource()
 

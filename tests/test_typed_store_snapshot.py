@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
+from agent_comms.owner_release import OwnerReleaseStore
 from conftest import maintenance_held
 
 from agent_comms.errors import RelationViolationError
@@ -12,7 +13,6 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.input_disposition import InputDispositionRow, InputDispositions
 from agent_comms.input_key import BusInputKey
 from agent_comms.maintenance_barrier import MaintenanceNotHeldError
-from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.typed_table import HeldBusFile
 

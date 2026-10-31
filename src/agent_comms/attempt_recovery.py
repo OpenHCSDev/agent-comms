@@ -63,8 +63,10 @@ from .locked_store import RegistryFile
 from .registration import Registration
 from .threads import Thread
 
+from .owner_release import OwnerRelease, OwnerReleaseEvidence
+
 if TYPE_CHECKING:
-    from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRelease, OwnerReleaseEvidence
+    from agent_comms.owner_lifecycle import OwnerLifecycle
 
 _OWNER_LOSS_ISSUER = object()
 

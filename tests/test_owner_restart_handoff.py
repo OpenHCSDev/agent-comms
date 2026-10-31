@@ -3,6 +3,11 @@
 No root, writer, child, native package or process launch is acquired here.
 """
 
+from agent_comms.owner_release import (
+    OwnerReleaseEvidence,
+    ProcessExitedOwnerCompletion,
+    SessionRetiredOwnerCompletion,
+)
 from agent_comms.repo import Checkout
 from dataclasses import replace
 import os
@@ -16,10 +21,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment, SetVariable, UnsetVariable
-from agent_comms.owner_lifecycle import (
-    OwnerReleaseEvidence, OwnerRestartSelection, ProcessExitedOwnerCompletion,
-    SessionRetiredOwnerCompletion,
-)
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import OwnerRestartHandoff, RetiredOwnerLaunch
 from agent_comms.registry_document import RegistryDocument, RegistrySnapshot
 from agent_comms.thread_identity import GenerationCounter, OwnerIdentity

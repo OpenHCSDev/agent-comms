@@ -23,11 +23,11 @@ from .native_arguments import (
 )
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import (
-    OwnerCompletion,
     OwnerLifecycle,
     OwnerRestartResult,
     OwnerRestartSelection,
 )
+from .owner_release import OwnerCompletion
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .restart_scope import AllOwners, RestartScope
 from .thread_identity import ThreadAuthority

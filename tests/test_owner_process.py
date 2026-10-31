@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.owner_release import NoRelease
 from agent_comms.repo import Checkout
 import asyncio
 import os
@@ -29,7 +30,6 @@ from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.runtime import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
-from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.session_file import NoSessionFile
