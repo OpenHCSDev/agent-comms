@@ -467,6 +467,10 @@ class AlarmSection:
         return tuple(line for kind, pings in self.by_kind().items()
                      for line in FoldedRule.of(kind, pings).lines(now))
 
+    def tables(self, now: float) -> tuple[ViewTable[AlarmLine], ...]:
+        return (ViewTable(AlarmLine, HudExclude, tuple(
+            AlarmLine(ping.alarm_kind, ping.text, ping.since.age(now)) for ping in self.pings)),)
+
 
 class ActionWord(ABC):
     """One word of an action a rule's rows share: written once in the rule's header."""
