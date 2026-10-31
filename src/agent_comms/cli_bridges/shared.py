@@ -50,7 +50,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
-from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError, SessionCommandError
+from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
