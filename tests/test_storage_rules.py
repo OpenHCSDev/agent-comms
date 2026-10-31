@@ -126,13 +126,13 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     Checkout.add(home, old, DetachedStart('HEAD'))
     thread = comms.registry.require('worker')
     other = comms.registry.declare(Thread('other', frozenset(), Checkout(tmp_path)))
-    assert rule.checkouts_of(thread) == (home, old)
-    storage = UnitStorage.read(rule, thread)
+    assert rule.checkouts_of(thread, RepositoryReads()) == (home, old)
+    storage = UnitStorage.read(rule, thread, RepositoryReads())
     scratch = rule.roots_of(thread).scratch
     scratch.mkdir(parents=True)
     (scratch / 'payload').write_bytes(b's' * 128 * 2**10)
     (old / 'payload').write_bytes(b'c' * 128 * 2**10)
-    storage = UnitStorage.read(rule, thread)
+    storage = UnitStorage.read(rule, thread, RepositoryReads())
     assert storage.home == Checkout(home)
     assert storage.extra_checkouts == (Checkout(old),)
     assert storage.adding(Checkout(home)) == storage
@@ -145,7 +145,7 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
         CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
     StorageProjection(rule, thread, comms).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
-    assert rule.checkouts_of(thread) == (home,)
+    assert rule.checkouts_of(thread, RepositoryReads()) == (home,)
     StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
@@ -168,8 +168,8 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(path, Repo.of(home), start),))
     Checkout.add(home, path, start)
-    assert rule.owns_present_checkout(thread, path)
-    assert path in rule.checkouts_of(thread)
+    assert rule.owns_present_checkout(thread, path, RepositoryReads())
+    assert path in rule.checkouts_of(thread, RepositoryReads())
 
 
 def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(checkout_comms: Comms):
@@ -197,14 +197,14 @@ def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
         start = DetachedStart('HEAD')
         projection.check((CreateCheckoutStorageEffect(path, Repo.of(thread.project_path), start),))
         Checkout.add(thread.project_path, path, start)
-    storage = UnitStorage.read(rule, thread)
+    storage = UnitStorage.read(rule, thread, RepositoryReads())
     assert len(storage.extra_checkouts) == 3
 
 
 def test_projected_checkout_membership_follows_add_and_remove(checkout_comms: Comms):
     rule = checkout_comms.registry.storage_rule
     thread = checkout_comms.registry.require('worker')
-    storage = UnitStorage.read(rule, thread)
+    storage = UnitStorage.read(rule, thread, RepositoryReads())
     first = Checkout(rule.order_checkout(rule.roots_of(thread), 'P1'))
     second = Checkout(rule.order_checkout(rule.roots_of(thread), 'P2'))
     single = storage.adding(first)
@@ -231,7 +231,7 @@ def test_cannot_remove_current_project_but_can_remove_another_checkout(tmp_path)
     comms.registry.storage_rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch')
     thread = comms.registry.declare(Thread('worker', frozenset(), Checkout(project_link)))
     assert thread.project_path == current
-    assert UnitStorage.read(comms.registry.storage_rule, thread).home == Checkout(current)
+    assert UnitStorage.read(comms.registry.storage_rule, thread, RepositoryReads()).home == Checkout(current)
     with pytest.raises(StorageDenied):
         StorageProjection(comms.registry.storage_rule, comms.registry.require('worker'), comms).check((
             RemoveCheckoutStorageEffect(project_link.resolve()),))
@@ -296,7 +296,7 @@ def test_storage_violation_observation_key_resolves_every_compared_field(checkou
     """The heartbeat digests a storage rule through each field's declared type."""
     comms = checkout_comms
     thread = comms.registry.require('worker')
-    storage = UnitStorage.read(comms.registry.storage_rule, thread)
+    storage = UnitStorage.read(comms.registry.storage_rule, thread, RepositoryReads())
     assert storage.unit == thread.incarnation
     assert StorageHomeMissing(storage).observation_key() == StorageHomeMissing(
-        UnitStorage.read(comms.registry.storage_rule, thread)).observation_key()
+        UnitStorage.read(comms.registry.storage_rule, thread, RepositoryReads())).observation_key()

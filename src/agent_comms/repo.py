@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
-from functools import cached_property
+from functools import cache, cached_property
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -97,6 +97,7 @@ class Repo(GitLaunch, BaseModel, WireValue):
     model_config = ConfigDict(frozen=True)
     remote: ClassVar[str] = "origin"
     local_remote: ClassVar[str] = "."
+    full_commit: ClassVar[re.Pattern[str]] = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
     checkout: Path
     github: InstanceOf[
@@ -300,8 +301,29 @@ class Repo(GitLaunch, BaseModel, WireValue):
 
     @classmethod
     def descends(cls, checkout: Path | str, ancestor: str, revision: str) -> bool:
-        """Whether ``revision`` holds ``ancestor`` in this checkout's history."""
+        """Whether ``revision`` holds ``ancestor`` in this checkout's history. Two full commit ids
+        have one answer for good; a ref or an abbreviation moves, so it is asked every time."""
+        if cls.full_commit.fullmatch(ancestor) and cls.full_commit.fullmatch(revision):
+            return cls.commit_descends(cls.ancestry_dir(Path(checkout)), ancestor, revision)
         return cls.answers(checkout, "merge-base", "--is-ancestor", ancestor, revision)
+
+    @staticmethod
+    @cache
+    def commit_descends(common_dir: Path, ancestor: str, descendant: str) -> bool:
+        return Repo.answers(common_dir, "merge-base", "--is-ancestor", ancestor, descendant)
+
+    @staticmethod
+    @cache
+    def ancestry_dir(checkout: Path) -> Path:
+        """Where immutable ancestry is asked. Liveness probes read Checkout.common_dir instead,
+        because a removed worktree must stop answering there."""
+        return Repo.common_dir_of(checkout)
+
+    @staticmethod
+    def common_dir_of(checkout: Path) -> Path:
+        """Git's shared ref and object owner, independent of this worktree's HEAD."""
+        return Path(Repo.git(checkout, "rev-parse", "--path-format=absolute",
+                             "--git-common-dir").strip()).resolve()
 
     @classmethod
     def store_serves(cls, store: Path, *args: str) -> bool:
@@ -333,8 +355,10 @@ class Repo(GitLaunch, BaseModel, WireValue):
         return ()
 
     @classmethod
+    @cache
     def of(cls, checkout: Path) -> Repo:
-        """Its GitHub name comes from the checkout's own origin remote."""
+        """Its GitHub name comes from the checkout's own origin remote, which does not move while
+        a process runs: installs restart the connector."""
         url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
         return cls(checkout=checkout, github=cls.repository_url(url))
 
@@ -530,8 +554,7 @@ class Checkout(SingleFieldValue, PresentMember):
     @cached_property
     def common_dir(self) -> Path:
         """Git's shared ref and object owner, independent of this worktree's HEAD."""
-        return Path(Repo.git(self.path, "rev-parse", "--path-format=absolute",
-                             "--git-common-dir").strip()).resolve()
+        return Repo.common_dir_of(self.path)
 
     def read(self) -> CheckoutHistory:
         """One operation's refs and commit graph; the caller owns this read's lifetime."""
@@ -817,6 +840,10 @@ class RepositoryReads:
         return self.history_for(Checkout(path)).repository
 
     def history_for(self, checkout: Checkout) -> CheckoutHistory:
+        """One cut per common directory, shared by every worktree it listed. A worktree added
+        after that cut is in none of its listings, so it reads a cut of its own: on 2026-10-30
+        every new order's worktree (claude-nra--P1067) killed the heartbeat pass that saw it
+        mid-read, because head_for found no HEAD for it in the stale listing."""
         checkout = checkout.resolved()
         if checkout.path not in self._worktree_histories:
             common = checkout.common_dir
@@ -824,6 +851,8 @@ class RepositoryReads:
                 self._histories[common] = checkout.read()
             history = self._histories[common]
             self._worktree_histories.update((path, history) for path in history.heads)
+            if checkout.path not in history.heads:
+                history = checkout.read()
             self._worktree_histories[checkout.path] = history
         return self._worktree_histories[checkout.path]
 
