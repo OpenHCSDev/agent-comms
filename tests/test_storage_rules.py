@@ -168,7 +168,7 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     StorageProjection(rule, thread, comms).check((
         CreateCheckoutStorageEffect(path, Repo.of(home), start),))
     Checkout.add(home, path, start)
-    assert rule.owns_present_checkout(thread, path)
+    assert rule.owns_present_checkout(thread, path, RepositoryReads())
     assert path in rule.checkouts_of(thread, RepositoryReads())
 
 
