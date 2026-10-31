@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 from .channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, TurnId, WireOmitDefault
+from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
@@ -232,8 +232,8 @@ class TaskAttachment(
         """Search rows this attachment adds beside its original message: none."""
         return iter(())
 
-    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        """The commander observations this attachment carries for that commander: none."""
+    def commander_update(self, commander: ThreadLookup) -> tuple[CommanderUpdate, ...]:
+        """The observations this attachment carries for that commander birth: none."""
         return ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:

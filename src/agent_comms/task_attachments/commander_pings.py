@@ -1,24 +1,25 @@
-"""Committed commander notifications own the heartbeat's retained observations.
+"""Retained commander observations are independent of optional bus publication.
 
-New observations and every still-undisposed request wake on each beat. A changed quiet frame
-publishes once without waking; an unchanged quiet frame adds nothing to bus history. The
-original subject actions dispose of requests, and the answer window only gates overdue
-writing verbs. No process-local cache owns any of it.
+The heartbeat retains each observation before attempting delivery. Published messages own
+only what was actually sent; the disposable HUD renders the same retained packet. Original
+subject actions dispose of requests, never a delivery setting or publication attempt.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from agent_comms.channel_targets import ThreadTarget
+from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
+from agent_comms.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
-from agent_comms.nominal.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude
+from agent_comms.nominal.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude, ThreadLookup
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
@@ -193,7 +194,7 @@ class UnitPing(Ping):
 
 @dataclass(frozen=True)
 class CommanderDelivery:
-    """A derived packet and the one open set shared by publication and its disposable HUD."""
+    """A derived observation and its open set, shared by retention, publication and HUD."""
 
     packet: CommanderUpdate
     open_pings: tuple[Ping, ...]
@@ -231,8 +232,8 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
         """The packet's position under the commander birth it was published for."""
         yield CommanderUpdatePosition(message.seq, self.commander.require_recorded().lookup)
 
-    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        return (self,) if self.commander == commander else ()
+    def commander_update(self, commander: ThreadLookup) -> tuple[CommanderUpdate, ...]:
+        return (self,) if self.commander.require_recorded().lookup == commander else ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
         """A board packet speaks in the owner's voice yet is not his words: its own category."""
@@ -245,7 +246,7 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
         return ()
 
     def body(self, hud: tuple[str, ...]) -> str:
-        """The existing HUD owns presentation; this packet owns publication and history."""
+        """The existing HUD owns presentation; only a sent message claims this text."""
         return "\n".join((
             "BOARD (Core heartbeat; Tristan's own words never arrive in this format)",
             "Each rule prints its shared words once; '…' in a header is each row's own words.",
@@ -278,27 +279,33 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
 
     @classmethod
     def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        """The newest typed packet for that commander birth, or none. An independent message
-        to the commander, newer or not, is never this board's baseline."""
+        """The last retained observation, even when nothing was sent to the bus."""
+        return CommanderUpdateStore.at(comms.root, commander).read()
+
+    @classmethod
+    def published(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
+        """The last actual publication: what was announced, not just observed."""
+        lookup = commander.require_recorded().lookup
         with comms.bus.bus.observing() as db:
-            messages = CommanderUpdatePosition.latest(db, commander.require_recorded().lookup)
+            messages = CommanderUpdatePosition.latest(db, lookup)
         return tuple(packet for message in messages
-                     for packet in message.task.commander_update(commander))
+                     for packet in message.task.commander_update(lookup))
 
     @classmethod
     def current_board(cls, comms: Comms, commander: str) -> tuple[BoardEntry, ...]:
-        """The newest packet's board, derived at the moment of asking."""
+        """The retained observation's board, derived at the moment of asking."""
         return tuple(entry for latest in cls.latest(comms, comms.registry.require(commander).incarnation)
                      for entry in latest.board(comms))
 
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
-               previous: tuple[CommanderUpdate, ...], *, now: float,
+               previous: tuple[CommanderUpdate, ...], *,
+               published: tuple[CommanderUpdate, ...], now: float,
                history: CommanderHistory,
                not_applied: tuple[str, ...] = ()) -> CommanderDelivery:
-        """New observations or any open request wake on every beat. Publication never disposes
-        of a ping; only a beat without unresolved work may be passive."""
+        """Observation owns ages; actual publication owns which lines were announced.
+        Publication never disposes of a ping; open requests still wake on every beat."""
         known = {ping.key: ping for packet in previous for ping in packet.handled}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
@@ -309,7 +316,8 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
                  *(RulePing.capture(rule) for rule in rules),
              )), key=lambda ping: not ping.urgent,
         ))
-        new = tuple(ping for ping in handled if known.get(ping.key) != ping)
+        announced = {ping.key: ping for packet in published for ping in packet.handled}
+        new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
         notice = CommanderNotice(commander, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
@@ -324,31 +332,28 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
                        previous: tuple[CommanderUpdate, ...], *,
+                       published: tuple[CommanderUpdate, ...],
                        now: float) -> tuple[CommanderUpdate, ...]:
-        """A failed pass read no board, so it clears nothing: it adds only its own retained
-        occurrence, once. Every handled line keeps its object and age for the next complete
-        read to derive from."""
+        """A failed pass clears nothing. Keep its original age, and retry an occurrence
+        not yet published even when a muted/failed attempt already retained it."""
         ping = RulePing.capture(failure)
-        handled = tuple(line for packet in previous for line in packet.handled)
-        if ping in handled:
+        if any(ping in packet.handled for packet in published):
             return ()
-        ping = replace(ping, since=ping.since.continued_from(now))
+        handled = tuple(line for packet in previous for line in packet.handled)
+        retained = (handled if ping in handled else
+                    (*handled, replace(ping, since=ping.since.continued_from(now))))
+        current = next(line for line in retained if line == ping)
         return (CommanderDecisions(
-            commander, (*handled, ping), (ping,), (),
+            commander, retained, (current,), (),
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
-    def passive(self) -> CommanderUpdate:
-        """Keep every observed fact, but use the existing no-input notice behavior."""
-        return CommanderNotice(self.commander, self.handled, not_applied=self.not_applied,
-                               publication=self.publication)
-
-    def send(self, comms: Comms, now: float, hud: tuple[str, ...], *,
-             publication: PublicationFacts = UnpublishedFacts()) -> Message:
+    def send(self, comms: Comms, hud: tuple[str, ...], *,
+             publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
         recipient = comms.registry.require(self.commander.name)
-        packet = recipient.heartbeat_delivery.packet(replace(self, publication=publication))
-        return packet.publish(
-            comms.messaging, ThreadTarget(self.commander.name), self.body(hud))
+        return recipient.heartbeat_delivery.publish(
+            replace(self, publication=publication), comms, hud)
+
 
 
 @dataclass(frozen=True)
@@ -378,6 +383,31 @@ class CommanderDecisions(CommanderUpdate):
 
     def new_pings(self) -> tuple[Ping, ...]:
         return self.decisions
+
+
+@dataclass(frozen=True, slots=True)
+class CommanderUpdateStore(PatternFile, SingleFileStore, DurableFile,
+                           LockedStore[tuple[CommanderUpdate, ...]], DependentStateTier):
+    """The last observation for one commander birth, not a message or a disposable view.
+
+    The packet declarations supply the complete stored shape through FieldCodec. Only the
+    heartbeat writes it; failed publication and muted delivery do not erase observations.
+    """
+
+    filename: ClassVar[str] = "commander_updates/{lookup}.json"
+    record_type = tuple[CommanderUpdate, ...]
+
+    @classmethod
+    def at(cls, root: Path, commander: ThreadIncarnation) -> Self:
+        return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
+
+    def empty(self) -> tuple[CommanderUpdate, ...]:
+        return ()
+
+    @classmethod
+    def record(cls, root: Path, packet: CommanderUpdate) -> None:
+        store = cls.at(root, packet.commander)
+        store.update(lambda previous: DocumentChange.to((packet,)))
 
 
 class AlarmGroup(ViewHeading, affix="Alarms"):

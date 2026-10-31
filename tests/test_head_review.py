@@ -33,7 +33,7 @@ from agent_comms.standing_rules import (
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, CommanderUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
@@ -457,8 +457,10 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
     head = source.git(source.checkout, "rev-parse", "HEAD").strip()
     source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
     moved = opened(github, source, request.pr, head)
-    assert request.change_identity(WorkBranches(source.checkout), "main") == moved.change_identity(
-        WorkBranches(source.checkout), "main")
+    branches = WorkBranches(source.checkout)
+    branches.prepare_pull_request("main", request.head)
+    branches.prepare_pull_request("main", moved.head)
+    assert request.change_identity(branches, "main") == moved.change_identity(branches, "main")
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
     assert not StoredHeadReview.head_reviews(comms.goals.todos, moved)
@@ -1297,7 +1299,8 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     owner = comms.registry.require('lead').incarnation
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
     packet = CommanderDecisions(owner, (ping,), (ping,), ())
-    original = packet.send(comms, published, ())
+    CommanderUpdateStore.record(comms.root, packet)
+    original, = packet.send(comms, ())
     previous = CommanderUpdate.latest(comms, owner)
     assert previous == (packet,)
     assert isinstance(original.task, CommanderDecisions)
@@ -1316,12 +1319,14 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
         assert not UnlandedHeadSubject(unrelated).disposed(history, published)
     assert not HeadSubject(request).disposed(history, published)
 
-    # Derive the next real packet from that committed baseline and the same observation.
+    # Retained observations own age; actual publications own which lines were announced.
     delivery = CommanderUpdate.derive(owner, (), (lost,), previous,
+                                      published=CommanderUpdate.published(comms, owner),
                                       now=time.time(), history=history)
     assert delivery.packet.handled[0].since == ping.since
     assert (delivery.open_pings == ()) is cleared
-    delivery.packet.send(comms, time.time(), ())
+    CommanderUpdateStore.record(comms.root, delivery.packet)
+    delivery.packet.send(comms, ())
     assert CommanderUpdate.latest(comms, owner) == (delivery.packet,)
     assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
     assert original.task.handled == (ping,)

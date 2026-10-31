@@ -20,6 +20,7 @@ from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.locked_store import RootFile
 from agent_comms.messages import Message
 from agent_comms.thread_identity import ThreadIncarnation
+from cutover.carry_commander_observations import CommanderObservations
 
 # The wire names of the deleted HUD ping classes; no class declares them any more.
 RETIRED = ("load", "unit_row", "phase_row", "finished_phases_row", "forks_row")
@@ -91,6 +92,7 @@ class CommanderNoticeStored(CommanderUpdateStored):
 
 
 class CommanderUpdateLines(Carry):
+    precedes = (CommanderObservations,)
     opened_files: ClassVar[tuple[type[RootFile], ...]] = (Bus,)
 
     def carry(self, *, apply: bool) -> Carried:

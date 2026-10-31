@@ -4,9 +4,9 @@ import asyncio
 import json
 import os
 import pickle
-import sqlite3
 import time
-from contextlib import nullcontext
+from contextlib import contextmanager, nullcontext
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from multiprocessing import Pipe
 
@@ -21,11 +21,11 @@ from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObserva
 from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
 from agent_comms.commander_hud import (
-    CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
+    CommanderFrame, CommanderHud, CommanderUnit, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, CommanderUpdateStore, PublishedFacts, RulePing
+from agent_comms.errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
 from agent_comms.read_basis import DMDisplayScope
@@ -72,12 +72,12 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
         yield held_bus
 
 
-@pytest.mark.parametrize("delivery", ("on", "off"))
+@pytest.mark.parametrize(("delivery", "publications"), (("on", 1), ("off", 0)))
 def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messages(
-    notification_bus: Comms, delivery: str,
+    notification_bus: Comms, delivery: str, publications: int,
 ) -> None:
     from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
-    from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+    from agent_comms.heartbeat_delivery import HeartbeatDelivery
 
     comms = notification_bus
     original = comms.registry.require("lead")
@@ -93,31 +93,91 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     now = time.time()
     rule = ServicePassFailing(watch="delivery-setting", since=now, error="still visible", failed_at=now)
     hud = beat(comms, (rule,))
-    message, = notifications(comms)
-    assert message.task.handled == hud.packets[0].handled
-    assert rule.line() in message.body
-    assert CommanderUpdate.latest(comms, selected.incarnation) == (message.task,)
-    assert message.role.counts_as_conversation() == (delivery == "on")
-    assert isinstance(message.task, CommanderNotice) == (mode is OffHeartbeatDelivery)
+    messages = notifications(comms)
+    assert len(messages) == publications
+    for message in messages:
+        assert message.task.handled == hud.packets[0].handled
+        assert rule.line() in message.body
+        assert message.role.counts_as_conversation()
+    assert CommanderUpdate.latest(comms, selected.incarnation) == hud.packets
     again = beat(comms, (rule,))
     assert aged(again.packets[0].handled) == aged(hud.packets[0].handled)
+    assert bool(notifications(comms)) is bool(publications)
     assert CommanderFrame.current(comms, "lead") == again
     direct = independent_instruction(comms, "ordinary direct request")
     assert direct.role.counts_as_conversation()
     assert direct.category is InboundCategory
 
 
-def test_disabled_heartbeat_failure_retains_service_error_without_model_input(notification_bus):
-    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
+def test_disabled_heartbeat_failure_retains_service_error_without_bus_publication(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
 
     comms = notification_bus
     comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
     failed_pass(comms, RuntimeError("muted service failure"))
+    assert notifications(comms) == ()
+    commander = comms.registry.require("lead").incarnation
+    retained, = CommanderUpdate.latest(comms, commander)
+    assert retained.handled == (RulePing.capture(retained_failure(comms)),)
+    BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
+    assert CommanderUpdate.latest(comms, commander) == (retained,)
+    assert CommanderUpdate.published(comms, commander) == ()
+    assert notifications(comms) == ()
+    comms.threads.set_heartbeat_delivery("lead", OnHeartbeatDelivery)
+    BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
+    resumed, = notifications(comms)
+    assert resumed.role.counts_as_conversation()
+    assert aged(resumed.task.handled) == aged(retained.handled)
+    BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
+    assert len(notifications(comms)) == 1
+
+
+def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+
+    comms = notification_bus
+    commander = comms.registry.require("lead")
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(
+        problem=todo.id, holder=comms.registry.require("worker").incarnation,
+        order=todo.order.checked().id, since=RecordedEventTime(time.time() - 600),
+    )
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    first = beat(comms, (rule,))
+    again = beat(comms, (rule,))
+    assert notifications(comms) == ()
+    assert first.open_pings and again.open_pings
+    assert aged(again.packets[0].handled) == aged(first.packets[0].handled)
+    comms.threads.set_heartbeat_delivery("lead", OnHeartbeatDelivery)
+    enabled = beat(comms, (rule,))
     message, = notifications(comms)
-    assert isinstance(message.task, CommanderNotice)
-    assert not message.role.counts_as_conversation()
-    assert "muted service failure" in message.body
-    assert message.task.handled == (RulePing.capture(retained_failure(comms)),)
+    assert message.role.counts_as_conversation()
+    assert aged(message.task.handled) == aged(first.packets[0].handled)
+    assert enabled.commander == commander.incarnation
+    assert CommanderUpdate.latest(comms, commander.incarnation) == enabled.packets
+
+
+def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+
+    comms = notification_bus
+    first = beat(comms)
+    original, = notifications(comms)
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    comms.registry.register_child("muted-fork", "lead", CommanderForkExecution, comms.goals)
+    muted = beat(comms)
+    assert muted.display_facts != first.display_facts
+    assert notifications(comms) == (original,)
+    assert CommanderFrame.current(comms, "lead") == muted
+    comms.threads.set_heartbeat_delivery("lead", OnHeartbeatDelivery)
+    enabled = beat(comms)
+    assert enabled.display_facts == muted.display_facts
+    _, resumed = notifications(comms)
+    assert not resumed.role.counts_as_conversation()
+    beat(comms)
+    assert tuple(message.reference for message in notifications(comms)) == (
+        original.reference, resumed.reference,
+    )
 
 
 def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
@@ -144,6 +204,22 @@ def notifications(comms, commander="lead"):
         owner(comms).name, commander, comms.registry.snapshot(),
     )).read_opened(comms.bus.bus)
     return tuple(message for message in page.messages if isinstance(message.task, CommanderUpdate))
+
+
+@contextmanager
+def refused_publication(comms: Comms) -> Iterator[None]:
+    """The real SQLite writer refuses inserts; the original transaction still rolls back."""
+    bus = comms.bus.bus
+    with bus.writing() as db:
+        db.execute(
+            f'CREATE TRIGGER refuse_publication BEFORE INSERT ON "{Message.table.declared_name}" '
+            "BEGIN SELECT RAISE(ABORT, 'publication refused'); END"
+        )
+    try:
+        yield
+    finally:
+        with bus.writing() as db:
+            db.execute("DROP TRIGGER refuse_publication")
 
 
 def lead_hud(comms, states=()):
@@ -307,12 +383,15 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
     now = time.time()
     for name in ("lead", "worker"):
         commander = comms.registry.require(name).incarnation
-        update, = CommanderUpdate.report_failure(commander, failure, (), now=now)
-        update.send(comms, now, ())
+        update, = CommanderUpdate.report_failure(commander, failure, (), published=(), now=now)
+        CommanderUpdateStore.record(comms.root, update)
+        update.send(comms, ())
         latest, = CommanderUpdate.latest(comms, commander)
         assert latest.commander == commander
         assert latest.handled == (RulePing.capture(failure),)
-        assert CommanderUpdate.report_failure(commander, failure, (latest,), now=now + 1) == ()
+        assert CommanderUpdate.report_failure(
+            commander, failure, (latest,), published=CommanderUpdate.published(comms, commander),
+            now=now + 1) == ()
     # The worker's later packet is not the lead's board.
     lead = comms.registry.require("lead").incarnation
     lead_board, = CommanderUpdate.latest(comms, lead)
@@ -331,18 +410,18 @@ def everything_to_lead(comms):
     return {message.reference for message in page.messages}
 
 
-def test_hidden_tool_time_does_not_append_quiet_bus_history(notification_bus):
+def test_hidden_tool_time_keeps_publication_display_facts(notification_bus):
     comms = notification_bus
     recorded_turn(comms, (False,))
     hud = beat(comms, states=state_cards(comms, UnitState))
     first, = notifications(comms)
-    assert isinstance(first.task, CommanderNotice)
     for _ in range(2):
         recorded_turn(comms, (False,))
         later = beat(comms, states=state_cards(comms, UnitState))
         assert tuple(card.clock for card in hud.units) != tuple(card.clock for card in later.units)
         assert hud.display_facts == later.display_facts
-    assert tuple(message.reference for message in notifications(comms)) == (first.reference,)
+        # A unit may still need a commander action; a hidden clock is not a new display fact.
+        assert first.task.publication == PublishedFacts.of(later.display_facts)
 
 
 def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notification_bus):
@@ -364,12 +443,15 @@ def test_unchanged_open_alarm_wakes_each_beat_until_a_recorded_action(notificati
     assert len(hud.board) == 1
 
     publish(comms, "lead", "worker", time.time())
+    cleared = beat(comms, (rule,))
+    assert not cleared.packets[0].role.counts_as_conversation()
+    assert cleared.board == ()
+    # ReviewTimerUp is already shown in the unit row, not as a separate alarm. Its
+    # disposal advances the retained board without publishing an identical quiet display.
+    assert cleared.display_facts == hud.display_facts
+    assert len(notifications(comms)) == 2
     beat(comms, (rule,))
-    _, _, cleared = notifications(comms)
-    assert isinstance(cleared.task, CommanderNotice)
-    assert CommanderFrame.current(comms, "lead").board == ()
-    beat(comms, (rule,))
-    assert len(notifications(comms)) == 3
+    assert len(notifications(comms)) == 2
 
 
 def test_an_independent_heartbeat_message_never_replaces_the_board(notification_bus):
@@ -441,8 +523,9 @@ def test_a_recreated_commander_inherits_no_board(notification_bus):
     assert CommanderUpdate.latest(comms, reborn) == ()
     assert CommanderUpdate.latest(comms, board.task.commander) == (board.task,)
     now = time.time()
-    update, = CommanderUpdate.report_failure(reborn, failing, (), now=now)
-    update.send(comms, now, ())
+    update, = CommanderUpdate.report_failure(reborn, failing, (), published=(), now=now)
+    CommanderUpdateStore.record(comms.root, update)
+    update.send(comms, ())
     latest, = CommanderUpdate.latest(comms, reborn)
     assert latest.commander == reborn and latest.handled == update.handled
 
@@ -810,7 +893,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
         original.task.commander, original.task.handled, (), original.task.handled,
     )
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
-    message = packet.send(comms, time.time(), hud.hud_text(time.time()))
+    message, = packet.send(comms, hud.hud_text(time.time()))
     for frame in (lead_hud(comms), hud):
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
@@ -840,22 +923,14 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     assert isinstance(first.task, CommanderNotice)
     assert first.task.publication == PublishedFacts.of(first_hud.display_facts)
     comms.registry.register_child("quiet-fork", "lead", CommanderForkExecution, comms.goals)
-    bus = comms.bus.bus
-    with bus.writing() as db:
-        db.execute(
-            f'CREATE TRIGGER refuse_quiet BEFORE INSERT ON "{Message.table.declared_name}" '
-            "BEGIN SELECT RAISE(ABORT, 'quiet publication refused'); END"
-        )
-    try:
-        with pytest.raises(sqlite3.IntegrityError, match="quiet publication refused"):
-            beat(comms)
-    finally:
-        with bus.writing() as db:
-            db.execute("DROP TRIGGER refuse_quiet")
+    with refused_publication(comms), pytest.raises(HumanSendRefusedError):
+        beat(comms)
     owner = comms.registry.require("lead").incarnation
     unsent = CommanderFrame.at(comms.root, owner).read()
     assert first_hud.display_facts != unsent.display_facts
-    assert CommanderUpdate.latest(comms, owner) == (first.task,)
+    assert CommanderUpdate.latest(comms, owner) == unsent.packets
+    assert CommanderUpdate.published(comms, owner) == (first.task,)
+    assert CommanderUpdate.published(comms, owner)[0].publication == PublishedFacts.of(first_hud.display_facts)
     assert len(notifications(comms)) == 1
 
     retried = beat(comms)
@@ -872,6 +947,26 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     assert failed.display_facts != retried.display_facts
     assert "new recorded failure" in failed.status_strip(time.time())
     assert len(notifications(comms)) == 3
+
+
+def test_unsent_new_alert_remains_new_on_retry_without_resetting_its_age(notification_bus):
+    comms = notification_bus
+    beat(comms)
+    first, = notifications(comms)
+    rule = ServicePassFailing(
+        watch="unsent-new-alert", since=time.time(), error="a source failed", failed_at=time.time(),
+    )
+    with refused_publication(comms), pytest.raises(HumanSendRefusedError):
+        beat(comms, (rule,))
+    owner = comms.registry.require("lead").incarnation
+    observed, = CommanderUpdate.latest(comms, owner)
+    assert observed.handled == (RulePing.capture(rule),)
+    assert CommanderUpdate.published(comms, owner) == (first.task,)
+    beat(comms, (rule,))
+    _, announced = notifications(comms)
+    assert announced.role.counts_as_conversation()
+    assert announced.task.new_pings() == observed.handled
+    assert aged(announced.task.handled) == aged(observed.handled)
 
 
 def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus, request):
