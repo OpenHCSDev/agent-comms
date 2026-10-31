@@ -167,6 +167,8 @@ from agent_comms_hooks import ToolRefusedError
 from .goal_scope import OneGoal
 
 from agent_comms.change_report import FetchedRevision
+from agent_comms.registry_document import CommanderProject
+
 if TYPE_CHECKING:
     from agent_comms.held_orders import LiveHold
     from agent_comms.bus import BusReader
@@ -180,7 +182,7 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
-    from agent_comms.registry_document import CommanderProject, RegistrySnapshot
+    from agent_comms.registry_document import RegistrySnapshot
 
 
 @dataclass(frozen=True)
