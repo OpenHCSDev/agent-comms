@@ -133,9 +133,11 @@ def bind_expected_prompt(
             try:
                 NativeIdentityCheck(
                     row=reserved,
-                    stage=stage,
-                    owner=ParticipantOwner(owner, generation).coordinator_identity(
-                        stage.recipient_lookup
+                    expected=stage.identity(
+                        reserved.input_id,
+                        ParticipantOwner(owner, generation).coordinator_identity(
+                            stage.recipient_lookup
+                        ),
                     ),
                 ).require_valid()
             except ReservationViolationError as error:

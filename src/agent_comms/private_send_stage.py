@@ -21,12 +21,7 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
 from .field_codec import ThreadLookup, InputId, RootId
-from .private_send_rules import (
-    NativeBindingCheck,
-    NativeClaimCheck,
-    NativeIdentityCheck,
-    NativeReservationCheck,
-)
+from .private_send_rules import NativeClaimCheck, NativeIdentityCheck, NativeReservationCheck
 from .native_input_owner import ParticipantOwner
 from .native_input_record import (NativeInputIdentity, NativeInputExecution, TriageNativeExecution, FullNativeExecution)
 from .native_input_proof import NativeContextProof
@@ -43,6 +38,30 @@ from .selected_triage import DecidedTriageRecord, SelectedTriage
 from .text_digest import TextDigest
 from .turn_failure import TurnFailure
 from .typed_table import SqlValue
+from .reservation_rules import ReservationRule
+
+
+@dataclass(frozen=True, kw_only=True)
+class NativeBindingCheck(NativeIdentityCheck):
+    row: PromptBinding
+    wire_root_id: RootId
+    prompt_digest: TextDigest
+
+
+class NativeBindingRootRule(ReservationRule):
+    check_type = NativeBindingCheck
+    explanation = "The prelaunch binding belongs to a different wire root."
+
+    def violated(self, check: NativeBindingCheck) -> bool:
+        return check.row.wire_root_id != check.wire_root_id
+
+
+class NativeBindingContentRule(ReservationRule):
+    check_type = NativeBindingCheck
+    explanation = "The native request digest differs from its durable prelaunch binding."
+
+    def violated(self, check: NativeBindingCheck) -> bool:
+        return TextDigest(check.row.expected_prompt_digest) != check.prompt_digest
 
 
 @dataclass(frozen=True)
@@ -127,8 +146,9 @@ class NativeSendStage(ABC):
         try:
             NativeIdentityCheck(
                 row=row,
-                stage=self,
-                owner=owner.coordinator_identity(self.recipient_lookup),
+                expected=self.identity(
+                    row.input_id, owner.coordinator_identity(self.recipient_lookup),
+                ),
             ).require_valid()
         except ReservationViolationError as error:
             raise StaleFence(f"native dispatch identity changed: {error}") from error
@@ -202,8 +222,9 @@ class NativeSendStage(ABC):
         try:
             NativeReservationCheck(
                 row=reserved,
-                stage=self,
-                owner=owner.coordinator_identity(self.recipient_lookup),
+                expected=self.identity(
+                    reserved.input_id, owner.coordinator_identity(self.recipient_lookup),
+                ),
                 token_digest=token_digest,
             ).require_valid()
         except ReservationViolationError as error:
@@ -235,8 +256,9 @@ class NativeSendStage(ABC):
         try:
             NativeBindingCheck(
                 row=binding,
-                stage=self,
-                owner=owner.coordinator_identity(self.recipient_lookup),
+                expected=self.identity(
+                    binding.input_id, owner.coordinator_identity(self.recipient_lookup),
+                ),
                 wire_root_id=wire_root_id,
                 prompt_digest=TextDigest(native_request_digest(prompt)),
             ).require_valid()
