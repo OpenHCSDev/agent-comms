@@ -18,7 +18,7 @@ from .build_identity import RepositoryCommit
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .commander.order import CommanderContext
 from .declared_family import DeclaredFamily
-from .errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from .field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
 from .head_review import (
     BaseSide,

@@ -1,116 +1,85 @@
-"""Process-lifetime watch claims.
-
-A watched process holds an exclusive flock on its claim for its whole life and
-writes there the command that started it. The kernel drops the lock when the
-process dies, so a claim with a record and no holder is a watch that lapsed.
-"""
-
+"""The session's existing hook/socket boundary; standard library only."""
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import socket
+import sys
 import time
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Sequence
-from contextlib import contextmanager
-from dataclasses import asdict, dataclass, field
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from collections.abc import (
+    Callable,
+    Mapping,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import ClassVar
 
-from agent_comms.process_claim import ProcessSingleton
-from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import AtomicFile
-from agent_comms_hooks import ClaudeTranscriptHook
-from agent_comms_hooks.board import AbsentSessionSocket, SessionBoard
-
-if TYPE_CHECKING:
-    from agent_comms.cli_bridges.monitor import SessionRequest
-    from agent_comms.cli_bridges.shared import Serve
+from . import (
+    ClaudeHook,
+    ClaudeHookProgram,
+    HookRecord,
+)
+from .board import SessionWire
+from .process_claim import ProcessSingleton
+from .shell_commands import ConnectCommand
 
 
 class SessionFailure(Exception):
     """A session command failed; it does not declare the serving process dead."""
 
 
-class SessionRefusedError(ValueError, SessionFailure):
-    """A session endpoint rejected the control request, not malformed wire data."""
-
-
 class SessionCommandError(RuntimeError, SessionFailure):
     """A session command could not complete."""
 
 
-class SessionRequestTimeout(SessionCommandError):
-    """The request's declared reply budget expired."""
-
-
-class SessionConnectionClosed(SessionCommandError):
-    """The peer closed before a required reply or startup probe."""
-
-
 class NoSessionBridge(SessionCommandError):
-    """No bridge holds this claim: nothing is delivered until connect starts one."""
+    """No bridge holds this claim; its recovery command remains available."""
 
     def __init__(self, session: str) -> None:
         super().__init__(
             f'No session bridge is running for session {session}; its log names why it stopped. '
-            'Start it with agent-comms-claude-bridge connect.')
+            f'Start it with {ConnectCommand.program.name} {ConnectCommand.command_name()}.')
+
+
+class HookBridgeUnavailable(RuntimeError, SessionFailure):
+    """A bound session cannot answer its hook; it did not become unbound."""
 
 
 @dataclass(frozen=True)
-class DeafWatch:
-    """A session bridge with no Monitor reading it: every line to it waits unread. Core's
-    heartbeat and the session's own tool-call hook say it in this one sentence."""
+class HookAnswer(HookRecord, SessionWire):
+    """The resident hook's output and process result, not another saved record."""
 
-    since: str
-
-    def line(self) -> str:
-        return (f"RE-ARM this session's watch: its bridge has no confirmed Monitor {self.since},"
-                " so every Core line to it waits unread -> re-arm its watch:"
-                " agent-comms-claude-bridge watch (bare, no pipe)")
-
-
-@dataclass(frozen=True)
-class WatchRecord:
-    bus: str
-    root: str
-    command: tuple[str, ...]
-    base_state: Path
+    request: ClassVar[str] = "hook-answer"
+    timeout: ClassVar[float] = 30
+    stdout: str = ""
+    stderr: str = ""
+    status: int = 0
 
     @classmethod
-    def decode(cls, bus: str, root: str, command: Sequence[str], base_state: str) -> WatchRecord:
-        """Normalize the saved JSON array before constructing the immutable record."""
-        return cls(bus, root, tuple(command), Path(base_state))
+    def replied(cls, record: dict[str, object]) -> HookAnswer:
+        member = record.pop(cls.family_discriminator)
+        if member != cls.request:
+            raise HookBridgeUnavailable(f"The session bridge refused the hook: {member}: {record!r}")
+        return cls.decode(record)
 
-    def to_json(self) -> str:
-        """The saved command carries its declared base directory as path text."""
-        return json.dumps({**asdict(self), "base_state": str(self.base_state)})
-
-
-@dataclass(frozen=True)
-class HeldClaim:
-    """The open lock description that keeps a claim live. The kernel ties the flock to this
-    description, so a duplicate inherited through exec keeps the claim held. The lock file
-    carries no data: the holder publishes its record whole beside it, so a reader sees the
-    complete old record or the complete new one, never a truncated file."""
-
-    lock: TextIO
-    saved: AtomicFile
-
-    def record(self, record: WatchRecord) -> HeldClaim:
-        self.saved.write_text(record.to_json())
-        return self
-
-    def inheritable(self) -> int:
-        descriptor = os.dup(self.lock.fileno())
-        os.set_inheritable(descriptor, True)
-        return descriptor
+    def print(self, program: type[ClaudeHookProgram]) -> None:
+        sys.stdout.write(self.stdout)
+        sys.stderr.write(self.stderr)
+        if self.status:
+            raise SystemExit(program.failure_status(self.status))
 
 
 @dataclass(frozen=True)
-class WatchClaim:
-    """The kernel-held lifetime and saved re-arm command of one session's bridge watch."""
+class SessionEndpoint:
+    """One locator, shared by the lightweight hook and the kernel-held WatchClaim."""
 
     thread: str
     home: Path = field(default_factory=Path.home)
@@ -130,7 +99,6 @@ class WatchClaim:
 
     @classmethod
     def endpoints(cls, home: Path) -> tuple[Path, ...]:
-        """Live session endpoints share the claim directory, independent of --state."""
         return tuple(sorted(cls.directory(home).glob("*.sock")))
 
     @property
@@ -138,15 +106,12 @@ class WatchClaim:
         key = hashlib.sha256(self.thread.encode()).hexdigest()
         return self.directory(self.home) / f"{key}.lock"
 
-    @staticmethod
-    def claims_in(directory: Path) -> tuple[Path, ...]:
-        """Every session's claim lock in ``directory``; reader and launch claims carry a
-        second suffix (``reader_claim``, ``launch_claim``)."""
-        return tuple(sorted(path for path in directory.glob("*.lock") if len(path.suffixes) == 1))
+    @property
+    def claim(self) -> ProcessSingleton:
+        return ProcessSingleton(self.path)
 
     @staticmethod
     def record_beside(claim: Path) -> Path:
-        """The saved re-arm record, published whole; the lock file only holds the flock."""
         return claim.with_suffix(".record")
 
     @property
@@ -155,235 +120,149 @@ class WatchClaim:
 
     @property
     def socket_path(self) -> Path:
-        # sockaddr_un is short. Keep the locator derived from the session claim.
+        # sockaddr_un is short. This is the existing claim-derived address.
         return self.path.with_name(self.path.stem[:32] + ".sock")
 
-    @property
-    def claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.path)
+    def session(self) -> HookSession:
+        """An enrolled record establishes binding, not a successful socket connection.
 
-    @property
-    def reader_claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.path.with_suffix(".reader.lock"))
+        Live and lapsed enrolled claims are both bound. An unrecorded launch or a
+        session never enrolled has no bus; the endpoint never guesses its role.
+        """
+        if self.record_path.exists():
+            return BoundSession(self)
+        return UnboundSession(self)
 
-    @property
-    def launch_claim(self) -> ProcessSingleton:
-        return ProcessSingleton(self.path.with_suffix(".launch.lock"))
-
-    @contextmanager
-    def launching(self) -> Iterator[None]:
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.launch_claim.waited():
-            yield
-
-    @contextmanager
-    def held(self, record: WatchRecord) -> Iterator[HeldClaim]:
-        """One watch per conversation, independent of --state and bus aliases."""
-        self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.claim.claimed() as lock:
-            yield HeldClaim(lock, AtomicFile(self.record_path)).record(record)
-
-    @contextmanager
-    def adopted(self, descriptor: int, record: WatchRecord) -> Iterator[HeldClaim]:
-        """A replaced bridge's successor takes over the description its predecessor kept
-        locked through exec, so the claim never reads as lapsed, and records its own command."""
-        with self.claim.adopted(descriptor) as lock:
-            yield HeldClaim(lock, AtomicFile(self.record_path)).record(record)
-
-    @contextmanager
-    def reader_held(self) -> Iterator[None]:
-        with self.reader_claim.claimed():
-            yield
-
-    def has_reader(self) -> bool:
-        return self.reader_claim.held_elsewhere()
-
-    def deaf(self) -> tuple[DeafWatch, ...]:
-        """A running bridge whose reader claim nobody holds; a session with no bridge is
-        not deaf, it never bound one."""
-        if self.claim.held_elsewhere() and not self.has_reader():
-            return (DeafWatch("now (no Monitor holds its reader claim)"),)
-        return ()
-
-    def state(self) -> WatchState:
-        if not self.path.exists():
-            return UnclaimedWatch()
-        with self.claim.observed() as claim:
-            held = claim.held
-        if not self.record_path.exists():
-            return ClaimingWatch() if held else UnclaimedWatch()
-        record = WatchRecord.decode(**json.loads(self.record_path.read_text()))
-        return LiveWatch(self, record) if held else LapsedWatch(self, record)
-
-    def enrol(self, record: WatchRecord) -> None:
-        with self.launching():
-            self.state().enrol(self, record)
+    def absent(self) -> HookSession:
+        """The kernel distinguishes a held install swap from a lapsed enrolled bridge."""
+        return SwappingSession(self) if self.claim.held_elsewhere() else AbsentSession(self)
 
 
-class WatchState(ABC):
-    """The claim state owns connection, shutdown, enrolment and discovery."""
+class SocketWatch:
+    """An absent unheld socket is down; both transport and watch control use this policy."""
 
-    @abstractmethod
-    def rearm(self, launch: Callable[[], None]) -> None:
-        """Whether this state needs the enrolled session's existing launcher."""
-
-    def connect(self, serve: Callable[[], Serve],
-                request: Callable[[Serve], SessionRequest]) -> None:
-        """An unenrolled session does not construct a serve or request authority."""
-
-    def connect_held(self, serve: Callable[[], Serve],
-                     request: Callable[[Serve], SessionRequest]) -> None:
-        """A claim removed while awaiting its launch lock remains unclaimed."""
-
-    def end(self, request: Callable[[], SessionRequest]) -> None:
-        """Only a live holder can receive a shutdown request."""
-
-    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
-        with claim.held(record):
-            pass
-
-    def bindings(self) -> tuple[WatchRecord, ...]:
-        """No session binding exists until this watch is enrolled."""
-        return ()
-
-    def commands(self) -> bool:
-        """An unbound session commands nothing: the registry names the commander, and only
-        a binding can point at it."""
-        return False
-
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
-                   commander: Callable[[WatchRecord], T]) -> T:
-        """An unbound session has no role on any bus: a subagent, or a session never enrolled."""
-        return unbound()
-
-    def board(self) -> tuple[str, ...]:
-        """Only a running bridge can derive a board."""
-        return ()
-
-    def announce_absence(self, announce: Callable[[], None]) -> bool:
-        """No bridge holds the claim: the reader says delivery is down, once per outage."""
-        announce()
-        return True
-
-    def name_wait(self, announce: Callable[[], None]) -> bool:
-        """An absent holder is not a wait to name."""
-        return False
-
-    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
-        """No bridge holds the claim, so its socket is gone, not between bridges."""
+    def await_socket(self, claim: SessionEndpoint, absent: OSError) -> None:
         raise NoSessionBridge(claim.thread) from absent
 
 
-class UnclaimedWatch(WatchState):
-    def rearm(self, launch: Callable[[], None]) -> None:
-        raise SessionCommandError('Enroll this session before starting its Monitor')
+class HeldSocketWatch(SocketWatch):
+    """An inherited claim stays held through an install's exec and its socket gap."""
 
-
-class ClaimingWatch(WatchState):
-    """A bridge holds the claim and is publishing its first record: it is serving, so it is
-    neither relaunched nor announced as down, and it has no binding to report yet."""
-
-    def rearm(self, launch: Callable[[], None]) -> None:
-        return
-
-    def announce_absence(self, announce: Callable[[], None]) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class RecordedWatch(WatchState):
-    claim: WatchClaim
-    record: WatchRecord
-
-    def bindings(self) -> tuple[WatchRecord, ...]:
-        return (self.record,)
-
-    def commands(self) -> bool:
-        """Whether the registry names this binding's thread a commander, read now: command
-        moves between threads, so no session keeps its own copy of the answer. A failed first
-        connect leaves a record naming a thread nobody registered; that session commands nothing,
-        and raising here failed every hook it ran."""
-        snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
-        if not snapshot.taken(self.record.bus):
-            return False
-        bound = snapshot.require(self.record.bus)
-        return any(thread.incarnation == bound.incarnation
-                   for thread in snapshot.commander_project.commanders(snapshot))
-
-    def by_role[T](self, unbound: Callable[[], T], fleet: Callable[[WatchRecord], T],
-                   commander: Callable[[WatchRecord], T]) -> T:
-        """A bound session supplies its own record to the selected role's operation."""
-        return commander(self.record) if self.commands() else fleet(self.record)
-
-    def connect(self, serve: Callable[[], Serve],
-                request: Callable[[Serve], SessionRequest]) -> None:
-        with self.claim.launching():
-            self.claim.state().connect_held(serve, request)
-
-    def connect_held(self, serve: Callable[[], Serve],
-                     request: Callable[[Serve], SessionRequest]) -> None:
-        operation = serve()
-        operation.owner.require_alive()
-        verification = request(operation)
-        try:
-            verification.exchange(self.claim.socket_path)
-        except (FileNotFoundError, ConnectionRefusedError, SessionRefusedError):
-            self.reconnect(operation, verification)
-
-    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
-        serve.launch_record(self.claim, self.record, request)
-
-
-class LiveWatch(RecordedWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
-        """The kernel-held bridge is already serving; do not launch another."""
-        return
-
-    def board(self) -> tuple[str, ...]:
-        """The bridge derives the current board. A held claim's absent socket is an install's
-        swap (announce_absence), so it is one board line and the call's slice still lands;
-        any other failed read is a hook failure."""
-        try:
-            return SessionBoard.asked(self.claim.socket_path).lines
-        except AbsentSessionSocket:
-            return ("BOARD: not read this call: an install is swapping the session bridge, "
-                    "so no bridge listens yet; the board returns when the new one does",)
-
-    def reconnect(self, serve: Serve, request: SessionRequest) -> None:
-        raise RuntimeError(
-            'An older watch still owns this session, or an install is replacing it. '
-            'No second bridge launched. Stop that Monitor once, then connect.')
-
-    def end(self, request: Callable[[], SessionRequest]) -> None:
-        request().exchange(self.claim.socket_path)
-
-    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
-        if self.record != record:
-            raise ValueError('This session is already bound to another bridge command')
-
-    def announce_absence(self, announce: Callable[[], None]) -> bool:
-        """A held claim's absent socket is an install's swap, not an outage."""
-        return False
-
-    def name_wait(self, announce: Callable[[], None]) -> bool:
-        """Name a held claim's replacement once through the reader's protocol."""
-        announce()
-        return True
-
-    def await_socket(self, claim: WatchClaim, absent: OSError) -> None:
-        """The claim's lock outlives the install's exec, so a held claim's absent socket is
-        the swap's gap: wait for the successor however long it starts."""
+    def await_socket(self, claim: SessionEndpoint, absent: OSError) -> None:
         time.sleep(.05)
 
 
-class LapsedWatch(RecordedWatch):
-    def rearm(self, launch: Callable[[], None]) -> None:
-        launch()
+@dataclass(frozen=True)
+class HookSession(SocketWatch, ABC):
+    endpoint: SessionEndpoint
+
+    def require_bound(self) -> None:
+        raise HookBridgeUnavailable(
+            f"Session {self.endpoint.thread} is bound to no bus thread; bind it to the bus first")
+
+    def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
+        """An unbound session supplies no enrolled record to the resident watch."""
+        return unbound()
+
+    @abstractmethod
+    def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None: ...
 
 
-class CommanderSession(ClaudeTranscriptHook):
-    """A hook that acts only in the session the registry currently names commander."""
+class UnboundSession(HookSession):
+    """A genuinely unenrolled session keeps the program's existing local answer."""
 
-    @property
-    def commands(self) -> bool:
-        return WatchClaim(self.session_id).state().commands()
+    def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
+        program.unbound(record)
+
+
+@dataclass(frozen=True)
+class BoundSession(HookSession):
+    def require_bound(self) -> None:
+        """Enrollment is already established by this state; socket liveness is separate."""
+
+    def when_bound[Answer](self, unbound: Callable[[], Answer], bound: Callable[[], Answer]) -> Answer:
+        return bound()
+
+    def answer(self, program: type[ClaudeHookProgram], record: Mapping[str, object],
+               *, timeout: float = HookAnswer.timeout) -> HookAnswer:
+        """One request on the one resident socket; absence is handled by the session state."""
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as peer:
+            peer.settimeout(timeout)
+            peer.connect(str(self.endpoint.socket_path))
+            peer.sendall(json.dumps({
+                SessionWire.family_discriminator: program.wire_name(), "payload": record,
+            }).encode() + b"\n")
+            with peer.makefile("rb") as stream:
+                raw = stream.readline()
+        if not raw:
+            raise HookBridgeUnavailable("The bound session bridge closed without answering the hook")
+        return HookAnswer.replied(json.loads(raw))
+
+    def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
+        try:
+            answer = self.answer(program, record)
+        except (FileNotFoundError, ConnectionRefusedError):
+            self.endpoint.absent().invoke(program, record)
+            return
+        except OSError as error:
+            raise HookBridgeUnavailable(
+                f"Bound session {self.endpoint.thread} cannot answer its hook: {error}"
+            ) from error
+        answer.print(program)
+
+
+class AbsentSession(BoundSession):
+    """Enrollment survives the outage; only the declared recovery command may bypass it."""
+
+    def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
+        program.absent(record, NoSessionBridge(self.endpoint.thread))
+
+
+class SwappingSession(AbsentSession, HeldSocketWatch):
+    """Wait for the held claim's successor, with the hook's existing reply budget."""
+
+    def invoke(self, program: type[ClaudeHookProgram], record: Mapping[str, object]) -> None:
+        deadline = time.monotonic() + HookAnswer.timeout
+        bound = BoundSession(self.endpoint)
+        while time.monotonic() < deadline:
+            try:
+                answer = bound.answer(program, record, timeout=max(.001, deadline - time.monotonic()))
+            except (FileNotFoundError, ConnectionRefusedError) as absent:
+                try:
+                    self.endpoint.absent().await_socket(self.endpoint, absent)
+                except NoSessionBridge as lapsed:
+                    program.absent(record, lapsed)
+                    return
+            except OSError as error:
+                raise HookBridgeUnavailable(
+                    f"Bound session {self.endpoint.thread} cannot answer its hook: {error}"
+                ) from error
+            else:
+                answer.print(program)
+                return
+        raise HookBridgeUnavailable(
+            f"Session {self.endpoint.thread} still holds its claim but did not restore its socket "
+            f"within {HookAnswer.timeout:g} seconds")
+
+
+class SessionHookProgram(ClaudeHookProgram, ABC):
+    """The boundary reads once, sends to the existing session, and prints its answer."""
+
+    @classmethod
+    def main(cls) -> None:
+        try:
+            record = json.load(sys.stdin)
+            hook = ClaudeHook.decode(record)
+            SessionEndpoint(hook.session_id).session().invoke(cls, record)
+        except SessionFailure as error:
+            cls.failed(error)
+
+
+class SkillText(SessionHookProgram):
+    """Startup deals through the resident after launch, not through a parallel hook."""
+
+    events = ("SessionStart",)
+
+    @classmethod
+    def installation_members(cls) -> tuple[type[ClaudeHookProgram], ...]:
+        return ()

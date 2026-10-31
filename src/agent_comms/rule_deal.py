@@ -29,6 +29,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
+from .instruction_deck import DealtCalls
 from .field_codec import FieldCodec, MalformedRecord
 from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
@@ -490,17 +491,7 @@ class Blocked(ToolGateState):
     cause: Owed
 
     def enforce(self, gate: ToolGate, tool: str) -> None:
-        gate.refuse(
-            "\n\n".join(
-                (
-                    self.cause.record.trigger.reason(),
-                    f"You just tried {tool} before {self.cause.before}. Call #{gate.count_call()}"
-                    " since this deal, refused.",
-                    self.cause.reason,
-                    gate.template_once(self.cause.record.due),
-                )
-            )
-        )
+        gate.blocked(self.cause, tool)
 
     def permits_read(self, path: Path) -> bool:
         return self.cause.permits_read(path)
@@ -704,6 +695,15 @@ class Owed(State):
     def reason(self) -> str:
         """What the session skipped, and what clears it."""
 
+    def explain_refusal(self, tool: str, number: int, template: str) -> str:
+        """The owed case owns its refusal; the backend owns how it is delivered."""
+        return "\n\n".join((
+            self.record.trigger.reason(),
+            f"You just tried {tool} before {self.before}. Call #{number} since this deal, refused.",
+            self.reason,
+            template,
+        ))
+
     def permits_read(self, path: Path) -> bool:
         """Reading a dealt file is the way through the gate."""
         return True
@@ -843,7 +843,7 @@ class Unaudited(Owed):
         return f"Reading is passive; {self.refusal}."
 
 
-class RuleDeal(State):
+class RuleDeal(State, DealtCalls):
     """One session's deal: the files beside its `stem` that record what it was dealt, what it
     has read in full and the audit it wrote."""
 
@@ -864,19 +864,8 @@ class RuleDeal(State):
         )
 
     @property
-    @abstractmethod
-    def stem(self) -> Path:
-        """Where this session's deal files live; each takes its own suffix."""
-
-    @property
     def record(self) -> Path:
         return self.stem.with_suffix(".deal.json")
-
-    @property
-    def calls(self) -> Path:
-        """One byte per gated call since this deal; atomic append counts parallel calls once
-        without another counter or history scan."""
-        return self.stem.with_suffix(".calls")
 
     @property
     def dealt_read(self) -> Path:
@@ -953,11 +942,6 @@ class RuleDeal(State):
             )
         return f"{due.reminder()}\n\n{due.template(self.audit)}"
 
-    def count_call(self) -> int:
-        with self.calls.open("ab", buffering=0) as calls:
-            calls.write(b".")
-            return calls.tell()
-
     def current(self) -> DealRecord:
         """Keep a deal while its sources exist; a retired source requires a fresh deal.
 
@@ -1002,15 +986,19 @@ class RuleDeal(State):
             json.dumps(FieldCodec.encode(record)).encode()
         )
 
-    def record_read(self, path: Path, span: ReadSpan) -> None:
+    def record_read(self, path: Path, span: ReadSpan) -> bool:
         """A completed read covering a whole dealt file counts its content; any other read
         counts nothing."""
         if path not in self.current().paths or not span.covers(path):
-            return
+            return False
         source = DealtSource.of(path)
         read = DealtRead(source, source.digest())
-        with self.dealt_read.open("a", encoding="utf-8") as record:
-            record.write(json.dumps(FieldCodec.encode(read)) + "\n")
+        line = json.dumps(FieldCodec.encode(read)) + "\n"
+        with self.write_guard(self.dealt_read):
+            with self.dealt_read.open("a", encoding="utf-8") as record:
+                first = record.tell() == 0
+                record.write(line)
+                return first
 
 
 class ToolGate(RuleDeal):
@@ -1044,6 +1032,10 @@ class ToolGate(RuleDeal):
         """Writing the audit itself is the way through the gate; any other write waits."""
         if path != self.audit.resolve():
             self.judge_tool(tool)
+
+    def blocked(self, cause: Owed, tool: str) -> None:
+        template = self.template_once(cause.record.due)
+        self.refuse(cause.explain_refusal(tool, self.count_call(), template))
 
     @abstractmethod
     def refuse(self, reason: str) -> None:

@@ -30,11 +30,11 @@ from module_layers import PACKAGE, ClientSources, MaterializedClients, StackClie
 from nominal_refactor_advisor import audit
 
 import agent_comms
+from agent_comms_hooks import process_claim
 from agent_comms import (
     coordination_schema,
     field_codec,
     locked_store,
-    process_claim,
     store_files,
     typed_table,
 )

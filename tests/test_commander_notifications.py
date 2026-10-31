@@ -45,7 +45,7 @@ from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, Standi
 from agent_comms.ui_model.unit_state import (
     Spinning, UnitState, UrgentGroup,
 )
-from agent_comms_hooks.watch import RecordedWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import RecordedWatch, WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget

@@ -15,10 +15,13 @@ from agent_comms.bus import Bus
 from agent_comms.native_build_inputs import ConfiguredChildStdio
 from agent_comms.child_process import SpawnedProcess
 from agent_comms.locked_store import SQLiteFile
-from agent_comms.process_claim import ClaimHeldError, ProcessSingleton
 from agent_comms.store_files import SingleFileStore
 from agent_comms.todos import TodoStore
 
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
+)
 from test_locked_store import _hold_store_write, assert_writer_excluded, event, process
 
 

@@ -17,6 +17,11 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, TextIO
 
+from agent_comms_hooks.process_claim import (
+    ClaimHeldError,
+    ProcessSingleton,
+)
+
 
 from .cli_result import CliResult, ResultShower
 from .child_process import OutlivesLauncherLifetime, Platform, ProcessIdentity, SpawnedProcess
@@ -36,7 +41,6 @@ from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import OwnerRestartSelection
 from .owner_restart import OwnerRestartRequest, StoppedOwnerFailure
 from .private_path import PrivateDirectoryRole
-from .process_claim import ClaimHeldError, ProcessSingleton
 from .restart_refusals import RestartRefusal
 from .restart_scope import OwnersNamed
 from .thread_identity import OwnerIdentity, RecordedThreadIncarnation, ThreadIncarnationRecord

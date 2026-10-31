@@ -16,7 +16,10 @@ from agent_comms.field_codec import (
     TurnId,
 )
 from agent_comms.pi_events import ToolExecutionStart
-from agent_comms.pi_payloads import CodelessProviderDiagnosticError, ReportedText
+from agent_comms.pi_payloads import (
+    CodelessProviderDiagnosticError,
+    ReportedText,
+)
 from agent_comms.runtime_updates import ThreadOutput
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread

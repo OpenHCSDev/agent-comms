@@ -19,11 +19,11 @@ from agent_comms.locked_store import DurableFile, PatternFile
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.private_path import PrivateDirectoryRole, TrustedAncestorRole
+from agent_comms_hooks.process_claim import ProcessSingleton
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
 from .native_input_proof import NativeInputProof
-from .process_claim import ProcessSingleton
 
 
 class SessionFiles:
