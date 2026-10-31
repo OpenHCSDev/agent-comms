@@ -22,11 +22,10 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
 if TYPE_CHECKING:
     from .audience_manifest import AudiencedMessage
     from .frozen_recipient import FrozenRecipient
-    from .catalog_document import CatalogAccess, CatalogDocument
+    from .catalog_document import CatalogDocument
     from .channels import Channel
     from .cli_command import CliCommand
     from .cli_result import CliResult
-    from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
     from .history_views import HistoryViews
@@ -39,10 +38,9 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
+    from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
-    from .thread_status import ThreadStatus
     from .threads import Thread
     from .wake_policy import WakePolicy
 
@@ -109,8 +107,12 @@ def exact_stored_target(name: str) -> bool:
             if name in BuiltinChannelView.addresses() else True)
 
 
+class ResolvedTarget:
+    """An acquired thread/channel value; CLI commands bind this nominal result family."""
+
+
 class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
-    """A command destination owns its binding and catalog participation."""
+    """A command destination owns resolution and catalog participation."""
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
@@ -149,13 +151,9 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         return True
 
     @abstractmethod
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]): ...
-
-    @abstractmethod
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]: ...
+    def resolve(
+        self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel],
+    ) -> ResolvedTarget | Checkout: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
@@ -395,14 +393,8 @@ class ThreadTarget(NamedTarget):
     ) -> int:
         return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedThread:
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedTarget:
         return snapshot.resolve_thread(self.selected_name(snapshot))
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
     def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
@@ -540,14 +532,8 @@ class ChannelTarget(NamedTarget):
     ) -> int:
         return require_channel(self.name).pending_count(counts)
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedChannel:
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedTarget:
         return snapshot.resolve_channel(require_channel(self.name))
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender: Message | None = None):
         from .channels import BuiltinChannelView
@@ -632,14 +618,8 @@ class ProjectTarget(CommandTarget):
     def destination_names(self) -> tuple[str, ...]:
         return ()
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]):
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> Checkout:
         return self.project
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.project_bindings(comms, resolved)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")

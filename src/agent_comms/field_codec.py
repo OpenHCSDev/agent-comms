@@ -2501,12 +2501,15 @@ class FieldCodec(MroDispatch, Sealed):
         )
 
     @classmethod
-    @cache
     def field_annotation(cls, record: type, name: str) -> type[object]:
         """A field resolves where it was declared, without evaluating unrelated annotations."""
-        declarer = next(owner for owner in record.__mro__ if name in
-                        annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF))
-        annotations = annotationlib.get_annotations(declarer, format=annotationlib.Format.FORWARDREF)
+        declarer = next(
+            owner for owner in record.__mro__
+            if name in annotationlib.get_annotations(owner, format=annotationlib.Format.FORWARDREF)
+        )
+        annotations = annotationlib.get_annotations(
+            declarer, format=annotationlib.Format.FORWARDREF,
+        )
         return cls._evaluate_annotations(declarer, {name: annotations[name]})[name]
 
     @overload
@@ -2552,20 +2555,9 @@ class FieldCodec(MroDispatch, Sealed):
         return hashlib.sha256(cls.compact(compared, sort_keys=True).encode()).hexdigest()
 
     @classmethod
-    @cache
-    def compared_fields(cls, record: type) -> tuple[FieldPlan, ...]:
-        """The comparison view resolves only fields it actually compares, not wire context
-        or unrelated class annotations. FieldPlan still owns their directives and decoders."""
-        return tuple(
-            cls._field_plan(item, annotation)(declared=item, _annotation=annotation)
-            for item in fields(record) if item.compare
-            for annotation in (cls.field_annotation(record, item.name),)
-        )
-
-    @classmethod
     def compile_comparison(cls, record: type) -> None:
         """Prepare the same declared field view that record comparisons execute."""
-        _RecordDecoder(record).compile_comparison(set())
+        _member_decoder(record).compile_comparison(set())
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
@@ -3110,9 +3102,9 @@ class _TypeDecoder(_ScalarDecoder[type[DeclaredFamily]]):
 
     @classmethod
     def from_annotation(cls, target: object, args: tuple[object, ...]) -> ValueDecoder[type[DeclaredFamily]]:
-        if args and issubclass(cast(type, args[0]), DeclaredFamily):
-            return _FamilyNameDecoder(target, cast(type[DeclaredFamily], args[0]))
-        raise TypeError(f"Unsupported JSON type: {target}")
+        if args and isinstance(args[0], type) and issubclass(args[0], DeclaredFamily):
+            return _FamilyNameDecoder(target, args[0])
+        raise UnsupportedFieldType(f"Unsupported JSON type: {target}")
 
     @classmethod
     def representation_plan(
@@ -3620,6 +3612,16 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     def plan(self) -> FieldCodec._RecordPlan:
         return FieldCodec._record_plan(self.target)
 
+    @cached_property
+    def compared_fields(self) -> tuple[FieldPlan, ...]:
+        """The compiled decoder owns the compared-only view's lifetime. Class metadata
+        and excluded context never enter this view; FieldPlan owns its value decoders."""
+        return tuple(
+            FieldCodec._field_plan(item, annotation)(declared=item, _annotation=annotation)
+            for item in fields(self.target) if item.compare
+            for annotation in (FieldCodec.field_annotation(self.target, item.name),)
+        )
+
     def fits_wire(self, data: object) -> TypeGuard[dict[str, object]]:
         if not isinstance(data, dict):
             return False
@@ -3642,13 +3644,13 @@ class _RecordDecoder[T](_ContextDecoder[T]):
         # Each compared field compares through its declared type. Value decoders
         # compile per field on demand, so excluded live readers never compile.
         return tuple((entry.name, entry.value.comparison(entry.current(value)))
-                     for entry in FieldCodec.compared_fields(self.target))
+                     for entry in self.compared_fields)
 
     def compile_comparison(self, compiled: set[object]) -> None:
         if self.target in compiled:
             return
         compiled.add(self.target)
-        for entry in FieldCodec.compared_fields(self.target):
+        for entry in self.compared_fields:
             entry.value.compile_comparison(compiled)
 
     def field_paths(self, key: str, seen: frozenset[type] = frozenset()) -> tuple[tuple[str, ...], ...]:

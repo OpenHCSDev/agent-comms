@@ -29,7 +29,7 @@ from agent_comms.storage_room import RoomAllocation
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 
-from .shell_effects import StorageDenied, StorageEffect
+from .shell_effects import StorageDenied
 from .thread_storage import (
     StoragePath,
     StorageRoots,
@@ -42,8 +42,6 @@ if TYPE_CHECKING:
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.todos import ProgressRead, Todo, TodoStore
     from agent_comms.held_orders import LiveHold
-
-    from .native_tool_call import CodingCall
 
 
 

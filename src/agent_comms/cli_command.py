@@ -1,35 +1,50 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
+from inspect import iscoroutinefunction, signature
+from types import get_original_bases
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Generic,
+    Self,
+    TextIO,
+    TypeVar,
+    cast,
+    get_args,
+    get_origin,
+)
+
+from metaclass_registry.mro_dispatch import MroDispatch, handles
+from pydantic import JsonValue
+
 from agent_comms.active_route import ActiveRoute
 from agent_comms.catalog_document import CatalogAccess, NoCatalog
-from agent_comms.channel_targets import ChannelSelection, CommandTarget, NoChannel, SurroundingChannel
+from agent_comms.channel_targets import (
+    ChannelSelection,
+    CommandTarget,
+    NoChannel,
+    OneChannel,
+    ResolvedTarget,
+    SurroundingChannel,
+)
 from agent_comms.cli_failures import CLI_FAILURES
 from agent_comms.cli_result import CliResult, ResultShower
 from agent_comms.command import Command
 from agent_comms.comms import Comms
-from agent_comms.repo import Checkout
 from agent_comms.config_options import ConfigOptions
-from agent_comms.errors import ToolRefusedError
-from agent_comms.field_codec import FieldCodec, RecordMember, WireValue
-from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
-from agent_comms.lifecycle_capability import LifecycleCapability, Successful
-from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.target_fields import TargetField
-from dataclasses import dataclass, field, replace
-from pydantic import JsonValue
-from collections.abc import Mapping
-from typing import Annotated, Generic, Self, TypeVar
-
-from agent_comms.channel_targets import OneChannel
-from agent_comms.registry_document import ResolvedChannel, ResolvedThread
-from agent_comms.declared_verb import DeclaredCommand
 from agent_comms.declared_family import ModuleMembers
-from agent_comms.field_codec import FieldPlan, TargetBound
+from agent_comms.declared_verb import DeclaredCommand
+from agent_comms.errors import ToolRefusedError
+from agent_comms.field_codec import FieldCodec, FieldPlan, RecordMember, TargetBound, WireValue
+from agent_comms.installer.owner_starts import OwnerStart, RefusedOwner, StartedOwner
 from agent_comms.launch_root import LaunchRoot
-from inspect import iscoroutinefunction, signature
-from types import get_original_bases
-from typing import TYPE_CHECKING, TextIO, cast, get_args, get_origin
+from agent_comms.lifecycle_capability import LifecycleCapability, Successful
+from agent_comms.registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
+from agent_comms.repo import Checkout
+from agent_comms.target_fields import TargetField
 
 if TYPE_CHECKING:
     from agent_comms.active_route import CommsRoute
@@ -67,6 +82,7 @@ Answer = TypeVar("Answer", bound=CliResult, covariant=True, default=CliResult)
 @dataclass(frozen=True, kw_only=True)
 class CliCommand(
     ModuleMembers,
+    MroDispatch,
     DeclaredCommand,
     CliExecution[Answer],
     Generic[Answer],
@@ -138,11 +154,45 @@ class CliCommand(
         return ()
 
     @classmethod
-    def bindings(cls, comms: Comms, target: CommandTarget, channel: SurroundingChannel,
-                 *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-                 resolved: ResolvedThread | ResolvedChannel | Checkout) -> tuple[Self, ...]:
-        return target.bindings(
-            cls, comms, channel, resolved, project=project, snapshot=snapshot, catalog=catalog)
+    def bindings(
+        cls, resolved: ResolvedTarget | Checkout, comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[Self, ...]:
+        return cast(tuple[Self, ...], cls.handler_for(type(resolved))(
+            resolved, comms, channel, project=project, snapshot=snapshot, catalog=catalog,
+        ))
+
+    @handles(ResolvedTarget)
+    @classmethod
+    def _unsupported_bindings(
+        cls, resolved: ResolvedTarget, comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[Self, ...]:
+        raise TypeError(f"No CLI binding for {type(resolved).__name__}")
+
+    @handles(ResolvedThread)
+    @classmethod
+    def _thread_bindings(
+        cls, resolved: ResolvedThread, comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[Self, ...]:
+        return cls.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
+
+    @handles(ResolvedChannel)
+    @classmethod
+    def _channel_bindings(
+        cls, resolved: ResolvedChannel, comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[Self, ...]:
+        return cls.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
+
+    @handles(Checkout)
+    @classmethod
+    def _project_bindings(
+        cls, resolved: Checkout, comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[Self, ...]:
+        return cls.project_bindings(comms, resolved)
 
     @classmethod
     def target_catalog(cls, comms: Comms, target: TargetSelection,
@@ -167,7 +217,7 @@ class CliCommand(
             for name, resolved in resolved_targets:
                 for context in name.contexts(member, selected_channels):
                     available = member.bindings(
-                        comms, name, context, project=project, snapshot=snapshot, catalog=catalog, resolved=resolved)
+                        resolved, comms, context, project=project, snapshot=snapshot, catalog=catalog)
                     if available:
                         declaration = target.listed_declaration(member)
                         grouped.setdefault(declaration, {}).update(dict.fromkeys(
@@ -443,8 +493,8 @@ class OneTarget(TargetSelection):
         name, = self.targets
         resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
-                         for bound in declaration.bindings(comms, name, context, project=project, snapshot=snapshot,
-                                                           catalog=catalog, resolved=resolved))
+                         for bound in declaration.bindings(resolved, comms, context, project=project, snapshot=snapshot,
+                                                           catalog=catalog))
         if len(bindings) == 1:
             bound = bindings[0].for_editor(comms, name.name, project).edited(arguments)
             return bound.with_confirmation(confirmed).apply(comms)
@@ -493,8 +543,8 @@ class TargetBatch(TargetSelection):
             for context in name.contexts(declaration, channel):
                 try:
                     bindings = tuple(command for member in declarations
-                                     for command in member.bindings(comms, name, context,
-                                                                   project=project, snapshot=snapshot, catalog=catalog, resolved=resolved))
+                                     for command in member.bindings(resolved, comms, context,
+                                                                   project=project, snapshot=snapshot, catalog=catalog))
                     if not bindings:
                         raise CommandSelectionChanged(
                             f'This action is no longer available for {name}{context.scope()}')
@@ -513,8 +563,8 @@ class TargetBatch(TargetSelection):
                 current_catalog = (comms.channels.catalog.read()
                                    if context.needs_catalog or name.needs_channel_state else NoCatalog())
                 if bound_command not in type(bound_command).bindings(
-                        comms, name, context, project=project, snapshot=current, catalog=current_catalog,
-                        resolved=name.resolve(current, comms.bus.require_channel)):
+                        name.resolve(current, comms.bus.require_channel), comms, context,
+                        project=project, snapshot=current, catalog=current_catalog):
                     raise CommandSelectionChanged(
                         f'The bound command for {name}{context.scope()} changed; refresh the selection')
                 command.schedule(TargetBatchSchedule(position, name, outcomes, together), comms)

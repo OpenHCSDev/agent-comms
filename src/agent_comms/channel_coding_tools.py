@@ -40,11 +40,11 @@ from .selected_tool_broker import (
     verify_sent_full_input,
 )
 from .shell_effects import StorageDenied
-from .storage_room import NoRoomNeeded, RoomReservation
 from .storage_projection import StorageProjection
+from .storage_room import NoRoomNeeded, RoomReservation
+from .threads import Thread
 from .tool_denial import SelectedToolDenied
 from .turn_goal_permission import TurnGoalPermission
-from .threads import Thread
 
 if TYPE_CHECKING:
     from .backend import TurnSession

@@ -15,7 +15,7 @@ from pydantic import JsonValue
 
 
 from .activity import ActivityCapture
-from .channel_targets import CommandersTag
+from .channel_targets import CommandersTag, ResolvedTarget
 from .channels import Channel, ChannelMemberIndex
 from .child_process import NoProcess, ProcessIdentity
 from .declared_family import DeclaredFamily
@@ -97,13 +97,13 @@ DEFAULT_ROSTER = RosterVisibility()
 
 
 @dataclass(frozen=True)
-class ResolvedThread:
+class ResolvedThread(ResolvedTarget):
     thread: Thread
     status: ThreadStatus
 
 
 @dataclass(frozen=True)
-class ResolvedChannel:
+class ResolvedChannel(ResolvedTarget):
     channel: Channel
     members: tuple[ResolvedThread, ...]
 

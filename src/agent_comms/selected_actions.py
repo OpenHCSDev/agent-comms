@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
+from .coordination_tables.assignments import WakeAssignment
 from .envelope_claim_transitions import ExistingFileClaim
 from .field_codec import ClaimId
 from .native_tool_call import NativeToolMode
@@ -16,11 +17,10 @@ from .selected_claim import (
     publish_selected_resource_claim,
     write_selected_claimed_file,
 )
-from .turn_context import InstructionFile
-from .coordination_tables.assignments import WakeAssignment
 from .selected_write_authority import BoundSelectedWriteAuthority
 from .selected_write_plan import PlannedWrite
 from .threads import Thread
+from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingToolOwner

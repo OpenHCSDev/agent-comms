@@ -12,6 +12,7 @@ from .messages import InfoKind, Message
 from .native_failures import NativePiUnavailable
 from .turn_context import ReplyRouteSegment, WireProvenance
 
+
 @dataclass(frozen=True)
 class SelectedSource:
     """An original delivery and its relation to the owning mutable claim store.
