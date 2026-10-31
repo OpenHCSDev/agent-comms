@@ -18,13 +18,10 @@ from .declared_family import DeclaredFamily
 from .field_codec import (
     FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion, Token256Text, WireName,
 )
-from .package_stamp import STAMP
+from . import package_stamp
 
 if TYPE_CHECKING:
     from .runtime import RuntimeProxy, SocketClient
-
-CORE_COMMIT = STAMP.commit()
-
 
 @dataclass(frozen=True, kw_only=True)
 class SocketLine(DeclaredFamily, affix=""):
@@ -64,7 +61,7 @@ class OwnerLine(SocketLine):
 class OwnerAnnouncement(OwnerLine):
     """The first line of every owner subscription, compared before any update."""
 
-    core_commit: str = CORE_COMMIT
+    core_commit: str = field(default_factory=lambda: package_stamp.STAMP.commit())
 
     def announced(self, thread: str) -> None:
         if self != OwnerAnnouncement():
@@ -213,7 +210,7 @@ class IncompatibleOwner(DeclaredFamily, affix="Owner"):
 
     def line(self) -> str:
         return (f"The {self.thread} owner runs {self.owner_core()}, not this app's Core "
-                f"{CORE_COMMIT[:9]}. Its history is shown read-only; sending opens after "
+                f"{OwnerAnnouncement().core_commit[:9]}. Its history is shown read-only; sending opens after "
                 f"the owner restarts while idle.")
 
     async def request(self, action: str, **_: object) -> dict:

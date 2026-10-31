@@ -9,10 +9,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
+from agent_comms_hooks.shell_commands import ShellCommand
+
 from .native_build_inputs import GitLaunch, NamedProgram
 from .repo import Checkout, CheckoutStart, Repo
-from .shell_commands import ShellCommand
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied
 

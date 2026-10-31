@@ -15,6 +15,7 @@ from agent_comms.pi_payloads import (
     AssistantMessage,
     MissingData,
     MissingToolResult,
+    PiPayload,
     ProvidedToolResult,
     ReportedModel,
     StateData,
@@ -58,7 +59,6 @@ def test_idle_proof_requires_reported_native_state(state):
 def test_single_external_member_is_derived_and_requires_one_provided_case():
     from agent_comms.declared_family import DeclaredFamily
     from agent_comms.field_codec import ExternalNullMember, SingleExternalMember
-    from agent_comms.pi_payloads import PiPayload
 
     class Choice(SingleExternalMember, PiPayload, DeclaredFamily, affix="Choice"):
         pass

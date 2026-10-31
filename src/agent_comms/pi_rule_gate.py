@@ -81,7 +81,7 @@ class PiRedeal(PiRuleGate, Redeals):
         snapshot = self.comms.registry.snapshot()
         snapshot.commander_project.deal_rules(
             self,
-            self.thread.incarnation,
+            snapshot.born(self.thread.incarnation.require_recorded().lookup),
             commander=commander,
             commanded=commanded,
             prompts=self.owner_words(snapshot),

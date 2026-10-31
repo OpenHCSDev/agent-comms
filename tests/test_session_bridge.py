@@ -8,11 +8,14 @@ import pytest
 from agent_comms.cli_bridges.shared import Binding, GivenBinding
 
 from agent_comms.cli_bridges.monitor import AttachMonitor, InspectSession, SessionReady
+from agent_comms.cli_bridges.session_watch import (
+    SessionConnectionClosed,
+    SessionRequestTimeout,
+    WatchClaim,
+    WatchRecord,
+)
 from agent_comms.cli_bridges.shared import BridgeLog
 from agent_comms.field_codec import FieldCodec
-from agent_comms_hooks.watch import (
-    SessionConnectionClosed, SessionRequestTimeout, WatchClaim, WatchRecord,
-)
 
 
 def test_bridge_log_timestamps_each_line_including_fragmented_writes_and_tracebacks():

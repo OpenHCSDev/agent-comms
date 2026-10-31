@@ -32,6 +32,7 @@ from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
+from agent_comms_hooks import ToolRefusedError
 from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.acp_extension import (
@@ -54,7 +55,7 @@ from agent_comms.coordination_errors import (
     Refused,
     StaleRevision,
 )
-from agent_comms.errors import RelationViolationError, ToolRefusedError
+from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
 from agent_comms.notification_evidence import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead

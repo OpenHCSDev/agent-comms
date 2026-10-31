@@ -42,6 +42,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, ClassVar, Literal, Self, cast
 
+from agent_comms_hooks import ToolRefusedError
 from aiohttp import web
 from aiohttp.typedefs import Handler
 from aiohttp.web_urldispatcher import AbstractResource, ResourceRoute, SystemRoute
@@ -55,7 +56,10 @@ from .child_process import GitChildren, OwnedGitOpening, join_retirement
 from .comms import Comms, client_wire, wire
 from .repo import Checkout
 from .declared_family import DeclaredFamily, UnknownFamilyMember
-from .errors import RelationViolationError, ToolRefusedError, UnregisteredThreadError
+from .errors import (
+    RelationViolationError,
+    UnregisteredThreadError,
+)
 from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
 from .field_codec import (

@@ -10,6 +10,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import ToolCallId
 from .pi_payloads import ProviderDiagnosticError
 
+
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence

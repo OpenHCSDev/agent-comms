@@ -13,7 +13,7 @@ import pytest
 import tomli_w
 
 from agent_comms import integration
-from agent_comms.errors import ToolRefusedError
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.repo import Repo, UnavailableCommitError
