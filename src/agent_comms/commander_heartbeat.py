@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.commander_hud import CodexUsage, CommanderFrame, CommanderHud, HudUnavailableGroup
 from agent_comms.child_process import ReadWork
 from agent_comms.task_attachments.commander_pings import (
-    AlarmGroup, CommanderUpdate, PublishedFacts, RulePing, UnitPing,
+    AlarmGroup, CommanderUpdate, CommanderUpdateStore, PublishedFacts, RulePing, UnitPing,
 )
 from agent_comms.commander_service import CommanderService
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
@@ -82,6 +82,7 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                     thread.incarnation, failure,
                     CommanderUpdate.latest(comms, thread.incarnation), now=now,
                 ):
+                    CommanderUpdateStore.record(comms.root, update)
                     sections = AlarmGroup.sections((update,), update.open_pings(actions))
                     update.send(comms, now, (
                         HudUnavailableGroup.heading(),
@@ -100,8 +101,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
         )
 
     def pass_body(self, comms: Comms, observed: tuple[CommanderObservation, ...]) -> None:
-        """Read one shared board; each recipient keeps its own committed publication evidence."""
-        published = {}
+        """Retain one shared observation per recipient before optional publication."""
+        huds = {}
         completed = []
         now = time.time()
         try:
@@ -133,15 +134,16 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.commander
-                    published[recipient] = hud
+                    huds[recipient] = hud
+                    CommanderUpdateStore.record(comms.root, delivery.packet)
                     facts = PublishedFacts.of(hud.display_facts)
-                    latest = held[recipient]
+                    latest = CommanderUpdate.published(comms, recipient)
                     if delivery.packet.should_publish(facts, latest):
                         delivery.packet.send(comms, now, hud.hud_text(now), publication=facts)
                     completed.append(recipient)
         finally:
             # A later commander's failure does not erase frames/passes already completed.
-            CommanderFrame.replace_all(comms.root, tuple(published.values()))
+            CommanderFrame.replace_all(comms.root, tuple(huds.values()))
             ServicePassStore.at(comms.root).heartbeat_passed(
                 completed,
                 (thread.incarnation for thread in comms.registry.all_threads().values()),

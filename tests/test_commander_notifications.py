@@ -24,7 +24,7 @@ from agent_comms.commander_hud import (
     CommanderFrame, CommanderHud, CodexUsage, FinishedPlansGroup, UnreadableUsage,
 )
 from agent_comms.commander.vibe_check import OverloadDegradation
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderNotice, CommanderUpdate, CommanderUpdateStore, RulePing
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.message_page import MessagePageRequest
@@ -72,12 +72,12 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
         yield held_bus
 
 
-@pytest.mark.parametrize("delivery", ("on", "off"))
+@pytest.mark.parametrize(("delivery", "publications"), (("on", 1), ("off", 0)))
 def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messages(
-    notification_bus: Comms, delivery: str,
+    notification_bus: Comms, delivery: str, publications: int,
 ) -> None:
     from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
-    from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+    from agent_comms.heartbeat_delivery import HeartbeatDelivery
 
     comms = notification_bus
     original = comms.registry.require("lead")
@@ -93,31 +93,84 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     now = time.time()
     rule = ServicePassFailing(watch="delivery-setting", since=now, error="still visible", failed_at=now)
     hud = beat(comms, (rule,))
-    message, = notifications(comms)
-    assert message.task.handled == hud.packets[0].handled
-    assert rule.line() in message.body
-    assert CommanderUpdate.latest(comms, selected.incarnation) == (message.task,)
-    assert message.role.counts_as_conversation() == (delivery == "on")
-    assert isinstance(message.task, CommanderNotice) == (mode is OffHeartbeatDelivery)
+    messages = notifications(comms)
+    assert len(messages) == publications
+    for message in messages:
+        assert message.task.handled == hud.packets[0].handled
+        assert rule.line() in message.body
+        assert message.role.counts_as_conversation()
+    assert CommanderUpdate.latest(comms, selected.incarnation) == hud.packets
     again = beat(comms, (rule,))
     assert aged(again.packets[0].handled) == aged(hud.packets[0].handled)
+    assert bool(notifications(comms)) is bool(publications)
     assert CommanderFrame.current(comms, "lead") == again
     direct = independent_instruction(comms, "ordinary direct request")
     assert direct.role.counts_as_conversation()
     assert direct.category is InboundCategory
 
 
-def test_disabled_heartbeat_failure_retains_service_error_without_model_input(notification_bus):
+def test_disabled_heartbeat_failure_retains_service_error_without_bus_publication(notification_bus):
     from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
 
     comms = notification_bus
     comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
     failed_pass(comms, RuntimeError("muted service failure"))
+    assert notifications(comms) == ()
+    commander = comms.registry.require("lead").incarnation
+    retained, = CommanderUpdate.latest(comms, commander)
+    assert retained.handled == (RulePing.capture(retained_failure(comms)),)
+    BrokenHeartbeat().failed(lambda: nullcontext(comms), RuntimeError("muted service failure"))
+    assert CommanderUpdate.latest(comms, commander) == (retained,)
+    assert CommanderUpdate.published(comms, commander) == ()
+    assert notifications(comms) == ()
+
+
+def test_muted_pending_work_keeps_its_age_and_wakes_when_enabled(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+
+    comms = notification_bus
+    commander = comms.registry.require("lead")
+    todo = comms.goals.todos.get("P1")
+    rule = ReviewTimerUp(
+        problem=todo.id, holder=comms.registry.require("worker").incarnation,
+        order=todo.order.checked().id, since=RecordedEventTime(time.time() - 600),
+    )
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    first = beat(comms, (rule,))
+    again = beat(comms, (rule,))
+    assert notifications(comms) == ()
+    assert first.open_pings and again.open_pings
+    assert aged(again.packets[0].handled) == aged(first.packets[0].handled)
+    comms.threads.set_heartbeat_delivery("lead", OnHeartbeatDelivery)
+    enabled = beat(comms, (rule,))
     message, = notifications(comms)
-    assert isinstance(message.task, CommanderNotice)
-    assert not message.role.counts_as_conversation()
-    assert "muted service failure" in message.body
-    assert message.task.handled == (RulePing.capture(retained_failure(comms)),)
+    assert message.role.counts_as_conversation()
+    assert aged(message.task.handled) == aged(first.packets[0].handled)
+    assert enabled.commander == commander.incarnation
+    assert CommanderUpdate.latest(comms, commander.incarnation) == enabled.packets
+
+
+def test_muted_changed_quiet_display_publishes_once_when_enabled(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery, OnHeartbeatDelivery
+
+    comms = notification_bus
+    first = beat(comms)
+    original, = notifications(comms)
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    comms.registry.register_child("muted-fork", "lead", CommanderForkExecution, comms.goals)
+    muted = beat(comms)
+    assert muted.display_facts != first.display_facts
+    assert notifications(comms) == (original,)
+    assert CommanderFrame.current(comms, "lead") == muted
+    comms.threads.set_heartbeat_delivery("lead", OnHeartbeatDelivery)
+    enabled = beat(comms)
+    assert enabled.display_facts == muted.display_facts
+    _, resumed = notifications(comms)
+    assert not resumed.role.counts_as_conversation()
+    beat(comms)
+    assert tuple(message.reference for message in notifications(comms)) == (
+        original.reference, resumed.reference,
+    )
 
 
 def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
@@ -308,6 +361,7 @@ def test_each_commander_gets_its_own_failure_packet(notification_bus):
     for name in ("lead", "worker"):
         commander = comms.registry.require(name).incarnation
         update, = CommanderUpdate.report_failure(commander, failure, (), now=now)
+        CommanderUpdateStore.record(comms.root, update)
         update.send(comms, now, ())
         latest, = CommanderUpdate.latest(comms, commander)
         assert latest.commander == commander
@@ -442,6 +496,7 @@ def test_a_recreated_commander_inherits_no_board(notification_bus):
     assert CommanderUpdate.latest(comms, board.task.commander) == (board.task,)
     now = time.time()
     update, = CommanderUpdate.report_failure(reborn, failing, (), now=now)
+    CommanderUpdateStore.record(comms.root, update)
     update.send(comms, now, ())
     latest, = CommanderUpdate.latest(comms, reborn)
     assert latest.commander == reborn and latest.handled == update.handled
@@ -810,7 +865,7 @@ def test_waiting_notification_keeps_actionable_subjects_overflow_and_original_ev
         original.task.commander, original.task.handled, (), original.task.handled,
     )
     hud = replace(lead_hud(comms), packets=(packet,), open_pings=packet.handled)
-    message = packet.send(comms, time.time(), hud.hud_text(time.time()))
+    message, = packet.send(comms, time.time(), hud.hud_text(time.time()))
     for frame in (lead_hud(comms), hud):
         now = time.time()
         original_lines = frame.alarm_detail(frame.alarms, now)
@@ -855,7 +910,9 @@ def test_failed_quiet_publication_retries_identical_display_until_committed(noti
     owner = comms.registry.require("lead").incarnation
     unsent = CommanderFrame.at(comms.root, owner).read()
     assert first_hud.display_facts != unsent.display_facts
-    assert CommanderUpdate.latest(comms, owner) == (first.task,)
+    assert CommanderUpdate.latest(comms, owner) == unsent.packets
+    assert CommanderUpdate.published(comms, owner) == (first.task,)
+    assert CommanderUpdate.published(comms, owner)[0].publication == PublishedFacts.of(first_hud.display_facts)
     assert len(notifications(comms)) == 1
 
     retried = beat(comms)
