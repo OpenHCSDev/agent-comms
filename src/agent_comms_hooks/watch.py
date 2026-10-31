@@ -66,7 +66,7 @@ class DeafWatch:
     since: str
 
     def line(self) -> str:
-        return (f"RE-ARM the commander watch: its bridge has no confirmed Monitor {self.since},"
+        return (f"RE-ARM this session's watch: its bridge has no confirmed Monitor {self.since},"
                 " so every Core line to it waits unread -> re-arm its watch:"
                 " agent-comms-claude-bridge watch (bare, no pipe)")
 
