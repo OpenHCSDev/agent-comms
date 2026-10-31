@@ -19,9 +19,9 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, NoReturn, Self, TextIO
 
 from agent_comms.repo import Checkout
 
-from .activity_clocks import ActivityClocks, ChannelActivity
+from .activity_clocks import ChannelActivity
 from .channel_targets import CommandTarget, ThreadTarget
-from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
+from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import (
@@ -115,9 +115,9 @@ class NamedViewer(SingleFieldValue, DisplayViewer):
 
     def historical_selection(self, page: MessagePage, presentation: BusPresentation, historical: HistorySource, source: Bus, document: ReadDocument, snapshot: RegistrySnapshot) -> HistoricalSelection:
         historical.validate()
-        return HistoricalSelection(HistoricalDisplay(historical, presentation.bus.reads.capture(
+        return historical.selection(presentation.bus.reads.capture(
             self.resolve(snapshot).name, page.messages, snapshot, source,
-            conversation_snapshot=historical.provenance, document=document)))
+            conversation_snapshot=historical.provenance, document=document))
 
     def cursor(self, reads: ReadLedger, snapshot: RegistrySnapshot, document: ReadDocument, source: BusSnapshot) -> ReadCursor:
         return document.cursor(self.name, snapshot, source)
@@ -302,44 +302,6 @@ class DMSelection(SelectedDisplay):
             displayed=self.basis.displayed.select(selected)))
 
 
-@dataclass(frozen=True, slots=True)
-class HistoricalSelection(SelectedDisplay):
-    displayed: HistoricalDisplay
-
-    @property
-    def identity(self):
-        return DisplayIdentity(
-            viewer=self.displayed.displayed.viewer_identity,
-            history_revision=self.history_revision,
-            bus_identity=self.displayed.displayed.bus_identity,
-        )
-
-    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
-        self.displayed.acknowledge(views.bus.history, views.registry)
-
-    def select_evidence(self, selected: frozenset[int]) -> Self:
-        return replace(self, displayed=self.displayed.select(selected))
-
-
-@dataclass(frozen=True, slots=True)
-class HistoricalDisplay:
-    source: HistorySource
-    displayed: DisplayBasis
-
-    def select(self, sequences: Collection[int]) -> HistoricalDisplay:
-        return HistoricalDisplay(self.source, self.displayed.select(sequences))
-
-    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
-        """Acknowledge exactly painted historical membership in its own ledger."""
-        viewer = registry.require(self.displayed.viewer)
-        viewer.role.require_user(DMScopeChanged("Historical viewer changed; refresh history"))
-        if viewer.incarnation != self.displayed.viewer_identity:
-            raise DMScopeChanged("Historical viewer changed; refresh history")
-        if self.source not in archive.sources():
-            raise HistoricalSourceChanged("Historical source detached; refresh history")
-        self.source.acknowledge(self.displayed)
-
-
 class LineOutput:
     """Flush once per event-loop pass."""
 
@@ -357,14 +319,15 @@ class LineOutput:
         self.stream.flush()
 
 
+
 if TYPE_CHECKING:
+    from .read_selection import CapturedSelection
+    from agent_comms.historical_views import HistoricalSelection
     import sqlite3
 
     from .bus import Bus, BusReader, BusSnapshot
-    from .catalog_document import CatalogDocument
-    from .catalog_store import ChannelCatalog
-    from .channels import Channels, TagChannel
-    from .historical_views import DMHistory, HistoryArchive, HistorySource
+    from .channels import TagChannel
+    from .historical_views import DMHistory, HistorySource
     from .history_views import HistoryViews
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
@@ -1273,84 +1236,3 @@ class UnreadQuery:
                        parameters=(*self.parameters, *targets))
 
 
-@dataclass(frozen=True, slots=True)
-class DisplayUnreadSelection:
-    """The complete captured inputs that determine an unread count."""
-
-    seen: ReadCursor
-    scopes: tuple[ChannelDisplayScope, ...]
-    viewer_names: tuple[str, ...]
-    registry: RegistryProvenance
-
-    def queries(self) -> tuple[UnreadQuery, ...]:
-        """Each scope's count resolved against this registry and cursor."""
-        names = json.dumps(self.viewer_names)
-        return tuple(
-            UnreadQuery(
-                scope.channel,
-                ReadCursor.rows(self.registry, {"viewer": self.seen.counted(scope, self.registry)}),
-                self.seen.lower_bound(scope, self.registry),
-                *scope.index_predicate,
-                names,
-            )
-            for scope in self.scopes
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class CapturedSelection:
-    """One captured registry/catalog/read basis for local human presentation."""
-
-    registry: RegistrySnapshot
-    catalog: CatalogDocument
-    activity: ActivityClocks
-    viewer: DisplayViewer
-    reads: ReadLedger
-    document: ReadDocument
-
-    def seen(self, source: BusSnapshot) -> ReadCursor:
-        return self.viewer.cursor(self.reads, self.registry, self.document, source)
-
-    def unread_selection(self, source: BusSnapshot) -> DisplayUnreadSelection:
-        return DisplayUnreadSelection(
-            self.seen(source), self.scopes, tuple(sorted(self.viewer_names)), self.registry,
-        )
-    @classmethod
-    def capture(
-        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
-        activity: ActivityClocks,
-    ) -> CapturedSelection:
-        viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, activity, viewer, reads, document)
-
-    @classmethod
-    def load(
-        cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
-    ) -> CapturedSelection:
-        """Use one consistent source cut without borrowing locks for decoding."""
-        snapshot, channels, read_document = registry.store.snapshot_with_pair(catalog, reads)
-        return cls.capture(snapshot, channels, reads, read_document, viewer, activity)
-
-    @property
-    def channels(self) -> Channels:
-        return self.catalog.views(self.activity)
-
-    @property
-    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
-        return tuple(
-            channel.display_scope(self.registry)
-            for channel in self.channels.values()
-        )
-
-    @property
-    def viewer_names(self) -> frozenset[str]:
-        return self.viewer.aliases(self.registry)
-
-    def require_viewer(self) -> str:
-        return self.viewer.require_name(self.registry)
-
-    def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target, self.activity)
-        return channel.display_scope(self.registry)

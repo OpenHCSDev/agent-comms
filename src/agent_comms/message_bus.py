@@ -37,13 +37,8 @@ from agent_comms.message_reference import (
 )
 from agent_comms.peer_relevance import Prioritized
 from agent_comms.publisher import Publisher
-from agent_comms.read_basis import (
-    AnonymousViewer,
-    CapturedSelection,
-    DisplayViewer,
-    ListedDeliveries,
-    NamedViewer,
-)
+from agent_comms.read_selection import CapturedSelection
+from agent_comms.read_basis import AnonymousViewer, DisplayViewer, ListedDeliveries, NamedViewer
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import DeliveryScope
 

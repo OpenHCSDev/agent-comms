@@ -34,9 +34,8 @@ from agent_comms.tool_caller import ToolCaller
 from agent_comms.comms import wire
 from agent_comms.field_codec import AcpSessionId, RootId
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
-from agent_comms.runtime import (
-    RuntimeConnection, present_session, socket_path,
-)
+from agent_comms.owner_connection import socket_path
+from agent_comms.runtime import RuntimeConnection, present_session
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.session_file import RegistrySessionLocation

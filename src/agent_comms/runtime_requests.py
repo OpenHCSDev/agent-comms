@@ -132,7 +132,7 @@ class ProjectRuntimeRequest(AttachedResultRuntimeRequest):
         return cls(thread=thread.name, binding=LiveThreadOwnerBinding(owner, process))
 
     def environment(self, root):
-        from .runtime import socket_path
+        from agent_comms.owner_connection import socket_path
 
         return {
             "AGENT_COMMS_PROJECT_SOCKET": str(socket_path(root, self.binding.process.pid)),

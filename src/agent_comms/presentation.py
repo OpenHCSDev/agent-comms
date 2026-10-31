@@ -75,13 +75,8 @@ from .notification_progress import (
 )
 from .notification_read import CapturedNotificationWindow
 from .private_path import FileRevision
-from .read_basis import (
-    AnonymousViewer,
-    CapturedSelection,
-    ChannelDisplayScope,
-    DisplayViewer,
-    NamedViewer,
-)
+from .read_selection import CapturedSelection
+from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility

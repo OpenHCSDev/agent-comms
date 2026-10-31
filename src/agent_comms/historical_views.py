@@ -70,11 +70,53 @@ from .thread_identity import UnrecordedThreadIncarnation
 from .threads import ThreadProvenance
 from .transcript_routes import TranscriptRoutes
 
+from collections.abc import Collection
+from typing import Self
+from .coordination_errors import DMScopeChanged
+from agent_comms.read_basis import SelectedDisplay
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .history_views import HistoryViews
     from .presentation import BusPresentation
     from .threads import Thread
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalSelection(SelectedDisplay):
+    displayed: HistoricalDisplay
+
+    @property
+    def identity(self):
+        return DisplayIdentity(
+            viewer=self.displayed.displayed.viewer_identity,
+            history_revision=self.history_revision,
+            bus_identity=self.displayed.displayed.bus_identity,
+        )
+
+    def acknowledge(self, views: HistoryViews, page: MessagePage, *, worktree: Checkout) -> None:
+        self.displayed.acknowledge(views.bus.history, views.registry)
+
+    def select_evidence(self, selected: frozenset[int]) -> Self:
+        return replace(self, displayed=self.displayed.select(selected))
+
+
+@dataclass(frozen=True, slots=True)
+class HistoricalDisplay:
+    source: HistorySource
+    displayed: DisplayBasis
+
+    def select(self, sequences: Collection[int]) -> HistoricalDisplay:
+        return HistoricalDisplay(self.source, self.displayed.select(sequences))
+
+    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
+        """Acknowledge exactly painted historical membership in its own ledger."""
+        viewer = registry.require(self.displayed.viewer)
+        viewer.role.require_user(DMScopeChanged("Historical viewer changed; refresh history"))
+        if viewer.incarnation != self.displayed.viewer_identity:
+            raise DMScopeChanged("Historical viewer changed; refresh history")
+        if self.source not in archive.sources():
+            raise HistoricalSourceChanged("Historical source detached; refresh history")
+        self.source.acknowledge(self.displayed)
 
 
 class HistoryView(ABC):
@@ -282,6 +324,9 @@ class HistorySource:
     snapshot_bus_revision: int
     snapshot_registry_revision: FileObservation
     provenance: RegistryProvenance
+
+    def selection(self, displayed: DisplayBasis) -> HistoricalSelection:
+        return HistoricalSelection(HistoricalDisplay(self, displayed))
 
     def __post_init__(self) -> None:
         # Archived transcripts stay with the original root; the snapshot copies no sessions.

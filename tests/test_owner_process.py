@@ -28,7 +28,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import AcpSessionId, GoalId, TurnId, compile_decoder
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.pi_vocabulary import ThinkingLevelField
 from agent_comms.restart_scope import OwnersNamed

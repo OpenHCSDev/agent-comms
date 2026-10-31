@@ -102,7 +102,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         InputDispositions(native.root).replace(original_document)
         async def attach_current():
             current = comms.registry.require(name)
-            from agent_comms.runtime import socket_path
+            from agent_comms.owner_connection import socket_path
             await asyncio.to_thread(wait_for, socket_path(native.root, current.require_process().pid))
             agent = canonical_agent(comms, auto_wake=False)
             try:

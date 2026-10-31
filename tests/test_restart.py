@@ -11,7 +11,7 @@ from agent_comms.field_codec import FieldCodec, TurnId
 from agent_comms.restart_queue import PendingRestart, RestartedRestart
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.pi_counts import PiCount
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.restart_scope import OwnersNamed
 from agent_comms.routing import NoTurnRouting
