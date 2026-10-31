@@ -542,7 +542,7 @@ async def relaunched(claim: WatchClaim, relaunch: Callable[[], None]) -> bool:
     outage the reader then announces, naming its log; it is not retried."""
     try:
         return await asyncio.to_thread(claim.state().rearm, relaunch)
-    except (OSError, RuntimeError, ValueError) as error:
+    except (SessionFailure, *BRIDGE_FAILURES) as error:
         print(f'Session bridge relaunch failed: {error}', file=sys.stderr, flush=True)
         return False
 

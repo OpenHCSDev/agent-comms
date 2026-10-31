@@ -271,7 +271,7 @@ class LiveWatch(RecordedWatch, HeldSocketWatch):
                     "so no bridge listens yet; the board returns when the new one does",)
 
     def reconnect(self, serve: agent_comms.cli_bridges.shared.Serve, request: agent_comms.cli_bridges.monitor.SessionRequest) -> None:
-        raise RuntimeError(
+        raise SessionCommandError(
             'An older watch still owns this session, or an install is replacing it. '
             'No second bridge launched. Stop that Monitor once, then connect.')
 

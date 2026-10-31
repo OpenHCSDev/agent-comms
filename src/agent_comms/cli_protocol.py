@@ -29,6 +29,7 @@ from .recorded_time import UnrecordedTimeError
 from .turn_item import NativeTurnId, TurnItem
 from .wire_models import DeclaredWireFamily, WireModel
 
+
 class TimestampedWire(WireModel):
     """A source record's original ISO timestamp, decoded before making any events."""
 

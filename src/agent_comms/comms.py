@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 from contextlib import AbstractContextManager, aclosing
 from functools import partial
 from pathlib import Path
@@ -30,6 +31,11 @@ from .thread_configuration import ThreadConfiguration
 from .thread_management import ThreadManagement
 from .transcripts import Transcripts
 from .watched import FileSource
+
+if TYPE_CHECKING:
+    from .message_page import InboxPage
+    from .thread_identity import ThreadIncarnation
+    from .transcript_sources import TranscriptSource
 
 
 class Comms(ActivityClient):
@@ -67,7 +73,7 @@ class Comms(ActivityClient):
 
     async def watch(
         self, name: str, *, after: InboxStart = TakenInputStart(),
-    ) -> AsyncIterator[Message]:
+    ) -> AsyncGenerator[Message]:
         """Wait unlocked; each inbox read owns one client call on a worker, so the caller's loop
         keeps serving, and streaming records nothing."""
         reader = await Coordination.run_worker(partial(self.watched_reader, name))
@@ -83,18 +89,18 @@ class Comms(ActivityClient):
                     if not batch.remaining:
                         break
 
-    def watched_reader(self, name: str):
+    def watched_reader(self, name: str) -> ThreadIncarnation:
         with Comms.client(self.route) as comms:
             return comms.registry.require(name).incarnation
 
-    def watched_batch(self, name: str, reader, after: InboxStart):
+    def watched_batch(self, name: str, reader: ThreadIncarnation, after: InboxStart) -> InboxPage:
         with Comms.client(self.route) as comms:
             batch = comms.bus.inbox_at(name, comms.registry.snapshot(), after=after)
             if not reader.current(comms.registry.snapshot()):
                 raise UnregisteredThreadError("Watched thread was removed or replaced")
             return batch
 
-    def history_source(self, name: str):
+    def history_source(self, name: str) -> TranscriptSource:
         """The named thread's transcript source, whose requests a watch follows."""
         with Comms.client(self.route) as comms:
             thread = comms.registry.require(name)
