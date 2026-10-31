@@ -48,7 +48,7 @@ from agent_comms.harness_delivery_states import (
 )
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_errors import (
-    CoordinationBeginUnavailable, CoordinationError, CoordinationReadUnavailable, DeferredRead,
+    CoordinationBeginUnavailable, CoordinationReadUnavailable, DeferredRead,
 )
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
@@ -105,6 +105,7 @@ from .session_watch import (
 from ..locked_store import FilesRequest, RegistryFile, SQLiteFile
 from agent_comms.harness_install import HarnessSession
 from .monitor import (
+    BRIDGE_FAILURES,
     BridgeExit,
     InspectSession,
     MonitorAttachment,
@@ -1206,7 +1207,7 @@ class CliBridge(ExternalRuntime, DeliversInput, HarnessSession, Generic[BridgeOp
             await self.options.operation.execute(self)
         except* (BlockingIOError, SessionFailure):
             raise
-        except* (OSError, ValueError, CoordinationError) as group:
+        except* BRIDGE_FAILURES as group:
             failure = 'Comms bridge stopped:\n' + ''.join(
                 traceback.TracebackException.from_exception(
                     group, max_group_width=sys.maxsize, max_group_depth=sys.maxsize,

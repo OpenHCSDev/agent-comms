@@ -19,6 +19,7 @@ from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordination_errors import CoordinationError
 from agent_comms.harness_delivery_states import Outcome
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
@@ -476,6 +477,11 @@ class EndSession(VerifySession, declared_name='end'):
         return reply
 
 
+BRIDGE_FAILURES: tuple[type[Exception], ...] = (OSError, ValueError, CoordinationError)
+"""What the bus, its files and its wire can raise into a bridge: the failures a bridge reports.
+Anything else is a defect in the bridge's own code and crashes it loudly."""
+
+
 @dataclass
 class MonitorService:
     bridge: LineMonitorBridge
@@ -492,7 +498,7 @@ class MonitorService:
                     reply = await request.handle(self, peer)
                 except (MalformedRecord, TimeoutError, SessionFailure) as error:
                     reply = SessionRefused(error=str(error))
-                except Exception as error:
+                except BRIDGE_FAILURES as error:
                     # Refuse this request without cancelling every client in the TaskGroup.
                     reply = RequestFailure(error).reply(self.bridge.log)
                 await reply.publish(peer)
