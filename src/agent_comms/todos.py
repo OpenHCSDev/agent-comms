@@ -5750,10 +5750,6 @@ class Todo(TodoStoreRows, TypedTable):
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
-    def require_released_order(self, owner: ThreadIncarnation, goal_id: GoalId) -> None:
-        if self.current_holder.owned_by(owner, goal_id):
-            raise TodoConflict(self)
-
     @property
     def latest_message(self) -> OrderMessage:
         messages = self.history.events(self.id, OrderMessage, limit=1, descending=True)
