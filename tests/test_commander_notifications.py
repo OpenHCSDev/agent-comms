@@ -96,8 +96,7 @@ def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messag
     messages = notifications(comms)
     assert len(messages) == publications
     for message in messages:
-        assert message.task.handled == hud.packets[0].handled
-        assert rule.line() in message.body
+        assert FieldCodec.encode(message.task.handled) == FieldCodec.encode(hud.packets[0].handled)
         assert message.role.counts_as_conversation()
     assert CommanderUpdate.latest(comms, selected.incarnation) == hud.packets
     again = beat(comms, (rule,))

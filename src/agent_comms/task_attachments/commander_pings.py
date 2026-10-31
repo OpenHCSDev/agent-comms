@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
+from agent_comms.channel_targets import ThreadTarget
 from agent_comms.locked_store import DocumentChange, DurableFile, LockedStore, PatternFile
 from agent_comms.store_files import DependentStateTier, SingleFileStore
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -19,7 +20,9 @@ from agent_comms.harness_delivery_states import DeliveredOutcome, Outcome
 from agent_comms.commander_service import CommanderService
 from agent_comms.errors import RelationViolationError
 from agent_comms.disclosure_text import AccentTone, ViewHeading, ViewTable, WarningTone
-from agent_comms.nominal.field_codec import FieldCodec, HudExclude, OrderId, PublicationExclude, ThreadLookup
+from agent_comms.nominal.field_codec import (
+    FieldCodec, HudExclude, OrderId, PublicationExclude, ThreadLookup,
+)
 from agent_comms.message_reference import MessageReference
 from agent_comms.heartbeat_subjects import CommanderHistory, HeartbeatSubject
 from agent_comms.messages import (
@@ -280,7 +283,7 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     @classmethod
     def latest(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
         """The last retained observation, even when nothing was sent to the bus."""
-        return CommanderUpdateStore.at(comms.root, commander).read()
+        return CommanderUpdateStore.for_commander(comms.root, commander).read()
 
     @classmethod
     def published(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
@@ -351,8 +354,9 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     def send(self, comms: Comms, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
         recipient = comms.registry.require(self.commander.name)
-        return recipient.heartbeat_delivery.publish(
-            replace(self, publication=publication), comms, hud)
+        packet = replace(self, publication=publication)
+        return recipient.heartbeat_delivery.publish(lambda: packet.publish(
+            comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud)))
 
 
 
@@ -398,7 +402,7 @@ class CommanderUpdateStore(PatternFile, SingleFileStore, DurableFile,
     record_type = tuple[CommanderUpdate, ...]
 
     @classmethod
-    def at(cls, root: Path, commander: ThreadIncarnation) -> Self:
+    def for_commander(cls, root: Path, commander: ThreadIncarnation) -> Self:
         return cls(cls.path_in(root, lookup=str(commander.require_recorded().lookup)))
 
     def empty(self) -> tuple[CommanderUpdate, ...]:
@@ -406,7 +410,7 @@ class CommanderUpdateStore(PatternFile, SingleFileStore, DurableFile,
 
     @classmethod
     def record(cls, root: Path, packet: CommanderUpdate) -> None:
-        store = cls.at(root, packet.commander)
+        store = cls.for_commander(root, packet.commander)
         store.update(lambda previous: DocumentChange.to((packet,)))
 
 
