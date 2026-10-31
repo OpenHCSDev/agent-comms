@@ -80,11 +80,12 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
             for thread in self.served(comms.registry, comms.goals):
                 for update in CommanderUpdate.report_failure(
                     thread.incarnation, failure,
-                    CommanderUpdate.latest(comms, thread.incarnation), now=now,
+                    CommanderUpdate.latest(comms, thread.incarnation),
+                    published=CommanderUpdate.published(comms, thread.incarnation), now=now,
                 ):
                     CommanderUpdateStore.record(comms.root, update)
                     sections = AlarmGroup.sections((update,), update.open_pings(actions))
-                    update.send(comms, now, (
+                    update.send(comms, (
                         HudUnavailableGroup.heading(),
                         *CommanderHud.alarm_text(sections, now),
                     ))
@@ -111,6 +112,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                 recipients = self.recipients(comms.registry.snapshot(), item.thread)
                 held = {recipient.incarnation: CommanderUpdate.latest(comms, recipient.incarnation)
                         for recipient in recipients}
+                announced = {recipient.incarnation: CommanderUpdate.published(comms, recipient.incarnation)
+                             for recipient in recipients}
                 previous = held[item.thread.incarnation]
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
@@ -126,7 +129,8 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                 rules = tuple(rule for rule in item.rules if rule not in rejected)
                 not_applied = tuple(rule.rejected_line(error) for rule, error in rejected.items())
                 deliveries = tuple(CommanderUpdate.derive(
-                    recipient, states, rules, latest, now=now, history=history,
+                    recipient, states, rules, latest, published=announced[recipient],
+                    now=now, history=history,
                     not_applied=not_applied,
                 ) for recipient, latest in held.items())
                 board = CommanderHud.of(comms, item.thread.name, item.frame, item.states,
@@ -134,12 +138,12 @@ class CommanderHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, Co
                 for delivery in deliveries:
                     hud = board.for_delivery(delivery)
                     recipient = delivery.packet.commander
-                    huds[recipient] = hud
                     CommanderUpdateStore.record(comms.root, delivery.packet)
+                    huds[recipient] = hud
                     facts = PublishedFacts.of(hud.display_facts)
-                    latest = CommanderUpdate.published(comms, recipient)
+                    latest = announced[recipient]
                     if delivery.packet.should_publish(facts, latest):
-                        delivery.packet.send(comms, now, hud.hud_text(now), publication=facts)
+                        delivery.packet.send(comms, hud.hud_text(now), publication=facts)
                     completed.append(recipient)
         finally:
             # A later commander's failure does not erase frames/passes already completed.

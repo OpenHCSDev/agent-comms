@@ -33,7 +33,7 @@ from agent_comms.standing_rules import (
     LinkedUnreviewedHead, ReviewTimerUp, StuckMerge,
 )
 from agent_comms.repo import Checkout
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, CommanderUpdate, CommanderUpdateStore, RulePing
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
@@ -1297,7 +1297,8 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
     owner = comms.registry.require('lead').incarnation
     ping = replace(RulePing.capture(lost), since=RecordedEventTime(published))
     packet = CommanderDecisions(owner, (ping,), (ping,), ())
-    original = packet.send(comms, published, ())
+    CommanderUpdateStore.record(comms.root, packet)
+    original, = packet.send(comms, ())
     previous = CommanderUpdate.latest(comms, owner)
     assert previous == (packet,)
     assert isinstance(original.task, CommanderDecisions)
@@ -1316,12 +1317,14 @@ def test_retained_head_verdict_precedes_the_published_lost_packet(
         assert not UnlandedHeadSubject(unrelated).disposed(history, published)
     assert not HeadSubject(request).disposed(history, published)
 
-    # Derive the next real packet from that committed baseline and the same observation.
+    # Retained observations own age; actual publications own which lines were announced.
     delivery = CommanderUpdate.derive(owner, (), (lost,), previous,
+                                      published=CommanderUpdate.published(comms, owner),
                                       now=time.time(), history=history)
     assert delivery.packet.handled[0].since == ping.since
     assert (delivery.open_pings == ()) is cleared
-    delivery.packet.send(comms, time.time(), ())
+    CommanderUpdateStore.record(comms.root, delivery.packet)
+    delivery.packet.send(comms, ())
     assert CommanderUpdate.latest(comms, owner) == (delivery.packet,)
     assert (CommanderUpdate.current_board(comms, 'lead') == ()) is cleared
     assert original.task.handled == (ping,)

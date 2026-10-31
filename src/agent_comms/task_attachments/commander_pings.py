@@ -284,7 +284,7 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
 
     @classmethod
     def published(cls, comms: Comms, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        """The last actual publication, used only to deduplicate quiet messages."""
+        """The last actual publication: what was announced, not just observed."""
         lookup = commander.require_recorded().lookup
         with comms.bus.bus.observing() as db:
             messages = CommanderUpdatePosition.latest(db, lookup)
@@ -300,11 +300,12 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     @classmethod
     def derive(cls, commander: ThreadIncarnation, states: tuple[UnitState, ...],
                rules: tuple[StandingRule, ...],
-               previous: tuple[CommanderUpdate, ...], *, now: float,
+               previous: tuple[CommanderUpdate, ...], *,
+               published: tuple[CommanderUpdate, ...], now: float,
                history: CommanderHistory,
                not_applied: tuple[str, ...] = ()) -> CommanderDelivery:
-        """New observations or any open request wake on every beat. Publication never disposes
-        of a ping; only a beat without unresolved work may be passive."""
+        """Observation owns ages; actual publication owns which lines were announced.
+        Publication never disposes of a ping; open requests still wake on every beat."""
         known = {ping.key: ping for packet in previous for ping in packet.handled}
         # Equality ignores the start, so an unchanged observation keeps the start it had.
         began = {ping: ping.since for ping in known.values()}
@@ -315,7 +316,8 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
                  *(RulePing.capture(rule) for rule in rules),
              )), key=lambda ping: not ping.urgent,
         ))
-        new = tuple(ping for ping in handled if known.get(ping.key) != ping)
+        announced = {ping.key: ping for packet in published for ping in packet.handled}
+        new = tuple(ping for ping in handled if announced.get(ping.key) != ping)
         notice = CommanderNotice(commander, handled, not_applied=not_applied)
         opened = notice.open_pings(history)
         open_members = frozenset(opened)
@@ -330,21 +332,23 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
     @classmethod
     def report_failure(cls, commander: ThreadIncarnation, failure: ServicePassFailing,
                        previous: tuple[CommanderUpdate, ...], *,
+                       published: tuple[CommanderUpdate, ...],
                        now: float) -> tuple[CommanderUpdate, ...]:
-        """A failed pass read no board, so it clears nothing: it adds only its own retained
-        occurrence, once. Every handled line keeps its object and age for the next complete
-        read to derive from."""
+        """A failed pass clears nothing. Keep its original age, and retry an occurrence
+        not yet published even when a muted/failed attempt already retained it."""
         ping = RulePing.capture(failure)
-        handled = tuple(line for packet in previous for line in packet.handled)
-        if ping in handled:
+        if any(ping in packet.handled for packet in published):
             return ()
-        ping = replace(ping, since=ping.since.continued_from(now))
+        handled = tuple(line for packet in previous for line in packet.handled)
+        retained = (handled if ping in handled else
+                    (*handled, replace(ping, since=ping.since.continued_from(now))))
+        current = next(line for line in retained if line == ping)
         return (CommanderDecisions(
-            commander, (*handled, ping), (ping,), (),
+            commander, retained, (current,), (),
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
-    def send(self, comms: Comms, now: float, hud: tuple[str, ...], *,
+    def send(self, comms: Comms, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
         recipient = comms.registry.require(self.commander.name)
         return recipient.heartbeat_delivery.publish(
