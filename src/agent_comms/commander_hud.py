@@ -195,9 +195,19 @@ class CommanderPhase(HudRecord):
     """PlanPhase supplies every answer; no HUD status taxonomy is maintained beside it."""
 
     phase: Annotated[type[PlanPhase], DisclosureIdentity()]
-    done: bool
-    ready: bool
-    holders: tuple[ThreadIncarnation, ...]
+    done: Annotated[bool, HudExclude()]
+    ready: Annotated[bool, HudExclude()]
+    holders: Annotated[tuple[ThreadIncarnation, ...], HudExclude()]
+
+    @projected(view=HudExclude)
+    def stands(self) -> str:
+        """The phase as a sentence, never two bare booleans and an item count."""
+        held = ", ".join(holder.name for holder in self.holders)
+        if self.done:
+            return f"done, still held by {held}" if held else "done"
+        if held:
+            return f"held by {held}"
+        return "ready, nobody holds it" if self.ready else "not ready"
 
     @property
     def finished(self) -> bool:
@@ -424,11 +434,22 @@ class CommanderHud(CommanderLoad):
         """Every original line; the section title already owns its compact heading."""
         return tuple(ping.render(now) for section in sections for ping in section.pings)
 
+    def owed_line(self) -> tuple[str, ...]:
+        """What the commander owes, one count per kind, before any of the rows."""
+        owed: dict[str, int] = {}
+        for section in self.alarms:
+            if section.group.needs_disposal():
+                for kind, pings in section.by_kind().items():
+                    owed[kind.declared_name] = owed.get(kind.declared_name, 0) + len(pings)
+        if not owed:
+            return ()
+        return ("Owed: " + " · ".join(f"{name} {count}" for name, count in owed.items()),)
+
     def hud_text(self, now: float, *, colour: bool = False) -> tuple[str, ...]:
         """The heartbeat has no viewport; native readers own their concrete geometry."""
         result = list(self.status_strip(now).splitlines())
-        # What is owed, by how much and for how long, before any row: one line per section.
-        result.extend(("", *(section.digest(now) for section in self.alarms),
+        # What is owed and what has waited longest, before any row.
+        result.extend((*self.owed_line(), *(section.oldest(now) for section in self.alarms),
                        "Cards: " + ", ".join(section.heading() for section in self.groups)))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if section.group.needs_disposal()), now, colour=colour),
@@ -437,7 +458,7 @@ class CommanderHud(CommanderLoad):
             group = section.group
             result.extend(("", group.paint(section.heading(), colour)))
             result.extend(group.paint(line, colour) for line in group.table_lines(
-                table.folded_lines() for table in section.tables))
+                table.by_action_lines() for table in section.tables))
         result.extend(("", *self.alarm_text(
             tuple(section for section in self.alarms if not section.group.needs_disposal()), now, colour=colour)))
         return tuple(result)

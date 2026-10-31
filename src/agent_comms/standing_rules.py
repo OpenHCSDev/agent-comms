@@ -173,6 +173,13 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         return tuple(commands)
 
 
+class AskedOnce:
+    """A rule whose rows share one declared ask: its whole line derives from ask and facts."""
+
+    def line(self) -> str:
+        return f"{self.ask} · {self.facts()}"
+
+
 class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.commander"):
     @classmethod
     @abstractmethod
@@ -181,6 +188,12 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
 
     @abstractmethod
     def line(self) -> str: ...
+
+    ask: ClassVar[str] = ""
+
+    def facts(self) -> str:
+        """This row's own facts; a rule declaring ``ask`` prints that once above its rows."""
+        return self.line()
 
     @abstractmethod
     def broke_after(self, after: float) -> bool: ...
@@ -991,7 +1004,7 @@ class DeliveredHeadReview(HolderLine, DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_name=None):
+class UnreviewedHead(AskedOnce, HeadLine, HeadReviewCommands, DatedStandingRule, declared_name=None):
     """One ready head waiting too long for a decision; a reviewing mark is not one."""
     due_at: float
     seconds: ClassVar[int] = 10 * 60
@@ -1024,11 +1037,11 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def began(self) -> float:
         return self.due_at
 
-    def line(self) -> str:
-        return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
-                f" there unjudged. you read it yet?"
-                f" -> judge ok/back/reviewing/superseded " + " ".join(
-                    f"--{name} {value}" for name, value in self.command_values().items()))
+    ask: ClassVar[str] = "JUDGE: sitting there unjudged. you read it yet? -> judge ok/back/reviewing/superseded"
+
+    def facts(self) -> str:
+        """The arguments each verb takes, ready to run after the ask's verb."""
+        return " ".join(f"--{name} {value}" for name, value in self.command_values().items())
 
 
 @dataclass(frozen=True)
@@ -1051,7 +1064,7 @@ class OrderlessUnreviewedHead(UnreviewedHead):
 
 
 @dataclass(frozen=True)
-class StuckMerge(HeadLine, DatedStandingRule):
+class StuckMerge(AskedOnce, HeadLine, DatedStandingRule):
     """An armed head GitHub will not merge: approved, queued and going nowhere. One line per
     head, naming every block on it."""
     request: PullRequestHead
@@ -1080,15 +1093,22 @@ class StuckMerge(HeadLine, DatedStandingRule):
     def began(self) -> float:
         return min(block.since for block in self.blocks)
 
-    def line(self) -> str:
-        return (f"UNSTICK {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} has"
-                f" auto-merge armed but {'; '.join(block.what() for block in self.blocks)}. who's fixing it?"
-                f" -> {'; '.join(block.remedy() for block in self.blocks)}"
+    ask: ClassVar[str] = "UNSTICK: auto-merge armed and it cannot land. who's fixing it?"
+
+    def remedies(self) -> str:
+        return ("; ".join(block.remedy() for block in self.blocks)
                 + (f" at {', '.join(holder.name for holder in self.holders)}" if self.holders else ""))
+
+    def head(self) -> str:
+        return f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+
+    def facts(self) -> str:
+        return f"{self.head()}: {'; '.join(block.what() for block in self.blocks)} -> {self.remedies()}"
+
 
 
 @dataclass(frozen=True)
-class IdlePullRequest(HeadLine, DatedStandingRule):
+class IdlePullRequest(AskedOnce, HeadLine, DatedStandingRule):
     """An open head, draft or ready, going nowhere outside the merge queue: unmoved for the
     idle window, or blocked by a conflict or a red required check. Armed heads are
     StuckMerge's; every other open request linked to one of this commander's orders is a
@@ -1138,15 +1158,26 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
         """A verdict on the head or an order to its holder disposes of the line."""
         return (*super().subjects(), *(UnitSubject(holder) for holder in self.holders))
 
-    def line(self) -> str:
-        held = ", ".join(holder.name for holder in self.holders) or self.unheld
-        why = "; ".join(block.what() for block in self.blocks) or "head unmoved"
-        actions = ((*(block.remedy() for block in self.blocks),
-                    *(f"order {holder.name}" for holder in self.holders))
-                   or (self.unowned,))
-        return (f"{self.tag} {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} ({held}):"
-                f" {why}, unchanged since {RecordedEventTime(self.moved).stamp()}. who owns it, or are we"
-                f" pretending it doesn't exist? -> {'; '.join(actions)}")
+    ask: ClassVar[str] = "who owns these, or are we pretending they don't exist?"
+
+    def held(self) -> str:
+        return ", ".join(holder.name for holder in self.holders) or self.unheld
+
+    def why(self) -> str:
+        return "; ".join(block.what() for block in self.blocks) or "head unmoved"
+
+    def actions(self) -> str:
+        return "; ".join((*(block.remedy() for block in self.blocks),
+                          *(f"order {holder.name}" for holder in self.holders))
+                         or (self.unowned,))
+
+    def head(self) -> str:
+        return f"{self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]}"
+
+    def facts(self) -> str:
+        return (f"{self.tag} {self.head()} ({self.held()}): {self.why()},"
+                f" unchanged since {RecordedEventTime(self.moved).stamp()} -> {self.actions()}")
+
 
 
 @dataclass(frozen=True)

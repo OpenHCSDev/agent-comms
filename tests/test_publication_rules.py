@@ -152,8 +152,8 @@ def test_closed_unmerged_pull_request_flags_lost_commits(head_bus, reviewed_sour
     request = PullRequestHead(source.github, 7, lost_head)
     assert lost.request == request
     assert lost.commits == (lost_head,)
-    assert lost.line() == (f'LOST https://github.com/{source.github.to_wire()}/pull/7 '
-        'closed unmerged holds 1 commits main lacks -> land them, or record why they are dropped')
+    assert lost.line() == (f'{lost.ask} · https://github.com/{source.github.to_wire()}/pull/7 '
+                           'holds 1 commits main lacks')
     assert judge.SupersededVerb in ClosedUnmergedPullRequest.clearing_verbs
     accepted = ReviewedHeadVerdict(VerdictReason('The owner implements the requested behavior without competing decisions.'))
     review = CommsHeadVerdictTool(request=request, operation=accepted, order=NoHeadOrder())
