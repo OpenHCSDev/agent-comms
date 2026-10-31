@@ -75,9 +75,7 @@ class FailedGitCommand(GitCommandError):
 
     def no_check_ran_on(self, sha: str) -> bool:
         """Git's absent-note reply, not a corrupt repository or an invalid revision."""
-        return self.returncode == 1 and self.stderr in (
-            "", f"error: no note found for object {sha}.\n",
-        )
+        return self.returncode == 1 and self.stderr == f"error: no note found for object {sha}.\n"
 
     def unrelated_history(self) -> bool:
         return self.returncode == 1

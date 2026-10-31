@@ -102,8 +102,7 @@ from .working_memory_worker import AnnotationWorker
 from dataclasses import dataclass
 from .drain_failures import drain_failures
 from .activity import FailedWakeDiagnostic
-from .reservation_rules import ReservationViolationError
-from agent_comms.input_drain import SchedulesWake, SessionScheduleCheck, WakeDue, WakeHeld, WakeOutcome
+from agent_comms.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
 from .thread_identity import OwnerIdentity
 
 from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
@@ -151,21 +150,12 @@ class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWakeCheck(SchedulesWake, SessionScheduleCheck):
+class SelectedWakeCheck(SchedulesWake):
     """A selected turn runs beside the owner's observation, which hands it later messages."""
 
     execution: "SelectedExecution"
     thread: str
     owner: "OwnerIdentity"
-
-    def schedule(self) -> None:
-        try:
-            self.require_valid()
-        except ReservationViolationError:
-            return  # The wake already running drains again when it ends.
-        self.inputs.register_wake(
-            self.session_id, self.inputs.runtime.background(self.run())
-        )
 
     async def run(self) -> WakeOutcome:
         inputs, session_id = self.inputs, self.session_id

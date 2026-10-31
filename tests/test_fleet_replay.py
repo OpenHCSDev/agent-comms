@@ -530,8 +530,8 @@ def test_new_allocated_branch_after_upstream_capture_is_one_unreadable_holder(fl
         assert tuple(card for card in observed.states if card.unit.name != 'unpushed') == healthy
         completed_after = time.time()
         asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(built.comms)))
-        assert ServicePassStore.at(built.comms.root).read().completed_since(
-            built.thread(Fleet.commander).incarnation, completed_after)
+        assert ServicePassStore.at(built.comms.root).read().heartbeat_completed_at(
+            built.thread(Fleet.commander).incarnation).since(completed_after)
         recovered = observe_commander(built.comms, built.thread(Fleet.commander),
                                       ProgressRead(), plans=plans)
         assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'

@@ -4517,23 +4517,35 @@ class RejectedHeadVerdict(DecidedHeadVerdict):
                                self.reason.text, record.at, evidence=record.order.evidence),)
 
 
-@dataclass(frozen=True)
-class SupersededHeadVerdict(DecidedHeadVerdict):
-    """The commander explicitly drops this exact head in favor of recorded replacement work."""
+class DiscardedHeadVerdict(DecidedHeadVerdict, declared_name=None):
+    """The commander explicitly gives up this exact head; a closed PR's lost commits take
+    their recorded reason from here."""
 
-    replacement: str
     state = "failure"
-    verb = "Superseded"
 
     def supersedes(self) -> bool:
         return True
 
     def current_head(self, request: PullRequestHead) -> ReadPullRequestHead:
-        """Dropping a head is how a closed PR's lost commits get their recorded reason."""
         return request.closed_or_open()
+
+
+@dataclass(frozen=True)
+class SupersededHeadVerdict(DiscardedHeadVerdict):
+    """This head is given up in favor of recorded replacement work."""
+
+    replacement: str
+    verb = "Superseded"
 
     def description(self, reviewer: str, subject: str) -> str:
         return f"{super().description(reviewer, subject)} (replaced by {self.replacement})"
+
+
+@dataclass(frozen=True)
+class AbandonedHeadVerdict(DiscardedHeadVerdict):
+    """This head is given up on purpose and nothing replaces it; the reason says why."""
+
+    verb = "Abandoned"
 
 
 @dataclass(frozen=True)
@@ -5782,10 +5794,6 @@ class Todo(TodoStoreRows, TypedTable):
         holder.require_trace(proposed.owner, traced)
         proposed = holder.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
-
-    def require_released_order(self, owner: ThreadIncarnation, goal_id: GoalId) -> None:
-        if self.current_holder.owned_by(owner, goal_id):
-            raise TodoConflict(self)
 
     @property
     def latest_message(self) -> OrderMessage:

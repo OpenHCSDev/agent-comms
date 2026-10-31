@@ -198,6 +198,9 @@ class ThreadOutput(activity.ThreadOutput):
         self.drafts = staged.drafts
 
     def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
+        """A batch refused partway, by a maintenance hold or a CoordinationBeginUnavailable, is
+        published again whole from the committed drafts. Its stored writes are keyed, so what
+        already landed lands once; a sent reply is remembered by the replying output."""
         staged = self.staged()
         pending: list[RuntimeUpdate] = []
         for update in updates:
@@ -249,6 +252,8 @@ class ReplyingThreadOutput(ThreadOutput):
 
     messaging: Messaging = field(kw_only=True)
     pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
+    # Sent is sent: staging shares this one map, so a refused batch never sends a reply again.
+    sent: dict[tuple[TurnItem, str], tuple[MessageReference, ...]] = field(default_factory=dict)
 
     def staged(self) -> Self:
         return replace(super().staged(), pending=self.pending.copy())
@@ -256,6 +261,9 @@ class ReplyingThreadOutput(ThreadOutput):
     def commit(self, staged: Self) -> None:
         super().commit(staged)
         self.pending = staged.pending
+        for sent in tuple(self.sent):
+            if sent[0] not in self.pending:
+                del self.sent[sent]
 
     @classmethod
     def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
@@ -299,15 +307,15 @@ class ReplyingThreadOutput(ThreadOutput):
             if key.turn_id != turn_id:
                 continue
             item = self.pending[key]
-            published = tuple(
-                publication
-                for target, references in sorted(replies.items())
-                for publication in recipients[target].reply(
-                    self.messaging, sender=self.activity_thread, target=target,
-                    body=item.assistant_text, answers=tuple(references),
-                    source_turn=NoSourceTurn(),
-                )
-            )
+            for target, references in sorted(replies.items()):
+                if (key, target) not in self.sent:
+                    self.sent[key, target] = recipients[target].reply(
+                        self.messaging, sender=self.activity_thread, target=target,
+                        body=item.assistant_text, answers=tuple(references),
+                        source_turn=NoSourceTurn(),
+                    )
+            published = tuple(publication for target in sorted(replies)
+                              for publication in self.sent[key, target])
             super().publish_item(replace(item, events=tuple(
                 event.with_publications(published) for event in item.events
             )))

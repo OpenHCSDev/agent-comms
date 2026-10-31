@@ -2,6 +2,9 @@
 from pathlib import Path
 from agent_comms.repo import Checkout
 from contextlib import asynccontextmanager, suppress
+import threading
+from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
 import os
 import shutil
@@ -97,7 +100,7 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 await monitor_reader.readline()  # SessionReady, followed by the real probe.
                 probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
                 await probe.confirm(selected, ObservedMonitor(transcript_record('probe'), 1.))
-                watching = asyncio.create_task(selected.watch_child())
+                watching = asyncio.create_task(selected.watch_bus())
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
@@ -216,9 +219,28 @@ async def test_busy_confirmation_keeps_monitor_serving_without_replaying(bridge)
 async def begin_waits(capsys, message):
     """The bridge's own log names the held message once the store's declared wait expires."""
     seen = ''
-    while f'Message {message.message_id} waits for the coordinator' not in seen:
+    while f'Message {message.message_id} waits for the store' not in seen:
         await asyncio.sleep(.01)
         seen += capsys.readouterr().err
+
+
+@pytest.mark.asyncio
+async def test_busy_read_holds_the_watch_resume_until_the_store_frees(bridge, capsys):
+    """Real contention on the read that opens the core watch: the wait keeps the bridge up."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    with Coordination(str(path)):
+        pass
+    with closing(sqlite3.connect(path, isolation_level=None)) as held:
+        held.execute('BEGIN EXCLUSIVE')
+        resuming = asyncio.create_task(bridge.once_available('Watch resume', bridge.resume_after))
+        seen = ''
+        async with asyncio.timeout(60):
+            while 'Watch resume waits for the store' not in seen:
+                await asyncio.sleep(.01)
+                seen += capsys.readouterr().err
+        assert not resuming.done()
+        held.execute('ROLLBACK')
+    assert await asyncio.wait_for(resuming, 30) == bridge.binding.start
 
 
 @pytest.mark.asyncio
@@ -1148,3 +1170,115 @@ def test_a_gap_at_the_terminator_number_makes_no_line_count():
     observed = ReadResultObserved('export', '1\t"x"\n3\t',
                                   ObservedMonitor(transcript_record('read'), 1.), frozenset())
     assert observed.rows() == ()
+
+
+async def delivered_line(selected, reader, record):
+    """The real monitor receives one line and confirms it, as the session would."""
+    line = (await reader.readline()).decode().rstrip('\n')
+    for update in notification(line, record_id=transcript_record(record)).updates(ClaudeSession()):
+        await update.observed(selected)
+    return line
+
+
+async def stopped(task):
+    task.cancel()
+    with suppress(asyncio.CancelledError):
+        await task
+
+
+@pytest.mark.asyncio
+async def test_the_bus_read_runs_in_the_bridge_and_survives_a_restart_without_repeats(bridge):
+    async with attached_monitor(bridge) as reader:
+        first = bridge.comms.messaging.send('peer', 'viewer', 'arrives before the read').message
+        watching = asyncio.create_task(bridge.watch_bus())
+        await delivered_line(bridge, reader, 'first')
+        children = Path(f'/proc/{os.getpid()}/task/{threading.get_native_id()}/children').read_text()
+        assert not any(b'watch' in Path(f'/proc/{child}/cmdline').read_bytes() for child in children.split())
+        during = bridge.comms.messaging.send('peer', 'viewer', 'arrives during the read').message
+        await delivered_line(bridge, reader, 'during')
+        await stopped(watching)
+        after = bridge.comms.messaging.send('peer', 'viewer', 'arrives while it is down').message
+        watching = asyncio.create_task(bridge.watch_bus())
+        await delivered_line(bridge, reader, 'after')
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [first.reference, during.reference, after.reference]
+
+
+@pytest.mark.asyncio
+async def test_a_maintenance_hold_waits_and_resumes_without_loss_or_repeat(bridge):
+    async with attached_monitor(bridge) as reader:
+        before = bridge.comms.messaging.send('peer', 'viewer', 'before the hold').message
+        barrier = MaintenanceBarrier(bridge.comms.registry.store.path)
+        held = barrier.begin(MaintenanceOperator.current())
+        watching = None
+        try:
+            watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
+            await asyncio.sleep(0.2)
+            assert not watching.done()
+        finally:
+            barrier.clear(held)
+        await delivered_line(bridge, reader, 'before-hold')
+        after = bridge.comms.messaging.send('peer', 'viewer', 'after the hold').message
+        await delivered_line(bridge, reader, 'after-hold')
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [before.reference, after.reference]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('failure, stops', (
+    (OSError('the read failed'), CoreWatchEnded),
+    (MaintenanceHeldError('held'), MaintenanceHeldError),
+))
+async def test_a_read_failure_stops_only_after_the_delivery_under_way_finishes(failure, stops):
+    lines = asyncio.Queue()
+    release = asyncio.Event()
+    finished = []
+
+    async def delivery():
+        await release.wait()
+        finished.append('delivered')
+
+    lines.put_nowait(delivery)
+    delivering = asyncio.create_task(ClaudeBridge.deliver_lines(lines))
+    await asyncio.sleep(0)
+    with core_watch_failure(lines):
+        raise failure
+    await asyncio.sleep(0)
+    assert not delivering.done() and not finished
+    release.set()
+    with pytest.raises(stops):
+        await delivering
+    assert finished == ['delivered']
+
+
+def test_a_failure_outside_the_reported_family_crashes_instead_of_queueing():
+    lines = asyncio.Queue()
+    with pytest.raises(LookupError):
+        with core_watch_failure(lines):
+            raise LookupError('a defect')
+    assert lines.empty()
+
+
+@pytest.mark.asyncio
+async def test_a_held_store_during_the_read_keeps_the_bridge_up_and_delivers_once(bridge, capsys):
+    """Real contention on the store a busy read reports: it waits, it does not end the watch."""
+    path = CoordinationStore.path_in(bridge.comms.root)
+    async with attached_monitor(bridge, timeout=120) as reader:
+        sent = bridge.comms.messaging.send('peer', 'viewer', 'read while the store is held').message
+        with closing(sqlite3.connect(path, isolation_level=None)) as held:
+            held.execute('BEGIN EXCLUSIVE')
+            watching = asyncio.create_task(bridge.comms.bus.when_open(bridge.watch_bus))
+            seen = ''
+            async with asyncio.timeout(60):
+                while 'Watch read waits for the store' not in seen:
+                    await asyncio.sleep(.01)
+                    seen += capsys.readouterr().err
+            assert not watching.done(), seen
+            held.execute('ROLLBACK')
+        await delivered_line(bridge, reader, 'held-store')
+        assert not watching.done()
+        await stopped(watching)
+        rows = await stored_attempts(bridge)
+        assert [row.reference for row in rows] == [sent.reference]

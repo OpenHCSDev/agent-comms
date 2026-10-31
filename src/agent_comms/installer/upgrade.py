@@ -125,7 +125,7 @@ from agent_comms.installer.probes.commands import (
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwnersProbe
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
-from agent_comms.installer.probes.services import CommanderHeartbeatProbe, ServingProbe
+from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import (
     InstallRolledBack, InterpreterWorkerDied, OwnersNotRestarted, UpgradeRefused,
 )
@@ -293,11 +293,6 @@ class StoppedOwners:
 @dataclass(frozen=True)
 class RestartedServices:
     services: tuple[RestartedService, ...]
-    heartbeat: CommanderHeartbeatProbe = field(kw_only=True)
-
-    def require_heartbeat(self, stack: TargetStack) -> None:
-        """Owners and bridges must be released before joining the ordinary service pass."""
-        stack.probe(self.heartbeat)
 
     def service_lines(self) -> tuple[str, ...]:
         return (f"Restarted services: "
@@ -360,9 +355,6 @@ class RetiringRehearsal(FreshRehearsal):
 
 class LiveRun(DeclaredFamily, affix="Run"):
     """What a live install changed."""
-
-    def require_heartbeat(self, stack: TargetStack) -> None:
-        """A run which restarted no service has no new heartbeat to qualify."""
 
     @abstractmethod
     def lines(self) -> tuple[str, ...]: ...
@@ -488,11 +480,10 @@ class ServicesStopped:
     services: tuple[HostService, ...]
     give_back: ExitStack
 
-    def start_on(self, stack: TargetStack, root: Path) -> RestartedServices:
-        heartbeat = CommanderHeartbeatProbe(root, time.time())
+    def start_on(self, stack: TargetStack) -> RestartedServices:
         restarted = stack.start_services(self.services)
         self.give_back.pop_all()
-        return RestartedServices(restarted, heartbeat=heartbeat)
+        return RestartedServices(restarted)
 
 
 @dataclass
@@ -956,7 +947,6 @@ class Install[Rehearsed: Rehearsal](ABC):
             rehearsed = self.reported(rehearsal)
             try:
                 live_run = self.install(rehearsal, bridges, report)
-                live_run.require_heartbeat(self.staged)
                 self.chain.finish_at(self.root)
                 if self.installed.python != self.staged.python:
                     self.staged.commands.close_runtime(self.installed.python)
@@ -1217,7 +1207,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     self.publish(backup, selected_route)
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         report.owners.release()
-                    restarted_services = stopped.start_on(self.staged, self.root)
+                    restarted_services = stopped.start_on(self.staged)
                 except BaseException as error:
                     print(f"install: install failed ({type(error).__name__}: {error}); "
                           "restoring original installation", file=sys.stderr)
@@ -1267,7 +1257,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     retired_backups = backup.retain(self.spill_dir)
                 return passed.extended(
                     CarriedRun, stopped=tuple(report.owners.stopped), services=restarted_services.services,
-                    heartbeat=restarted_services.heartbeat, started=started, restore_space=restore, backup=backup.report(),
+                    started=started, restore_space=restore, backup=backup.report(),
                     retired_backups=retired_backups)
             finally:
                 holder.close()
@@ -1321,7 +1311,7 @@ class FreshInstall(Install[FreshRehearsal]):
         with self.staged.services_stopped(self.installed) as stopped:
             try:
                 route = self.publish(backup, selected_route)
-                services = stopped.start_on(self.staged, self.root)
+                services = stopped.start_on(self.staged)
             except BaseException:
                 HostService.stop_all(stopped.services)
                 backup.restore_route()
@@ -1329,7 +1319,7 @@ class FreshInstall(Install[FreshRehearsal]):
                 raise
             with BackupRetirePhase().running(self.staged.commands.clock):
                 backup.retain(self.spill_dir)
-            return CreatedRun(services.services, route, heartbeat=services.heartbeat)
+            return CreatedRun(services.services, route)
 
 
 class RetiringInstall(StopsOwners, FreshInstall):

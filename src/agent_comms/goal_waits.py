@@ -490,11 +490,6 @@ class GoalWaitRecovery:
         self.registry._commit_registration(edit, change)
         return review.wait.clear(self.waits)
 
-    def consume_goal_wait(self, name: str, wait_id: GoalWaitId) -> bool:
-        """Consume the exact wait after reserving its original attempt."""
-        goal = self.registry.require(name).goal.active()
-        return goal.consume_wait(self.waits, wait_id)
-
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """Read the exact completed delivery before checking its original owner fence."""
         with self.registry.store.current_snapshot():

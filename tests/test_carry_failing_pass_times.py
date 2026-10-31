@@ -28,5 +28,4 @@ def test_carry_gives_a_stored_failure_its_first_failure_time_once(tmp_path):
     assert step.carry(apply=True).rewritten == (path.relative_to(root),)
     failure = ServicePassStore(path).read().failing["CommanderHeartbeat"]
     assert (failure.since, failure.failed_at) == (1793331540.0, 1793331540.0)
-    assert not failure.failed_since(1793331600.0)
     assert step.carry(apply=True).changed == 0

@@ -92,10 +92,10 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             request = await asyncio.wait_for(frames.get(), 3)
             # The exact JSON line parser used by the running bridge owns decoding.
             request = WATCH_LINE.validate_json(request.model_dump_json())
-            await request.handle(bridge, None)
+            await request.handle(bridge)
             assert seen == [None, 'p1']
             # An already handled frame neither fetches nor republishes the page.
-            await request.handle(bridge, None)
+            await request.handle(bridge)
             assert seen == [None, 'p1']
             # Zero is a real external item coordinate, including a pinned read.
             older = comms.transcripts.capture_page_read('cli', position=EarlierThan(newest.before),
@@ -104,7 +104,7 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
             with pytest.raises(CoordinationReadUnavailable):
                 comms.transcripts.capture_page_read('cli', position=EarlierThan(older.before)).read()
             request = await asyncio.wait_for(frames.get(), 3)
-            await WATCH_LINE.validate_json(request.model_dump_json()).handle(bridge, None)
+            await WATCH_LINE.validate_json(request.model_dump_json()).handle(bridge)
             oldest = comms.transcripts.capture_page_read('cli', position=EarlierThan(older.before)).read()
             assert [event.text for event in oldest.events] == ['oldest']
             assert not oldest.has_older

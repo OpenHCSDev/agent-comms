@@ -32,7 +32,6 @@ from .errors import RejectedEnforcementError, RelationViolationError
 from .field_codec import (
     FieldCodec,
     GoalId,
-    GoalWaitId,
     MalformedRecord,
     NullMember,
     PathText,
@@ -466,13 +465,13 @@ class CheckedCommit:
     def stored(cls, repository: Path, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
         try:
-            Repo.git(repository, *cls.NOTES, "list", sha)
+            note = Repo.git(repository, *cls.NOTES, "show", sha)
         except GitCommandError as failure:
             if failure.no_check_ran_on(sha):
                 return ()  # No check ran on this commit.
             raise
-        return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
-                     Repo.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
+        return tuple(FieldCodec.decode(cls, FieldCodec.parse(line))
+                     for line in note.splitlines() if line)
 
     def store(self, repository: Path, sha: str) -> None:
         Repo.git(repository, *self.NOTES, "append", "-m",
@@ -648,9 +647,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     @abstractmethod
     def clear_wait(self, waits: GoalWaits) -> bool: ...
 
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return False
-
     def require_active(self) -> Goal:
         goal = self.require()
         goal.state.require(Active, RelationViolationError(goal.state.activity_refusal()))
@@ -783,9 +779,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def clear_wait(self, waits: GoalWaits) -> bool:
         return waits.clear(self.id)
-
-    def consume_wait(self, waits: GoalWaits, wait_id: GoalWaitId) -> bool:
-        return waits.consume(self.id, wait_id)
 
     def wake_context(self, goals: Goals, owner: ThreadIncarnation) -> WakeGoalValue:
         todos = self.order.todos(goals, owner, self.id)

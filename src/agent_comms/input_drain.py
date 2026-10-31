@@ -104,10 +104,6 @@ class WakeDue(WakeOutcome):
         observer(session_id)
 
 
-class SchedulesWake(RuleCheck):
-    """A check that schedules a wake, so it waits for the previous wake to finish."""
-
-
 class BackgroundWake(RuleCheck):
     """A check that starts work in the background, so configuration can disable it."""
 
@@ -118,21 +114,28 @@ class SessionScheduleCheck(RuleCheck):
     inputs: "InputDrain"
 
 
-class WakeScheduleCheck(SchedulesWake, BackgroundWake, SessionScheduleCheck):
-    """Check wake permission and execute it under the existing turn lock.
-
-    A queued wake never carries a stale owner grant across a lock wait. The
-    current owner and active goal are read only after acquiring the turn lock.
-    """
+class SchedulesWake(SessionScheduleCheck, ABC):
+    """A check that schedules a wake, so it waits for the previous wake to finish."""
 
     def schedule(self) -> None:
         try:
             self.require_valid()
         except ReservationViolationError:
-            return
+            return  # The wake already running drains again when it ends.
         self.inputs.register_wake(
             self.session_id, self.inputs.runtime.background(self.run())
         )
+
+    @abstractmethod
+    async def run(self) -> WakeOutcome: ...
+
+
+class WakeScheduleCheck(SchedulesWake, BackgroundWake):
+    """Check wake permission and execute it under the existing turn lock.
+
+    A queued wake never carries a stale owner grant across a lock wait. The
+    current owner and active goal are read only after acquiring the turn lock.
+    """
 
     async def run(self) -> WakeOutcome:
         inputs, session_id = self.inputs, self.session_id
