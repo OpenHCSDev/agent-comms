@@ -975,11 +975,11 @@ class Enrol(Operation):
         """Enrolment alone starts nothing."""
 
 
-@dataclass(frozen=True)
 # What a bridge reports and stops on; anything else is a defect and crashes.
 REPORTED_FAILURES = (OSError, ValueError, CoordinationError)
 
 
+@dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: messages.Message
 
