@@ -4,11 +4,12 @@ from agent_comms.repo import Checkout
 import gc
 import hashlib
 import pickle
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import fields, replace
 
 import pytest
 
+from agent_comms.comms import Comms
 from agent_comms.registry_document import ThreadRows
 
 from agent_comms.errors import RelationViolationError
@@ -19,6 +20,7 @@ from agent_comms.display_references import (
 )
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.historical_views import HistorySource
+from agent_comms.messages import InfoKind, Message, PublicRecord
 from agent_comms.registry_document import HistoricalRootPurpose
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
 from agent_comms.ui_model.sidebar import SidebarModel
@@ -195,3 +197,48 @@ def test_current_reference_source_projection_keeps_historical_identity(comms, de
     assert isinstance(reference, HistoricalDisplayReference)
     assert reference.source == source.key
     assert reference.incarnation == original.incarnation
+
+
+def test_source_projection_reuses_real_captures_without_merging_revisions(
+    comms: Comms, declare_reference: Callable[[], Thread],
+) -> None:
+    original = declare_reference()
+    references = CurrentDisplayReferences.from_registry(
+        str(comms.root), comms.registry.snapshot(), ("#team",))
+    earlier = HistorySource.capture_original(comms.root)
+    recorded = references.for_source(earlier)
+    assert references.for_source(None) is references
+    assert references.for_source(HistorySource.capture_original(comms.root)) is recorded
+    assert recorded.targets["#team"] == references.targets["#team"]
+    assert recorded.find(f"@{original.name}")[0].reference.incarnation == original.incarnation
+
+    comms.registry.rename(original.name, "renamed-reference")
+    later = HistorySource.capture_original(comms.root)
+    assert later.key == earlier.key
+    assert later.snapshot_bus_revision == earlier.snapshot_bus_revision
+    assert later.snapshot_registry_revision != earlier.snapshot_registry_revision
+    renamed = references.for_source(later)
+    assert renamed is not recorded
+    assert references.for_source(later) is renamed
+    assert recorded.find("@renamed-reference") == ()
+    assert renamed.find("@renamed-reference")[0].reference.name == "renamed-reference"
+    assert renamed.targets["#team"] == recorded.targets["#team"]
+    assert references.for_source(earlier) is recorded
+
+    comms.bus.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("renamed-reference", "#team", "another bus revision", InfoKind, seq=seq)))
+    appended = HistorySource.capture_original(comms.root)
+    assert appended.key == later.key
+    assert appended.snapshot_registry_revision == later.snapshot_registry_revision
+    assert appended.snapshot_bus_revision != later.snapshot_bus_revision
+    after_append = references.for_source(appended)
+    assert after_append is not renamed
+    assert after_append == renamed
+    assert references.for_source(appended) is after_append
+
+    restored = pickle.loads(pickle.dumps(references, protocol=5))
+    assert restored == references
+    restored_recorded = restored.for_source(earlier)
+    assert restored_recorded == recorded
+    assert restored_recorded is not recorded
+    assert restored.for_source(earlier) is restored_recorded
