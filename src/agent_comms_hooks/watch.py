@@ -300,8 +300,12 @@ class RecordedWatch(WatchState):
 
     def commands(self) -> bool:
         """Whether the registry names this binding's thread a commander, read now: command
-        moves between threads, so no session keeps its own copy of the answer."""
+        moves between threads, so no session keeps its own copy of the answer. A failed first
+        connect leaves a record naming a thread nobody registered; that session commands nothing,
+        and raising here failed every hook it ran."""
         snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
+        if not snapshot.taken(self.record.bus):
+            return False
         bound = snapshot.require(self.record.bus)
         return any(thread.incarnation == bound.incarnation
                    for thread in snapshot.commander_project.commanders(snapshot))
