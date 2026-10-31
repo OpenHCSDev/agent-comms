@@ -11,14 +11,14 @@ from .child_process import ProcessIdentity
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.participants import OwnerGenerations
 from .reservation_rules import ReservationRule, RuleCheck
+from .native_input_record import NativeInputRecord
+from .native_runtime_input import NativeRuntimeInput
 from .text_digest import TextDigest
 from .turn_goal_permission import GoalPermission
 from .threads import Thread
 
 if TYPE_CHECKING:
-    from .native_input_record import NativeInputRecord
     from .native_prompt_binding import PromptBinding
-    from .native_runtime_input import NativeRuntimeInput
     from .private_send_stage import NativeSendStage
 
 

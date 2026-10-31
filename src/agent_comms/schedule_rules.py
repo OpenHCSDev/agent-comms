@@ -17,13 +17,13 @@ from .maintenance_barrier import MaintenanceStatus
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
 from .turn_outcome import TurnOutcome
+from .thread_identity import OwnerIdentity
 from .turn_input_source import NoTurnAcceptance
 
 if TYPE_CHECKING:
     from .goals import GoalDeclaration
     from .coordinated_runtime import SelectedExecution
     from .input_drain import InputDrain
-    from .thread_identity import OwnerIdentity
     from .turn_runner import TurnRunner
 
 

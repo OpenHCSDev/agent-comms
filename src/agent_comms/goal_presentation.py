@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .field_codec import NullMember, WireValue, GoalId
-from .goal_failure_observation import FailedTurnEvidence
+from .goal_failure_observation import FailedTurnEvidence, GoalFailureEvidence
 from .goal_states import PauseSource
 from .goals import Goal, GoalCheckpoint, GoalDeclaration
 from .lifecycle_capability import Active
@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from .bus_publication import Delivered
     from .goal_actions import GoalAction
     from .goal_attempts import Generation
-    from .goal_failure_observation import GoalFailureEvidence
     from .goal_waits import GoalWait
     from .registry_document import RegistrySnapshot
     from .threads import Thread

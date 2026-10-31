@@ -2936,10 +2936,10 @@ class _OpaqueRecordDecoder[T](_OpaqueDecoder[T, type[T]]):
     __slots__ = ()
 
     def represented_comparison(self, represented: ValueDecoder[T], value: T) -> object:
-        return _RecordDecoder(self.target).compared(value)
+        return _member_decoder(self.target).compared(value)
 
     def compile_represented_comparison(self, compiled: set[object]) -> None:
-        _RecordDecoder(self.target).compile_comparison(compiled)
+        _member_decoder(self.target).compile_comparison(compiled)
 
 
 class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):

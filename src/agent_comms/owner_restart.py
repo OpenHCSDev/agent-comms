@@ -24,6 +24,7 @@ from .native_arguments import (
 from .owner_launch import RetainedOwnerLaunch
 from .owner_lifecycle import (
     OwnerCompletion,
+    OwnerLifecycle,
     OwnerRestartResult,
     OwnerRestartSelection,
 )
@@ -33,7 +34,6 @@ from .thread_identity import ThreadAuthority
 
 if TYPE_CHECKING:
     from .owner_cutover import OwnerCutover
-    from .owner_lifecycle import OwnerLifecycle, OwnerRestartResult
     from .registry_document import RegistrySnapshot
     from .registry_store import RegistryEdit
     from .threads import Thread

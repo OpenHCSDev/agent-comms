@@ -31,12 +31,12 @@ from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
 
 from .threads import Thread
+from .todos import PendingProblemOrder
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .phase_evidence import PlanReading
     from .plan_phases import PlanPhase
-    from .todos import PendingProblemOrder
 
 
 @dataclass(frozen=True)
