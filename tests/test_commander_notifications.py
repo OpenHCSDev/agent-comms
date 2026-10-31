@@ -72,6 +72,54 @@ def notification_bus(held_bus, installed_runtime, monkeypatch, tmp_path):
         yield held_bus
 
 
+@pytest.mark.parametrize("delivery", ("on", "off"))
+def test_heartbeat_delivery_preserves_membership_board_history_and_direct_messages(
+    notification_bus: Comms, delivery: str,
+) -> None:
+    from agent_comms.cli_verbs.heartbeat_delivery import HeartbeatDeliveryCliCommand
+    from agent_comms.heartbeat_delivery import HeartbeatDelivery, OffHeartbeatDelivery
+
+    comms = notification_bus
+    original = comms.registry.require("lead")
+    mode = FieldCodec.decode(type[HeartbeatDelivery], delivery)
+    result = HeartbeatDeliveryCliCommand(name="lead", delivery=mode).apply(comms)
+    selected = comms.registry.require("lead")
+    assert result.delivery is selected.heartbeat_delivery is mode
+    assert selected == replace(original, heartbeat_delivery=mode)
+    assert FieldCodec.decode(Thread, FieldCodec.encode(selected)) == selected
+    assert selected.for_registration(selected.name, selected).heartbeat_delivery is mode
+    assert selected in comms.registry.snapshot().commander_project.commanders(comms.registry.snapshot())
+
+    now = time.time()
+    rule = ServicePassFailing(watch="delivery-setting", since=now, error="still visible", failed_at=now)
+    hud = beat(comms, (rule,))
+    message, = notifications(comms)
+    assert message.task.handled == hud.packets[0].handled
+    assert rule.line() in message.body
+    assert CommanderUpdate.latest(comms, selected.incarnation) == (message.task,)
+    assert message.role.counts_as_conversation() == (delivery == "on")
+    assert isinstance(message.task, CommanderNotice) == (mode is OffHeartbeatDelivery)
+    again = beat(comms, (rule,))
+    assert aged(again.packets[0].handled) == aged(hud.packets[0].handled)
+    assert CommanderFrame.current(comms, "lead") == again
+    direct = independent_instruction(comms, "ordinary direct request")
+    assert direct.role.counts_as_conversation()
+    assert direct.category is InboundCategory
+
+
+def test_disabled_heartbeat_failure_retains_service_error_without_model_input(notification_bus):
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
+
+    comms = notification_bus
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    failed_pass(comms, RuntimeError("muted service failure"))
+    message, = notifications(comms)
+    assert isinstance(message.task, CommanderNotice)
+    assert not message.role.counts_as_conversation()
+    assert "muted service failure" in message.body
+    assert message.task.handled == (RulePing.capture(retained_failure(comms)),)
+
+
 def test_real_heartbeat_dispatches_watch_and_plan_roles_separately(notification_bus: Comms) -> None:
     heartbeat = CommanderHeartbeat()
     prepared = heartbeat.prepare(notification_bus)

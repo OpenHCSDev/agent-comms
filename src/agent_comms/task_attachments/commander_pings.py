@@ -338,9 +338,16 @@ class CommanderUpdate(OwnerNotice, declared_name=None):
             not_applied=tuple(line for packet in previous for line in packet.not_applied),
         ),)
 
+    def passive(self) -> CommanderUpdate:
+        """Keep every observed fact, but use the existing no-input notice behavior."""
+        return CommanderNotice(self.commander, self.handled, not_applied=self.not_applied,
+                               publication=self.publication)
+
     def send(self, comms: Comms, now: float, hud: tuple[str, ...], *,
              publication: PublicationFacts = UnpublishedFacts()) -> Message:
-        return replace(self, publication=publication).publish(
+        recipient = comms.registry.require(self.commander.name)
+        packet = recipient.heartbeat_delivery.packet(replace(self, publication=publication))
+        return packet.publish(
             comms.messaging, ThreadTarget(self.commander.name), self.body(hud))
 
 

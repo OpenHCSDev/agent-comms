@@ -537,8 +537,12 @@ class DealMode(DeclaredFamily, affix="DealMode"):
         return Open()
 
     @classmethod
-    def automatic[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
-        """Automatic redealing is disabled unless the mode supplies it."""
+    def compaction[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        """Lost-context reading is independent of periodic refreshes."""
+        return kept
+
+    @classmethod
+    def refresh[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
         return kept
 
 
@@ -555,11 +559,19 @@ class StartupDealMode(DealMode):
         return next(owed, Open()).state()
 
 
-class FullDealMode(StartupDealMode):
+class CompactionDealMode(StartupDealMode):
+    """Read on startup and after lost context, never at mid-session thresholds."""
+
+    @classmethod
+    def compaction[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        return action()
+
+
+class FullDealMode(CompactionDealMode):
     """Enforce the gate and redeal on compaction and context thresholds."""
 
     @classmethod
-    def automatic[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+    def refresh[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
         return action()
 
 
@@ -577,11 +589,6 @@ class DealTrigger(DeclaredFamily, affix="Deal"):
         """The cause with its evidence, as the refusal's first line."""
 
 
-class AutomaticDeal(DealTrigger, declared_name=None):
-    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
-        return mode.automatic(action, kept)
-
-
 @dataclass(frozen=True)
 class StartedDeal(DealTrigger):
     """A first start: nothing read before is in front of the session."""
@@ -590,8 +597,11 @@ class StartedDeal(DealTrigger):
         return "Dealt because this session just started: nothing you read before is in front of you."
 
 
-class CompactionDeal(AutomaticDeal):
+class CompactionDeal(DealTrigger):
     """A compaction replaced the context with a summary; a member says when."""
+
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        return mode.compaction(action, kept)
 
     @abstractmethod
     def moment(self) -> str:
@@ -643,8 +653,11 @@ class PrimedDeal(DealTrigger):
 
 
 @dataclass(frozen=True)
-class RefreshDeal(AutomaticDeal):
+class RefreshDeal(DealTrigger):
     """A declared share of the context window filled before any compaction."""
+
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        return mode.refresh(action, kept)
 
     used: int
     """The percent of the context window used when the refresh came due."""
