@@ -338,7 +338,7 @@ class ToolTransport(Generic[Call]):
         for call in self.calls.values():
             call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
-    def judge(self, call: Call) -> None:
+    async def judge(self, call: Call) -> None:
         """Refuse a call before its policy is asked; an ungated transport leaves it to `allow`."""
         return
 
@@ -350,7 +350,7 @@ class ToolTransport(Generic[Call]):
 
     async def judged_allow(self, round_number: int, call: Call) -> None:
         """Inside the call's one claim, so a refusal is the call's own failed terminal."""
-        self.judge(call)
+        await self.judge(call)
         await self.allow(round_number, call)
 
     @staticmethod
@@ -422,5 +422,7 @@ class GatedToolTransport(ToolTransport[Call]):
         super().__init__(listener, pid=pid)
         self.rule_gate = gate
 
-    def judge(self, call: Call) -> None:
-        call.judge_under(self.rule_gate)
+    async def judge(self, call: Call) -> None:
+        identity = self.calls.identity_for(call)
+        round = self.calls.rounds[identity.round_number]
+        await self.rule_gate.judge_round(call, round, self.turn)
