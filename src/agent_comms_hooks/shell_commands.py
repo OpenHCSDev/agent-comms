@@ -186,15 +186,19 @@ class ShellLexer(shlex.shlex, ShellText):
             # quotes. shlex retains those bytes; an inner -c must see the real text.
             if self.token.endswith('\n'):
                 self.token = self.token[:-(2 if value == '"' else 1)]
-            elif value == '"' and self.token[-1:] in ('$', '`'):
-                self.token = self.token[:-2] + self.token[-1:]
+            else:
+                # A removed continuation does not quote the word. Only a completed
+                # escape does; genuine earlier quotes/escapes retain their kind.
+                self.word_type = QuotedWord
+                if value == '"' and self.token[-1:] in ('$', '`'):
+                    self.token = self.token[:-2] + self.token[-1:]
         if self._state == ' ' and value not in (' ', None):
             self.word_start = self.position - 1
             self.check_substitution(self.getvalue()[self.word_start:self.word_start + 1],
                                     self.word_start + 1)
         if value == 'c':
             self.word_type = Operator
-        elif value in ("'", '"', '\\'):
+        elif value in ("'", '"'):
             self.word_type = QuotedWord
         self._state = value
 

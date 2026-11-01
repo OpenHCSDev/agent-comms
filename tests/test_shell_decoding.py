@@ -113,6 +113,9 @@ class ShellDecoding(unittest.TestCase):
             "cat <<-'A'\n\t'not shell\n\tA\nmkdir target",
             "cat <<A\nordinary text\nA\nmkdir target",
             "cat <<E\"OF\"\n$(uv sync)\nEOF\nmkdir target",
+            "cat <<E\"\"\\\nOF\n$(touch hidden)\nEOF\nmkdir target",
+            "cat <<\\E\\\nOF\n$(touch hidden)\nEOF\nmkdir target",
+            'cat <<"E\\\nOF"\n$(touch hidden)\nEOF\nmkdir target',
             "cat <<'EOF'\n>>> '''not shell\nEOF\nmkdir target",
             "cat <<'EOF'; echo header\n>& 'not shell\nEOF\nmkdir target",
             shlex.join(('bash', '-c', "python - <<'PY'\nprint(\"it's > picked\")\nPY\nmkdir target")),
@@ -125,6 +128,8 @@ class ShellDecoding(unittest.TestCase):
         for text in (
             'cat <<EOF\n$(uv sync)\nEOF\n',
             'cat <<EOF\n`uv sync`\nEOF\n',
+            'cat <<E\\\nOF\n$(touch target)\nEOF\n',
+            'cat <<-E\\\nOF\n\t`touch target`\n\tEOF\n',
             "cat <<'EOF'\nno terminator",
             "cat <<'EOF'\n\tEOF\n",
             'echo >',
@@ -262,6 +267,8 @@ class ShellDecoding(unittest.TestCase):
         script = 'while kill -0 123; do sleep 1; done'
         for text, bounded in (
             (script, False),
+            ('whi\\\nle kill -0 123; do sleep 1; done', False),
+            ('un\\\ntil kill -0 123; do sleep 1; done', False),
             ('(' + script + ')', False),
             (shlex.join(('bash', '-o', 'pipefail', '-c', script)), False),
             (shlex.join(('timeout', '-s', 'INT', '5', 'bash', '-c', script)), True),
@@ -271,7 +278,13 @@ class ShellDecoding(unittest.TestCase):
                 waits = tuple(WaitCommand(text).waits())
                 self.assertEqual(len(waits), 1)
                 self.assertEqual(waits[0].bounded, bounded)
-        self.assertEqual(tuple(WaitCommand('"while" kill -0 123').waits()), ())
+        for text in (
+            '"while" kill -0 123',
+            'whi""\\\nle kill -0 123',
+            '\\whi\\\nle kill -0 123',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(tuple(WaitCommand(text).waits()), ())
         polling = shlex.join(('timeout', '5', 'bash', '-c',
                              'while env -u OLD pgrep -f worker; do sleep 1; done'))
         self.assertTrue(tuple(WaitCommand(polling).waits())[0].polls_pgrep_f())
