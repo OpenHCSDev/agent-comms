@@ -1509,7 +1509,10 @@ class InstallVerb(OrderVerb):
     clears = (InstallDue,)
 
     def run(self, ctx: Commander) -> None:
-        for due in InstallDue.due(ctx.comms, ProgressRead()):
+        pulls = ProgressRead()
+        InstallDue.prepare(ctx.comms, ctx.commander,
+                           HeldOrders.read(ctx.comms, ctx.commander), pulls)
+        for due in InstallDue.due(ctx.comms, pulls):
             print(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(ctx.comms)}")
 
 

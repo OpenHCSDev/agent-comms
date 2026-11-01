@@ -23,6 +23,7 @@ from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.held_orders import HeldOrders
 from agent_comms.installer.probes.interpreter import RecordedInterpreterBuild
 from agent_comms.installer.probes.packages import ArchiveRecord, CommitRecord, GitRecord, PackageRecord
 from agent_comms.installer.runtime_resolution import CorePackage, RuntimePackage, RuntimeResolution
@@ -295,10 +296,13 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
     checked, contained, missing = graph.installed, graph.installed, graph.newer
     github_cli.configure(graph.repository.github)
     for number, commit in ((1, checked), (2, checked), (3, contained), (4, missing)):
-        github_cli.put(graph.repository.github, MergedListedPullRequest(
+        row = MergedListedPullRequest(
             number, f'fix/{number}', commit, updated='2026-10-25T12:00:00Z', base=WorkBranches.main,
             reviewable_times=('2026-10-25T12:00:00Z',), merge=PullRequestCommit(commit),
-            merged='2026-10-25T12:00:00Z'))
+            merged='2026-10-25T12:00:00Z')
+        graph.repository.git(checkout, 'push', 'origin',
+                             f'{row.head}:refs/pull/{row.number}/head')
+        github_cli.put(graph.repository.github, row)
     caller = ThreadCaller("lead")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
@@ -322,7 +326,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 DeliveredCommitNotInstalledError,
             ),
         )
-        for problem, delivery, expected_error in cases:
+        for number, (problem, delivery, expected_error) in enumerate(cases, 1):
             build = delivery.proof_build
             order = PendingProblemOrder(
                 scope=FIX_SCOPE,
@@ -417,7 +421,9 @@ def test_install_due_compares_fetched_main_to_installed_build(
     Commander.on_root("lead", registered, bus.root)
 
     github_cli.configure(graph.repository.github)
-    due = InstallDue.due(bus, ProgressRead())
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    due = InstallDue.due(bus, pulls)
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     assert Repo.git(checkout, "rev-parse", "origin/main").strip() == (
@@ -437,7 +443,9 @@ def test_install_due_compares_fetched_main_to_installed_build(
     runtime = LaunchRuntime.installed().prefix
     resolution = RuntimeResolution.at(runtime)
     resolution.model_copy(update={"core_commit": graph.newer}).save(runtime)
-    after_install = InstallDue.due(bus, ProgressRead())
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
     configured = bus.registry.snapshot().commander_project.require().repos
@@ -478,7 +486,9 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     merged = int(Repo.git(checkout, "log", "-1", "--format=%ct", merge))
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 
-    (due,) = InstallDue.due(bus, ProgressRead())
+    pulls = ProgressRead()
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
     assert "order install" in due.line().rsplit(" -> ", 1)[1]
