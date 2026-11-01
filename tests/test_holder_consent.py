@@ -1,11 +1,12 @@
 """Shared maintenance, exact holder consent and genuine caller binding are different contracts."""
 
+from contextlib import nullcontext
 from dataclasses import replace
 import time
 
 import pytest
 
-from agent_comms.errors import TodoConflict
+from agent_comms.errors import RelationViolationError, TodoConflict
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, OwnerInvocable, PausedGoalAction, ReissuedOrderGoalAction, SetGoalAction
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, ModelPause, PausedGoal
 from agent_comms.goals import Goal, GoalConsentRequired, NoGoal
@@ -13,6 +14,7 @@ from agent_comms.order_tools import CommsChangeProblemTool, CommsOrderTool, Comm
 from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
+from agent_comms.threads import ParkedThreadWorkState
 from agent_comms.todos import AssignTodo, HolderConsentRequired, ReleaseTodo, StrikeReason
 from agent_comms.tool_caller import CommanderForkCaller, CommanderPeerCaller, ThreadCaller
 
@@ -297,6 +299,89 @@ def test_exact_noop_maintenance_needs_no_new_goal_consent(fork_bus):
         CommsChangeProblemTool(problem=current.id, operation=operation), comms)
     assert result.todo == current
     assert comms.registry.require("worker").goal == worker.goal
+
+
+@pytest.mark.parametrize("parked", (False, True))
+def test_post_handoff_review_timer_update_preserves_history_without_new_consent(fork_bus, parked):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    ThreadCaller("lead").invoke(CommsOrderTool(owner="worker", order=action), comms)
+    current = comms.goals.todos.get(current.id)
+    worker = comms.registry.require("worker")
+    assert current.held().previous_owners
+    if parked:
+        comms.registry.set_work_state("worker", ParkedThreadWorkState())
+    review_at = RecordedEventTime(current.review_at.recorded_at("A review time") + 1)
+    operation = AssignTodo.by(
+        action.assigner, current.revision, worker.incarnation, worker.goal.require().id,
+        review_at, current.order.checked(), current.request.require(),
+        action.traced, frozenset({current.id}))
+    assert operation.proposed.previous_owners == ()
+    result = ThreadCaller("lead").invoke(
+        CommsChangeProblemTool(problem=current.id, operation=operation), comms)
+    assert result.todo.review_at == review_at
+    assert result.todo.revision == current.revision + 1
+    assert result.todo.assignment == current.assignment
+    assert result.todo.order == current.order
+    assert result.todo.creator_identity == current.creator_identity
+    assert comms.registry.require("worker").goal == worker.goal
+
+
+@pytest.fixture(params=(False, True), ids=("absent-goal", "completed-goal"))
+def free_receiver(fork_bus, request):
+    comms, _, _ = fork_bus
+    worker = comms.registry.require("worker")
+    if request.param:
+        goal = Goal(text="A completed independent task", id=GoalId.mint(),
+                    published_seq=0, state=CompletedGoal())
+        comms.registry.register(replace(worker, goal=goal))
+    return comms.registry.require("worker")
+
+
+@pytest.mark.parametrize("parked", (False, True))
+def test_direct_assignment_consumes_the_fresh_receivers_work_state(fork_bus, free_receiver, parked):
+    comms, source, _ = fork_bus
+    current, action = incoming_work(comms)
+    if parked:
+        comms.registry.set_work_state("worker", ParkedThreadWorkState())
+    rows = comms.goals.todos.board()
+    worktrees = source.git(source.checkout, "worktree", "list", "--porcelain")
+    operation = AssignTodo.by(
+        action.assigner, current.revision, free_receiver.incarnation, GoalId.mint(),
+        action.review_at, action.order, action.request, action.traced, frozenset({current.id}))
+    with pytest.raises(RelationViolationError) if parked else nullcontext():
+        ThreadCaller("lead").invoke(
+            CommsChangeProblemTool(problem=current.id, operation=operation), comms)
+    assert comms.registry.require("worker").goal == free_receiver.goal
+    if parked:
+        assert comms.goals.todos.board() == rows
+        assert source.git(source.checkout, "worktree", "list", "--porcelain") == worktrees
+    else:
+        assert comms.goals.todos.get(current.id).held().owner_identity == free_receiver.incarnation
+
+
+@pytest.mark.parametrize("parked", (False, True))
+def test_creation_rechecks_work_state_instead_of_trusting_a_retained_ready_thread(
+    fork_bus, free_receiver, parked,
+):
+    comms, source, _ = fork_bus
+    _, action = incoming_work(comms)
+    if parked:
+        comms.registry.set_work_state("worker", ParkedThreadWorkState())
+    rows = comms.goals.todos.board()
+    worktrees = source.git(source.checkout, "worktree", "list", "--porcelain")
+    with pytest.raises(RelationViolationError) if parked else nullcontext():
+        comms.goals.todos.create(
+            "P41", source.github, "Another declared repair",
+            creator=comms.registry.require("lead"), owner=free_receiver,
+            assigner=action.assigner, generation=GoalId.mint(), request=action.request,
+            review_at=action.review_at, order=action.order)
+    assert comms.registry.require("worker").goal == free_receiver.goal
+    if parked:
+        assert comms.goals.todos.board() == rows
+        assert source.git(source.checkout, "worktree", "list", "--porcelain") == worktrees
+    else:
+        assert comms.goals.todos.get("P41").held().owner_identity == free_receiver.incarnation
 
 
 @pytest.mark.parametrize("state,available", (

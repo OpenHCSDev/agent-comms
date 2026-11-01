@@ -3701,8 +3701,10 @@ class Assignment(TodoHolder):
         """A retained assignment follows its live incarnation, never a reused name."""
         return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
-    def require_goal_consent(self, actor: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
+    def require_receiving_work(self, actor: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
+        """The fresh receiver supplies both work availability and goal consent."""
         owner = snapshot.born(self.owner_identity.require_recorded().lookup)
+        owner.work_state.require_assignment()
         owner.goal.require_work(actor, owner)
 
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
@@ -4001,23 +4003,24 @@ class AssignTodo(TodoOperation):
         if self.changes_work(current, proposed):
             current.current_holder.require_release(self.actor, current)
 
-    def require_goal_consent(
+    def require_receiving_work(
         self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
     ) -> None:
         if self.changes_work(current, proposed):
-            proposed.require_goal_consent(self.actor, snapshot)
+            proposed.require_receiving_work(self.actor, snapshot)
 
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
         current = store.get(problem)
         proposed = current.proposed_assignment(self.proposed)
         self.require_holder_consent(current, proposed)
-        self.require_goal_consent(current, proposed, RegistryStore.at(store.root).snapshot())
+        self.require_receiving_work(current, proposed, RegistryStore.at(store.root).snapshot())
         return (replace(current, assignment=proposed, order=self.order),)
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         snapshot = RegistryStore.at(store.root).snapshot()
-        self.require_goal_consent(current, self.proposed, snapshot)
-        self.proposed.require_available_in(
+        proposed = current.proposed_assignment(self.proposed)
+        self.require_receiving_work(current, proposed, snapshot)
+        proposed.require_available_in(
             db, current.id, IncomingWork(
                 self.group | {current.id}, frozenset({self.order.id})),
             snapshot, store.prepared_edits())
@@ -6494,7 +6497,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
         assignment = Assignment.of(assignee, assigner, generation)
-        assignment.require_goal_consent(assigner, RegistryStore.at(self.root).snapshot())
+        assignment.require_receiving_work(assigner, RegistryStore.at(self.root).snapshot())
         DirectiveText.require(text)
         order.require_wording()
         order.require_writable()
@@ -6503,7 +6506,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         prepared = self.preparing_edits((proposed,))
         with prepared.writing() as db:
             snapshot = RegistryStore.at(self.root).snapshot()
-            proposed.held().require_goal_consent(assigner, snapshot)
+            proposed.held().require_receiving_work(assigner, snapshot)
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(frozenset({todo_id}), frozenset({order.id})),
                 snapshot, prepared.prepared_edits())
