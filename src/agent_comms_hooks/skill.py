@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.cli_bridges.claude_transcript import ClaudeJsonLines
+from agent_comms.class_fact import ClassFact
 from agent_comms.commander.package import CommanderPackage
 from agent_comms.commander.rule_file import RuleFile
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -46,10 +47,14 @@ class DeckReader(DealtSources):
 
     deck_suffix: ClassVar[str] = ".deck.json"
     """The one shared deck beside each session's transcript."""
-    slice_chars: ClassVar[int] = 2_500
-    """The most characters one inline slice carries; a longer paragraph splits at its lines. A
-    rule's wake-up is never split, since a greentext cut before its punchline teaches nothing,
-    so the cap sits above the longest one and the deck test fails when one outgrows it."""
+    @ClassFact
+    def slice_chars(cls: type[DeckReader]) -> int:
+        """Whole wake-ups declare the inline packing width; paragraphs split at their lines.
+
+        A rule cannot be cut before its punchline. Its declared text, not a separately
+        maintained character count, therefore supplies the width for every reader.
+        """
+        return max(map(len, cls.tells()))
 
     @classmethod
     def proofs(cls) -> tuple[Path, ...]:
