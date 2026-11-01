@@ -157,7 +157,11 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
 
     @classmethod
     def installed(cls) -> RecordedBuildIdentity:
-        runtime = LaunchRuntime.installed()
+        return cls.at(LaunchRuntime.installed())
+
+    @classmethod
+    def at(cls, runtime: LaunchRuntime) -> RecordedBuildIdentity:
+        """Read the selected build, never borrow the current pointer for a candidate."""
         runtime.require_available()
         resolution = RuntimeResolution.at(runtime.prefix)
         return cls(

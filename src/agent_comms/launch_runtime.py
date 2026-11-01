@@ -113,10 +113,14 @@ class LaunchRuntime:
         return self.interpreter.parent.parent.resolve()
 
     @property
+    def purelib(self) -> Path:
+        """The selected runtime's package directory, including before installation."""
+        return Path(sysconfig.get_path("purelib", vars={"base": str(self.prefix)}))
+
+    @property
     def package_root(self) -> Path:
         """The Core package installed in this runtime's purelib directory."""
-        purelib = Path(sysconfig.get_path("purelib", vars={"base": str(self.prefix)}))
-        root = purelib / "agent_comms"
+        root = self.purelib / "agent_comms"
         initializer = root / "__init__.py"
         if not initializer.is_file():
             raise FileNotFoundError(f"Installed Core package is missing: {initializer}")
