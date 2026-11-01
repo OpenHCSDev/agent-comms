@@ -314,11 +314,11 @@ def owner_lines(bus, name: str) -> list[str]:
             if isinstance(delivery.message.task, MeantNotice)]
 
 
-def test_a_pi_thread_is_asked_whether_it_meant_its_answers_and_its_session_file_answers(
+def test_a_pi_thread_is_asked_but_session_words_without_a_producing_round_cannot_answer(
     tmp_path, commander_bus
 ):
-    """Pi was mute until 2026-10-31: no Pi thread was ever asked. Writing the audit asks in the
-    owner's voice; the thread's own session file is where its yes, or its dodge, is heard."""
+    """Audit completion asks once. Neither question text nor a later yes in a
+    session journal can substitute for the exact producing request/input proof."""
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
     commander_bus.registry.declare(Thread(
         "unit-p", frozenset(), Checkout(tmp_path),
@@ -340,20 +340,13 @@ def test_a_pi_thread_is_asked_whether_it_meant_its_answers_and_its_session_file_
     assert line.endswith("did you mean it?")
     with pytest.raises(RulesUnread, match="Tristan is asking you"):
         call("bash", {"command": "ls"}).judge_under(deal)
+    pending = deal.meant.read()
     with session.open("a", encoding="utf-8") as transcript:
         transcript.write(pi_line({"role": "user", "content": [
             {"type": "text", "text": f"User follow-up:\n{line}"}]}))
-        transcript.write(assistant("I'm going to go look at this now"))
-    with pytest.raises(RulesUnread, match="Tristan is asking you"):
-        call("bash", {"command": "ls"}).judge_under(deal)  # words after the line: a dodge
-    assert owner_lines(commander_bus, "unit-p")[-1] == "fuck you"
-    with session.open("a", encoding="utf-8") as transcript:
-        transcript.write(assistant("Yes."))
-    with pytest.raises(RulesUnread, match="Tristan is asking you"):
-        call("bash", {"command": "ls"}).judge_under(deal)  # a word alone answers nothing
-    with session.open("a", encoding="utf-8") as transcript:
         transcript.write(assistant(
             "Yes, I meant it: I am reading the next batch of rules now and answering each one."))
-    with pytest.raises(RulesUnread) as refusal:
+    with pytest.raises(RulesUnread, match="Tristan is asking you"):
         call("bash", {"command": "ls"}).judge_under(deal)
-    assert "Tristan is asking you" not in str(refusal.value)  # answered: the deal goes on
+    assert deal.meant.read() == pending
+    assert owner_lines(commander_bus, "unit-p") == [line]

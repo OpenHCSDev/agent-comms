@@ -63,6 +63,9 @@ class Provenance(DeclaredFamily, affix="Provenance"):
         """
         raise ValueError(f"Original text is not retained by {self.public_description()}")
 
+    def committed_contexts(self) -> tuple[NativeProvenance, ...]:
+        return ()
+
     def preview_observations(self) -> tuple[PreviewProvenance, ...]:
         return ()
 
@@ -200,6 +203,9 @@ class NativeProvenance(Provenance):
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
         return (self.identity,)
 
+    def committed_contexts(self) -> tuple[NativeProvenance, ...]:
+        return (self,)
+
 
 @dataclass(frozen=True)
 class PreviewProvenance(Provenance):
@@ -266,6 +272,9 @@ class ContextSources:
 
     provenance: tuple[Provenance, ...]
 
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        return tuple(reference for source in self.provenance for reference in source.bus_references())
+
     def native_identity(self) -> NativeSessionIdentity:
         originals = {identity for source in self.provenance for identity in source.native_identities()}
         if len(originals) != 1:
@@ -273,10 +282,13 @@ class ContextSources:
         (identity,) = originals
         return identity
 
-    def journal_entries(self) -> tuple[str, ...]:
+    def journal_coordinates(self) -> tuple[str, ...]:
         identity = self.native_identity()
-        entries = tuple(dict.fromkeys(entry for source in self.provenance
-                                      for entry in source.journal_entries(identity)))
+        return tuple(dict.fromkeys(entry for source in self.provenance
+                                   for entry in source.journal_entries(identity)))
+
+    def journal_entries(self) -> tuple[str, ...]:
+        entries = self.journal_coordinates()
         if not entries:
             raise ValueError("Original segment has no recoverable journal coordinates")
         return entries
@@ -352,6 +364,9 @@ class SegmentManifest:
     def wire_sources(self) -> tuple[MessageReference, ...]:
         """Original bus messages declared by this segment, in contribution order."""
         return self.kind.wire_sources(self)
+
+    def original_user_entries(self, reference: MessageReference) -> tuple[str, ...]:
+        return self.kind.original_user_entries(self, reference)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -697,6 +712,14 @@ class ContextSegment(
         """A segment without its own wire sources answers through its contributors."""
         return tuple(source for child in original.contributors for source in child.wire_sources())
 
+    @classmethod
+    def user_references(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        return ()
+
+    @classmethod
+    def original_user_entries(cls, original: SegmentManifest, reference: MessageReference) -> tuple[str, ...]:
+        return ()
+
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
 
@@ -833,13 +856,17 @@ class WireSources(ContextSegment, declared_name=None):
     @classmethod
     def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
         return (
-            *(reference for source in original.provenance for reference in source.bus_references()),
+            *original.sources.bus_references(),
             *super().wire_sources(original),
         )
 
 
 @dataclass(frozen=True, kw_only=True)
 class UserInputSegment(SuppliedSegment, WireSources):
+    @classmethod
+    def user_references(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        return original.sources.bus_references()
+
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
@@ -994,6 +1021,17 @@ class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
 
     @classmethod
+    def original_user_entries(
+        cls, original: SegmentManifest, reference: MessageReference,
+    ) -> tuple[str, ...]:
+        if any(reference in child.kind.user_references(child)
+               for child in original.original_values()):
+            entries = original.sources.journal_coordinates()
+            if len(entries) == 1:
+                return entries
+        return ()
+
+    @classmethod
     def record_manifest(
         cls, original: SegmentManifest, previous: SegmentRecording,
         *, recording_turn: int = 1,
@@ -1011,6 +1049,11 @@ class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
         entries = tuple(ContextEntryManifest(child)
                         for child in original.contributors[recorded.inherited_entries:])
         return recorded, entries
+
+
+@dataclass(frozen=True, kw_only=True)
+class TransformedInputSegment(NativeAnnotations, MeasuredNativeSegment):
+    """SDK values without original-entry correspondence carry no user-entry proof."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1283,6 +1326,21 @@ class ContextManifest:
     def public_text_recorded(self) -> bool:
         return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
 
+
+    def committed_context(self, identity: NativeSessionIdentity) -> NativeProvenance:
+        contexts = {context for part in self.segments for source in part.provenance
+                    for context in source.committed_contexts()}
+        if len(contexts) != 1:
+            raise ValueError("Producing request has no unambiguous committed context")
+        (context,) = contexts
+        if context.identity != identity:
+            raise ValueError("Producing request belongs to another native session")
+        return context
+
+    def user_entries(self, reference: MessageReference) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(entry for part in self.segments
+            for original in part.original_values()
+            for entry in original.original_user_entries(reference)))
 
     def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
         if not 0 <= position < len(self.segments):
