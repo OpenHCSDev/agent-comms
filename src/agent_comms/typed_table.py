@@ -810,11 +810,35 @@ class SQLiteSchemaDifference:
         return f"{self.name}: stored {self.stored or 'nothing'}; declared {self.declared or 'nothing'}"
 
 
+class TableSource:
+    """A query's table location; the default retains SQLite's normal name search."""
+
+    __slots__ = ()
+
+    def qualified(self, name: str) -> str:
+        return _identifier(name)
+
+
+LOCAL_TABLE_SOURCE = TableSource()
+
+
 @dataclass(frozen=True)
-class SQLiteDatabase(TypedRow):
+class SQLiteDatabase(TypedRow, TableSource):
+    """An actual attached database owns qualification through its recorded name."""
+
     seq: int
     name: str
     file: str
+
+    @classmethod
+    def named(cls, db: sqlite3.Connection, name: str) -> Self:
+        database, = cls.read(db.execute(
+            "SELECT seq,name,file FROM pragma_database_list WHERE name=?", (name,),
+        ))
+        return database
+
+    def qualified(self, name: str) -> str:
+        return f"{_identifier(self.name)}.{_identifier(name)}"
 
 
 @dataclass(frozen=True)
@@ -1046,18 +1070,17 @@ class PracticeRebuild(SchemaRebuild):
 
     @contextmanager
     def attached(self, db: sqlite3.Connection) -> Iterator[AttachedPracticeRebuild]:
-        with closing(SQLiteFile.read_snapshot(self.path)) as source:
-            db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
-                       (self.path.resolve().as_uri() + "?mode=ro",))
-            try:
-                yield AttachedPracticeRebuild(source, db)
-            finally:
-                db.execute(f'DETACH DATABASE "{self.database}"')
+        db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
+                   (self.path.resolve().as_uri() + "?mode=ro",))
+        try:
+            yield AttachedPracticeRebuild(SQLiteDatabase.named(db, self.database), db)
+        finally:
+            db.execute(f'DETACH DATABASE "{self.database}"')
 
 
 @dataclass(frozen=True)
 class AttachedPracticeRebuild(SchemaRebuild):
-    source: sqlite3.Connection
+    source: SQLiteDatabase
     destination: sqlite3.Connection
 
     def retain_rows(
@@ -1082,7 +1105,7 @@ class AttachedPracticeRebuild(SchemaRebuild):
         return self.destination.execute(
             f"INSERT INTO main.{table} ({row._column_list(fields)}) "
             f"SELECT {row.qualified(*fields)} "
-            f"FROM {_identifier(PracticeRebuild.database)}.{table} AS {table} "
+            f"FROM {self.source.qualified(row.declared_name)} AS {table} "
             f"WHERE ({row._sql(where)}) AND NOT EXISTS "
             f"(SELECT 1 FROM main.{table} AS {retained_alias} WHERE {retained})",
             parameters,
@@ -1093,7 +1116,7 @@ class AttachedPracticeRebuild(SchemaRebuild):
         rows: tuple[type[TypedTable], ...],
     ) -> None:
         projections = tuple(row for row in schema.projection_rows() if row in rows)
-        if not ProjectionProducer.matches(self.source, projections):
+        if not ProjectionProducer.matches(db, projections, table_source=self.source):
             raise RelationViolationError("Practice projection producers differ from this runtime")
         through = max((row.practice_sequence(db, self.source)
                        for row in schema.projection_rows()), default=0)
@@ -1101,7 +1124,7 @@ class AttachedPracticeRebuild(SchemaRebuild):
         schema.create_tables(db, rows)
         for row in projections:
             db.execute(f'INSERT INTO "{row.declared_name}" '
-                       f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
+                       f'SELECT * FROM {self.source.qualified(row.declared_name)}')
         schema.replay(db, rows, after=through)
 
 
@@ -2545,18 +2568,21 @@ class TypedTable(
 
     @classmethod
     def select_keys(cls, db: sqlite3.Connection,
-                    keys: Sequence[Mapping[str, object]]) -> list[Self]:
+                    keys: Sequence[Mapping[str, object]], *,
+                    table_source: TableSource = LOCAL_TABLE_SOURCE) -> list[Self]:
         """Rows equal to any of these named keys under the same null-safe IS equality select()
         uses: the requested keys drive an indexed join, one batch per the connection's own
         variable limit, each distinct key probed once."""
-        return [row for requested in cls.requested_keys(db, keys) for row in cls.iterate(db.execute(
+        return [row for requested in cls.requested_keys(db, keys, table_source=table_source)
+                for row in cls.iterate(db.execute(
             f"WITH {requested.values} "
             f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
             requested.bindings))]
 
     @classmethod
     def requested_keys(cls, db: sqlite3.Connection,
-                       keys: Sequence[Mapping[str, object]]) -> Iterator[RequestedKeys]:
+                       keys: Sequence[Mapping[str, object]], *,
+                       table_source: TableSource = LOCAL_TABLE_SOURCE) -> Iterator[RequestedKeys]:
         """The distinct named keys, encoded by their declared columns, in batches that fit the
         connection's own variable limit; each batch joins this table as ``FROM requested
         JOIN <table> ON ...`` under select()'s null-safe IS equality."""
@@ -2576,7 +2602,7 @@ class TypedTable(
         for chunk in batched(bound, batch):
             yield RequestedKeys(
                 f"requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)})",
-                f"FROM requested JOIN {table} ON {joined}",
+                f"FROM requested JOIN {table_source.qualified(cls.declared_name)} ON {joined}",
                 tuple(value for _, values in chunk for value in values))
 
     @classmethod
@@ -2584,11 +2610,12 @@ class TypedTable(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object],
         row_type: type[RelatedRow] | None, limit: int | None,
+        table_source: TableSource,
     ) -> Generator[Self | RelatedRow]:
         condition, parameters = cls._condition(where, parameters, key)
         direction, selected = " DESC" if descending else "", row_type or cls
         return selected.iterate(db.execute(
-            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
+            f"SELECT {selected._select_list(cls)} FROM {table_source.qualified(cls.declared_name)} "
             f"WHERE {condition}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else "") + (" LIMIT ?" if limit is not None else ""),
@@ -2600,7 +2627,7 @@ class TypedTable(
     def select(
         cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> list[RelatedRow]: ...
 
     @overload
@@ -2608,7 +2635,7 @@ class TypedTable(
     def select(
         cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> list[Self]: ...
 
     @classmethod
@@ -2621,16 +2648,17 @@ class TypedTable(
         order_by: tuple[str, ...] = (),
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
-        **key: object,
+        table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Sequence[Self | RelatedRow]:
-        return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
+        return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit,
+                               table_source))
 
     @overload
     @classmethod
     def stream(
         cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[RelatedRow]: ...
 
     @overload
@@ -2638,7 +2666,7 @@ class TypedTable(
     def stream(
         cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[Self]: ...
 
     @classmethod
@@ -2651,10 +2679,11 @@ class TypedTable(
         order_by: tuple[str, ...] = (),
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
-        **key: object,
+        table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[Self | RelatedRow]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
+        return cls._query(db, where, parameters, order_by, descending, key, row_type, limit,
+                          table_source)
 
     @classmethod
     def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
@@ -2731,23 +2760,27 @@ class TypedTable(
         return [item for item in stored if item.name in declared or item.name not in claimed]
 
     @classmethod
-    def present(cls, db: sqlite3.Connection) -> bool:
+    def present(cls, db: sqlite3.Connection, *,
+                table_source: TableSource = LOCAL_TABLE_SOURCE) -> bool:
         return SqlValue.for_annotation(bool).read(db.execute(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+            f"SELECT EXISTS(SELECT 1 FROM {table_source.qualified('sqlite_master')} "
+            "WHERE type='table' AND name=?)",
             (cls.declared_name,)))[0]
 
     @classmethod
-    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> bool:
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (),
+               table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> bool:
         condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {condition})",
+            f"SELECT EXISTS(SELECT 1 FROM {table_source.qualified(cls.declared_name)} WHERE {condition})",
             parameters))[0]
 
     @classmethod
-    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
+    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (),
+              table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> int:
         condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(int).read(db.execute(
-            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
+            f"SELECT COUNT(*) FROM {table_source.qualified(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
     @cache
@@ -2856,7 +2889,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                      if owner.shares_outputs_with(cls))
 
     @classmethod
-    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+    def practice_sequence(cls, db: sqlite3.Connection, source: TableSource) -> int:
         """Only the identity-owning row contributes a verified history prefix."""
         return 0
 
@@ -2976,12 +3009,14 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         return tuple(cls(name, digest) for name, digest in digests.items())
 
     @classmethod
-    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...], *,
+                table_source: TableSource = LOCAL_TABLE_SOURCE) -> bool:
         if not rows:
             return True
-        if not cls.present(db):
+        if not cls.present(db, table_source=table_source):
             return False
-        stored = {record.projection: record.producer_digest for record in cls.select(db)}
+        stored = {record.projection: record.producer_digest
+                  for record in cls.select(db, table_source=table_source)}
         digests = cls.digests_for(rows)
         return all(stored.get(name) == digest for name, digest in digests.items())
 
