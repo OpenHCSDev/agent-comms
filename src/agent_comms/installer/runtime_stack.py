@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 from agent_comms.child_process import ResidentManager
+from agent_comms.build_artifact import BuildArtifact
 from agent_comms.installer.carry import STEPS
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -165,6 +166,10 @@ class RuntimeStack(Extendable):
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
 
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """Production lock builds do not claim explicitly supplied local wheels."""
+        return ()
+
     def stage_native(self) -> tuple[Path, Path]:
         """Prepare a missing artifact once; the checkout holds only its store link."""
         manifest = self.checkout / "stack/pi-native.sha256"
@@ -226,6 +231,10 @@ class WheelRuntime(RuntimeStack):
     source_runtime: LaunchRuntime
     wheels: tuple[Path, ...]
 
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """The new runtime retains its own exact inputs; borrowed originals stay read-only."""
+        return tuple(self.runtime.prefix / "inputs" / wheel.name for wheel in self.wheels)
+
     def sync(self) -> None:
         named_prefix = self.runtime.interpreter.parent.parent
         if named_prefix.exists() or named_prefix.is_symlink():
@@ -248,16 +257,23 @@ class WheelRuntime(RuntimeStack):
         actual = donor.probe(InstalledPackagesProbe(source.core_commit))
         if actual != source.packages:
             raise UpgradeRefused("Dependency source differs from its recorded packages")
+        artifacts = tuple(BuildArtifact.capture(wheel) for wheel in self.wheels)
         self.commands.run(self.uv, "--offline", "venv", "--python",
                           self.interpreter.interpreter, prefix)
         if self.runtime.interpreter.resolve() != self.interpreter.interpreter.resolve():
             raise UpgradeRefused("Prepared target did not select the requested interpreter")
+        (prefix / "inputs").mkdir(mode=0o700)
+        for artifact, selected in zip(artifacts, self.wheel_inputs(), strict=True):
+            shutil.copyfile(artifact.path, selected)
+            selected.chmod(0o400)
+            if BuildArtifact.capture(selected).sha256 != artifact.sha256:
+                raise UpgradeRefused(f"Retained wheel differs from its input: {artifact.path}")
         shutil.copytree(self.source_runtime.purelib, self.runtime.purelib,
                         dirs_exist_ok=True, symlinks=True)
         # Prefix data is copied intact; package preparation validates its native assets.
         shutil.copytree(self.source_runtime.prefix / "share", prefix / "share", symlinks=True)
         self.commands.run(self.uv, "--offline", "pip", "install", "--no-deps", "--reinstall",
-                          "--python", self.python, *self.wheels, env=self.environment())
+                          "--python", self.python, *self.wheel_inputs(), env=self.environment())
         self.commands.run(self.uv, "--offline", "pip", "check", "--python", self.python,
                           env=self.environment())
 
