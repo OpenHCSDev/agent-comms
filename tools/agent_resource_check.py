@@ -302,9 +302,8 @@ def main():
     args = parser.parse_args()
     for kind in DirectoryUsers.kinds():
         if (paths := getattr(args, kind.__name__)) is not None:
-            # Read other users' /proc entries too, rather than silently omit them.
-            if os.geteuid() != 0:
-                os.execvp("sudo", ["sudo", "-n", sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
+            # Keep the caller's permissions. Unreadable processes remain explicit
+            # in the report and prevent FreeDirectories from declaring a path free.
             raise SystemExit(kind(paths).report())
     limits = limits_for(args.root)
     free, memory = headroom(limits)
