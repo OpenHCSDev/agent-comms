@@ -409,18 +409,6 @@ class TranscriptSource:
         its deal never asks: asking would lock the session behind a question it can't answer."""
         return Mute()
 
-    def words_end(self) -> int:
-        """Where the session's record of its own words ends now."""
-        return 0
-
-    def said_since(self, offset: int) -> tuple[str, ...]:
-        """The session's own words after `offset`; a mute source has none."""
-        return ()
-
-    def said_after(self, line: str, offset: int) -> tuple[str, ...]:
-        """The session's words after the user message carrying `line` arrived."""
-        return ()
-
     def receipts(self) -> SessionReceipts:
         """What the session's own record shows it just did; a source with no record has none."""
         return SessionReceipts()

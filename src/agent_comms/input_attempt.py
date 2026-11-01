@@ -37,6 +37,7 @@ from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
 
 if TYPE_CHECKING:
+    from .message_reference import MessageReference
     from .registry_document import RegistrySnapshot
     from .turn_lease import TurnLeaseFence
 
@@ -133,6 +134,9 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
 
     def context_provenance(self) -> InputProvenance:
         raise RelationViolationError("Constraint lacks its original input")
+
+    def model_contexts_for(self, root_id: RootId, reference: MessageReference) -> tuple[NativeContextProof, ...]:
+        return ()
 
     def model_contexts(self) -> tuple[NativeContextProof, ...]:
         return ()
@@ -487,6 +491,11 @@ class ContextConsumedInput(StartedInput):
     """The original started binding plus its first independently corroborated context."""
 
     context: Annotated[NativeContextProof, PublicExclude(), WireRequired()]
+
+    def model_contexts_for(self, root_id: RootId, reference: MessageReference) -> tuple[NativeContextProof, ...]:
+        if reference in self.origin.delivery_reference(root_id).references():
+            return self.model_contexts()
+        return ()
 
     def model_contexts(self) -> tuple[NativeContextProof, ...]:
         return (self.context,)
