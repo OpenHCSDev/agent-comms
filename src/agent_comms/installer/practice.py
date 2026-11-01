@@ -10,7 +10,11 @@ from pathlib import Path
 from math import ceil
 from collections.abc import Iterable
 
+from agent_comms.bus import Bus
 from agent_comms.context_store import ContextManifestReference, ContextStore
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.registry_document import RegistryEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
@@ -192,6 +196,33 @@ class PracticeCopy:
             maximum_bytes=self.remaining_bytes(maximum_bytes),
         )
         self.copied[source.path] = resource
+
+    def include_inputs(
+        self, entries: tuple[RegistryEntry, ...], *, maximum_bytes: int,
+        identities: Iterable[NativeSessionIdentity] = (),
+    ) -> InputDocument:
+        """Selected coordinator evidence beside the complete captured input readers.
+
+        include() owns capturing the original bus and ledger; this method never
+        substitutes a selected ledger or creates suppression evidence. Caller owns
+        one consistent cut and serial materialization, not native launch authority.
+        """
+        self.prepare()
+        for owner in (Bus, InputDispositions):
+            source = owner.path_in(self.root)
+            if source.exists():
+                if source not in self.copied:
+                    raise UpgradeRefused(f"Capture complete {source.name} before selecting input evidence")
+            elif owner.path_in(self.path).exists():
+                raise UpgradeRefused(f"Copied {source.name} has no original reader source")
+        source = CoordinationStore.path_in(self.root)
+        resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source,))
+        selected = CoordinationStore.retain_inputs(
+            source, CoordinationStore.path_in(self.path), entries,
+            identities=identities, maximum_bytes=self.remaining_bytes(maximum_bytes),
+        )
+        self.copied[source] = resource
+        return selected
 
     def include(self, paths: tuple[Path, ...]) -> None:
         self.prepare()

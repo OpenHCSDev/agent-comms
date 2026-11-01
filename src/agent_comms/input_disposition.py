@@ -578,3 +578,22 @@ class SnapshotInputDispositions(InputDispositions, declared_name=None):
         return HarnessDelivery.unconfirmed_for(
             self.original.destination, owners, table_source=self.original.source,
         )
+
+    def retain_unresolved(self, entries: tuple[RegistryEntry, ...]) -> InputDocument:
+        """Seed original attempt groups selected by the ordinary unresolved reader.
+
+        The complete copied ledger owns suppression in every state. This offline
+        selection reuses the same attachment and producer a second time, rather
+        than restating its key/outcome/suppression decisions. An unresolved ledger
+        row may keep an additional original attempt witness at its key; it still
+        wins the projection. No native association is inferred from a scalar id.
+        """
+        selected = self.unresolved(entries)
+        recipients = {entry.thread.name: entry.thread.incarnation.require_recorded().lookup
+                      for entry in entries}
+        for attempted in self.harness_attempts(entries):
+            if attempted.key in selected.rows:
+                attempted.origin.retain_harness_rows(
+                    self.original, recipients[attempted.owner],
+                )
+        return selected

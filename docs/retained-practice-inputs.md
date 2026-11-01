@@ -1,7 +1,8 @@
 # Original-coordinate practice inputs — implementation checkpoint
 
-Core #3829 remains unfinished. Entry and selected saved-context retention now have
-a PracticeCopy consumer in source; bounded coordinator selection, native-journal
+Core #3829 remains unfinished. Entry, selected saved-context and coordinator input
+evidence now have explicit PracticeCopy consumers in source. Complete coordinator
+relations, coherent aggregate capture, bounded peak materialization, native-journal
 reading and the prepared-root application run remain unfinished.
 This document records the source decisions, not an executable selection roster.
 
@@ -87,8 +88,8 @@ and primary-key deduplication with `retain_rows`; no second key encoder or raw-c
 procedure is added. Completed changes come from the connection, since SQLite's
 WITH-prefixed INSERT reports Cursor.rowcount=-1.
 
-ContextStore and PracticeCopy now consume the primitive; the coordinator selector
-still does not. Guard-safe loading, required children, source snapshot consistency,
+ContextStore and CoordinationStore now consume the primitive through their
+explicit PracticeCopy selection methods. Guard-safe loading, required children, source snapshot consistency,
 producer metadata, sequences, schema compatibility, materialized bounds and copy
 behavior remain unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
 is changed. These methods are implementation prerequisites, not a runnable root.
@@ -120,7 +121,7 @@ The existing rebuild API forwards the same transaction connection through schema
 reconciliation; that parameter is not an independently maintained source snapshot.
 No additional rebuild hierarchy or unchanged-whole-file gate was added. Actual
 WAL interleaving, source/target isolation and producer-prefix controls are still
-unrun, and no CoordinationStore/PracticeCopy consumer is claimed.
+unrun; the coordinator consumer below is a source implementation, not qualification.
 
 ## Shared loading lifetime and acknowledgement groups — source only
 
@@ -152,8 +153,9 @@ actual class creation/MRO, schema stability and group-copy behavior still requir
 qualification. Four new harness-group scenarios are authored, UNRUN: selected
 observations with an existing post-handoff claim, observations with no claim,
 full-reference conflict, and copy conflict with no partial publication.
-CoordinationStore/PracticeCopy has no coordinator-seed selection consumer yet. Coordinator seed capture and the remaining
-serialized/cross-store and producer dependencies remain OPEN; complete FK validity
+The coordinator seed consumer below now selects through the existing input
+projection. Aggregate capture and the remaining serialized/cross-store and producer
+dependencies remain OPEN; complete FK validity
 would not establish their preservation or the original group's validity.
 
 ## Required preservation that SQL foreign keys do not establish
@@ -210,10 +212,43 @@ complete ledger, captured consistently with the coordinator source; the caller
 owns that capture and attachment lifetime. This is not a second ledger or an
 input replay operation.
 
-The view is not yet consumed by a coordinator materializer or `PracticeCopy`.
-Runtime class creation/MRO/registration, the actual attached query, cross-store
-capture and complete preservation remain unqualified. No seed-only database is
-published as a runnable root or complete backup.
+`SnapshotInputDispositions.retain_unresolved` now consumes that unchanged reader
+and seeds original attempt groups at the selected keys. It asks the existing
+harness producer a second time on the same attachment, not a copied key/outcome
+or suppression algorithm. An unresolved stored ledger row can keep an additional
+original attempt witness at its key; the complete ledger still wins the read.
+The recipient lookup comes from those original source entries, not from a stored
+name/generation or a fabricated birth. `HarnessAttemptOrigin.retain_harness_rows`
+owns its bridge/reference selection and full-sequence check; origins without a
+harness witness contribute no harness rows. No synthesized reservation is stored.
+
+`CoordinationStore.retain_inputs` runs these seeds through the existing
+`ReconciledFile.retaining_rows` loading/dependency/publication lifetime.
+`NativeRuntimeInput.retain_sessions` additionally selects original native groups
+by both recorded session id and original session path. A bare ledger native id
+is not treated as a coordinator FK. The existing row hooks retain the selected
+original children, claims and forward references.
+
+`PracticeCopy.include_inputs` requires existing bus/ledger sources to have been
+captured completely through `include`; a copied reader with no original source
+refuses. The coordinator uses the remaining aggregate allowance, and its resource
+is recorded only after successful publication. Ordinary whole copies/backups are
+unchanged. The caller still owns the consistent source cut and serial copy; this
+is not a capture certificate or native launch permission.
+
+Three new cases in `tests/test_harness_receipt_context.py` are authored **UNRUN**:
+no ledger row, an original reservation, and an actually bound/started ledger row.
+They use the existing native-root/message/claim producers, compare the ordinary
+source and retained projections and original attempt rows, and check the source
+coordinator bytes and bus revision. Together with the eighteen previous cases,
+**twenty-one added scenarios remain unrun**. These do not cover every disposition,
+native association or rollback/resource failure.
+
+Runtime class creation/MRO/registration, attached SQL, cross-store capture and
+complete preservation remain unqualified. The selector has no participant-wide
+reverse walk; current participant/pointer aggregates, inverse native membership,
+serialized references and the remaining original recovery groups still require
+semantic closure. No seed-only database is a runnable root or complete backup.
 
 ## Copy and backup are different contracts
 
@@ -287,7 +322,7 @@ handwritten table layout or fake native provider. These are SQL data-group
 cases, not actual native admission or runnable-root acceptance. FULL wire
 membership, malformed-source refusal, cursor/attempt/publication groups and
 all-state suppression still need the necessary combined behavioral selection.
-The PR now has thirteen added retention scenarios, all unrun in this source pass.
+That checkpoint added thirteen retention scenarios, all unrun in the source pass.
 
 The focused NRA before-map covers nineteen production modules and219 raw/static
 class declarations with no parse omissions. The final delta additionally covers
@@ -320,7 +355,7 @@ revision. The existing fixture now declares its actual `AssignmentId` and
 `OwnerFence`, rather than `str` and `object`. These are stored SQL-group controls,
 not runnable-root, native, recovery-pointer or physical acceptance. Together with
 the earlier thirteen retention scenarios and one recipient-birth regression,
-eighteen added scenarios remain unrun.
+those eighteen scenarios remain unrun; the later consumer adds three more above.
 
 The live installer already enters `mode.owners_stopped` before its practice
 phase (`installer/upgrade.py`). `LiveMode` uses the existing maintenance hold,
@@ -351,9 +386,19 @@ closure. External/dynamic bindings, serialized links and required reverse childr
 remain OPEN. The earlier d4/Toad corpus and its unresolved cases are separate;
 these counts do not resolve them. New metadata methods require targeted reproof.
 
-Next: finish coordinator seeds and the remaining semantic groups, wire that
-selection through PracticeCopy and enforce the aggregate copy budget, then
-qualify the coherent implementation through the combined backend/carry and actual
+The current post-P859 selector slice covers 30 production/test/fixture modules
+and 585 original/canonical class declarations, with no parse omissions. It extends
+the 22-module/524-class before-slice through four fixture/test modules and four
+moved-owner modules. The intervening 26-module/525-class result keeps its older
+source epoch. Compilation and exact NRA-indexed AST comparisons preserve all 148
+existing functions in the six changed Python files. Five mapped dependencies
+changed on rebase: registry resolution declarations, bus selection imports, the
+FieldCodec compared-field/decoder owner, and two fixture import moves. Those
+changes were read; they are not inherited runtime qualification. These are source
+checks, not native transport or SQL execution.
+
+Next: finish the remaining coordinator semantic groups and qualify coherent
+aggregate capture and peak budget, then the combined backend/carry and actual
 prepared-root saved-history journey. No pytest, provider, donor mutation or new
 native/physical run was performed for this source checkpoint. Reader promotion
 still requires the separate default-storage and decorator creation-cut proofs.
