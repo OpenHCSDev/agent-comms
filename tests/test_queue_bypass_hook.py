@@ -1,4 +1,4 @@
-"""The real PreToolUse hook requires Core's exact-head verdict for a commander bypass."""
+"""The real PreToolUse hook preserves each bypass's pin and review contract."""
 
 import json
 import subprocess
@@ -13,7 +13,7 @@ from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from hook_session_fixture import resident_hook, resident_session
 from agent_comms.todos import QualifiedHeadVerdict, ReviewedHeadVerdict, RejectedHeadVerdict
 from agent_comms_hooks.queue_bypass import MergeTarget, MergeTargetUnreadable, QueueBypass
-from agent_comms_hooks.shell_commands import ShellCommand, shell_commands
+from agent_comms_hooks.shell_commands import HereDocument, ShellCommand
 from test_head_review import ACCEPTED, QUALIFIED, REASON, invoke, opened
 
 pytest_plugins = ("test_head_review",)
@@ -108,40 +108,36 @@ def test_option_data_does_not_select_a_merge_family(command, github_cli):
     assert QueueBypass.matching(simple) == ()
 
 
-def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
+def test_commander_api_merge_requires_the_pinned_recorded_ok(
         head_bus, reviewed_source, tmp_path):
     comms, github, request = head_bus
     transcript = tmp_path / "s.jsonl"
-    def commands(head):
-        return (
-            f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()} --match-head-commit {head}",
-            f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge -f merge_method=merge -f sha={head}",
-        )
+
+    def command(head):
+        return (f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge"
+                f" -f merge_method=merge -f sha={head}")
 
     with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
         def refused(head):
-            for command in commands(head):
-                result = resident_tool_use(command, transcript, bridge)
-                assert result.status == 0, result.stderr
-                decision = json.loads(result.stdout)["hookSpecificOutput"]
-                assert decision["permissionDecision"] == "deny"
-                assert f"#{request.pr}" in decision["permissionDecisionReason"]
-                assert head in decision["permissionDecisionReason"]
-                assert "ok verdict" in decision["permissionDecisionReason"]
+            result = resident_tool_use(command(head), transcript, bridge)
+            assert result.status == 0, result.stderr
+            decision = json.loads(result.stdout)["hookSpecificOutput"]
+            assert decision["permissionDecision"] == "deny"
+            assert f"#{request.pr}" in decision["permissionDecisionReason"]
+            assert head in decision["permissionDecisionReason"]
+            assert "ok verdict" in decision["permissionDecisionReason"]
 
         refused(request.head)
         invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-        for command in commands(request.head):
-            result = resident_tool_use(command, transcript, bridge)
-            assert result.status == 0, result.stderr
-            assert result.stdout == ""
+        result = resident_tool_use(command(request.head), transcript, bridge)
+        assert result.status == 0, result.stderr
+        assert result.stdout == ""
         moved = opened(github, reviewed_source, request.pr, "b" * 40)
         refused(moved.head)
         # Core authorizes the saved pin; GitHub's precondition refuses that old pin after a push.
-        for command in commands(request.head):
-            result = resident_tool_use(command, transcript, bridge)
-            assert result.status == 0, result.stderr
-            assert result.stdout == ""
+        result = resident_tool_use(command(request.head), transcript, bridge)
+        assert result.status == 0, result.stderr
+        assert result.stdout == ""
         opened(github, reviewed_source, request.pr, request.head)
         invoke(comms, request, RejectedHeadVerdict(REASON))
         refused(request.head)
@@ -150,10 +146,9 @@ def test_commander_admin_and_api_merges_require_the_pinned_recorded_ok(
 
 
 @pytest.mark.parametrize("actor,allowed", (("lead", True), ("worker", False)))
-def test_merge_authority_comes_from_the_admitted_actor_not_a_changed_launcher(
+def test_pinned_admin_merge_needs_no_recorded_ok_and_uses_the_admitted_actor(
         head_bus, tmp_path, actor, allowed):
     comms, _, request = head_bus
-    invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
     command = (f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
                f" --match-head-commit {request.head}")
     with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
@@ -170,15 +165,26 @@ def test_merge_authority_comes_from_the_admitted_actor_not_a_changed_launcher(
             assert "bound commander" in decision["permissionDecisionReason"]
 
 
+def test_commander_admin_merge_still_requires_its_head_pin(head_bus, tmp_path):
+    comms, _, request = head_bus
+    command = f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
+    with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
+        result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
+        assert result.status == 0, result.stderr
+        assert json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
 def test_escaped_quote_inside_double_quotes_is_one_word():
     command = """git grep -n "'watch'\\|\\"watch\\"" -- tools | cut -c1-9"""
-    assert list(shell_commands(command)) == [
+    assert [list(simple.words) for simple in ShellCommand.parsed(command)] == [
         ["git", "grep", "-n", """'watch'\\|"watch\"""", "--", "tools"], ["cut", "-c1-9"],
     ]
 
 
 def test_here_document_body_after_escaped_quote_is_not_shell():
     command = 'echo "a\\"b"; cat <<\'EOF\'\nit\'s "not shell\nEOF\necho done\n'
-    assert list(shell_commands(command)) == [
-        ["echo", 'a"b'], ["cat", "<<", "EOF"], ["echo", "done"],
+    parsed = tuple(ShellCommand.parsed(command))
+    assert [list(simple.words) for simple in parsed] == [
+        ["echo", 'a"b'], ["cat"], ["echo", "done"],
     ]
+    assert parsed[1].redirections == (HereDocument('EOF'),)
