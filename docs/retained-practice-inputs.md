@@ -121,15 +121,22 @@ then checks references before committing. Exceptions roll back through the exist
 SQLiteFile transaction owner. The same `require_related_rows` check is used by
 ordinary schema reconciliation. No ordinary runtime insertion guard is weakened.
 
-`TypedTable.retain_required_rows` supplies the default empty contribution;
-`ClaimBatchAcknowledgements` overrides it because its sealed counts describe the
-complete original child group. The schema follows inverse **declared FK edges**
-only for that requested parent, rather than expanding every participant's history.
+`TypedTable.retain_required_rows` supplies the default empty contribution.
+`RetainsChildren` composes that contribution with inverse **declared FK edges**.
+ClaimBatchAcknowledgements inherits this capability because its sealed counts
+describe the complete original child group; its forwarding override is deleted.
+HarnessDelivery inherits the same behavior for its original observation parts.
+Only a requested parent expands its children, not every participant's history.
 `ForeignKey` owns both directions and their one parent-affinity comparison.
 Original sealed state is copied unchanged; no seal transition or replay is issued.
 
 These are source implementations, not executed copy/rollback/guard controls.
-CoordinationStore/PracticeCopy has no selection consumer yet. Natural-key harness,
+The acknowledgement and harness rows share the same retained-group capability;
+actual class creation/MRO, schema stability and group-copy behavior still require
+qualification. Four new harness-group scenarios are authored, UNRUN: selected
+observations with an existing post-handoff claim, observations with no claim,
+full-reference conflict, and copy conflict with no partial publication.
+CoordinationStore/PracticeCopy has no coordinator-seed selection consumer yet. Coordinator seed capture and the remaining
 serialized/cross-store and producer dependencies remain OPEN; complete FK validity
 would not establish their preservation or the original group's validity.
 
@@ -140,10 +147,18 @@ would not establish their preservation or the original group's validity.
   equivalent seed. Stored rows in every state suppress a synthesized attempted
   key; copying only unresolved ledger rows could resurrect a completed attempt.
   No synthesized `ReservedInput` is written back merely to construct a copy.
-* **Harness claims:** `HarnessDelivery.settle_claims` and
-  `AssignmentStore.settle_harness_inputs` relate the original recipient and
-  message reference to claims. `HarnessDelivery.references()` declares only its
-  participant dependency. The natural-key claim relation is not an FK edge.
+* **Harness claims and observations:** `WakeAssignment.for_harness_sources` now
+  owns recipient/sequence candidate selection and full MessageReference conflict
+  checking. Normal settlement consumes it rather than maintaining its own SQL
+  predicate; selected HarnessDelivery retention reads through the same active
+  original attachment and copies every existing matching claim, including its
+  unchanged lifecycle/revision. Missing claims stay absent: an attempt can precede
+  claim acceptance. A same-sequence/different-message conflict refuses instead of
+  silently disappearing. This natural relation is not fabricated as a mandatory
+  FK. HarnessObservedPart's declared FK supplies its parent, not the reverse
+  observation set; RetainsChildren supplies that original child group through the
+  shared schema traversal. Original sender/body/record-ID/timestamp and partial
+  ReceivingMonitor state are not reconstructed, completed or replayed.
 * **Sealed acknowledgements:** `ClaimBatchAcknowledgements.column_guards` requires
   complete member/delivery sets and their original counts. Forward FK closure
   does not supply those children. Child insert guards reject an already-sealed
