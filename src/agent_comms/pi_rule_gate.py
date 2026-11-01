@@ -54,7 +54,7 @@ if TYPE_CHECKING:
     from .native_input_proof import NativeContextProof, NativeContextRecord
     from .native_session_files import NativeSessionFiles
     from .messages import MessageInput
-    from .native_tool_transport import NativeToolRound
+    from .native_tool_transport import NativeToolRound, ToolTransport
     from .comms import Comms
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -87,14 +87,14 @@ class PiRuleGate(DealtRuleGate):
 
     @asynccontextmanager
     async def round_gate[Call: NativeToolCall](
-        self, round: NativeToolRound[Call], turn: TurnSession,
+        self, round: NativeToolRound[Call], transport: ToolTransport[Call],
     ) -> AsyncIterator[PiRuleGate]:
         yield self
 
     async def judge_round[Call: NativeToolCall](
-        self, call: Call, round: NativeToolRound[Call], turn: TurnSession,
+        self, call: Call, round: NativeToolRound[Call], transport: ToolTransport[Call],
     ) -> None:
-        async with self.round_gate(round, turn) as gate:
+        async with self.round_gate(round, transport) as gate:
             await Coordination.run_worker(partial(call.judge_under, gate))
 
 
@@ -130,8 +130,9 @@ class PiThreadGate(PiRuleGate, Speaking):
 
     @asynccontextmanager
     async def round_gate[Call: NativeToolCall](
-        self, round: NativeToolRound[Call], turn: TurnSession,
+        self, round: NativeToolRound[Call], transport: ToolTransport[Call],
     ) -> AsyncIterator[PiRuleGate]:
+        turn = transport.turn
         async with turn.cursor_delivery.reading() as source_reads:
             yield PiRoundGate(
                 self.scratch, self.worktree, self.comms, self.thread, round, turn, source_reads,
