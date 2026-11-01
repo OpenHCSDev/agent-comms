@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from itertools import takewhile
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, Never
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Never
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
@@ -18,6 +18,8 @@ from .native_input_proof import NativeContextJournal, NativeContextProof, Native
 
 if TYPE_CHECKING:
     from .native_output import NativeRecordLocation
+    from .pi_payloads import PiMessage
+    from .rule_deal import Speaking, Voice
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
 
@@ -39,6 +41,8 @@ from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .native_tools import ReadTool
+from .session_receipts import SessionReceipts
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId
 
@@ -227,6 +231,13 @@ class StoredRecord(NativeRecord):
     @property
     def size(self):
         return sum(event.text_size for event in self.events)
+
+
+@dataclass
+class NativeReceipts(SessionReceipts):
+    """A Pi session's receipts: its read tool has Pi's own name."""
+
+    reading_tool: ClassVar[str] = ReadTool.declared_name
 
 
 class NativeTranscript(TranscriptSource):
@@ -465,6 +476,46 @@ class NativeTranscript(TranscriptSource):
             self.require_publication_context(entry, session_entry_start=user.start, files=files)
             return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
+
+    receipts_window: ClassVar[int] = 6_000_000
+    """How far back receipts read: a Pi record carrying tool output is large, so a smaller
+    window can hold no turn's end."""
+
+    def voice(self, deal: Speaking) -> Voice:
+        """A Pi session file records the session's own words, so its deal asks in the owner's
+        voice and hears the answer here."""
+        return deal
+
+    def words_end(self) -> int:
+        return self.path.stat().st_size
+
+    def messages_after(self, offset: int) -> tuple[PiMessage, ...]:
+        """The complete messages recorded after `offset`, oldest first; one still being
+        appended waits."""
+        with closing(self.forward(offset, self.words_end())) as records:
+            return tuple(message for record in records if record.complete
+                         for message in record.project(lambda original: original.entry.messages))
+
+    def said_since(self, offset: int) -> tuple[str, ...]:
+        return tuple(words for message in self.messages_after(offset) for words in message.said())
+
+    def said_after(self, line: str, offset: int) -> tuple[str, ...]:
+        """Words before the line arrives are no answer to it and no dodge of it."""
+        messages = self.messages_after(offset)
+        arrival = next((index for index, message in enumerate(messages)
+                        if message.user and line in message.text), len(messages))
+        return tuple(words for message in messages[arrival + 1:] for words in message.said())
+
+    def receipts(self) -> SessionReceipts:
+        """The session file's recent past, folded oldest first."""
+        receipts = NativeReceipts()
+        with closing(self.tail(max_bytes=self.receipts_window)) as entries:
+            newest_first = tuple(entries)
+        for entry in reversed(newest_first):
+            for message in entry.messages:
+                message.tally(receipts)
+        receipts.turn_ended()
+        return receipts
 
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size
