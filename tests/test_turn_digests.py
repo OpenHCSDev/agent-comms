@@ -26,7 +26,7 @@ from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
-from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
+from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, UserInputSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -168,8 +168,11 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     digest = hashlib.sha256(frame.encode()).hexdigest()
     wake = SegmentManifest(SelectedWakeSegment, (
         WireProvenance(asked.reference), WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    original = UserInputSegment(
+        provenance=(WireProvenance(asked.reference),), content=asked.body,
+    ).manifest(0)
     entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
-                            digest, len(frame), 1, contributors=(wake,))
+                            digest, len(frame), 1, contributors=(wake, original))
     with comms.contexts.writing() as db:
         ContextEntry(
             PiSessionId("source"), str(source), NativeItemId("u1"), entry
