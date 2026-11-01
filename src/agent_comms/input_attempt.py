@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
@@ -10,6 +11,7 @@ from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import (
     FieldCodec,
+    boundary_decoder,
     GoalId,
     InputId,
     NullMember,
@@ -45,7 +47,15 @@ class InputAlreadyCleared(RelationViolationError):
     """A positively cleared input cannot acquire another native write."""
 
 
-class ClearedInputState:
+class KnownInputState:
+    """A reported definite disposition, not permission to write or replay input."""
+
+    @classmethod
+    def failure_result[T](cls, known: Callable[[], T], unknown: Callable[[], T]) -> T:
+        return known()
+
+
+class ClearedInputState(KnownInputState):
     public_status = "cleared"
     cancellation_feedback = "Input cleared before native start."
 
@@ -105,6 +115,16 @@ class InputAttempt(LifecycleCapability, ConsumptionEvidence, DeclaredFamily, aff
     @property
     @abstractmethod
     def public_status(self) -> str: ...
+
+    @classmethod
+    @boundary_decoder
+    def reported(cls, state: type[InputAttempt] | None) -> type[InputAttempt]:
+        """Interpret an optional wire report without inventing a stored input."""
+        return UnreportedInput if state is None else state
+
+    @classmethod
+    def failure_result[T](cls, known: Callable[[], T], unknown: Callable[[], T]) -> T:
+        return unknown()
 
     def source_text_or(self, fallback: str) -> str:
         return fallback
@@ -425,7 +445,7 @@ class ClearedNativeInput(ClearedInputState, SentInput):
     """The native queue confirmed removal; original wire binding stays intact."""
 
 
-class StartedInput(SentInput):
+class StartedInput(KnownInputState, SentInput):
     has_started = True
     public_status = "started"
     cancellation_feedback = "Native input started; turn cancelled."
@@ -499,7 +519,7 @@ class ContextConsumedInput(StartedInput):
         return UnchangedInput(self)
 
 
-class NotSentInput(Unresolved, RecoverableUnboundInput):
+class NotSentInput(KnownInputState, Unresolved, RecoverableUnboundInput):
     public_status = "not_sent"
     cancellation_feedback = (
         "Not sent — cancellation completed before native delivery."
@@ -508,3 +528,9 @@ class NotSentInput(Unresolved, RecoverableUnboundInput):
 
 class MissingInput(InputAttempt):
     public_status = "missing"
+
+
+class UnreportedInput(InputAttempt):
+    """The failure reported no input disposition; the wire's absence stays absent."""
+
+    public_status = "unconfirmed"
