@@ -42,7 +42,7 @@ from .acp_extension import (
     TurnChangedUpdate,
     UpdateMetadata,
 )
-from .bus_read import OwnerLiveRead, UiRead
+from .bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
 from .commander_hud import CommanderFrame, CommanderHud, CommanderLoad, CommanderUnitDetail
 from .comms import Comms
 from .coordinator import Coordination
@@ -51,6 +51,7 @@ from .goal_actions import CreateProblemGoalAction, OrderGoalAction
 from .goals import Goal, OrderCheck
 from .head_review import HeadReviewOrder, PreparedHeadReview, PullRequestHead
 from .held_orders import HeldOrders
+from .input_attempt import UNOBSERVED_DELIVERY_SCOPE
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
@@ -545,10 +546,10 @@ class CommsTurnsTool(ThreadReadTool):
 
 @dataclass(frozen=True, kw_only=True)
 class InputDeliveryRead(
-    OwnerLiveRead[DeliveryOverview],
+    OwnerScopedRead[DeliveryOverview],
     declared_name="comms_input_delivery",
 ):
-    """The one declaration of a unit's input delivery, answered by its live native owner."""
+    """One delivery projection, refined by the actual owner's queue when observed."""
 
     label = "Input delivery"
     description = ("Read a unit's inputs that failed or are UNKNOWN, and its earlier delivery "
@@ -556,6 +557,11 @@ class InputDeliveryRead(
     include_history: Annotated[
         bool, *tool_field("Include earlier delivery notices; current inputs are always read")
     ] = True
+
+    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> DeliveryOverview:
+        return comms.goals.input_delivery(
+            owner.name, include_history=self.include_history, scope=UNOBSERVED_DELIVERY_SCOPE,
+        )
 
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> DeliveryOverview:
         scope = await ctx.server.agent.inputs.delivery_scope(ctx.session)
