@@ -58,7 +58,7 @@ from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      FullPrime, LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
-from test_commander_notifications import beat, lead_hud
+from test_commander_notifications import beat
 from test_head_review import ACCEPTED, invoke
 
 from agent_comms.cli_bridges.hook_requests import (
@@ -403,7 +403,11 @@ def test_rules_carrying_his_words_flag_their_board_lines():
 
 
 def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus, tmp_path, monkeypatch):
-    """Real packets, bridge delivery journal and session socket; no hook-side state."""
+    """Retained observations, bridge delivery journal and socket; publication stays muted."""
+    from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
+    from agent_comms.task_attachments.commander_pings import CommanderUpdateStore
+
+    assert notification_bus.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
     comms = notification_bus
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
@@ -418,8 +422,8 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
                      subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
     second = RulePing(ReviewTimerUp, TextDigest.of("second"), text="Review worker P2",
                       subjects=(UnitSubject(worker),), since=RecordedEventTime(began))
-    hud = lead_hud(comms).hud_text(began + 90)
-    CommanderDecisions(lead, (first, second), (first, second), ()).send(comms, hud)
+    CommanderUpdateStore.record(comms.root, CommanderDecisions(
+        lead, (first, second), (first, second), ()))
     with (claim.held(record), claim.reader_held(), Binding.open(tmp_path / "delivery") as db,
           socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as server):
         server.bind(str(claim.socket_path))
@@ -434,13 +438,15 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             unchanged_summary((first, second), began + 91),
         )
         changed = replace(first, observation=TextDigest.of("changed"), since=RecordedEventTime(began + 90))
-        CommanderDecisions(lead, (changed, second), (changed,), ()).send(comms, hud)
+        CommanderUpdateStore.record(comms.root, CommanderDecisions(
+            lead, (changed, second), (changed,), ()))
         assert tool_call(hook, server, comms, db, began + 92) == (
             "BOARD: Read worker P1 (seen for 0 min)",
             unchanged_summary((second,), began + 92),
         )
         # A fresh packet does not reset delivery, and the answer window rings only once.
-        CommanderDecisions(lead, (changed, second), (), ()).send(comms, hud)
+        CommanderUpdateStore.record(comms.root, CommanderDecisions(
+            lead, (changed, second), (), ()))
         alarm = began + AwaitingCommander.seconds
         assert tool_call(hook, server, comms, db, alarm + 1) == (
             "BOARD: Review worker P2 (seen for 5 min)",
@@ -450,7 +456,7 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
             unchanged_summary((changed, second), alarm + 2),
         )
         assert DeliveredBoardContent.count(db) == 2
-        CommanderDecisions(lead, (), (), ()).send(comms, hud)
+        CommanderUpdateStore.record(comms.root, CommanderDecisions(lead, (), (), ()))
         assert tool_call(hook, server, comms, db, alarm + 3) == ()
         assert DeliveredBoardContent.count(db) == 0
 
