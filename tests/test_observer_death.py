@@ -32,8 +32,10 @@ from owner_socket_fixture import declare_owner
 
 def owner_reads(family: type[OwnerScopedRead] = OwnerScopedRead):
     """The declared read family supplies the UI operations covered by each contract."""
-    for operation in BusRead.members_with(family):
-        yield pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
+    return tuple(
+        pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
+        for operation in BusRead.members_with(family)
+    )
 
 
 def empty_window(root) -> ReadNotifications:

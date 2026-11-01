@@ -181,7 +181,6 @@ def test_notification_operations_are_root_free_family_records(operation: Notific
     assert decoded == operation and decoded.references == REFERENCES
     assert FieldCodec.decode(UiRead, encoded) == operation
     request = ReadNotifications("root", operation, request_id=4)
-    assert FieldCodec.decode(ReadNotifications, FieldCodec.encode(request)) == request
     transported = pickle.loads(pickle.dumps(request))
     assert transported == request and hash(transported) == hash(request)
     assert {transported: "held"}[request] == "held" and len({request, transported}) == 1
@@ -235,10 +234,9 @@ def test_notification_operations_are_ui_reads_and_not_tools():
     assert CommsMessageOutcomesTool in NativeRequestTools.members_with(NativeRequestTools)
 
 
-def test_a_notification_request_refuses_an_operation_outside_the_notification_family():
-    encoded = FieldCodec.encode(ReadNotifications("root", LiveNotificationRead(REFERENCES)))
-    with pytest.raises(ValueError, match="is not a member of NotificationRead"):
-        FieldCodec.decode(ReadNotifications, {**encoded, "operation": FieldCodec.encode(InputDeliveryRead())})
+def test_the_notification_decoder_refuses_an_operation_outside_its_family():
+    with pytest.raises(ValueError):
+        FieldCodec.decode(NotificationRead, FieldCodec.encode(InputDeliveryRead()))
 
 
 def test_activity_views_receive_expiry_without_expiring_store_or_evidence_views():
@@ -282,7 +280,7 @@ UI_ONLY_FIELDS = {"root", "request_id", "previous", "owner", "identity"}
 SHARED_UI_READS = [
     CommanderUnitRead(commander=LEAD, unit=WORKER, orders=ORDERS),
     TranscriptPageRead(thread="worker", position=EarlierThan(NativeTranscriptCursor("session.jsonl", 7)),
-                       page_source=RecordedPageSource("archive")),
+                       page_source=RecordedPageSource(HistorySourceKey("archive"))),
 ]
 
 

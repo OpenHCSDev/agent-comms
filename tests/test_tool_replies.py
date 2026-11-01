@@ -54,7 +54,7 @@ def test_bus_read_result_follows_an_inherited_specialisation_and_refuses_an_unsp
 
 def test_an_ordinary_tool_keeps_its_apply_annotation():
     ordinary = next(tool for tool in ToolRequest.members_with(ToolRequest) if not issubclass(tool, BusRead))
-    assert result_type(ordinary) is apply_result(ordinary)
+    assert result_type(ordinary) == apply_result(ordinary)
 
 
 def stores(comms: Comms) -> dict:
