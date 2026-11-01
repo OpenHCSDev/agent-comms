@@ -299,6 +299,39 @@ hook has no `BusReader`/`MessageReference` dependency.3614's relevant changes ar
 nominal-import moves already present here. Source recipes/results are retained
 under `p867-native-group-*`.
 
+## Publication groups and the existing capture lifetime
+
+`PublicationIntents` now composes the same `RetainsChildren` capability as
+`ExecutionRecord`. The schema's declared inverse relations retain the original
+`PublicationEvidence` and `PublicationAppendDispatches` rows. The latter's foreign
+key is declared in `coordination_response.py`, not in a retention-only roster.
+`RecoveryReader.get` reads the original intents and receipts separately;
+`PublicationAppendDispatches.resolve_retained` uses the original append record.
+Copying the intent alone does not preserve those answers. The raw loader retains
+absence as absence: no receipt, dispatch, acknowledgement or state transition is
+created to fill a missing record.
+
+Four publication cases are authored **UNRUN** in
+`tests/test_coordination_response.py`: intent/execution seeds crossed with frozen
+intent/published response. They reuse the existing actual response preparation
+and publication path, compare original intent/receipt/append rows, and check
+that retention changes neither the source coordinator digest nor the bus
+revision. The existing fixture now declares its actual `AssignmentId` and
+`OwnerFence`, rather than `str` and `object`. These are stored SQL-group controls,
+not runnable-root, native, recovery-pointer or physical acceptance. Together with
+the earlier thirteen retention scenarios and one recipient-birth regression,
+eighteen added scenarios remain unrun.
+
+The live installer already enters `mode.owners_stopped` before its practice
+phase (`installer/upgrade.py`). `LiveMode` uses the existing maintenance hold,
+stopped-owner and retargeted-runtime lifetime. `RehearsalMode` instead calls
+`owners_kept` (`install_choices.py`). A plain rehearsal therefore does not supply
+that quiet source boundary. The selected coordinator consumer must use the
+existing qualified capture lifetime and preserve its registry/complete-ledger/
+bus/coordinator relationships; this source trace neither executes nor certifies
+that aggregate capture. No new freeze state, installer or donor operation was
+added.
+
 ## Source evidence and remaining work
 
 The retained NRA source map at baseline `095c4cdfe85632f990be3b6d67411d9685e6dee9`
