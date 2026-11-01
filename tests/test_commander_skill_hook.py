@@ -807,7 +807,10 @@ def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_sessio
         call.judge()
         reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]
         assert reason["permissionDecision"] == "deny"
-        assert f"Next: {papers[0].resolve()}" in reason["permissionDecisionReason"]
+        assert f"batches of {Unengaged.batch}" in reason["permissionDecisionReason"]
+        assert "Next batch: " + ", ".join(
+            str(paper.resolve()) for paper in papers[:Unengaged.batch]
+        ) in reason["permissionDecisionReason"]
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[0].resolve())}, comms=commander_bus, binding=commander_binding))
     read_whole(transcript, papers[0].resolve(), comms=commander_bus, binding=commander_binding)
     assert not refused(capsys, gated(transcript, "Read", {"file_path": str(papers[1].resolve())}, comms=commander_bus, binding=commander_binding))

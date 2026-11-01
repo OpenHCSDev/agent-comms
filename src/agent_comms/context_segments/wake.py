@@ -8,7 +8,7 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -21,6 +21,7 @@ from ..turn_context import (
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
+    UserFollowupSegment,
     WireProvenance,
 )
 from ..wake_policy import WakePolicy
@@ -151,3 +152,27 @@ class DeliveredMessageSegment(InstructionSegment):
                 }, ensure_ascii=True,
             )
         )
+
+
+@dataclass(frozen=True)
+class FollowingDelivery:
+    """One committed message handed to its recipient's running turn. The task it carries says
+    which segment the turn reads it in."""
+
+    source: Delivered
+    assignment: WakeAssignment
+    owner: Thread
+
+    def segment(self) -> InstructionSegment:
+        return self.source.message.task.following_segment(self)
+
+    def delivered(self) -> DeliveredMessageSegment:
+        """A bus message: framed with its sender and route, and its contents untrusted."""
+        return DeliveredMessageSegment.capture(self.source, self.assignment, self.owner)
+
+    def typed(self) -> UserFollowupSegment:
+        """A line in the owner's own voice: the same follow-up as one he types into the view."""
+        self.assignment.require_selected_source(self.source, self.owner)
+        followup = UserFollowupSegment.capture(self.source.message.body)
+        return replace(followup, provenance=(
+            WireProvenance(self.source.message.reference), *followup.provenance))
