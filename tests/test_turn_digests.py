@@ -242,9 +242,10 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
                         FileSource(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
                         turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
-                        if any(event == AssistantTranscript('done', position=event.position,
-                                                                 timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
-                               for turn in turns.turns for event in turn.events):
+                        if any(event == AssistantTranscript(
+                                'done', position=event.position,
+                                timestamp=datetime.fromisoformat(final['timestamp']).timestamp(),
+                        ).with_publications(()) for turn in turns.turns for event in turn.events):
                             break
         finally:
             task.cancel()
