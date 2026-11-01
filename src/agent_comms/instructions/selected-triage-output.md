@@ -1,1 +1,1 @@
-Output ONLY a JSON object with one key {discriminator} and one of these declared values: {names}. No tools, extra keys, prose or markdown. Original messages are the selected JSON above.
+Reply with just a JSON object holding one key, {discriminator}, set to one of: {names}. No tools, other keys, prose or markdown. The messages are the selected JSON above.

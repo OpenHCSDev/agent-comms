@@ -143,7 +143,9 @@ class DeliveredMessageSegment(WireSources, InstructionSegment):
                     "audience": self.delivery.assignment.audience.value,
                     "body": message.body,
                 }, ensure_ascii=True,
-            )
+            ),
+            reply_to=message.exact_reply_target,
+            answers=FieldCodec.compact([FieldCodec.encode(message.reference)], ensure_ascii=True),
         )
 
 
@@ -166,7 +168,7 @@ class MessageDelivery:
         return self.source.message.task.message_segment(self)
 
     def delivered(self) -> DeliveredMessageSegment:
-        """A bus message: framed with its sender and route, and its contents untrusted."""
+        """A bus message: framed with its sender, its route and the send that answers it."""
         return DeliveredMessageSegment.capture(self)
 
     def typed(self) -> UserInputSegment:

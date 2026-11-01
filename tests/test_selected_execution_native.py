@@ -113,7 +113,7 @@ async def test_native_full_four_tools_publish_and_release(
                 assert self.headers["Authorization"] == "Bearer offline-only-fixture"
                 assert len(requests) <= 2 + triage
                 if triage and len(requests) == 1:
-                    assert "Output ONLY a JSON object with one key" in json.dumps(request)
+                    assert "Reply with just a JSON object holding one key" in json.dumps(request)
                     assert not request.get("tools")
                     delta = {"role": "assistant", "content": '{"decision":"FULL"}'}
                     reason = "stop"

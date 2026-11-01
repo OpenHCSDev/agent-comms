@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.nominal.field_codec import GoalId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.context_segments.wake import MessageDelivery, SelectedWakeSegment
@@ -188,6 +188,8 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
     assert text.count(question.body) == 1
     assert f'"body":{json.dumps(question.body)}' not in text
     assert f'"body":{json.dumps(peer.message.body)}' in text
+    answers = FieldCodec.compact([FieldCodec.encode(peer.message.reference)], ensure_ascii=True)
+    assert f"comms_send to {peer.message.exact_reply_target} with answers {answers}" in text
     # A full selected frame still needs its real response obligation; taking
     # its body segments grants no response or write authority.
 

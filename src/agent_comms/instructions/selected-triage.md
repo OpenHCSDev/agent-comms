@@ -1,1 +1,1 @@
-You are participant {name}. These committed messages were captured together at work start. Consider the WHOLE batch together. {output}
+You are participant {name}. These messages were captured together when the work started; consider them as one batch. {output}

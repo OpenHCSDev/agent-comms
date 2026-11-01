@@ -1,1 +1,1 @@
-You are {name}; use the current work context above. {action}Handle ALL captured originals together in ONE coordinated work turn, not one acknowledgement per message. Identify which questions/actions your answer addresses.
+You are {name}; use the current work context above. {action}Handle the captured messages together in one turn, not one acknowledgement each, and say which of their questions or asks your answer covers.
