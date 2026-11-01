@@ -78,10 +78,10 @@ class DeckReader(DealtSources):
         return tuple(stream for stream in (cls.voice(), indictment, cls.tells(), cls.failures())
                      if stream)
 
-    def header(self, start: DeckStart, comms: Comms, snapshot: RegistrySnapshot,
-               commanders: tuple[Thread, ...]) -> str:
+    def header(self, start: DeckStart, trigger: DealTrigger, comms: Comms,
+               snapshot: RegistrySnapshot, commanders: tuple[Thread, ...]) -> str:
         """Retained work, not a hierarchy of which reader is permitted to judge it."""
-        return start.held(comms, snapshot, commanders)
+        return start.held(trigger, comms, snapshot, commanders)
 
     def deaf(self, session: str) -> tuple[str, ...]:
         return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
@@ -316,7 +316,7 @@ class DeckStart(DealtDeck):
             + self.delivery().told(reader.sources(), self.audit),
             self.template_once(self.current().due),
             self.owner_words(prompts),
-            reader.header(self, comms, snapshot, commanders),
+            reader.header(self, trigger, comms, snapshot, commanders),
         )
 
     def owner_words(self, prompts: tuple[str, ...]) -> str:
@@ -350,11 +350,11 @@ class DeckStart(DealtDeck):
             return ClaudeJsonLines().owner_words(
                 stream, transcript.stat().st_size, self.owner_prompts)
 
-    def held(self, comms: Comms, snapshot: RegistrySnapshot,
+    def held(self, trigger: DealTrigger, comms: Comms, snapshot: RegistrySnapshot,
              commanders: tuple[Thread, ...]) -> str:
         """Held orders from the same bus and cut that selected the reader."""
         return "\n".join((
-            "FUCK YOUR COMPACTION. Your summary is a paraphrase. What the registered boards hold:",
+            trigger.boards(),
             *(hold.recalled() for commander in commanders
               for hold in HeldOrders.of(comms.goals.todos, snapshot, commander.name).live),
         ))

@@ -23,12 +23,3 @@ class AwarenessSegment(InstructionSegment):
             "bus": self.bus, "sources": [FieldCodec.encode(source) for source in self.sources],
         }, ensure_ascii=True)}
 
-
-@dataclass(frozen=True, kw_only=True)
-class UnavailableAwarenessSegment(InstructionSegment):
-    @classmethod
-    def instruction_name(cls):
-        return "awareness-unavailable.md"
-
-    def values(self):
-        return {}

@@ -121,7 +121,7 @@ async def test_native_full_four_tools_publish_and_release(
                     if not triage:
                         context = json.dumps(request["messages"])
                         assert "Selected source decisions through " in context
-                        assert "Optional non-authoritative awareness" in context
+                        assert "Optional awareness:" in context
                         assert initial.message.message_id in context
                     declared = ({name for name, _ in calls} if selected_write else {
                         tool.declared_name

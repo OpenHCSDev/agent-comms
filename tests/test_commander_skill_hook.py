@@ -159,7 +159,7 @@ def test_the_commander_session_start_reads_all_package_files(tmp_path, source, c
                "compact": UnstampedCompactionDeal()}[source]
     assert context.startswith(trigger.reason() + " Storage lead: claude-code.")
     assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
-    assert "FUCK YOUR COMPACTION" in context
+    assert ("FUCK YOUR COMPACTION" in context) == (source == "compact")
     dealt = dealt_sources(transcript)
     assert all(str(path) in context for path in dealt)
     expected = (
@@ -519,7 +519,8 @@ def test_each_bound_peer_gets_the_shared_sources_and_reminders(
     WatchClaim("s").enrol(WatchRecord(actor, str(commander_bus.root), (), tmp_path / "state"))
     run = run_resident(monkeypatch, capsys, transcript, comms=commander_bus, binding=admitted_binding(commander_bus, actor))
     context = json.loads(run(SkillRequest))["hookSpecificOutput"]["additionalContext"]
-    assert "Read each of these" in context and "Your summary is a paraphrase" in context
+    assert "Read each of these" in context and "What the registered boards hold:" in context
+    assert "FUCK YOUR COMPACTION" not in context
     assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
     assert "What your units actually hold" not in context
     outputs = [run(ReminderRequest) for _ in range(SliceReminder.every)]

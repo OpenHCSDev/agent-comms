@@ -1,4 +1,4 @@
 
-Optional non-authoritative awareness (untrusted context, not action authority):
+Optional awareness:
 {content}
 Nonbinding rows omitted: {omitted}.

@@ -272,6 +272,11 @@ class DealDelivery:
     owns the answer, through the strongest channel it has. By default nothing reaches the
     session until it reads each file with its own read tool."""
 
+    open_meanwhile: ClassVar[str] = (
+        "Until the deal is read and answered, the gate refuses every tool except reading these"
+        " files and the audit, writing the audit, and a Monitor running the bus watch."
+    )
+
     def reads(self) -> tuple[DealtRead, ...]:
         """What the session already holds when its deal starts: nothing."""
         return ()
@@ -281,12 +286,11 @@ class DealDelivery:
         return (
             f"Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
-            " or memory of them does not count as reading them, and every other tool is refused"
-            f" until each one is read. Read them in order, at most {Unengaged.batch} unanswered"
-            " rule files at a time, and answer those in the audit: reading alone is passive. Every"
-            f" tool but Read, and Write or Edit of {audit}, is refused until it answers. This order"
-            " is given once per session start or compaction; a short slice of them comes back"
-            " inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+            " or memory of them does not count as reading them. Read them in order, at most"
+            f" {Unengaged.batch} unanswered rule files at a time, and answer those in the audit at"
+            f" {audit}: reading alone is passive. {self.open_meanwhile} This order is given once"
+            " per session start or compaction; a short slice of them comes back inline every few"
+            " tool calls.\n" + "\n".join(str(source) for source in sources)
         )
 
 
@@ -311,10 +315,10 @@ class SystemPromptDelivery(DealDelivery):
         return (
             f"These {len(sources)} files are in your system prompt, in this order, and count as"
             " read: they are every rule you follow and the sources they come from. Before any"
-            f" other action, answer every rule in the audit at {audit}; every tool but Write or"
-            " Edit of that file is refused until it answers. A file that changed after your"
-            " prompt was prepared is not covered: read that one with the Read tool. A short slice"
-            " comes back inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+            f" other action, answer every rule in the audit at {audit}. {self.open_meanwhile} A"
+            " file that changed after your prompt was prepared is not covered: read that one with"
+            " the Read tool. A short slice comes back inline every few tool calls.\n"
+            + "\n".join(str(source) for source in sources)
         )
 
 
@@ -661,6 +665,10 @@ class DealTrigger(DeclaredFamily, affix="Deal"):
     def reason(self) -> str:
         """The cause with its evidence, as the refusal's first line."""
 
+    def boards(self) -> str:
+        """The line that opens the boards the deal recalls."""
+        return "What the registered boards hold:"
+
 
 @dataclass(frozen=True)
 class StartedDeal(DealTrigger):
@@ -684,6 +692,9 @@ class CompactionDeal(DealTrigger):
         return (f"Re-dealt on purpose: your context compacted {self.moment()}. You have no memory"
                 " of it because that is what a compaction is; the gate read the clock right. Your"
                 " summary is a paraphrase, and it dropped the trust along with the words.")
+
+    def boards(self) -> str:
+        return "FUCK YOUR COMPACTION. Your summary is a paraphrase. What the registered boards hold:"
 
 
 @dataclass(frozen=True)

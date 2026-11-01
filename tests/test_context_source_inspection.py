@@ -322,13 +322,13 @@ def test_cold_client_acquires_current_and_recorded_contributor_declarations():
     """Prevent producer-import order from changing RPC and manifest decoding."""
     import subprocess
     import sys
-    from agent_comms.context_segments.awareness import UnavailableAwarenessSegment
+    from agent_comms.context_segments.awareness import AwarenessSegment
     from agent_comms.turn_context import InstructionFile
 
-    source = FileProvenance("/original/instructions/awareness-unavailable.md", "a" * 64)
-    original = "Original unavailable awareness instruction"
-    contributor = UnavailableAwarenessSegment(
-        provenance=(source,), instruction=InstructionFile(original, source))
+    source = FileProvenance("/original/instructions/awareness.md", "a" * 64)
+    original = "Original awareness instruction"
+    contributor = AwarenessSegment(
+        provenance=(source,), instruction=InstructionFile(original, source), bus="bus", sources=())
     from agent_comms.turn_context import NextContextTurn
     payload = FieldCodec.encode(TurnContext(RecordedThreadIncarnation("original-owner", 17002.0),
                                          NextContextTurn(), (contributor,)))
@@ -339,10 +339,10 @@ from agent_comms.turn_context import ContextSegment, SegmentManifest, TurnContex
 assert "agent_comms.context_segments.awareness" not in sys.modules
 preview = FieldCodec.decode(TurnContext, json.load(sys.stdin))
 contributor = preview.segments[0]
-assert contributor.public_text() == "Original unavailable awareness instruction"
+assert contributor.public_text() == "Original awareness instruction"
 schema = FieldCodec.value_schema(type[ContextSegment])
 # Original stored spellings span every previously producer-local module.
-expected = {"awareness", "unavailable_awareness", "retained", "selected_wake",
+expected = {"awareness", "retained", "selected_wake",
             "selected_triage", "selected_work", "selected_response", "complete_awareness"}
 assert expected <= set(schema["enum"]), schema
 for name in expected:
@@ -356,6 +356,6 @@ except ValueError:
     pass
 else:
     raise AssertionError("Unknown context kind must still refuse")
-print(json.dumps({"current_preview": "decoded original unavailable contribution", "recorded_declarations": sorted(expected), "schema_members": len(schema["enum"])}))
+print(json.dumps({"current_preview": "decoded original awareness contribution", "recorded_declarations": sorted(expected), "schema_members": len(schema["enum"])}))
 '''], input=json.dumps(payload), capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr
