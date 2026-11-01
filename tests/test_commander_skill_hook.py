@@ -407,8 +407,9 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
     from agent_comms.heartbeat_delivery import OffHeartbeatDelivery
     from agent_comms.task_attachments.commander_pings import CommanderUpdateStore
 
-    assert notification_bus.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
     comms = notification_bus
+    comms.threads.set_heartbeat_delivery("lead", OffHeartbeatDelivery)
+    assert comms.registry.require("lead").heartbeat_delivery is OffHeartbeatDelivery
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     hook = BoardReminder.decode(hook_record(tmp_path / "session.jsonl"))
