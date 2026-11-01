@@ -127,7 +127,7 @@ from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwners
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import (
-    InstallRolledBack, InterpreterWorkerDied, OwnersNotRestarted, UpgradeRefused,
+    InstallRolledBack, OwnersNotRestarted, UpgradeRefused,
 )
 from agent_comms.installer.reporting import RootWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
@@ -147,7 +147,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo
-from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
+from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
@@ -818,8 +818,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused("The prepared install must run in its built target runtime")
         staged.complete()
         with StartingReportPublicationPhase().running(commands.clock):
-            driver = member.driver(mode, report, root, installed, staged, target)
-        with mode.owners_stopped(member, root, driver, staged, bridges) as report.owners:
+            report.starting(mode.destination(member.initial_writer(root, installed)), target)
+        with mode.owners_stopped(member, root, installed, staged, bridges) as report.owners:
             with PracticePhase().running(commands.clock):
                 install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                                       installed, staged, tree, installer,
@@ -845,32 +845,6 @@ class Install[Rehearsed: Rehearsal](ABC):
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
-
-    @classmethod
-    def driver(cls, mode: RunMode, report: InstallReport, root: Path, installed: Stack,
-               staged: TargetStack, target: str) -> Stack:
-        """The runtime that posts the starting report and stops the owners. The outgoing
-        one, unless its own bus write dies in its worker: install is the repair path for
-        that runtime, so the staged target drives instead (core-00ce84d3f, 2026-10-26: every
-        bus write raised AttributeError and no install could replace it). Do not retry the
-        starting report: its outcome is uncertain, and the old capture/readback workers
-        cannot decode the target's new service records before the normal writer handoff."""
-        try:
-            report.starting(mode.destination(cls.initial_writer(root, installed)), target)
-            return installed
-        except InterpreterWorkerDied as died:
-            # Publication failure does not authorize replacing a live root owner. Keep
-            # that owner's refusal attached to the original interpreter failure.
-            try:
-                RootRuntime.publish(root, staged.runtime)
-            except ForeignRuntimeError as held:
-                died.add_note(str(held))
-                raise died from held
-            print(f"install: {installed.runtime.prefix.name} could not confirm its starting report "
-                  f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install; "
-                  "the starting report is not retried",
-                  file=sys.stderr)
-            return staged
 
     @staticmethod
     def initial_writer(root: Path, installed: Stack) -> RootWriter:
