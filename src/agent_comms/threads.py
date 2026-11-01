@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import DeclaredTag, Tag
+from .channel_targets import Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .context_segments.wake_values import WakeWorkContext
 from .nominal.declared_family import DeclaredFamily
@@ -343,11 +343,6 @@ class Thread(ThreadProvenance, CatalogSelection):
         """A new owner incarnation starts unobserved over the last real record."""
         return replace(self, offered=UnobservedTools(),
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
-
-    def commanded_child(self, child: Thread) -> Thread:
-        """A commanded declaration inherits its initial audience from its commander, never its
-        commander's role."""
-        return replace(child, tags=DeclaredTag.for_child(self.tags))
 
     def inherited_history(self, registry, visited):
         if self.name in visited:

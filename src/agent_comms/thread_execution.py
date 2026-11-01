@@ -210,7 +210,7 @@ class ExternalThreadExecution(ThreadExecution):
 
 class SubagentExecution(ExternalThreadExecution):
     """A child working inside its parent session's turn: it reads its CLI inbox, holds no
-    order and has no unit card of its own, and starts with its parent's audience."""
+    order and has no independent card, and starts with inherited channel membership."""
 
     @classmethod
     def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
@@ -250,7 +250,10 @@ class SubagentExecution(ExternalThreadExecution):
 
 
 class CommanderForkExecution(SubagentExecution):
-    """A commander's child: only a commander declares one, and it starts on its own goal."""
+    """An SDK child borrows its bound parent's context and records its own fork goal.
+
+    Any independent parent can declare it; the stored execution identity stays stable.
+    """
 
     @classmethod
     def require_commander_fork(cls) -> None:

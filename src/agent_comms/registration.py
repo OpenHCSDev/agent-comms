@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Concatenate
 
 from .catalog_store import ChannelCatalog
+from .channel_targets import DeclaredTag
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError
 from .nominal.field_codec import GoalId, ThreadLookup, TurnId
@@ -210,18 +211,19 @@ class Registration:
         return self._declare_in(edit, child, _DEFAULT_PRESENCE,
             prepare_goal=execution.child_goal(goals, parent))
 
-    def register_commanded_unit(
-        self, name: str, commander: str, worktree: Checkout, process: ProcessIdentity,
+    def register_bound_thread(
+        self, name: str, channel_source: str, worktree: Checkout, process: ProcessIdentity,
     ) -> Thread:
-        """Declare a new commanded endpoint without rewriting an existing declaration."""
+        """Bind a new independent endpoint with inherited channels, not delegated authority."""
         with self.store.editing() as edit:
             if edit.document.taken(name):
                 return self._declare_in(edit, edit.document.require(name), _DEFAULT_PRESENCE)
-            child = edit.document.require(commander).commanded_child(Thread(
-                name, frozenset(), worktree,
+            source = edit.document.require(channel_source)
+            thread = Thread(
+                name, DeclaredTag.for_child(source.tags), worktree,
                 process_identity=process, execution=ExternalThreadExecution,
-            ))
-            return self._declare_in(edit, child, _DEFAULT_PRESENCE)
+            )
+            return self._declare_in(edit, thread, _DEFAULT_PRESENCE)
 
     def reserve_owner(self, edit: RegistryEdit, original: Thread, process: ProcessIdentity) -> RegistryOwner:
         """Reserve one process against the exact stopped launch it prepared.
