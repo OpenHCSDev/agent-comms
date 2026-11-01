@@ -1,15 +1,16 @@
-"""Installed repository commits, shared by delivery proofs and close checks."""
+"""Installed repository and interpreter identity, shared by proofs and close checks."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.nominal.field_codec import GitCommitText
+from agent_comms.nominal.field_codec import GitCommitText, WireOmitDefault
 from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
+from agent_comms.installer.probes.interpreter import InterpreterBuild, RecordedInterpreterBuild
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 
 
 class ProofBuildMismatchError(ValueError):
-    """A retained proof does not identify the currently installed repositories."""
+    """A retained proof does not identify the installed repositories and interpreter."""
 
 
 class DeliveredCommitNotInstalledError(ValueError):
@@ -132,7 +133,7 @@ class BuildIdentity(DeclaredFamily, affix="BuildIdentity"):
 @dataclass(frozen=True)
 class UnrecordedBuildIdentity(BuildIdentity):
     def recorded(self) -> RecordedBuildIdentity:
-        return RecordedBuildIdentity.installed()
+        return RecordedBuildIdentity.installed().recorded()
 
     def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
         installed = RecordedBuildIdentity.installed()
@@ -143,16 +144,26 @@ class UnrecordedBuildIdentity(BuildIdentity):
 
 @dataclass(frozen=True)
 class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
-    """Declared runtime source revisions, each identified by its repository."""
+    """Repository revisions and the interpreter observation owned by their runtime."""
 
     commits: tuple[RepositoryCommit, ...]
+    interpreter: Annotated[
+        RecordedInterpreterBuild | InterpreterBuild, WireOmitDefault()
+    ] = field(default_factory=InterpreterBuild)
 
     def __str__(self) -> str:
-        return ", ".join(
-            f"{record.repository.to_wire()} {record.commit}" for record in self.commits
-        )
+        return ", ".join((
+            *(f"{record.repository.to_wire()} {record.commit}" for record in self.commits),
+            str(self.interpreter),
+        ))
 
     def recorded(self) -> RecordedBuildIdentity:
+        try:
+            self.interpreter.require_recorded()
+        except ValueError as error:
+            raise ProofBuildMismatchError(
+                f"Proof build {self} has no interpreter observation; run and record a new proof."
+            ) from error
         return self
 
     @classmethod
@@ -168,7 +179,8 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
             tuple(
                 RepositoryCommit(member.repository, GitCommitText.decode(member.commit(resolution)))
                 for member in RuntimePackage.members_with(RuntimePackage)
-            )
+            ),
+            interpreter=resolution.interpreter,
         )
 
     def for_repository(self, repository: Repo) -> RepositoryCommit:
@@ -196,7 +208,8 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
         return Repo.descends(directory, commit, recorded.commit)
 
     def installation(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation:
-        installed = self.installed()
+        self.recorded()
+        installed = self.installed().recorded()
         if self != installed:
             raise ProofBuildMismatchError(
                 f"Proof build {self} differs from installed {installed}; run the proof again."

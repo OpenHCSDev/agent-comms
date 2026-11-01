@@ -41,6 +41,9 @@ class InterpreterBuild(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    def __str__(self) -> str:
+        return "unrecorded interpreter"
+
     def require_recorded(self) -> RecordedInterpreterBuild:
         raise ValueError("The runtime has no recorded interpreter build")
 
@@ -53,6 +56,11 @@ class RecordedInterpreterBuild(InterpreterBuild):
     abi: str = Field(min_length=1)
     stdlib: Path
     artifacts: tuple[BuildArtifact, ...] = Field(min_length=1)
+
+    def __str__(self) -> str:
+        images = ", ".join(f"{artifact.path} sha256={artifact.sha256}"
+                           for artifact in self.artifacts)
+        return f"interpreter {self.invoked} [{self.abi}]: {images}"
 
     def require_recorded(self) -> RecordedInterpreterBuild:
         return self
