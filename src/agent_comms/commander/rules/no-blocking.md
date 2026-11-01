@@ -21,6 +21,7 @@ type: hard-rule
 > "the tool said no"
 > did you tell anyone?
 > "I was waiting for someone to notice"
+> [Safe]. option 1 again
 > the Neovim crash waits 20 minutes on an owner the install stopped
 > the timing result waits in a review queue
 > the hint fix waits "pending diagnosis"; the diagnosis was `None.value`
@@ -30,6 +31,7 @@ type: hard-rule
 > mfw the fleet achieved perfect safety by doing nothing, and doing nothing was the outage
 > run it back
 > order tool refuses every free unit: same launch directory
+> wheel pops up. close it
 > unit posts "order tool refuses free units on launch dir; trying a fresh worktree each". does it
 > Neovim crash: "owner got stopped by the install, taking it". fixed before the install finished
 > hint fix: "it's None.value, patching the owner". done
