@@ -221,8 +221,17 @@ try {
             const resolved=await TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,parts);
             assert.equal(projections,1);
             assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
+            // The transformed value split this original group. Its own journal
+            // coordinates, not the earlier two-entry group, determine the read.
+            const mixedEntries=mixed.provenance.filter(source=>source.kind==='journal')
+                .flatMap(source=>source.entries);
+            assert.deepEqual(mixedEntries,childEntries);
+            await assert.rejects(TurnContext.recordedSegment(
+                session,full.identity,recordedEntries,mixed,[]),/projected bytes differ/);
+            projections=0;
             const completeOriginal=await TurnContext.recordedSegment(
-                session,full.identity,recordedEntries,mixed,[]);
+                session,full.identity,mixedEntries,mixed,[]);
+            assert.equal(projections,1);
             assert.equal(completeOriginal.full().segments[0].sha256,mixed.sha256);
             await assert.rejects(TurnContext.recordedSegment(
                 session,full.identity,recordedEntries,transformedSegment,[]),/projected bytes differ/);
