@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass, field, replace
+from functools import partial
 import sqlite3
 import sys
 
@@ -239,25 +240,26 @@ async def test_observation_joins_before_retirement_and_captured_sources_cannot_r
     comms, agent, session, client = publication
     owner = agent.inputs.state(session).owned()
     document = comms.registry.store.read()
-    entered, release = asyncio.Event(), asyncio.Event()
+    entered, release = (asyncio.Event(), asyncio.Event()), asyncio.Event()
 
-    async def observation():
-        entered.set()
+    async def observation(started):
+        started.set()
         await release.wait()
         assert agent.sessions.require(session) == session
         assert agent.inputs.state(session) is owner
 
-    observing = asyncio.create_task(owner.observe_live(observation))
+    observing = tuple(asyncio.create_task(owner.observe_live(partial(observation, started)))
+                      for started in entered)
     stopping = None
     try:
-        await asyncio.wait_for(entered.wait(), 3)
+        await asyncio.wait_for(asyncio.gather(*(started.wait() for started in entered)), 3)
         fenced = comms.owners.fence_stop(session)
         request, = comms.owners.stop_requests(fenced)
         stopping = asyncio.create_task(request.retire(agent.sessions, owner))
         await asyncio.sleep(0)
         assert not stopping.done()
         release.set()
-        await asyncio.wait_for(asyncio.gather(observing, stopping), 8)
+        await asyncio.wait_for(asyncio.gather(*observing, stopping), 8)
         assert owner.retired.done()
         assert session not in agent.sessions.published
         assert session not in agent.inputs.drained
@@ -272,18 +274,15 @@ async def test_observation_joins_before_retirement_and_captured_sources_cannot_r
         assert session not in agent.turns.persistent_backends
     finally:
         release.set()
-        await asyncio.gather(*(task for task in (observing, stopping) if task is not None),
+        await asyncio.gather(*(task for task in (*observing, stopping) if task is not None),
                              return_exceptions=True)
 
 
 async def test_queued_initial_menu_obeys_the_original_owner_stop(publication):
     _comms, agent, session, client = publication
     owner = agent.inputs.state(session).owned()
-    async with owner.retirement_lock:
-        menu = agent.sessions.config.start_menu(session, client)
-        owner.request_stop()
-        await asyncio.sleep(0)
-        assert not menu.done()
+    menu = agent.sessions.config.start_menu(session, client)
+    owner.request_stop()
     await asyncio.wait_for(menu, 3)
     assert not agent.turns.persistent_backends
 
@@ -303,7 +302,7 @@ async def test_cancelled_observation_releases_retirement_admission(publication):
         observing.cancel()
         with pytest.raises(asyncio.CancelledError):
             await observing
-        assert not owner.retirement_lock.locked()
+        await asyncio.wait_for(owner.join_observations(), 3)
     finally:
         observing.cancel()
         await asyncio.gather(observing, return_exceptions=True)

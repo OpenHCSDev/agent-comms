@@ -737,6 +737,7 @@ class OwnerSession(DrainedSession):
     auth_observer: asyncio.Task[None] = field(kw_only=True)
     retirement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     retired: asyncio.Future[None] = field(default_factory=asyncio.Future)
+    _observations: set[asyncio.Future[None]] = field(default_factory=set, init=False, repr=False)
 
     def owned(self) -> OwnerSession:
         return self
@@ -759,9 +760,19 @@ class OwnerSession(DrainedSession):
         belongs to the original owner's stop, not a later session-ID lookup that
         could create fresh unowned input state after retirement.
         """
-        async with self.retirement_lock:
-            if not self.stop.done():
-                await observe()
+        if self.stop.done():
+            return
+        completion = asyncio.get_running_loop().create_future()
+        self._observations.add(completion)
+        try:
+            await observe()
+        finally:
+            completion.set_result(None)
+            self._observations.remove(completion)
+
+    async def join_observations(self) -> None:
+        """Join admitted readers after stop closes admission; readers stay parallel."""
+        await join_retirement(asyncio.gather(*self._observations))
 
     def request_stop(self) -> None:
         self.stop.request()
