@@ -35,6 +35,8 @@ from .thread_storage import (
     StorageRoots,
 )
 from .threads import Thread
+from .store_files import ExclusiveAtomicFile
+from .private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration
@@ -343,6 +345,26 @@ class StorageRule(RoomAllocation, DurableFile):
     def load(cls, root: Path) -> Self:
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
+
+    def within(self, root: Path) -> Self:
+        """Keep allocation and disposable output inside a verification root, retaining limits."""
+        root = root.resolve()
+        return replace(self, volume=root, scratch_base=root / "scratch",
+                       checkout_base=root / "checkouts", temp_root=root / "tmp")
+
+    def prepare_isolated(self, root: Path) -> Self:
+        """Persist private allocation before registration loads it; never rewrite an old policy."""
+        scoped = self.within(root)
+        PrivateDirectoryRole.make_parents(root)
+        try:
+            ExclusiveAtomicFile(self.path_in(root)).write_text(
+                FieldCodec.compact(FieldCodec.encode(scoped)))
+        except FileExistsError:
+            stored = self.load(root)
+            if stored != stored.within(root):
+                raise ValueError(f"Existing storage policy escapes verification root {root}")
+            return stored
+        return scoped
 
     def initial_roots(self, name: str) -> StorageRoots:
         return StorageRoots(self.scratch_base / name)

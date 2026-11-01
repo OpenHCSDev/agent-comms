@@ -278,9 +278,7 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
             }
         )
     )
-    (root / "storage.json").write_text(json.dumps(FieldCodec.encode(
-        StorageRule(scratch_base=project.parent),
-    )))
+    StorageRule().prepare_isolated(root)
     wire(root)
     environment = {
         NativeArguments.binary_key: NativeArguments.default_binary,
