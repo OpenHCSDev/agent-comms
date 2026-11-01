@@ -14,7 +14,7 @@ import pytest
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
-from agent_comms.context_segments.wake import SelectedWakeSegment
+from agent_comms.context_segments.wake import MessageDelivery, SelectedWakeSegment
 from agent_comms.coordinated_runtime import SelectedExecution, SessionSetupFailed
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTable
 from conftest import accept_initial
@@ -30,7 +30,7 @@ from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.turn_context import TurnContext
+from agent_comms.turn_context import TurnContext, UserInputSegment
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
@@ -97,7 +97,9 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1], comms.goals),)).text
+    frame = TurnContext.render_segments(SelectedWakeSegment.capture(
+        ((initial, assignment),), people[1], comms.goals,
+    ).input_segments()).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
@@ -118,9 +120,9 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = people[1].incarnation.lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    frame = TurnContext.render_segments((SelectedWakeSegment.capture(
+    frame = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), comms.registry.require("alpha"), comms.goals,
-    ),)).text
+    ).input_segments()).text
     context = json.loads(next(
         line.removeprefix("work_context: ") for line in frame.splitlines()
         if line.startswith("work_context: ")
@@ -145,12 +147,45 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     )
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
-    frame = TurnContext.render_segments((SelectedWakeSegment.capture(
+    frame = TurnContext.render_segments(SelectedWakeSegment.capture(
         ((initial, assignment),), people[1], _comms.goals, sent_outcomes=(sent_outcome,)
-    ),)).text
+    ).input_segments()).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
     assert replace(notification, changed=False).sent_outcome() is None
+
+
+def test_selected_and_following_use_the_original_question_contract(tmp_path: Path) -> None:
+    from agent_comms.channel_targets import CommandTarget
+    from agent_comms.task_attachments.owner_notices import MeantNotice
+    from agent_comms.thread_identity import UserThreadRole
+
+    root, root_id, comms, peer, people = _root(tmp_path)
+    comms.registry.declare(Thread("owner", frozenset(), Checkout(tmp_path), role=UserThreadRole))
+    question = MeantNotice().publish(
+        comms.messaging, CommandTarget.named("#team"), "Did you mean it?\nExplain your answer."
+    )
+    original = comms.bus.bus.delivery(question.seq)
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        accept_initial(comms.bus, root_id, question.seq, store)
+        assignments = {assignment.wire_seq: assignment for assignment in
+                       sealed_cohort_assignments(store, people[1].incarnation.lookup)}
+    sources = ((peer, assignments[peer.message.seq]), (original, assignments[question.seq]))
+    frame = SelectedWakeSegment.capture(sources, people[1], comms.goals)
+    metadata, peer_segment, question_segment = frame.input_segments()
+    following = MessageDelivery(original, assignments[question.seq], people[1]).segment()
+    assert metadata is frame and frame.sources == sources
+    assert type(question_segment) is UserInputSegment
+    assert type(following) is UserInputSegment
+    assert following.text() == question_segment.text() == question.body
+    assert question_segment.manifest(0).wire_sources() == (question.reference,)
+    assert peer_segment.manifest(0).wire_sources() == (peer.message.reference,)
+    text = TurnContext.render_segments((peer_segment, question_segment)).text
+    assert text.count(question.body) == 1
+    assert f'"body":{json.dumps(question.body)}' not in text
+    assert f'"body":{json.dumps(peer.message.body)}' in text
+    # A full selected frame still needs its real response obligation; taking
+    # its body segments grants no response or write authority.
 
 
 def test_native_runtime_schema_drift_fails_closed(private_comms) -> None:
