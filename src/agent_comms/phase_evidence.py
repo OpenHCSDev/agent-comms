@@ -21,7 +21,9 @@ from functools import cached_property
 from pathlib import Path, PurePosixPath
 from threading import Lock
 from subprocess import TimeoutExpired
-from typing import TYPE_CHECKING, ClassVar, get_args, get_origin
+from typing import TYPE_CHECKING, ClassVar, cast, get_args, get_origin
+
+from metaclass_registry.mro_dispatch import MroDispatch, handles
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec
@@ -68,7 +70,7 @@ class MainTree:
     history: CheckoutHistory = field(compare=False, repr=False, kw_only=True)
     branch: ClassVar[str] = "main"
     source: ClassVar[str] = ".py"
-    bindings: dict[tuple[tuple[str, ...], str], tuple[str, ModuleBindings]] = field(
+    bindings: dict[tuple[tuple[str, ...], str], ModuleBindings] = field(
         default_factory=dict, compare=False, repr=False, kw_only=True,
     )
 
@@ -170,19 +172,26 @@ class MainTree:
                         roots: tuple[str, ...]) -> Iterator[ModuleBindings]:
         """Per-blob declaration facts under their import roots, parsed only as requested."""
         blobs = self.selected(paths)
-        fresh = [(blob, name) for blob, name in blobs
-                 if (cached := self.bindings.get((roots, name))) is None or cached[0] != blob]
+        fresh = tuple((blob, name) for blob, name in blobs
+                      if (roots, name) not in self.bindings
+                      or not self.bindings[roots, name].retained(self))
         contents = dict(zip((name for _, name in fresh),
                             Repo.blobs(self.repo.checkout, *(blob for blob, _ in fresh)),
                             strict=True))
         for blob, name in blobs:
-            cached = self.bindings.get((roots, name))
-            if cached is None or cached[0] != blob:
+            if name in contents:
                 module, package = DeclaredScopes.dotted(name, roots)
-                bindings = ModuleBindings(name, module, package)
+                bindings = ModuleBindings(name, module, package, blob=blob)
                 bindings.visit(ast.parse(contents[name].decode(), filename=name))
-                cached = self.bindings[roots, name] = blob, bindings
-            yield cached[1]
+                self.bindings[roots, name] = bindings
+            yield self.bindings[roots, name]
+
+    def following(self, current: MainTree) -> MainTree:
+        """Carry only facts whose source blob the next tree still holds."""
+        return replace(current, bindings={
+            key: bindings for key, bindings in self.bindings.items()
+            if bindings.retained(current)
+        })
 
     def contains(self, sha: str) -> bool:
         return self.history.contains(sha, self.commit)
@@ -265,10 +274,7 @@ class PlanReading:
         return self.reads[evidence]
 
     def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
-        main = replace(main, bindings={
-            key: value for key, value in self.main.bindings.items()
-            if main.files.get(key[1]) == value[0]
-        })
+        main = self.main.following(main)
         return type(self)(todos, main, {
             evidence: answer for evidence, answer in self.reads.items()
             if answer.retained(evidence, self.main, main)
@@ -1040,16 +1046,6 @@ class QualifiedName:
     def __str__(self) -> str:
         return ".".join(self.parts)
 
-    @classmethod
-    def expressions(cls, expression: ast.expr) -> Iterator[QualifiedName]:
-        """Decode the name/attribute expressions the source resolver already admits."""
-        match expression:
-            case ast.Name(id=local):
-                yield cls((local,))
-            case ast.Attribute(value=value, attr=member):
-                yield from (owner.child(member) for owner in cls.expressions(value))
-
-
 @dataclass(frozen=True)
 class Declaration:
     """One declaring statement on main and the module path that holds it, so two declarations
@@ -1069,8 +1065,8 @@ class MemberAnswer:
     shape: str
 
 
-class RosterValue:
-    """Only the source distinctions the roster question reads; other expressions name nothing."""
+class RosterValue(MroDispatch):
+    """Compact expression facts shared by base-name and roster evidence."""
 
     def members(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
         return 0
@@ -1078,26 +1074,75 @@ class RosterValue:
     def references(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
         return 0
 
+    def names(self) -> tuple[QualifiedName, ...]:
+        return ()
+
+    def attribute(self, member: str) -> RosterValue:
+        return RosterValue()
+
+    def called(self) -> RosterValue:
+        return RosterValue()
+
+    def spread(self) -> RosterValue:
+        return RosterValue()
+
     @classmethod
     def of(cls, value: ast.expr) -> RosterValue:
-        """Decode foreign syntax once, including the original single-collection call rule."""
-        match value:
-            case ast.Call(args=[ast.Tuple() | ast.List() | ast.Set() as listed]) \
-                    | (ast.Tuple() | ast.List() | ast.Set() as listed):
-                return LiteralRoster(tuple(cls.of(element) for element in listed.elts))
-            case ast.Starred(value=ast.Name(id=local)):
-                return SpreadRoster(local)
-            case ast.Name() | ast.Attribute():
-                return ReferencedRoster(tuple(QualifiedName.expressions(value)))
-        return cls()
+        """Decode foreign syntax once through its declared nominal handler."""
+        return cast(RosterValue, cls.handler_for(type(value))(value))
+
+    @handles(ast.expr)
+    @staticmethod
+    def read_other(value: ast.expr) -> RosterValue:
+        return RosterValue()
+
+    @handles(ast.Name)
+    @staticmethod
+    def read_name(value: ast.Name) -> RosterValue:
+        return LocalRoster(QualifiedName((value.id,)))
+
+    @handles(ast.Attribute)
+    @staticmethod
+    def read_attribute(value: ast.Attribute) -> RosterValue:
+        return RosterValue.of(value.value).attribute(value.attr)
+
+    @handles(ast.Call)
+    @staticmethod
+    def read_call(value: ast.Call) -> RosterValue:
+        if len(value.args) == 1:
+            return RosterValue.of(value.args[0]).called()
+        return RosterValue()
+
+    @handles(ast.Tuple, ast.List, ast.Set)
+    @staticmethod
+    def read_sequence(value: ast.Tuple | ast.List | ast.Set) -> RosterValue:
+        return LiteralRoster(tuple(RosterValue.of(element) for element in value.elts))
+
+    @handles(ast.Starred)
+    @staticmethod
+    def read_spread(value: ast.Starred) -> RosterValue:
+        return RosterValue.of(value.value).spread()
 
 
 @dataclass(frozen=True)
 class ReferencedRoster(RosterValue):
-    names: tuple[QualifiedName, ...]
+    name: QualifiedName
+
+    def names(self) -> tuple[QualifiedName, ...]:
+        return (self.name,)
 
     def references(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
-        return sum(1 for name in self.names for _ in scopes.resolve(bindings.prefix, name))
+        return sum(1 for _ in scopes.resolve(bindings.prefix, self.name))
+
+    def attribute(self, member: str) -> RosterValue:
+        return ReferencedRoster(self.name.child(member))
+
+
+class LocalRoster(ReferencedRoster):
+    """A bare local name can be spread; an attribute reference cannot."""
+
+    def spread(self) -> RosterValue:
+        return SpreadRoster(self.name.name)
 
 
 @dataclass(frozen=True)
@@ -1110,11 +1155,18 @@ class SpreadRoster(RosterValue):
 
 
 @dataclass(frozen=True)
-class LiteralRoster(RosterValue):
+class MemberRoster(RosterValue):
     elements: tuple[RosterValue, ...]
 
     def members(self, bindings: ModuleBindings, scopes: DeclaredScopes, before: int) -> int:
         return sum(element.references(bindings, scopes, before) for element in self.elements)
+
+
+class LiteralRoster(MemberRoster):
+    """Only a literal collection, not an already-called one, is a call's admitted argument."""
+
+    def called(self) -> RosterValue:
+        return MemberRoster(self.elements)
 
 
 @dataclass(frozen=True)
@@ -1144,10 +1196,11 @@ class DeclaredClass(Declaration):
     @classmethod
     def of(cls, path: str, node: ast.ClassDef) -> DeclaredClass:
         return cls(path, node.name,
-                   tuple(name for base in node.bases for name in QualifiedName.expressions(base)),
+                   tuple(name for base in node.bases for name in RosterValue.of(base).names()),
                    tuple(statement.lineno for statement in node.body),
                    ClassAnswers.of(node, frozenset()),
-                   tuple(bound for statement in node.body for bound in BodyAssignment.of(statement)))
+                   tuple(bound for statement in node.body
+                         for bound in BodyAssignment.of(statement)))
 
 
 @dataclass(frozen=True)
@@ -1157,7 +1210,7 @@ class DeclaredFunction(Declaration):
     line: int
 
 
-class ClassDeclarations(ast.NodeVisitor):
+class ClassDeclarations(ast.NodeVisitor, MroDispatch):
     """Each class and function a body declares, nested classes and methods under their outer
     class's name. A function body runs later, so nothing in it is declared at import."""
 
@@ -1169,17 +1222,21 @@ class ClassDeclarations(ast.NodeVisitor):
         self.path = path
         self.prefix = prefix
 
+    def visit(self, node: ast.AST) -> None:
+        self.handler_for(type(node))(self, node)
+
+    @handles(ast.AST)
+    def visit_node(self, node: ast.AST) -> None:
+        super().visit(node)
+
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         qualified = self.prefix.child(node.name)
         self.classes[qualified] = DeclaredClass.of(self.path, node)
         ClassDeclarations(self.classes, self.functions, self.path, qualified).generic_visit(node)
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        """A function's body is not run at import."""
-        self.functions[self.prefix.child(node.name)] = DeclaredFunction(self.path, node.lineno)
-
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-        """A coroutine's body is not run at import."""
+    @handles(ast.FunctionDef, ast.AsyncFunctionDef)
+    def declare_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        """Both function forms defer their executable body until called."""
         self.functions[self.prefix.child(node.name)] = DeclaredFunction(self.path, node.lineno)
 
 
@@ -1187,12 +1244,18 @@ class ModuleBindings(ClassDeclarations):
     """What one module's top level binds, under ``if`` and ``try`` too: its classes, its
     imports and the values it assigns names."""
 
-    def __init__(self, path: str, module: QualifiedName, package: QualifiedName) -> None:
+    def __init__(self, path: str, module: QualifiedName, package: QualifiedName,
+                 *, blob: str) -> None:
         super().__init__({}, {}, path, module)
+        self.blob = blob
         self.anchors = (QualifiedName(()), *package.ancestors())
         self.bound: dict[str, QualifiedName] = {}
-        self.assigned: dict[str, list[tuple[int, RosterValue]]] = {}
+        self.assigned: dict[str, list[BodyAssignment]] = {}
         self.assignments: list[BodyAssignment] = []
+
+    def retained(self, main: MainTree) -> bool:
+        """These facts remain valid exactly while this path holds their original blob."""
+        return main.files.get(self.path) == self.blob
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.bound[node.name] = self.prefix.child(node.name)
@@ -1212,17 +1275,12 @@ class ModuleBindings(ClassDeclarations):
         for alias in node.names:
             self.bound[alias.asname or alias.name] = origin.child(alias.name)
 
-    def visit_Assign(self, node: ast.Assign) -> None:
-        self.record_assignments(node)
-
-    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
-        self.record_assignments(node)
-
-    def record_assignments(self, node: ast.stmt) -> None:
+    @handles(ast.Assign, ast.AnnAssign)
+    def record_assignments(self, node: ast.Assign | ast.AnnAssign) -> None:
         for assignment in BodyAssignment.of(node):
             self.assignments.append(assignment)
             for target in assignment.targets:
-                self.assigned.setdefault(target, []).append((assignment.line, assignment.value))
+                self.assigned.setdefault(target, []).append(assignment)
 
     def reach(self, local: str) -> Iterator[QualifiedName]:
         """What this module's top level binds ``local`` to, if it binds it."""
@@ -1231,7 +1289,8 @@ class ModuleBindings(ClassDeclarations):
 
     def literal(self, local: str, before: int) -> Iterator[RosterValue]:
         """The last value this module's top level assigns ``local`` before line ``before``."""
-        yield from [value for line, value in self.assigned.get(local, []) if line < before][-1:]
+        yield from [assignment.value for assignment in self.assigned.get(local, [])
+                    if assignment.line < before][-1:]
 
 
 class DeclaredScopes:

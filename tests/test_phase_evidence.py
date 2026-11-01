@@ -218,7 +218,7 @@ def test_following_reading_reuses_only_unchanged_blob_facts(tmp_path: Path) -> N
     assert following.main.bindings is not reading.main.bindings
     assert reading.main.bindings == held
     assert following.main.bindings == {(("src",), "src/kept.py"): held[("src",), "src/kept.py"]}
-    assert following.main.bindings[("src",), "src/kept.py"][1] is held[("src",), "src/kept.py"][1]
+    assert following.main.bindings[("src",), "src/kept.py"] is held[("src",), "src/kept.py"]
     assert not ClassDeclared("Before").read(following.main)
     assert not ClassDeclared("Deleted").read(following.main)
     assert ClassDeclared("After").read(following.main)
@@ -246,7 +246,8 @@ def test_module_binding_facts_do_not_retain_the_source_nodes() -> None:
                        "class Child(Parent):\n    values = (Parent, *OTHERS)\n")
     syntax = [weakref.ref(node) for node in ast.walk(module)
               if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.Assign))]
-    bindings = ModuleBindings("src/owner.py", QualifiedName.of("owner"), QualifiedName(()))
+    bindings = ModuleBindings("src/owner.py", QualifiedName.of("owner"), QualifiedName(()),
+                              blob="source-node-lifetime")
     bindings.visit(module)
     assert bindings.classes
     del module
@@ -429,6 +430,31 @@ def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
     ]
     assert not reading.holds(restated)
     assert not reading.holds(rosters)
+
+
+@pytest.mark.parametrize(("value", "roster"), (
+    ("(A, B)", True),
+    ("[A, B]", True),
+    ("{A, B}", True),
+    ("(values.A, values.B)", True),
+    ("wrap((A, B))", True),
+    ("wrap([A, B])", True),
+    ("outer(inner((A, B)))", False),
+    ("wrap(OTHER)", False),
+    ("wrap((A, B), 1)", False),
+    ("(*OTHER,)", True),
+    ("(*values.OTHER,)", False),
+    ("((A, B),)", False),
+))
+def test_roster_expression_answers_preserve_admitted_syntax(
+    tmp_path: Path, value: str, roster: bool,
+) -> None:
+    main = main_of(tmp_path, {
+        "src/values.py": "class A:\n    pass\nclass B:\n    pass\nOTHER = (A, B)\n",
+        "src/rosters.py": "import values\nfrom values import A, B\nOTHER = (A, B)\n"
+                          f"VALUE = {value}\n",
+    }).main
+    assert len(tuple(ClassRostersAbsent().rosters(main))) == 2 + int(roster)
 
 
 def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):
