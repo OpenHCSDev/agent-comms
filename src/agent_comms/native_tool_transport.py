@@ -425,4 +425,4 @@ class GatedToolTransport(ToolTransport[Call]):
     async def judge(self, call: Call) -> None:
         identity = self.calls.identity_for(call)
         round = self.calls.rounds[identity.round_number]
-        await self.rule_gate.judge_round(call, round, self.turn)
+        await self.rule_gate.judge_round(call, round, self)
