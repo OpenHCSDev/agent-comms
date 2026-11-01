@@ -83,14 +83,25 @@ class ShellWord:
     start: int
     end: int
     spelling: str
+    members: ClassVar[dict[str, type[ShellWord]]] = {}
+
+    def __init_subclass__(cls, *, spellings: tuple[str, ...] = ()) -> None:
+        super().__init_subclass__()
+        for spelling in spellings:
+            cls.members[spelling] = cls
 
     @classmethod
     def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
-        return cls(value, lexer.word_start, end, lexer.command[lexer.word_start:end])
+        spelling = lexer.command[lexer.word_start:end]
+        kind = cls.members.get(spelling, cls)
+        return kind(value, lexer.word_start, end, spelling)
 
     def consume(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.word(self)
         return iter(())
+
+    def argument(self, parser: ShellParser) -> None:
+        parser.words.append(self)
 
     descriptor_syntax: ClassVar[re.Pattern[str]] = re.compile(r'[0-9]+\Z')
 
@@ -199,13 +210,6 @@ class ShellLexer(shlex.shlex):
 class Operator(ShellWord):
     """The grammar's declarations own operator membership and behavior."""
 
-    members: ClassVar[dict[str, type[Operator]]] = {}
-
-    def __init_subclass__(cls, *, spellings: tuple[str, ...] = ()) -> None:
-        super().__init_subclass__()
-        for spelling in spellings:
-            cls.members[spelling] = cls
-
     @classmethod
     def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
         spelling = next((key for key in sorted(cls.members, key=len, reverse=True)
@@ -228,6 +232,18 @@ class Operator(ShellWord):
 
 class Separator(Operator, spellings=(';', ';;', ';&', ';;&', '&', '&&', '|', '||', '|&')):
     pass
+
+
+class BraceWord(ShellWord, spellings=('{', '}')):
+    """Reserved at command position; an argument or redirection still owns its word."""
+
+    def command_type(self) -> Never:
+        raise NotStandalone('Brace groups are not admitted by the bounded shell grammar')
+
+    def argument(self, parser: ShellParser) -> None:
+        if not parser.words:
+            self.command_type()
+        super().argument(parser)
 
 
 class OpenGroup(Operator, spellings=('(',)):
@@ -317,7 +333,7 @@ class TabbedDocumentRedirect(DocumentRedirect):
 
 class ArgumentTarget:
     def take(self, parser: ShellParser, word: ShellWord) -> None:
-        parser.words.append(word)
+        word.argument(parser)
 
     def require_word(self) -> None:
         pass
@@ -403,7 +419,7 @@ class GroupParser(ShellParser):
 
 
 class NotStandalone(ValueError):
-    """Literal recovery does not admit this shell syntax."""
+    """This shell syntax is outside the decoder's admitted grammar."""
 
 
 class LiteralShellParser(ShellParser):
