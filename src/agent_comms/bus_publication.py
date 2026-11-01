@@ -156,11 +156,30 @@ class OwnerVoiceOrigin(InitialOrigin):
 
 
 @dataclass(frozen=True, slots=True)
-class AgentOrigin(InitialOrigin):
-    """An executable thread's owner; it may resend under the same message id."""
+class AutomatedOrigin(InitialOrigin):
+    """Shared non-human publication, without an implied owner turn or directive."""
 
     def published(self, goals: Goals, message: Message) -> None:
-        """An agent's message directs no thread: only the owner's voice does."""
+        """An automated message directs no thread: only the owner's voice does."""
+
+    def require_sender(
+        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+    ) -> None:
+        sender_thread.role.require_automated_publication(
+            RelationViolationError("Initial sender must be a registered automated publisher.")
+        )
+
+    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
+        """A resend is decided by the bus's own write, not by a read before it."""
+
+    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
+        """A resend of the same message returns its committed original, never a copy."""
+        return bus.append_original(build)
+
+
+@dataclass(frozen=True, slots=True)
+class AgentOrigin(AutomatedOrigin):
+    """An executable thread's owner; it may resend under the same message id."""
 
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
@@ -169,12 +188,17 @@ class AgentOrigin(InitialOrigin):
             RelationViolationError("Initial sender must be a visible registered executable.")
         )
 
-    def require_source(self, source: BusReader, sender: str, message_id: MessageId) -> None:
-        """An agent's resend is decided by the bus's own write, not by a read before it."""
 
-    def append(self, bus: Bus, build: RecordBuilder) -> BusRecord:
-        """A resend of the same message returns its committed original, never a copy."""
-        return bus.append_original(build)
+@dataclass(frozen=True, slots=True)
+class ServiceOrigin(AutomatedOrigin):
+    """A service publisher does not impersonate an executable colleague."""
+
+    def require_sender(
+        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+    ) -> None:
+        sender_thread.role.require_service_publication(
+            RelationViolationError("Initial sender must be a declared service publisher.")
+        )
 
 
 @dataclass(frozen=True, slots=True)

@@ -22,4 +22,4 @@ class InstallReportProbe(RuntimeProbe[None], ServiceSender):
     def run(self) -> None:
         with client_wire(self.root) as comms:
             self.register(comms.registry)
-            comms.messaging.send(self.sender, CommsTag.channel(), self.body)
+            comms.messaging.send(self.sender, CommsTag.channel(), self.body, origin=self.origin)
