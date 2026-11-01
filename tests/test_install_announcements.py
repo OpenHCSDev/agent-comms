@@ -33,7 +33,7 @@ from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
-from agent_comms.thread_identity import ServiceThreadRole
+from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
 from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
 from agent_comms.threads import Thread
 from cli_command import core
@@ -176,15 +176,31 @@ def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private
     with pytest.raises(ThreadNotStoppedError):
         comms.threads.archive(original.name)
 
+    writer = comms.registry.declare(Thread("writer", frozenset(), Checkout(comms.root)))
     before = comms.bus.bus.revision()
     with pytest.raises(RelationViolationError):
         comms.messaging.send(original.name, CommsTag.channel(), "Wrong agent origin")
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(writer.name, CommsTag.channel(), "Wrong service origin", origin=probe.origin)
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(writer.name, original.name, "A service is not an inbox")
     assert comms.bus.bus.revision() == before
     probe.run()
     messages = HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages
     assert len(messages) == 2
     assert all(message.body == probe.body for message in messages)
     assert comms.registry.require(original.name).incarnation == original.incarnation
+
+
+def test_service_registration_does_not_replace_a_human_participant(private_comms):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    original = comms.registry.declare(Thread(
+        "installer", frozenset(), Checkout(comms.root), role=UserThreadRole))
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        InstallReportProbe(comms.root, "Not a service-owned identity").run()
+    assert comms.registry.require(original.name) == original
+    assert comms.bus.bus.revision() == before
 
 
 def test_a_read_back_that_differs_from_before_the_carry_refuses():

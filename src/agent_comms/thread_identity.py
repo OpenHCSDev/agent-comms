@@ -614,6 +614,16 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     origin_label: ClassVar[str]
 
     @classmethod
+    def choose(cls, current: type[ThreadRole], previous: type[ThreadRole]) -> type[ThreadRole]:
+        """The declared role owns operational re-registration, like other field policies."""
+        return current.registered_over(previous)
+
+    @classmethod
+    def registered_over(cls, previous: type[ThreadRole]) -> type[ThreadRole]:
+        """Ordinary metadata cannot change the original author's role."""
+        return previous
+
+    @classmethod
     def allows_automatic_reply(cls) -> bool:
         return False
 
@@ -766,6 +776,13 @@ class ServiceThreadRole(NonExecutingThreadRole, AutomatedThreadRole):
     """A platform publisher is not another colleague or a human reader."""
 
     origin_label = "service"
+
+    @classmethod
+    def registered_over(cls, previous: type[ThreadRole]) -> type[ThreadRole]:
+        """A declared publisher replaces its former automated role, never a human identity."""
+        previous.require_automated_publication(RelationViolationError(
+            "A service publisher cannot replace a human participant."))
+        return cls
 
     @classmethod
     def require_service_publication(cls, refusal: Exception) -> None:
