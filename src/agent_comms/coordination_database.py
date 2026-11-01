@@ -101,9 +101,13 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
         """
         from .input_disposition import SnapshotInputDispositions
         from .native_runtime_input import NativeRuntimeInput
+        from .participant_store import ParticipantStore
 
         with cls.retaining_rows(source, destination, maximum_bytes=maximum_bytes) as original:
             selected = SnapshotInputDispositions(destination.parent, original).retain_unresolved(entries)
+            ParticipantStore.retain_owners(original, tuple(
+                entry.thread.incarnation.require_recorded().lookup for entry in entries
+            ))
             NativeRuntimeInput.retain_sessions(original, identities)
         return selected
 

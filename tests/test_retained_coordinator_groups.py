@@ -7,20 +7,26 @@ from pathlib import Path
 import pytest
 
 from agent_comms.assignment_states import FullPendingAssignment, TriagePendingAssignment
+from agent_comms.attempt_start import AttemptStart
 from agent_comms.comms import wire
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.codex import CodexBridge
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, ParticipantNotRegistered
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
-from agent_comms.coordination_tables.executions import AcpOrigin, ExecutionRecord
+from agent_comms.coordination_tables.executions import (
+    AcpOrigin, CurrentExecutions, ExecutionRecord, NoPointedAttempt, NoPointedExecution,
+)
+from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.nominal.field_codec import AssignmentId, MessageId, TranscriptRecordId
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordId
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.participant_store import ParticipantStore
 from agent_comms.triage_native_sources import TriageNativeSource
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_policy import FullWake, MessageAudience
@@ -214,6 +220,66 @@ def test_retained_native_group_uses_original_membership_and_children(
             for ordinal, claim in enumerate(expected_claims)
         )
         assert tuple(row.execution_id for row in ExecutionRecord.select(db)) == execution_ids
+        assert ParticipantStore.read_at(db, RECIPIENT_LOOKUP) == source.store.participants.get(RECIPIENT_LOOKUP)
+    assert CoordinationStore.digest(source.path) == before
+
+
+def test_selected_participant_keeps_its_generation_and_current_pointer(
+    native_group_source: NativeGroupSource, tmp_path: Path,
+) -> None:
+    source = native_group_source
+    source.store.participants.advance_generation(RECIPIENT_LOOKUP, expected_generation=1)
+    unrelated = ThreadLookup('9' * 32)
+    absent = ThreadLookup('8' * 32)
+    source.store.participants.register(unrelated, committed=True)
+    source.store.create('selected-current', AcpOrigin, RECIPIENT_LOOKUP, 1)
+    source.store.start(AttemptStart(
+        'selected-current', 1, RECIPIENT_LOOKUP, 2, prepare_fence_token(),
+        expected_execution_revision=1, expected_pointer_revision=0,
+    ))
+    expected = source.store.participants.get(RECIPIENT_LOOKUP)
+    before = CoordinationStore.digest(source.path)
+    destination = tmp_path / 'participant-retained' / 'coordination.sqlite3'
+    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+        with pytest.raises(ParticipantNotRegistered):
+            ParticipantStore.read_at(original.destination, RECIPIENT_LOOKUP)
+        assert ParticipantStore.read_at(
+            original.destination, RECIPIENT_LOOKUP, table_source=original.source,
+        ) == expected
+        ParticipantStore.retain_owners(original, (RECIPIENT_LOOKUP, absent))
+    with closing(CoordinationStore.read_snapshot(destination)) as db:
+        assert ParticipantStore.read_at(db, RECIPIENT_LOOKUP) == expected
+        assert tuple(Participants.select(db)) == (Participants(
+            participant_lookup=RECIPIENT_LOOKUP, committed=True,
+        ),)
+        assert tuple(row.execution_id for row in ExecutionRecord.select(db)) == ('selected-current',)
+        assert not NativeRuntimeInput.select(db)
+        assert not WakeAssignment.select(db)
+    assert expected.owner_identity.generation == 2
+    assert expected.pointer.pointer_revision == 1
+    assert CoordinationStore.digest(source.path) == before
+
+
+@pytest.mark.parametrize('surviving', (
+    OwnerGenerations(owner_lookup=ThreadLookup('7' * 32), generation=3),
+    CurrentExecutions(owner_lookup=ThreadLookup('7' * 32),
+                      execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
+                      pointer_revision=5),
+))
+def test_incomplete_original_participant_refuses_selected_publication(
+    native_group_source: NativeGroupSource, tmp_path: Path, surviving: TypedTable,
+) -> None:
+    source = native_group_source
+    lookup = ThreadLookup('7' * 32)
+    with source.store.session.writing() as db:
+        Participants(participant_lookup=lookup, committed=True).insert(db)
+        surviving.insert(db)
+    before = CoordinationStore.digest(source.path)
+    destination = tmp_path / 'incomplete-participant' / 'coordination.sqlite3'
+    with pytest.raises(ParticipantNotRegistered):
+        with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+            ParticipantStore.retain_owners(original, (lookup,))
+    assert not destination.exists()
     assert CoordinationStore.digest(source.path) == before
 
 

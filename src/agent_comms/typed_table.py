@@ -1150,9 +1150,7 @@ class AttachedPracticeRebuild(SchemaRebuild):
         self, row: type[TypedTable], source: str, *, where: str = "1",
         parameters: tuple[object, ...] = (), prefix: str = "",
     ) -> int:
-        keys = tuple(item.name for item in row._columns if item.column.primary_key)
-        if not keys:
-            raise RelationViolationError(f"{row.declared_name} has no declared retention key")
+        keys = tuple(item.name for item in row.retention_key_fields)
         fields = tuple(item.name for item in row._writable_fields())
         retained_alias = _identifier(row.declared_name + "_retained")
         retained = " AND ".join(
@@ -2772,23 +2770,43 @@ class TypedTable(
         return cls._decode_row(row, {name: offset + index
                                      for index, name in enumerate(cls.column_projection())})
 
+    @ClassFact
+    @staticmethod
+    def retention_key_fields(cls: type[TypedTable]) -> tuple[_Field, ...]:
+        """The declaration supplies both raw-copy deduplication and held-row selection."""
+        keys = tuple(item for item in cls._columns if item.column.primary_key)
+        if not keys:
+            raise RelationViolationError(f"{cls.declared_name} has no declared retention key")
+        return keys
+
+    def retain_original(self, original: AttachedPracticeRebuild) -> int:
+        """Keep this original row's raw SQL through its declared key, not reinsertion."""
+        keys = self.retention_key_fields
+        plans = {plan.name: plan for plan in FieldCodec.field_plans(type(self))}
+        return original.retain_keys(type(self), ({
+            item.name: plans[item.name].current(self) for item in keys
+        },))
+
     @classmethod
-    def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
-        rows = cls._keyed(db, key)
+    def one(cls, db: sqlite3.Connection, *,
+            table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> Self | None:
+        rows = cls._keyed(db, key, table_source=table_source)
         return next(iter(rows), None)
 
     @classmethod
-    def require(cls, db: sqlite3.Connection, **key: object) -> Self:
+    def require(cls, db: sqlite3.Connection, *,
+                table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> Self:
         """The one row a reference names; a missing row is corruption."""
-        rows = cls._keyed(db, key)
+        rows = cls._keyed(db, key, table_source=table_source)
         if not rows:
             raise RowNotFoundError(f"Expected one {cls.declared_name} for {tuple(key)}")
         return rows[0]
 
     @classmethod
-    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
+    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object], *,
+               table_source: TableSource = LOCAL_TABLE_SOURCE) -> list[Self]:
         """At most one row is stored for a key; a repeated key is corruption."""
-        stored = cls.select(db, limit=2, **key)
+        stored = cls.select(db, limit=2, table_source=table_source, **key)
         if len(stored) > 1:
             raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return stored

@@ -241,14 +241,48 @@ no ledger row, an original reservation, and an actually bound/started ledger row
 They use the existing native-root/message/claim producers, compare the ordinary
 source and retained projections and original attempt rows, and check the source
 coordinator bytes and bus revision. Together with the eighteen previous cases,
-**twenty-one added scenarios remain unrun**. These do not cover every disposition,
-native association or rollback/resource failure.
+that checkpoint's **twenty-one added scenarios remained unrun**. The participant
+checkpoint below adds three more, for **twenty-four added scenarios UNRUN**.
+These do not cover every disposition, native association or rollback/resource failure.
 
 Runtime class creation/MRO/registration, attached SQL, cross-store capture and
 complete preservation remain unqualified. The selector has no participant-wide
-reverse walk; current participant/pointer aggregates, inverse native membership,
-serialized references and the remaining original recovery groups still require
-semantic closure. No seed-only database is a runnable root or complete backup.
+reverse walk. Participant aggregates now contribute through the row's cooperative
+retention hook below; inverse native membership, serialized references and the
+remaining original recovery groups still require semantic closure. No seed-only database is a runnable root or complete backup.
+
+## Participant aggregate — source implementation, not acceptance
+
+`ParticipantStore.get` requires `Participants`, `OwnerGenerations` and
+`CurrentExecutions`. A foreign-key-valid participant alone cannot answer that
+reader. `ParticipantStore.read_at` now owns the same three reads and original
+incomplete-aggregate refusal through the caller's already-held connection/source.
+Ordinary `get` keeps its existing session read lifetime and consumes that method;
+retention never constructs a borrowed `CoordinationSession` or another connection.
+
+`ParticipantStore.retain_owners` seeds selected original lookup keys, preserves an
+absent participant as absent, and refuses a present incomplete aggregate.
+`ParticipantSnapshot.retain_original` keeps its original generation/current pointer.
+`Participants.retain_required_rows` contributes the same aggregate through the
+existing cooperative hook, including participants discovered later by FK closure,
+not just the initial registry entries. This is not a reverse traversal of every
+participant execution. The current pointer's declared references retain its actual
+pointed execution/attempt; no counter, revision, commitment or lifecycle is reset.
+
+`TypedTable.retention_key_fields` derives the primary key once from its declared
+columns for raw-copy deduplication and held-row selection. `retain_original` gets
+those values through existing `FieldPlan.current` and the shared indexed/raw-copy
+compiler, not a field roster or decoded-row reinsertion. `one`, `require` and
+`_keyed` now carry the same `TableSource` as `select`; the actual `Generation`
+override carries it too while preserving its corruption exception.
+
+Three cases are authored **UNRUN**: an advanced generation and active current
+pointer preserve the exact aggregate without unrelated/native history; missing
+generation or missing pointer refuses publication. The existing two native-group
+seed cases also require the retained aggregate. Source mapping covers 65 modules,
+537 original class declarations, 519 canonical projections, no parse omissions;
+18 function-local test declarations remain unprojected OPEN. That is source
+coverage, not executed class/MRO/SQL behavior or complete closure.
 
 ## Copy and backup are different contracts
 
