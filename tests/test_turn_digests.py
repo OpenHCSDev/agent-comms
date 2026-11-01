@@ -148,7 +148,8 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     assert source.read_bytes() == saved
 
 
-def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path):
+@pytest.mark.parametrize('original_in_body', (False, True))
+def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path, original_in_body):
     comms = prepared(tmp_path)
     source = tmp_path / 'native.jsonl'
     frame = '── comms: 1 selected ──\nselected: [...]\n── reply relevance ──\nAnswer direct requests.'
@@ -166,13 +167,16 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     asked = comms.messaging.send('lead', 'native', 'How many opens are left?').message
     sent_outcome = comms.messaging.send('native', 'lead', 'An earlier answer.').message
     digest = hashlib.sha256(frame.encode()).hexdigest()
-    wake = SegmentManifest(SelectedWakeSegment, (
-        WireProvenance(asked.reference), WireProvenance(sent_outcome.reference)), digest, 1, 1)
-    original = UserInputSegment(
+    # Historical frames own their original references; new frames leave those
+    # references with the per-message body. Both reconstruct the same history.
+    frame_sources = (() if original_in_body else (WireProvenance(asked.reference),))
+    wake = SegmentManifest(SelectedWakeSegment,
+                           (*frame_sources, WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    originals = (UserInputSegment(
         provenance=(WireProvenance(asked.reference),), content=asked.body,
-    ).manifest(0)
+    ).manifest(0),) if original_in_body else ()
     entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
-                            digest, len(frame), 1, contributors=(wake, original))
+                            digest, len(frame), 1, contributors=(wake, *originals))
     with comms.contexts.writing() as db:
         ContextEntry(
             PiSessionId("source"), str(source), NativeItemId("u1"), entry
