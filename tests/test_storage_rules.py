@@ -3,7 +3,9 @@
 import runpy
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
@@ -22,11 +24,13 @@ from agent_comms.shell_effects import (
 )
 from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_rules import (
+    ScopedDirectory,
     StorageProjection,
     StorageRule,
     UnitStorage,
 )
 from agent_comms.thread_storage import (
+    StoragePath,
     StorageRoots,
     UnassignedThreadStorage,
 )
@@ -40,6 +44,7 @@ def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_pa
     policy = configured.prepare_isolated(root)
     before = StorageRule.path_in(root).read_bytes()
     assert policy == configured.within(root) == StorageRule.load(root)
+    policy.require_isolated(root)
     assert StorageRule().prepare_isolated(root) == policy
     assert StorageRule.path_in(root).read_bytes() == before
     reopened = wire(root)
@@ -60,6 +65,83 @@ def test_isolated_preparation_refuses_an_existing_foreign_policy_without_rewriti
         StorageRule().prepare_isolated(root)
     assert path.read_bytes() == before
     assert not foreign.scratch_base.exists()
+
+
+@pytest.mark.parametrize("scoped_directory", [
+    pytest.param(directory, id=directory.value.as_posix())
+    for plan in FieldCodec.field_plans(StorageRule)
+    for directory in ScopedDirectory.single(plan.annotation)
+    if directory.value.parts
+])
+class TestIsolatedDirectories:
+    def test_projection_refuses_a_canonical_escape_before_writing(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (root / scoped_directory.value).symlink_to(outside, target_is_directory=True)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().within(root)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().prepare_isolated(root)
+        assert not StorageRule.path_in(root).exists()
+        assert tuple(outside.iterdir()) == ()
+
+    def test_existing_policy_rejects_a_new_escape_without_rewriting(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        policy = StorageRule(floor_gib=0).prepare_isolated(root)
+        policy_path = StorageRule.path_in(root)
+        before = policy_path.read_bytes()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (root / scoped_directory.value).symlink_to(outside, target_is_directory=True)
+        loaded = StorageRule.load(root)
+        for current in (policy, loaded):
+            with pytest.raises(ValueError, match="escapes"):
+                current.require_isolated(root)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().prepare_isolated(root)
+        assert policy_path.read_bytes() == before
+        assert tuple(outside.iterdir()) == ()
+
+    def test_inward_links_preserve_private_scope(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        root.mkdir()
+        destination = root / "inward"
+        destination.mkdir()
+        (root / scoped_directory.value).symlink_to(destination, target_is_directory=True)
+        policy = StorageRule(floor_gib=0).prepare_isolated(root)
+        policy.require_isolated(root)
+        assert StorageRule.load(root) == policy
+        assert StorageRule().prepare_isolated(root) == policy
+
+
+def test_future_child_cannot_follow_an_escaping_scratch_link(tmp_path: Path):
+    policy = StorageRule(floor_gib=0).prepare_isolated(tmp_path / "verification")
+    policy.scratch_base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (policy.scratch_base / "future-child").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError, match="escapes"):
+        policy.initial_roots("future-child")
+    assert tuple(outside.iterdir()) == ()
+
+
+def test_private_projection_uses_new_field_declarations_without_another_roster(tmp_path: Path):
+    @dataclass(frozen=True)
+    class ExtendedStorageRule(StorageRule):
+        output: Annotated[StoragePath, ScopedDirectory(Path("output"))] = Path("/external")
+
+    scoped = ExtendedStorageRule(floor_gib=0).within(tmp_path)
+    assert scoped.output == tmp_path / "output"
+    scoped.require_isolated(tmp_path)
+    assert FieldCodec.decode(ExtendedStorageRule, FieldCodec.encode(scoped)) == scoped
 
 
 def test_resource_checker_uses_storage_allocation_floor(tmp_path):
