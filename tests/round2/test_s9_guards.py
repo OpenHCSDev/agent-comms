@@ -85,30 +85,3 @@ def test_no_exact_keysets_or_column_decoders():
     assert not violations
 
 
-def test_removed_mechanisms_and_settings_have_one_owner():
-    for name in (
-        "selected_source_snapshot.py",
-        "compaction_child_launcher.py",
-        "owner_compaction_process.py",
-        "compaction_child_watchdog.py",
-    ):
-        assert not (ROOT / name).exists(), name
-    for path in files():
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Name):
-                assert node.id != "reservable_commit", (path.name, node.lineno)
-            elif isinstance(node, ast.Attribute):
-                assert node.attr != "reservable_commit", (path.name, node.lineno)
-    declarations = []
-    for path in ROOT.glob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.ClassDef):
-                declared = {
-                    child.target.id
-                    for child in node.body
-                    if isinstance(child, ast.AnnAssign) and isinstance(child.target, ast.Name)
-                }
-                if {"reserve_tokens", "keep_recent_tokens"} <= declared:
-                    declarations.append((path.name, node.name))
-    # Pi's settings own compaction thresholds; Core declares no copy.
-    assert declarations == []

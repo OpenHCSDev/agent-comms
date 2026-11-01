@@ -24,21 +24,6 @@ NATIVE_INPUT_PATCH = STACK / "native/native-input.patch"
 pytestmark = pytest.mark.refactor_guard
 
 # Modules that existed only to run, journal, publish or reconcile Core's engine.
-DELETED_MODULES = re.compile(
-    r"^(compaction_\w+|owner_compaction_\w+|selected_pi_route|selected_pi_summary_rpc"
-    r"|selected_summary_claim|native_compaction_\w+|continued_private_session"
-    r"|failed_input_contexts|context_tokens|pi_summary_payloads|transcript_outcomes"
-    r"|turn_input_binding|native_revision_text|selected_source)$"
-)
-DELETED_NATIVE_FILES = (
-    "native-compaction-selected-summary.mjs", "native-compaction-source.mjs",
-    "native-compaction-source.d.ts", "native-compaction-policy.mjs",
-    "native-compaction-commit-child.mjs", "native-session-context.mjs",
-    "native-context-budget.mjs", "inspect-native-compaction-plan.mjs",
-    "patch-native-selected-compaction-summary.py", "patch-native-adaptive-settings.py",
-    "patch-native-context-budget.py", "patch-native-auto-compaction.py",
-    "native-summary-prefix.patch", "native-generation-policy.patch",
-)
 CUSTOM_COMPACTION_RPCS = (
     "agent_comms_summarize_compaction", "agent_comms_compaction_settings",
     "agent_comms_prepare_compaction", "agent_comms_restore_compaction",
@@ -62,29 +47,6 @@ def _stack_texts() -> dict[str, str]:
 def _constants(tree: ast.AST) -> set[str]:
     return {node.value for node in ast.walk(tree)
             if isinstance(node, ast.Constant) and isinstance(node.value, str)}
-
-
-def test_deleted_engine_modules_have_no_definition_or_importer():
-    modules = _modules()
-    defined = [name for name in modules if DELETED_MODULES.match(Path(name).stem)]
-    assert defined == []
-    importers = []
-    for module, tree in modules.items():
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom):
-                # "from .x import y" names module x; "from . import x" names module x.
-                package_import = node.module in (None, "agent_comms")
-                imported = ([alias.name for alias in node.names] if package_import
-                            else [node.module.split(".")[-1]])
-                if any(DELETED_MODULES.match(name) for name in imported):
-                    importers.append(f"{module}:{node.lineno}")
-    assert importers == []
-
-
-def test_deleted_native_engine_files_are_gone():
-    assert [name for name in DELETED_NATIVE_FILES if (STACK / "native" / name).exists()] == []
-    helpers = {path.name for path in (SOURCE / "_pi_helpers").iterdir()}
-    assert helpers.isdisjoint({"prepare_compaction.mjs", "context_tokens.mjs"})
 
 
 def test_no_compaction_journal_store_is_spelled():

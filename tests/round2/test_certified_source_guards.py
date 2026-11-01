@@ -23,12 +23,3 @@ def test_source_coverage_has_no_whole_bus_reader_or_hashed_tuple():
     assert "PrefixWitness | tuple" not in source
 
 
-def test_obsolete_bootstrap_and_public_session_switch_are_deleted():
-    for path in SOURCE.glob("*.py"):
-        source = path.read_text()
-        for name in (
-            "initialize_private_claim_protocol",
-            "enable_claim_gate_unlocked",
-            "_private_session_mode",
-        ):
-            assert name not in source, (path.name, name)

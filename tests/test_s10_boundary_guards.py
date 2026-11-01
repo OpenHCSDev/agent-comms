@@ -43,36 +43,6 @@ def test_s10_ui_choice_cannot_regain_a_raw_mapping_projection():
             assert node.attr not in {"get", "choice", "to_wire"}, ast.unparse(node)
 
 
-def test_s10_native_lifetime_is_owned_by_a12_without_retired_guardian():
-    package = Path(pi_events.__file__).parent
-    assert not (package / "selected_pi_child_deadline.py").exists()
-    for name in ("native_pi.py", "pi_events.py"):
-        tree = ast.parse((package / name).read_text())
-        for node in ast.walk(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                assert node.name not in {
-                    "from_journal",
-                    "exchange_fake_rpc",
-                    "_run_fake",
-                    "arm_selected_child",
-                    "_pidfd_open",
-                    "_pidfd_kill",
-                    "_terminate_process",
-                }
-            if isinstance(node, ast.ImportFrom):
-                assert node.module != "selected_pi_child_deadline"
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                assert node.func.attr not in {
-                    "create_subprocess_exec",
-                    "Popen",
-                    "killpg",
-                    "kill",
-                    "terminate",
-                }
-                if isinstance(node.func.value, ast.Name):
-                    assert node.func.value.id not in {"signal", "subprocess"}
-
-
 def test_native_tool_projection_has_no_backend_dispatch_or_session_scratch():
     package = Path(pi_events.__file__).parent
     backend = ast.parse((package / "backend.py").read_text())

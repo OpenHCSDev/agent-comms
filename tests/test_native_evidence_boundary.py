@@ -87,5 +87,5 @@ def test_duplicate_input_ids_are_not_silently_projected_away(tmp_path):
         for entry_id in ("first", "second")]
     session.write_text("".join(json.dumps(row) + "\n" for row in rows))
     session.chmod(0o600)
-    with pytest.raises(NativePiUnavailable):
-        NativeEntry.read_evidence(session)
+    with pytest.raises(NativePiUnavailable), NativeEntry.open_evidence(session) as evidence:
+        evidence.observe()

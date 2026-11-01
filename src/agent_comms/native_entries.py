@@ -202,12 +202,6 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return ()
 
     @classmethod
-    def read_evidence(cls, session_file):
-        """Decode once behind the existing strict private-file trust boundary."""
-        with cls.open_evidence(session_file) as evidence:
-            return evidence.observe()
-
-    @classmethod
     @contextmanager
     def open_evidence(cls, session_file):
         """Acquire a source reader, never input acceptance or replay authority."""

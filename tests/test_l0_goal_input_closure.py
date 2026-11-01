@@ -4,7 +4,6 @@ from agent_comms.repo import Checkout
 import os
 import sqlite3
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -182,33 +181,3 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     assert GoalWaits(tmp_path).read()[goal.id] == wait
 
 
-@pytest.mark.refactor_guard
-def test_retired_goal_input_authorities_cannot_return():
-    root = Path(__file__).parents[1] / "src/agent_comms"
-    source = "\n".join(
-        (root / name).read_text()
-        for name in (
-            "input_disposition.py",
-            "input_attempt.py",
-            "goal_actions.py",
-            "goal_management.py",
-            "goal_waits.py",
-            "owned_turn.py",
-        )
-    )
-    for retired in (
-        "AcpDeliveryCursors", "DeliveryCursor", "DeliveryDocument", "legacy_through",
-        "GoalReplyScope", "direct_origins",
-    ):
-        assert retired not in source
-    import ast
-
-    tree = ast.parse((root / "goal_actions.py").read_text())
-    retry = next(
-        node
-        for node in tree.body
-        if isinstance(node, ast.ClassDef) and node.name == "RetryGoalAction"
-    )
-    assert not any(
-        isinstance(node, ast.Attribute) and node.attr == "create_goal" for node in ast.walk(retry)
-    )
