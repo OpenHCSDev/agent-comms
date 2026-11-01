@@ -318,6 +318,7 @@ def owner_lines(bus, name: str) -> list[str]:
             if isinstance(delivery.message.task, MeantNotice)]
 
 
+@pytest.mark.usefixtures("native_runtime_package")
 def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     tmp_path, commander_bus
 ):
@@ -334,9 +335,8 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     events.CompactionEnd().deal_rules(deal)
     record = deal.current()
     first = next(source for source in record.dealt if source.stem in record.due.rules)
-    for source in record.dealt[:record.dealt.index(first) + 1]:
-        call("read", {"path": str(source)}).judge_under(deal)
-        call("read", {"path": str(source)}).completed_under(deal)
+    # The native package fixture compiles the real prompt and its matching reads.
+    assert record.read_by(deal) == record.paths
     deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
     write = call("write", {"path": str(deal.audit), "content": deal.audit.read_text()})
     write.judge_under(deal)
