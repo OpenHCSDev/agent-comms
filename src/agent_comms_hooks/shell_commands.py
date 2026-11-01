@@ -5,9 +5,9 @@ import io
 import re
 import shlex
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import ClassVar, Self
+from typing import ClassVar, Never, Self
 
 
 class ShellText(io.StringIO):
@@ -31,6 +31,9 @@ class Redirection:
     def written_paths(self) -> tuple[str, ...]:
         return ()
 
+    def defer(self, lexer: ShellLexer) -> None:
+        pass
+
     def read_body(self, lexer: ShellLexer) -> None:
         pass
 
@@ -41,6 +44,9 @@ class OutputRedirection(Redirection):
 
 
 class HereDocument(Redirection):
+    def defer(self, lexer: ShellLexer) -> None:
+        lexer.expect_document(self)
+
     def line_value(self, line: str) -> str:
         return line.rstrip('\r\n')
 
@@ -86,13 +92,22 @@ class ShellWord:
         parser.word(self)
         return iter(())
 
+    descriptor_syntax: ClassVar[re.Pattern[str]] = re.compile(r'[0-9]+\Z')
+
     def descriptor_before(self, position: int) -> bool:
-        return self.end == position and self.value.isdecimal() and self.spelling == self.value
+        return (self.end == position and self.descriptor_syntax.fullmatch(self.value) is not None
+                and self.spelling == self.value)
+
+    def descriptor_value(self) -> bool:
+        return self.value == '-' or self.descriptor_syntax.fullmatch(self.value.removesuffix('-')) is not None
 
     assignment_syntax: ClassVar[re.Pattern[str]] = re.compile(r'[a-zA-Z_][a-zA-Z_0-9]*=')
 
     def assignment(self) -> bool:
         return self.assignment_syntax.match(self.spelling) is not None
+
+    def command_type(self) -> type[ShellCommand]:
+        return SourceCommand
 
     def document(self) -> HereDocument:
         return ExpandedHereDocument(self.value)
@@ -102,32 +117,14 @@ class ShellWord:
 
 
 class QuotedWord(ShellWord):
+    def command_type(self) -> type[ShellCommand]:
+        return ShellCommand
+
     def document(self) -> HereDocument:
         return HereDocument(self.value)
 
     def tabbed_document(self) -> HereDocument:
         return TabStrippedHereDocument(self.value)
-
-
-class ShellOperators(ShellWord):
-    @classmethod
-    def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
-        boundary = value.find('\n')
-        if boundary >= 0:
-            value = value[:boundary + 1]
-            end = lexer.word_start + len(value)
-        return super().decoded(value, lexer, end)
-
-    def consume(self, parser: ShellParser) -> Iterator[ShellCommand]:
-        position = 0
-        while position < len(self.value):
-            spelling = next((value for value in sorted(Operator.members, key=len, reverse=True)
-                             if self.value.startswith(value, position)), '')
-            if not spelling:
-                raise ValueError(f'Unsupported shell operator {self.value[position:]!r}')
-            operator = Operator.members[spelling]()
-            position += len(spelling)
-            yield from parser.operator(operator, self.start + position - len(spelling))
 
 
 class ShellLexer(shlex.shlex):
@@ -143,6 +140,7 @@ class ShellLexer(shlex.shlex):
         self._state: str | None = None
         self.word_start = 0
         self.word_type: type[ShellWord] = ShellWord
+        self.documents: list[HereDocument] = []
         super().__init__(self.text, posix=True, punctuation_chars=';&|><()\n')
         self.whitespace = ' \t\r'
         self.whitespace_split = True
@@ -156,7 +154,7 @@ class ShellLexer(shlex.shlex):
         if self._state == ' ' and value not in (' ', None):
             self.word_start = self.position - 1
         if value == 'c':
-            self.word_type = ShellOperators
+            self.word_type = Operator
         elif value in ("'", '"', '\\'):
             self.word_type = QuotedWord
         self._state = value
@@ -179,6 +177,14 @@ class ShellLexer(shlex.shlex):
         self._pushback_chars.clear()
         self.state = ' '
 
+    def expect_document(self, document: HereDocument) -> None:
+        self.documents.append(document)
+
+    def read_documents(self) -> None:
+        documents, self.documents = self.documents, []
+        for document in documents:
+            document.read_body(self)
+
     def next_word(self) -> ShellWord | None:
         self.word_type = ShellWord
         value = super().read_token()
@@ -190,7 +196,7 @@ class ShellLexer(shlex.shlex):
         return self.word_type.decoded(value, self, end)
 
 
-class Operator:
+class Operator(ShellWord):
     """The grammar's declarations own operator membership and behavior."""
 
     members: ClassVar[dict[str, type[Operator]]] = {}
@@ -200,21 +206,45 @@ class Operator:
         for spelling in spellings:
             cls.members[spelling] = cls
 
-    def consume(self, parser: ShellParser, position: int) -> Iterator[ShellCommand]:
+    @classmethod
+    def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
+        spelling = next((key for key in sorted(cls.members, key=len, reverse=True)
+                         if value.startswith(key)), '')
+        if not spelling:
+            raise ValueError(f'Unsupported shell operator {value!r}')
+        end = lexer.word_start + len(spelling)
+        selected = cls.members[spelling](spelling, lexer.word_start, end, spelling)
+        # Admit one operator before recursive parsing; native lookahead stays here.
+        lexer.resume_at_boundary(end)
+        return selected
+
+    def consume(self, parser: ShellParser) -> Iterator[ShellCommand]:
+        return parser.operator(self)
+
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.finish()
         return iter(())
 
 
-class Separator(Operator, spellings=(';', ';;', ';&', ';;&', '&', '&&', '|', '||', '|&', '(', ')')):
+class Separator(Operator, spellings=(';', ';;', ';&', ';;&', '&', '&&', '|', '||', '|&')):
     pass
 
 
+class OpenGroup(Operator, spellings=('(',)):
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
+        parser.open_group()
+        return iter(())
+
+
+class CloseGroup(Operator, spellings=(')',)):
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
+        parser.close_group()
+
+
 class Newline(Operator, spellings=('\n',)):
-    def consume(self, parser: ShellParser, position: int) -> Iterator[ShellCommand]:
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.finish()
-        # The header newline owns the boundary, not native punctuation lookahead.
-        parser.lexer.resume_at_boundary(position + 1)
-        parser.read_documents()
+        parser.lexer.read_documents()
         return parser.flush()
 
 
@@ -224,9 +254,9 @@ class Redirect(Operator, spellings=('<', '<<<')):
     def bind(self, word: ShellWord) -> Redirection:
         return self.redirection(word.value)
 
-    def consume(self, parser: ShellParser, position: int) -> Iterator[ShellCommand]:
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.target.require_word()
-        if parser.words and parser.words[-1].descriptor_before(position):
+        if parser.words and parser.words[-1].descriptor_before(self.start):
             parser.words.pop()
         parser.target = RedirectionTarget(self)
         return iter(())
@@ -238,14 +268,14 @@ class WriteRedirect(Redirect, spellings=('>', '>>', '>|', '&>', '&>>', '<>')):
 
 class ReadDescriptorRedirect(Redirect, spellings=('<&',)):
     def bind(self, word: ShellWord) -> Redirection:
-        if not (word.value == '-' or word.value.rstrip('-').isdecimal()):
+        if not word.descriptor_value():
             raise ValueError('Input descriptor redirection requires a literal descriptor')
         return super().bind(word)
 
 
 class WriteDescriptorRedirect(Redirect, spellings=('>&',)):
     def bind(self, word: ShellWord) -> Redirection:
-        if word.value == '-' or word.value.rstrip('-').isdecimal():
+        if word.descriptor_value():
             return Redirection(word.value)
         return OutputRedirection(word.value)
 
@@ -254,10 +284,11 @@ class DocumentRedirect(Redirect, spellings=('<<',)):
     def bind(self, word: ShellWord) -> Redirection:
         return word.document()
 
-    def consume(self, parser: ShellParser, position: int) -> Iterator[ShellCommand]:
-        super().consume(parser, position)
+    def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
+        super().apply(parser)
         if parser.lexer.take_adjacent('-'):
-            parser.target = RedirectionTarget(TabbedDocumentRedirect())
+            parser.target = RedirectionTarget(TabbedDocumentRedirect(
+                '<<-', self.start, self.end + 1, '<<-'))
         return iter(())
 
 
@@ -279,7 +310,9 @@ class RedirectionTarget(ArgumentTarget):
     operator: Redirect
 
     def take(self, parser: ShellParser, word: ShellWord) -> None:
-        parser.redirections.append(self.operator.bind(word))
+        redirection = self.operator.bind(word)
+        parser.redirections.append(redirection)
+        redirection.defer(parser.lexer)
         parser.target = ArgumentTarget()
 
     def require_word(self) -> None:
@@ -287,8 +320,9 @@ class RedirectionTarget(ArgumentTarget):
 
 
 class ShellParser:
-    def __init__(self, command: str):
-        self.lexer = ShellLexer(command)
+    def __init__(self, lexer: ShellLexer):
+        self.lexer = lexer
+        self.pending = ShellCommand(())
         self.words: list[ShellWord] = []
         self.redirections: list[Redirection] = []
         self.target = ArgumentTarget()
@@ -297,16 +331,25 @@ class ShellParser:
     def word(self, word: ShellWord) -> None:
         self.target.take(self, word)
 
-    def operator(self, operator: Operator, position: int) -> Iterator[ShellCommand]:
-        return operator.consume(self, position)
+    def operator(self, operator: Operator) -> Iterator[ShellCommand]:
+        return operator.apply(self)
+
+    def open_group(self) -> None:
+        self.target.require_word()
+        if self.words or self.redirections:
+            raise ValueError('A parenthesized command requires its own command position')
+        self.pending.require_group_boundary()
+        self.pending = CommandGroup((), body=tuple(GroupParser(self.lexer).commands()))
+
+    def close_group(self) -> Never:
+        raise ValueError('Unexpected closing parenthesis')
 
     def finish(self) -> None:
         self.target.require_word()
         while self.words and self.words[0].assignment():
             self.words.pop(0)
-        if self.words or self.redirections:
-            self.line.append(ShellCommand(tuple(word.value for word in self.words),
-                                          redirections=tuple(self.redirections)))
+        self.line.extend(self.pending.completed(tuple(self.words), tuple(self.redirections)))
+        self.pending = ShellCommand(())
         self.words.clear()
         self.redirections.clear()
 
@@ -315,17 +358,30 @@ class ShellParser:
         self.line.clear()
         return iter(completed)
 
-    def read_documents(self) -> None:
-        for command in self.line:
-            for redirection in command.redirections:
-                redirection.read_body(self.lexer)
-
     def commands(self) -> Iterator[ShellCommand]:
         while word := self.lexer.next_word():
             yield from word.consume(self)
         self.finish()
-        self.read_documents()
+        self.lexer.read_documents()
         yield from self.flush()
+
+
+class GroupClosed(Exception):
+    """The group's own closing delimiter ends its shared-source parse."""
+
+
+class GroupParser(ShellParser):
+    def close_group(self) -> Never:
+        raise GroupClosed()
+
+    def commands(self) -> Iterator[ShellCommand]:
+        try:
+            yield from super().commands()
+        except GroupClosed:
+            self.finish()
+            yield from self.flush()
+            return
+        raise ValueError('Unterminated parenthesized command')
 
 
 class NotStandalone(ValueError):
@@ -338,7 +394,7 @@ class LiteralShellParser(ShellParser):
             raise NotStandalone('Recovery requires literal, single-line words')
         super().word(word)
 
-    def operator(self, operator: Operator, position: int) -> Iterator[ShellCommand]:
+    def operator(self, operator: Operator) -> Iterator[ShellCommand]:
         raise NotStandalone('Recovery does not admit shell operators')
 
 
@@ -392,7 +448,7 @@ class ShellCommand:
     @classmethod
     def standalone(cls, command: str) -> Iterator[ShellCommand]:
         try:
-            yield from LiteralShellParser(command).commands()
+            yield from LiteralShellParser(ShellLexer(command)).commands()
         except NotStandalone:
             return
 
@@ -404,19 +460,59 @@ class ShellCommand:
 
     @classmethod
     def parsed(cls, command: str) -> Iterator[ShellCommand]:
-        yield from ShellParser(command).commands()
+        yield from ShellParser(ShellLexer(command)).commands()
 
     @classmethod
     def split(cls, command: str) -> Iterator[ShellCommand]:
         for simple in cls.parsed(command):
             yield from simple.run_commands()
 
-    def run_commands(self) -> Iterator[ShellCommand]:
-        yield self
+    def source_commands(self) -> Iterator[ShellCommand]:
+        """Arguments launched as an executable are not shell control syntax."""
+        return iter(())
+
+    @property
+    def source_words(self) -> tuple[str, ...]:
+        return tuple(word for command in self.source_commands() for word in command.words)
+
+    def completed(self, words: tuple[ShellWord, ...], redirections: tuple[Redirection, ...]) -> Iterator[ShellCommand]:
+        if words or redirections:
+            command_type = words[0].command_type() if words else ShellCommand
+            yield command_type(tuple(word.value for word in words), redirections=redirections)
+
+    def require_group_boundary(self) -> None:
+        pass
+
+    def nested(self) -> Iterator[ShellCommand]:
         runner = Runner.named(self.program)
         yield from runner.inline(self.args)
-        for command in runner.started(self.args):
+        yield from runner.started(self.args)
+
+    def run_commands(self) -> Iterator[ShellCommand]:
+        yield self
+        for command in self.nested():
             yield from command.run_commands()
+
+
+class SourceCommand(ShellCommand):
+    def source_commands(self) -> Iterator[ShellCommand]:
+        return iter((self,))
+
+
+@dataclass(frozen=True)
+class CommandGroup(ShellCommand):
+    body: tuple[ShellCommand, ...] = field(kw_only=True)
+
+    def completed(self, words: tuple[ShellWord, ...], redirections: tuple[Redirection, ...]) -> Iterator[Self]:
+        if words or not self.body:
+            raise ValueError('A parenthesized command requires a nonempty body and no trailing words')
+        yield replace(self, redirections=redirections)
+
+    def require_group_boundary(self) -> None:
+        raise ValueError('Adjacent groups require a command separator')
+
+    def nested(self) -> Iterator[ShellCommand]:
+        return iter(self.body)
 
 
 class Runner(Program):
@@ -495,4 +591,4 @@ class ShellRunner(Runner, names=('bash', 'sh', 'zsh')):
         if not scripts and remaining and remaining[0].startswith('+'):
             raise ValueError('Shell +options are not admitted; use explicit -options')
         for script in scripts:
-            yield from ShellCommand.split(script)
+            yield from ShellCommand.parsed(script)

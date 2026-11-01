@@ -9,6 +9,7 @@ from agent_comms.shell_effects import (
     ForbiddenStorageEffect, ShellInvocation, StorageDenied, WriteStorageEffect,
     shell_storage_effects,
 )
+from agent_comms_hooks.bounded_waits import WaitCommand
 from agent_comms_hooks.shell_commands import ConnectCommand, HereDocument, ShellCommand
 
 
@@ -80,6 +81,8 @@ class ShellDecoding(unittest.TestCase):
             ("echo '2'> target", ('echo', '2'), ('target',)),
             ('echo 2 > target', ('echo', '2'), ('target',)),
             ('echo value 2>&1', ('echo', 'value'), ()),
+            ('echo ٢> target', ('echo', '٢'), ('target',)),
+            ('echo >&٢', ('echo',), ('٢',)),
             ('echo value >& target', ('echo', 'value'), ('target',)),
             ('cat < input', ('cat',), ()),
             ('cat <> target', ('cat',), ('target',)),
@@ -143,11 +146,45 @@ class ShellDecoding(unittest.TestCase):
         command, = ShellCommand.standalone(valid)
         self.assertEqual(command.args[-1], 'quoted;path')
         for text in ('echo ok; echo no', 'echo "$HOME"', 'echo `date`', 'echo ok > file',
-                     'echo ok\necho no'):
+                     'echo ok\necho no', '(echo ok)'):
             with self.subTest(text=text):
                 self.assertEqual(tuple(ShellCommand.standalone(text)), ())
         self.assertTrue(ConnectCommand.permits('agent-comms-claude-bridge connect'))
         self.assertFalse(ConnectCommand.permits('agent-comms-claude-bridge connect > file'))
+
+    def test_child_execution_owns_its_directory_lifetime(self):
+        for text, paths in (
+            ('bash -c "cd child; mkdir inner"; mkdir outer', ('child/inner', 'outer')),
+            ('(cd child; mkdir inner); mkdir outer', ('child/inner', 'outer')),
+            ('((cd child; mkdir inner)); mkdir outer', ('child/inner', 'outer')),
+            ('timeout -s INT 5 env -u OLD bash -c "cd child; mkdir inner"; mkdir outer', ('child/inner', 'outer')),
+            ('(cd child && mkdir inner) > group.log; mkdir outer', ('group.log', 'child/inner', 'outer')),
+            ("(cat <<'EOF') > group.log\n> not shell\nEOF\nmkdir outer", ('group.log', 'outer')),
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(shell_storage_effects(text, CWD), tuple(
+                    WriteStorageEffect(CWD / path) for path in paths))
+        for text in ('(mkdir target', ')', '()', '(mkdir a)(mkdir b)', '(mkdir a) trailing'):
+            with self.subTest(text=text), self.assertRaises(StorageDenied):
+                shell_storage_effects(text, CWD)
+
+    def test_waits_follow_source_scope_and_runner_ownership(self):
+        script = 'while kill -0 123; do sleep 1; done'
+        for text, bounded in (
+            (script, False),
+            ('(' + script + ')', False),
+            (shlex.join(('bash', '-o', 'pipefail', '-c', script)), False),
+            (shlex.join(('timeout', '-s', 'INT', '5', 'bash', '-c', script)), True),
+            (shlex.join(('env', '-u', 'OLD', 'timeout', '5', 'bash', '-c', '(' + script + ')')), True),
+        ):
+            with self.subTest(text=text):
+                waits = tuple(WaitCommand(text).waits())
+                self.assertEqual(len(waits), 1)
+                self.assertEqual(waits[0].bounded, bounded)
+        self.assertEqual(tuple(WaitCommand('"while" kill -0 123').waits()), ())
+        polling = shlex.join(('timeout', '5', 'bash', '-c',
+                             'while env -u OLD pgrep -f worker; do sleep 1; done'))
+        self.assertTrue(tuple(WaitCommand(polling).waits())[0].polls_pgrep_f())
 
     def test_document_capabilities_compose(self):
         parsed, = ShellCommand.parsed("cat <<'EOF'\nliteral\nEOF\n")

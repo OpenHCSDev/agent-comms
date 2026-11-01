@@ -89,39 +89,28 @@ class WaitCommand(Bash):
     """The word that ends a loop's condition."""
     openers: ClassVar[frozenset[str]] = frozenset((*body, "then", "!", "{"))
     """Words after which the next word is again a command."""
-    shell: ClassVar[re.Pattern[str]] = re.compile(r"(?:ba)?sh")
-    script_flag: ClassVar[re.Pattern[str]] = re.compile(r"-\w*c")
-
     @classmethod
     def commands(cls, segment: Words) -> Iterator[ShellCommand]:
-        """What one segment runs: its command, or the command its `timeout` runs."""
+        """Execution descendants derive from the same runner/group declarations."""
         for command in ShellCommand.of(dropwhile(cls.openers.__contains__, segment)):
-            yield from Timeout.around(command).commands()
+            yield from command.run_commands()
 
     def waits(self) -> Iterator[Wait]:
-        """Every loop this command runs, at command position or in a script a shell runs with
-        -c. Only such a script can be bounded: `timeout` runs programs, not shell keywords."""
-        segments = tuple(command.words for command in ShellCommand.parsed(self.command))
-        for index, segment in enumerate(segments):
-            for command in ShellCommand.of(dropwhile(self.openers.__contains__, segment)):
-                timeout = Timeout.around(command)
-                for run in timeout.commands():
-                    match (run.program, *run.args):
-                        case (keyword, *condition) if keyword in self.loops:
-                            yield Wait(
-                                False,
-                                (
-                                    tuple(condition),
-                                    *takewhile(
-                                        lambda later: later[:1] != self.body, segments[index + 1 :]
-                                    ),
-                                ),
-                            )
-                        case (program, flag, script, *_) if self.shell.fullmatch(
-                            program
-                        ) and self.script_flag.fullmatch(flag):
-                            for wait in WaitCommand(script).waits():
-                                yield replace(wait, bounded=wait.bounded or timeout.bounded)
+        return self.in_scope(tuple(ShellCommand.parsed(self.command)), False)
+
+    @classmethod
+    def in_scope(cls, commands: tuple[ShellCommand, ...], bounded: bool) -> Iterator[Wait]:
+        """Shell source owns control words; executable argv does not become shell syntax."""
+        segments = tuple(command.source_words for command in commands)
+        for index, decoded in enumerate(commands):
+            command = replace(decoded, words=tuple(dropwhile(cls.openers.__contains__, decoded.words)))
+            timeout = Timeout.around(command)
+            for source in command.source_commands():
+                for run in Timeout.around(source).commands():
+                    if run.program in cls.loops:
+                        yield Wait(bounded, (tuple(run.args), *takewhile(
+                            lambda later: later[:1] != cls.body, segments[index + 1:])))
+            yield from cls.in_scope(tuple(command.nested()), bounded or timeout.bounded)
 
     def unbounded_wait(self) -> tuple[str, ...]:
         """Why this command's wait loop could run forever; empty when it holds no loop."""

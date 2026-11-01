@@ -158,13 +158,17 @@ class ShellInvocation(ShellCommand):
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
         try:
-            decoded_commands = tuple(ShellCommand.split(command))
+            yield from cls.at_directory(ShellCommand.parsed(command), cwd)
         except ValueError as error:
             raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
                                 'no tool was started') from error
-        for decoded in decoded_commands:
-            invocation = cls(decoded.words, cwd, redirections=decoded.redirections)
-            yield invocation
+
+    @classmethod
+    def at_directory(cls, commands: Iterator[ShellCommand], cwd: Path) -> Iterator[ShellInvocation]:
+        for decoded in commands:
+            yield cls(decoded.words, cwd, redirections=decoded.redirections)
+            # Child execution inherits this directory; its changes die with that child.
+            yield from cls.at_directory(decoded.nested(), cwd)
             cwd = ShellProgram.named(decoded.program).following_directory(decoded.args, cwd)
 
 
