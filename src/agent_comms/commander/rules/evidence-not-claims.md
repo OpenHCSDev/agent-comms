@@ -2,7 +2,6 @@
 name: evidence-not-claims
 description: "a claim counts only with its artifact (diff, count, measurement, search); merged, installed and seen working are different states, and agreement is not evidence"
 drift: "Merged, installed and seen working are three states; a unit's proof is a claim until you rerun it or watch it work."
-audience: fleet
 type: feedback
 ---
 
