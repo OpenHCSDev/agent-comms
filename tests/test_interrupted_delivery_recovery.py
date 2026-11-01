@@ -27,7 +27,7 @@ tmp_path = private_root_fixture
 async def test_interrupted_following_delivery_recovers_only_before_native_send(
     tmp_path, native_bound,
 ):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, session_id = _session(tmp_path)
     owner = comms.registry.require("beta")
     message = publish_initial(comms, "sender", "beta", "must survive selection")
     store_path = comms.root / "coordination.sqlite3"
@@ -72,14 +72,14 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
         assert comms.agents.finish_turn(leased.turn_lease)
 
     if not native_bound:
-        agent.inputs.state(owner.name).queued = {item.input_id: item}
+        agent.inputs.state(session_id).queued = {item.input_id: item}
         assert await DeliveredInput.recover_interrupted(
-            agent.inputs, agent.inputs.state(owner.name), comms.registry.entry(owner.name).entry, root_id,
+            agent.inputs, agent.inputs.state(session_id), comms.registry.entry(owner.name).entry, root_id,
         ) == 0
-        agent.inputs.state(owner.name).queued = {}
+        agent.inputs.state(session_id).queued = {}
 
     recovered = await DeliveredInput.recover_interrupted(
-        agent.inputs, agent.inputs.state(owner.name), comms.registry.entry(owner.name).entry, root_id,
+        agent.inputs, agent.inputs.state(session_id), comms.registry.entry(owner.name).entry, root_id,
     )
     with Coordination(str(store_path)) as store:
         current = store.assignments.get(paused.assignment_id)
@@ -99,12 +99,12 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
 
 
 async def test_empty_delivery_recovery_does_not_wait_for_sql_writer(tmp_path):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, session_id = _session(tmp_path)
     entry = comms.registry.entry("beta").entry
     try:
         with Coordination(str(comms.root / "coordination.sqlite3")) as store, store.session.writing():
             assert await asyncio.wait_for(DeliveredInput.recover_interrupted(
-                agent.inputs, agent.inputs.state("beta"), entry, root_id,
+                agent.inputs, agent.inputs.state(session_id), entry, root_id,
             ), 1) == 0
     finally:
         await agent.shutdown()
@@ -113,7 +113,7 @@ async def test_empty_delivery_recovery_does_not_wait_for_sql_writer(tmp_path):
 async def test_recovery_without_paused_assignments_is_read_only(tmp_path):
     from agent_comms.coordination_database import CoordinationStore
 
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, session_id = _session(tmp_path)
     owner = comms.registry.require("beta")
     publish_initial(comms, "sender", "beta", "unbound recovery source")
     store_path = comms.root / "coordination.sqlite3"
@@ -136,7 +136,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path):
     before = FileRevision.capture(path)
     try:
         assert await DeliveredInput.recover_interrupted(
-            agent.inputs, agent.inputs.state("beta"), comms.registry.entry("beta").entry, root_id,
+            agent.inputs, agent.inputs.state(session_id), comms.registry.entry("beta").entry, root_id,
         ) == 0
         assert FileRevision.capture(path) == before
         assert path.stat().st_mode & 0o777 == 0o400

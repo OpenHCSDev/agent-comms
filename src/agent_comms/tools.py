@@ -10,6 +10,7 @@ from .agent_inbox import TakenInputStart
 
 from .tool_request import ListedNames, LiveOwnerTool, OmittedNames, PublishingTool, PublishingToolRequest, ReadTool, SubjectBinding, ThreadReadTool, ThreadToolRequest, ToolRequest, tool_field
 from .order_tools import MessagePublished
+from .native_tools import CommunicationCall
 
 import dataclasses
 import threading
@@ -867,6 +868,8 @@ class SendTool(PublishingTool[ThreadCaller]):
 
 class CommsSendTool(SendTool, ThreadToolRequest):
     """The native send declaration; its fields and publication belong to SendTool."""
+
+    native_call = CommunicationCall
 
 
 @dataclass(frozen=True, kw_only=True)

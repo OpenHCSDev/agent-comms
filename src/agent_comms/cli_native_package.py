@@ -23,7 +23,7 @@ from agent_comms.native_package import (
     write_native_manifest,
 )
 from agent_comms.thread_storage import StoragePath
-from agent_comms.unit_instructions import UnitInstructions
+from agent_comms.deal_prompt import DealPrompt
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,7 +56,7 @@ class QualifiedPackageVerb(PackageVerb):
 
     def _native_package(self) -> VerifiedNativePackage:
         package = VerifiedNativePackage.qualify(self.package)
-        print(UnitInstructions.prepare(), file=sys.stderr)
+        print(DealPrompt.prepare(), file=sys.stderr)
         return package
 
 
@@ -68,7 +68,7 @@ class VerifyVerb(PackageVerb):
 
     def apply(self, ctx: None = None) -> None:
         VerifiedNativePackage.prepare(self.package)
-        print(UnitInstructions.prepare(), file=sys.stderr)
+        print(DealPrompt.prepare(), file=sys.stderr)
 
 
 @dataclass(frozen=True, kw_only=True)

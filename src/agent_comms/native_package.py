@@ -58,9 +58,10 @@ def _resource_root() -> Path:
 
 
 MANIFEST = _resource_root() / "pi-native.sha256"
-OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
-# Derived from OWNER_INSTRUCTIONS and the commander's packaged sources at preparation.
-UNIT_INSTRUCTIONS = _resource_root() / "UNIT_SYSTEM.md"
+OWNER_INSTRUCTIONS = _resource_root() / "AGENTS.md"
+# The system prompt a Core-launched session carries: OWNER_INSTRUCTIONS and the whole deal,
+# derived at preparation by deal_prompt.DealPrompt, with the reads it carries beside it.
+SYSTEM_PROMPT = _resource_root() / "SYSTEM_PROMPT.md"
 
 
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"

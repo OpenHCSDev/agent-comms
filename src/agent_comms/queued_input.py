@@ -21,7 +21,7 @@ from .acp_extension import QueueItem
 from .turn_inbox import InputContent, InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
-from .context_segments.wake import DeliveredMessageSegment
+from .context_segments.wake import MessageDelivery
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
@@ -440,7 +440,7 @@ class DeliveredInput(QueuedInput):
                     if document.lookup(key).exists:
                         continue
                     rendered = TurnContext.render_segments(
-                        (DeliveredMessageSegment.capture(source, assignment, owner),)
+                        (MessageDelivery(source, assignment, owner).segment(),)
                     )
                     row = ReservedInput(
                         key, message.seq, canonical, context.claimed_identity.claimed_generation,
@@ -544,10 +544,9 @@ class DeliveredInput(QueuedInput):
     ) -> None:
         """Hand this owner's pending bus messages to its running turn.
 
-        Pi takes each one after its current tool batch. A turn that cannot take
-        follow-ups leaves them pending for the ordinary wake after it ends, and so
-        does every collective broadcast: a #comms post that names no one is not
-        this turn's input.
+        Pi takes each sealed pending assignment after its current tool batch,
+        regardless of its audience. Only a turn without following capacity leaves
+        the original pending for the ordinary wake after it ends.
         """
         turn = await inputs.effects.turns.active_backend_turn(session_id)
         # Only the started member owns both the inbox and its original input.
@@ -559,11 +558,7 @@ class DeliveredInput(QueuedInput):
 
         def read(store: Coordination):
             with store.session.read():
-                assignments = tuple(
-                    assignment
-                    for assignment in pending_sealed_assignments(store, lookup, after_seq=after_seq)
-                    if assignment.audience.enters_running_turn
-                )
+                assignments = pending_sealed_assignments(store, lookup, after_seq=after_seq)
             with store.session.capture(bus) as boundary, bus.bus.reading() as source:
                 boundary.privacy.require_root(root_id, IdentityConflict("delivered native namespace changed"))
                 originals = source.deliveries_for_references(tuple(

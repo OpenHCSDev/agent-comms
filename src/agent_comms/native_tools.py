@@ -114,6 +114,13 @@ class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name
         return json.dumps(self.arguments)
 
 
+class CommunicationCall(CoordinationCall, declared_name=None):
+    """Ordinary communication stays open during a read deal; execution still checks its owner."""
+
+    def judge_under(self, gate: PiRuleGate) -> None:
+        return
+
+
 class ArgumentTool:
     """One declared execution record supplies validation and native serialization."""
 
@@ -219,6 +226,11 @@ class MutatingPathTool(EditAction, PathTool):
 
     def judge_under(self, gate: PiRuleGate) -> None:
         gate.judge_write(self.declared_name, physical_path(self.path, gate.worktree))
+
+    def completed_under(self, gate: PiRuleGate) -> None:
+        """A completed write of the audit answers rules, and each is asked about once."""
+        if physical_path(self.path, gate.worktree) == gate.audit.resolve():
+            gate.audit_written()
 
     def _parse_resource(self):
         return self.claim_type(Path(self.path))

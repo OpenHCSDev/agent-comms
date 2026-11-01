@@ -12,7 +12,7 @@ from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
 from agent_comms.tool_denial import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.channel_coding_tools import CodingToolSocket
-from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 
 
 @pytest.mark.parametrize("name, arguments, encoded", [
@@ -40,7 +40,9 @@ async def test_refused_arguments_complete_without_an_owner_callback(
     pending = asyncio.create_task(socket.handle_request(raw)) if request_first else None
     if request_first:
         await asyncio.sleep(0)
-    socket.announce((ToolCallContent(id="bad", name="bash", arguments=args),))
+    socket.announce(AssistantMessage(content=ReportedParts((
+        ToolCallContent(id="bad", name="bash", arguments=args),
+    ))))
     socket.tool_started(ToolExecutionStart(tool_call_id=ReportedText("bad"), tool_name=ReportedText("bash"), args=args))
     with pytest.raises(SelectedToolDenied) as denied:
         await (pending if pending is not None else socket.handle_request(raw))

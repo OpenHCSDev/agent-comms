@@ -13,7 +13,7 @@ const load = path => import(pathToFileURL(join(dist, path)));
 const chat = await load('api/openai-completions.js');
 const anthropic = await load('api/anthropic-messages.js');
 const codex = await load('api/openai-codex-responses.js');
-const {NativeRequestObservation, observeStream} = await load('utils/agent-comms-request-observation.js');
+const {NativeRequest, observeStream} = await load('utils/agent-comms-request-observation.js');
 const {WebSocketServer} = createRequire(pathToFileURL(join(pkg, 'entry.cjs')))('ws');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const requests = [];
@@ -74,7 +74,7 @@ const controls = [];
 async function run(label, adapter, selectedModel, config = {}) {
     mode = label; responses = 0;
     const points = [], nativeEvents = [];
-    const observation = new NativeRequestObservation({sessionId:'private-control',onRequestProgress:p=>{
+    const observation = new NativeRequest({sessionId:'private-control',onRequestProgress:p=>{
         points.push(p);
         if (label==='throwing') throw new Error('Observer failure');
         if (label==='cancel' && p.stage==='first_event') config.signalOwner.abort();
@@ -100,6 +100,10 @@ async function run(label, adapter, selectedModel, config = {}) {
     if (label === 'consumer-queue') await sleep(300);
     for await (const event of observation.events(stream)) nativeEvents.push({type:event.type,at:performance.now()});
     const result = await stream.result();
+    const emitted = [];
+    await observation.emit({type:'message_end',message:result}, event=>emitted.push(event));
+    // The observer measures publication without cloning or rewriting the SDK message.
+    assert.strictEqual(emitted[0].message, result);
     const selected = points.filter(p=>['dispatch','headers','first_event','stream_end'].includes(p.stage));
     const record = {label,stopReason:result.stopReason,points:selected,nativeEvents,
         posts:requests.length-start,callbackMs:points.at(-1)?.callbackMs,

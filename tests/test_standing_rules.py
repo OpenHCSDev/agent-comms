@@ -71,7 +71,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     previous = CommanderDecisions(thread.incarnation, (old,), (old,), ())
     history = CommanderHistory.read(comms, frozenset({thread.name}))
     delivery = CommanderUpdate.derive(thread.incarnation, (), (rule,), (previous,),
-                                       now=now, history=history)
+                                       published=(previous,), now=now, history=history)
     update = delivery.packet
     assert update.handled[0].urgent
     current = comms.registry.require("paper")
@@ -81,7 +81,7 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     )
     assert GoalBlocked.violations(comms, "paper") == ()
     cleared = CommanderUpdate.derive(thread.incarnation, (), (), (update,),
-                                     now=now + 60, history=history)
+                                     published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()
 
 

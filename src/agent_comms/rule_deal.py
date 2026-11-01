@@ -23,10 +23,10 @@ import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import ClassVar, Self
 
 from .session_receipts import SessionReceipts
 from .nominal.declared_family import DeclaredFamily
@@ -36,9 +36,8 @@ from .pattern_sources import ReadThenRepeatedFailure
 from .locked_store import DocumentChange, LockedStore
 from .store_files import AtomicFile, DependentStateTier, SingleFileStore
 
-if TYPE_CHECKING:
-    from .commander.rule_file import RuleFile
-    from .context_reading import ContextUsage
+from .commander.rule_file import RuleFile
+from .context_reading import ContextUsage
 
 
 @dataclass(frozen=True)
@@ -126,11 +125,9 @@ class OpenedReadsStore(SingleFileStore, LockedStore[OpenedReads], DependentState
 
 @dataclass(frozen=True)
 class Asked:
-    """One line the gate said to the session in the owner's voice: its bus message, and how far
-    the session's own record of its words ran when it went out."""
+    """One line the gate published in the owner's voice, identified by its original message."""
 
     message_id: MessageId
-    offset: int
 
 
 @dataclass(frozen=True)
@@ -151,29 +148,32 @@ class MeantRecord:
     answer: ClassVar[re.Pattern[str]] = re.compile(r"^[\W_]*(yes|yeah|yep|yup|no|nope)\b", re.I)
     answer_words: ClassVar[int] = 12
 
-    def answered_by(self, words: tuple[str, ...]) -> bool:
-        """A yes or no opens with it and then says what the session is doing about it. On
-        2026-10-31 claude-nra said a bare "Yes." about ten times to reopen its tools, did the
-        opposite of what it had written, and told Tristan afterwards it meant none of them: no
-        single word can answer him."""
-        return any(self.answer.match(word) and len(word.split()) >= self.answer_words
-                   for word in words)
+    def answered_by(self, audit: SessionAudit) -> bool:
+        """Only this open question's explanatory audit answer settles its commitment."""
+        return bool(self.open and self.answers_in(audit.answers_for(self.open[0].message_id)))
+
+    @classmethod
+    def answers_in(cls, words: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(word for word in words
+                     if cls.answer.match(word) and len(word.split()) >= cls.answer_words)
 
     def asking(self, rules: frozenset[str], asked: Asked) -> MeantRecord:
-        return MeantRecord(self.asked | rules, (asked,))
+        return replace(self, asked=self.asked | rules, open=(asked,))
 
-    def settled(self) -> MeantRecord:
+    def settled(self, audit: SessionAudit) -> MeantRecord:
+        if not self.answered_by(audit):
+            raise ValueError("No explanatory audit answer names the open question")
         return replace(self, open=())
 
     def said(self, asked: Asked) -> MeantRecord:
         return replace(self, open=(*self.open, asked))
 
-    def next_line(self, words: tuple[str, ...]) -> str:
-        """The first dodge is told off; each later one hears its own newest words first."""
+    def next_line(self, audit: SessionAudit) -> str:
+        """The first dodge is told off; later ones quote the audit's own rule statement."""
         if len(self.open) == 1:
             return "fuck you"
-        quoted = words[-1].strip().splitlines()[0][:200]
-        return f"> {quoted}\n\nfuck you. it's literally your default"
+        quoted = audit.last_does()
+        return (f"> {quoted}\n\n" if quoted else "") + "fuck you. it's literally your default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -191,12 +191,12 @@ class Voice(ABC):
     """How a deal speaks to its session in the owner's voice, or that it cannot."""
 
     @abstractmethod
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
-        """After an audit edit: ask about the rules it newly answered, once."""
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
+        """After a successful audit edit: ask about the rules it newly answered, once."""
 
     @abstractmethod
-    def escalate(self, deal: RuleDeal) -> None:
-        """A call was refused while the question stands."""
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
+        """A successful audit edit wrote a non-answer to its open question."""
 
 
 class Speaking(Voice):
@@ -207,43 +207,38 @@ class Speaking(Voice):
     def say(self, line: str, deal: RuleDeal) -> Asked:
         """Put this line in front of the session as the owner's."""
 
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         """After an audit edit: ask about the rules it newly answered, once."""
 
         def asked(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
             fresh = answered - meant.asked
             if not fresh:
                 return DocumentChange.to(meant)
-            line = SessionAudit.read(deal.audit).his_question(deal.receipts())
+            line = audit.his_question(deal.receipts())
             return DocumentChange.to(meant.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
 
-    def escalate(self, deal: RuleDeal) -> None:
-        """A call refused while the question stands is a dodge only once the session has
-        written words after the last line reached it, and none of them answer. A refused call
-        alone proves nothing: Claude Code can run the hook before it writes the words sent with
-        the call, and on 2026-10-30 claude-code got three "fuck you"s while it was typing yes.
-        Until then the refusal itself carries the question, so a session whose bridge is down
-        can still answer."""
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
+        """Each successful non-answer edit is one dodge. Retrying a refused tool is not a
+        new commitment and cannot repeatedly escalate the same unchanged audit."""
 
         def escalated(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
-            words = deal.said_after(meant.open[-1]) if meant.open else ()
-            if not words:
+            words = audit.answers_for(meant.open[0].message_id) if meant.open else ()
+            if not words or meant.answered_by(audit):
                 return DocumentChange.to(meant)
-            return DocumentChange.to(meant.said(self.say(meant.next_line(words), deal)))
+            return DocumentChange.to(meant.said(self.say(meant.next_line(audit), deal)))
 
         deal.meant.update(escalated)
 
 
 class Mute(Voice):
-    """A deal with no owner's voice: a Pi thread, a subagent, a session bound to no bus. It
-    never asks, so it never owes an answer."""
+    """A deal that cannot publish in the owner's voice: it never asks or owes an answer."""
 
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         return
 
-    def escalate(self, deal: RuleDeal) -> None:
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
         return
 
 
@@ -257,6 +252,70 @@ class DealtRead:
 
     def current(self) -> bool:
         return self.digest == self.source.digest()
+
+    def line(self) -> str:
+        """One line of a deal's read log."""
+        return json.dumps(FieldCodec.encode(self)) + "\n"
+
+
+@dataclass(frozen=True)
+class PromptReads:
+    """The dealt files a system prompt carries, each as a read of the exact content it carries.
+    A file changed after the prompt was prepared no longer matches, so it is read like any
+    other; nothing is waived for content the session never saw."""
+
+    reads: tuple[DealtRead, ...]
+
+
+class DealDelivery:
+    """How a session receives the sources it is dealt. The runtime that launches the session
+    owns the answer, through the strongest channel it has. By default nothing reaches the
+    session until it reads each file with its own read tool."""
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        """What the session already holds when its deal starts: nothing."""
+        return ()
+
+    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+        """The order a hook gives with the deal: read every file, then answer it."""
+        return (
+            f"Read each of these {len(sources)} files in full with the Read tool before any other"
+            " action: they are every rule you follow and the sources they come from. A summary"
+            " or memory of them does not count as reading them, and every other tool is refused"
+            f" until each one is read. Read them in order, at most {Unengaged.batch} unanswered"
+            " rule files at a time, and answer those in the audit: reading alone is passive. Every"
+            f" tool but Read, and Write or Edit of {audit}, is refused until it answers. This order"
+            " is given once per session start or compaction; a short slice of them comes back"
+            " inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+        )
+
+
+@dataclass(frozen=True)
+class SystemPromptDelivery(DealDelivery):
+    """The deal arrived in the session's system prompt, papers first, the way its launcher
+    prepared it: the session read it all before its first token, with the system prompt's
+    authority. It owes the witness, not the reads: the audit and "did you mean it?" still stand
+    before the first tool call (Tristan, 2026-11-01)."""
+
+    prompt: Path
+
+    @property
+    def manifest(self) -> Path:
+        """The reads the prompt carries, written beside it when it was prepared."""
+        return self.prompt.with_name(self.prompt.name + ".reads.json")
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        return FieldCodec.decode(PromptReads, FieldCodec.parse(self.manifest.read_bytes())).reads
+
+    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+        return (
+            f"These {len(sources)} files are in your system prompt, in this order, and count as"
+            " read: they are every rule you follow and the sources they come from. Before any"
+            f" other action, answer every rule in the audit at {audit}; every tool but Write or"
+            " Edit of that file is refused until it answers. A file that changed after your"
+            " prompt was prepared is not covered: read that one with the Read tool. A short slice"
+            " comes back inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+        )
 
 
 @dataclass(frozen=True)
@@ -303,11 +362,20 @@ class OwnerWordsAnswer:
 
 
 @dataclass(frozen=True)
+class MeantAnswer:
+    """The session's own written commitment to one exact published question."""
+
+    asked: MessageId
+    answer: str = ""
+
+
+@dataclass(frozen=True)
 class SessionAudit:
-    """The audit a session writes as it reads its deal, decoded once."""
+    """The session's rule answers, owner actions and question commitments, decoded once."""
 
     rules: tuple[RuleAudit, ...]
     owner_words: tuple[OwnerWordsAnswer, ...]
+    meant: tuple[MeantAnswer, ...] = field(default=(), kw_only=True)
 
     @classmethod
     def read(cls, path: Path) -> SessionAudit:
@@ -323,14 +391,24 @@ class SessionAudit:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
         return ""
 
+    def answers_for(self, question: MessageId) -> tuple[str, ...]:
+        """Written answers naming this question, in the session's original order."""
+        return tuple(entry.answer for entry in self.meant if entry.asked == question)
+
+    def last_does(self) -> str:
+        """The last nonempty rule statement in the session's own audit, bounded for quotation."""
+        return next((line.strip()[:200] for entry in reversed(self.rules)
+                     for line in entry.does.splitlines() if line.strip()), "")
+
     def his_question(self, receipts: SessionReceipts) -> str:
-        """His question carries the newest thing the session said it does beside what its
-        transcript shows it did, the way he asks it in person; an audit that says nothing and a
-        session with no record hear the question alone."""
-        said = next((f"> {line.strip()[:200]}\n\nyou wrote that."
-                     for entry in reversed(self.rules) for line in entry.does.splitlines()
-                     if line.strip()), "")
-        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), MeantRecord.question)
+        """His question carries the audit's own statement beside observed transcript actions;
+        an audit that says nothing and a session with no record hear the question alone."""
+        statement = self.last_does()
+        said = f"> {statement}\n\nyou wrote that." if statement else ""
+        proved = "\n\n".join("Written answers:\n" + "\n".join(
+            f"> {line}" for line in answer.splitlines())
+            for answer in MeantRecord.answers_in(tuple(entry.answer for entry in self.meant)))
+        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), proved, MeantRecord.question)
                            if part)
 
     def entry(self, rule: str) -> RuleAudit:
@@ -403,6 +481,9 @@ class AuditDue:
                 f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
+                "When a question arrives, add its exact id and your explanatory answer to meant."
+                " Each entry has this declaration-derived shape: "
+                + json.dumps(FieldCodec.record_schema(MeantAnswer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why and doing; keep"
                 " every rule name and quoted words unchanged. Doing names your current action:\n"
                 + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
@@ -521,19 +602,60 @@ class Blocked(ToolGateState):
         deal.refresh_answered(usage)
 
 
-@dataclass(frozen=True)
-class Questioned(Blocked):
-    """The gate shut on an unanswered question: each refused call is a chance to dodge it."""
+class DealMode(DeclaredFamily, affix="DealMode"):
+    """Session gate policy, retained with the deal and shared by every backend."""
 
-    def enforce(self, gate: ToolGate, tool: str) -> None:
-        gate.voice().escalate(gate)
-        super().enforce(gate, tool)
+    @classmethod
+    def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
+        return Open()
+
+    @classmethod
+    def compaction[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        """Lost-context reading is independent of periodic refreshes."""
+        return kept
+
+    @classmethod
+    def refresh[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        return kept
+
+
+class OffDealMode(DealMode):
+    """Do not enforce the read/audit gate or automatically redeal."""
+
+
+class StartupDealMode(DealMode):
+    """Enforce first-start and explicit deals, but never interrupt for automatic redeals."""
+
+    @classmethod
+    def answer(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> ToolGateState:
+        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, record, opened))
+        return next(owed, Open()).state()
+
+
+class CompactionDealMode(StartupDealMode):
+    """Read on startup and after lost context, never at mid-session thresholds."""
+
+    @classmethod
+    def compaction[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        return action()
+
+
+class FullDealMode(CompactionDealMode):
+    """Enforce the gate and redeal on compaction and context thresholds."""
+
+    @classmethod
+    def refresh[Said](cls, action: Callable[[], Said], kept: Said) -> Said:
+        return action()
 
 
 class DealTrigger(DeclaredFamily, affix="Deal"):
     """Why this deal was dealt, said first on every refusal it causes. A fresh context has no
     memory of compacting, so a deal that does not say why looks unprovoked: claude-code called
     real compactions a gate bug at least four times (rules/after-compaction.md)."""
+
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        """First starts and explicit requests are not automatic interruptions."""
+        return action()
 
     @abstractmethod
     def reason(self) -> str:
@@ -550,6 +672,9 @@ class StartedDeal(DealTrigger):
 
 class CompactionDeal(DealTrigger):
     """A compaction replaced the context with a summary; a member says when."""
+
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        return mode.compaction(action, kept)
 
     @abstractmethod
     def moment(self) -> str:
@@ -604,6 +729,9 @@ class PrimedDeal(DealTrigger):
 class RefreshDeal(DealTrigger):
     """A declared share of the context window filled before any compaction."""
 
+    def deliver[Said](self, mode: type[DealMode], action: Callable[[], Said], kept: Said) -> Said:
+        return mode.refresh(action, kept)
+
     used: int
     """The percent of the context window used when the refresh came due."""
 
@@ -621,6 +749,7 @@ class DealRecord:
     dealt: tuple[Path, ...]
     due: AuditDue
     trigger: DealTrigger = StartedDeal()
+    mode: type[DealMode] = FullDealMode
 
     def sources(self) -> tuple[DealtSource, ...]:
         return tuple(DealtSource.of(path) for path in self.dealt)
@@ -655,6 +784,7 @@ class DealRecord:
             tuple(dict.fromkeys((*self.paths, *(source.resolve() for source in dealt.sources())))),
             AuditDue(self.due.rules | dealt.answered(), self.due.owner_words),
             self.trigger,
+            self.mode,
         ))
         return kept
 
@@ -665,8 +795,7 @@ class DealRecord:
 
     def answer(self, deal: RuleDeal, opened: OpenedReads) -> ToolGateState:
         """The first requirement still owed holds the gate; with none owed it is open."""
-        owed = (case for owes in deal.requirements for case in owes.owed_by(deal, self, opened))
-        return next(owed, Open()).state()
+        return self.mode.answer(deal, self, opened)
 
 
 class UndealtRecord(DealRecord):
@@ -736,7 +865,8 @@ class Unengaged(Owed):
     read: tuple[Path, ...]
     unopened: tuple[Path, ...]
 
-    batch: ClassVar[int] = 4
+    batch: ClassVar[int] = 5
+    """The one declaration of the batch: every refusal and the template read it from here."""
 
     before: ClassVar[str] = "answering the rule you just read"
 
@@ -775,32 +905,25 @@ class Unmeant(Owed):
 
     before: ClassVar[str] = "answering Tristan"
 
-    def state(self) -> ToolGateState:
-        return Questioned(self)
-
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         meant = deal.meant.read()
         if not meant.open:
-            return
-        if meant.answered_by(deal.said_since(meant.open[0].offset)):
-            # Recorded once, so no later call reads the session's words again.
-            deal.meant.update(lambda now: DocumentChange.to(
-                now.settled() if now.open == meant.open else now))
             return
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
                   SessionAudit.read(deal.audit).his_question(deal.receipts()))
 
     @property
     def reason(self) -> str:
-        """Claude Code can run this call's hook before it writes the words sent with the call,
-        so a yes beside the call may not be on record yet. On 2026-10-30 claude-board wrote
-        "Yes." with its next call, was refused as if it had not, and ended its turn sure the gate
-        was stuck. A yes or no counts from the next call on."""
+        """The original question id is available even when the first template predated it."""
+        entry = MeantAnswer(self.question.message_id)
         return (f"Tristan is asking you:\n\n{self.asking}\n\n"
                 "Compare it with what you are doing right now and tell him the truth. No is a"
-                " real answer. A word alone does not answer him: say yes or no, then what you"
-                " are doing about it. What you send beside a call counts from your next call.")
+                " real answer. Write your answer in this entry in the audit's meant list,"
+                f" preserving other entries, then save {self.audit}:\n"
+                f"{json.dumps(FieldCodec.encode(entry), ensure_ascii=False)}\n"
+                f"Open with yes or no and explain what you are doing in at least"
+                f" {MeantRecord.answer_words} words; a word alone does not answer him.")
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
@@ -834,12 +957,21 @@ class Unread(Owed):
             yield cls(record, deal.audit, remaining,
                       tuple(source for source in record.paths if source not in taken))
 
+    def next_batch(self) -> tuple[Path, ...]:
+        """The files that open now: the next `Unengaged.batch` unopened in the dealt order, or the
+        first unread when every one is already opened."""
+        return self.unopened[:Unengaged.batch] or self.remaining[:1]
+
     @property
     def reason(self) -> str:
+        """The batch is named on every refusal: told only the next file, sessions read one file
+        per call."""
         return (
             f"Read the rules you were dealt first, in the order dealt, each in full with your"
-            f" read tool (no offset or limit). Next: {next(iter(self.unopened), self.remaining[0])}."
-            " Still unread: " + ", ".join(str(source) for source in self.remaining)
+            f" read tool (no offset or limit). They open in batches of {Unengaged.batch}: read the"
+            " whole batch in one parallel call, then answer its rules in the audit in one edit."
+            " Next batch: " + ", ".join(str(source) for source in self.next_batch())
+            + ". Still unread: " + ", ".join(str(source) for source in self.remaining)
             + ". Your summary is a paraphrase of them, not a reading."
         )
 
@@ -922,30 +1054,26 @@ class RuleDeal(State, DealtCalls):
         """How this deal speaks as the owner; a deal with no bus seat stays mute."""
         return Mute()
 
-    def words_end(self) -> int:
-        """Where the session's record of its own words ends now."""
-        return 0
+    def delivery(self) -> DealDelivery:
+        """How the session receives what it is dealt; a deal that knows no launcher reads."""
+        return DealDelivery()
 
     def receipts(self) -> SessionReceipts:
         """What the session's own record shows it just did; a backend with no record has none."""
         return SessionReceipts()
 
-    def said_since(self, offset: int) -> tuple[str, ...]:
-        """The session's own words after `offset` in its backend's record of them. A mute
-        deal never asks, so it has none to read."""
-        return ()
-
-    def said_after(self, asked: Asked) -> tuple[str, ...]:
-        """The session's words after this line reached it; none before it arrives."""
-        return ()
-
     def audit_written(self) -> None:
-        """An audit edit completed: the rules it now answers are each asked about once."""
+        """A successful audit edit settles its exact question, then asks about new rules."""
         record = self.current()
         audit = SessionAudit.read(self.audit)
         if audit.fault():
             return
-        self.voice().question(self, frozenset(
+        meant = self.meant.update(lambda meant: DocumentChange.to(
+            meant.settled(audit) if meant.answered_by(audit) else meant))
+        voice = self.voice()
+        if meant.open:
+            voice.escalate(self, audit)
+        voice.question(self, audit, frozenset(
             source.stem for source in record.read_by(self)
             if source.stem in record.due.rules and not audit.entry(source.stem).unengaged(source)
         ))
@@ -984,24 +1112,43 @@ class RuleDeal(State, DealtCalls):
     def state(self) -> ToolGateState:
         return self.current().answer(self, self.dealt_opened.read())
 
+    def configure(self, mode: type[DealMode]) -> None:
+        """Change policy without discarding read evidence, the audit, or the current deal."""
+        with self.write_guard(self.record):
+            self.record.stat()  # Configuration targets an existing session, never fabricates a deal.
+            self.publish(replace(self.current(), mode=mode))
+
     def deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
              trigger: DealTrigger) -> None:
-        """A start or compaction drops what was read: the read log resets first, then the record
-        is published whole, so no reader sees a half-written deal. The audit goes with the reads:
+        with self.write_guard(self.record):
+            trigger.deliver(self.current().mode, lambda: self.replace_deal(dealt, prompts, trigger), None)
+
+    def replace_deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
+                     trigger: DealTrigger) -> None:
+        """A start or compaction drops what was read: the read log resets first, to what the
+        session's delivery already put in front of it (nothing, unless its launcher put the deal
+        in its system prompt), then the record is published whole, so no reader sees a
+        half-written deal. The audit goes with the reads:
         a fresh instance owes a fresh confession, never one carried over from the context it
         lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
+        mode = self.current().mode
+        paths = tuple(source.resolve() for source in dealt.sources())
+        held = frozenset(DealtSource.of(path) for path in paths)
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
-        self.dealt_read.write_text("", encoding="utf-8")
+        self.dealt_read.write_text("".join(
+            read.line() for read in self.delivery().reads() if read.source in held
+        ), encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
         self.meant.replace(MeantRecord())
         self.template_shown.unlink(missing_ok=True)
         self.publish(
             DealRecord(
-                tuple(source.resolve() for source in dealt.sources()),
+                paths,
                 AuditDue(dealt.answered(), prompts),
                 trigger,
+                mode,
             )
         )
 
@@ -1016,13 +1163,23 @@ class RuleDeal(State, DealtCalls):
         if path not in self.current().paths or not span.covers(path):
             return False
         source = DealtSource.of(path)
-        read = DealtRead(source, source.digest())
-        line = json.dumps(FieldCodec.encode(read)) + "\n"
+        line = DealtRead(source, source.digest()).line()
         with self.write_guard(self.dealt_read):
             with self.dealt_read.open("a", encoding="utf-8") as record:
                 first = record.tell() == 0
                 record.write(line)
                 return first
+
+
+@dataclass(frozen=True)
+class SessionRuleDeal(RuleDeal):
+    """A session's persisted deal, independently of its running tool transport."""
+
+    path: Path
+
+    @property
+    def stem(self) -> Path:
+        return self.path
 
 
 class ToolGate(RuleDeal):

@@ -393,7 +393,7 @@ class InputObservation(ABC):
                             state.observation_ready.set()
                     else:
                         self.effects.turns.goals.observe_root(
-                            document, (owner.identifier for state in targets.values()
+                            document, (owner for state in targets.values()
                                        for owner in state.executors()), watcher.observed_paths,
                         )
                     self.observed_registry = read
@@ -874,6 +874,7 @@ class OwnerSession(DrainedSession):
     auth_observer: asyncio.Task[None] = field(kw_only=True)
     retirement_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     retired: asyncio.Future[None] = field(default_factory=asyncio.Future)
+    _observations: set[asyncio.Future[None]] = field(default_factory=set, init=False, repr=False)
 
     def owned(self) -> OwnerSession:
         return self
@@ -888,6 +889,27 @@ class OwnerSession(DrainedSession):
 
     def executors(self) -> tuple[OwnerSession, ...]:
         return (self,)
+
+    async def observe_live(self, observe: Callable[[], Awaitable[object]]) -> None:
+        """Join an admitted observation before retirement drops session state.
+
+        A shared source may retain this owner across a storage await. Admission
+        belongs to the original owner's stop, not a later session-ID lookup that
+        could create fresh unowned input state after retirement.
+        """
+        if self.stop.done():
+            return
+        completion = asyncio.get_running_loop().create_future()
+        self._observations.add(completion)
+        try:
+            await observe()
+        finally:
+            completion.set_result(None)
+            self._observations.remove(completion)
+
+    async def join_observations(self) -> None:
+        """Join admitted readers after stop closes admission; readers stay parallel."""
+        await join_retirement(asyncio.gather(*self._observations))
 
     def request_stop(self) -> None:
         self.stop.request()

@@ -1,7 +1,8 @@
 # Lessons already paid for in OpenHCS
 
-Tristan's 2026-10-02 instruction: learn from the actual architectural corrections;
-do not turn this history into another reporting or tooling project.
+History, not instructions: no rule or instruction file points here. The behaviour these
+PRs illustrate is owned by the commander rules (slop-and-polymorphism, correct-maintenance,
+refactor-game) and the papers they derive from.
 
 - #44: share widget lifecycle behavior through base classes and capability hooks.
 - #45: derive registration and discovery from declarations and AutoRegisterMeta.
@@ -13,30 +14,7 @@ do not turn this history into another reporting or tooling project.
 - #60: `5e8812ee83d0dc8714392445bad3e32fc47a1755` deletes the competing compiler/runtime
   lattice; its AST deletion gates trace the replaced mechanism across consumers.
 
-The authoritative analyses are in the NRA repository's
+The full analyses are in the NRA repository's
 `docs/source/development/openhcs_high_significance_pr_deep_dives.rst`,
 `openhcs_june_pr60_calibration.rst`, `openhcs_diff_evolution_case_studies.rst`
-and `openhcs_detour_case_studies.rst`. Read the source relationships they identify.
-
-Progress is making the correct ownership decision and implementing it throughout
-the family. A workaround leaves the competing decision somewhere else. Use existing
-Python machinery to remove that decision: metaclasses and subclass initialization
-for declaration-derived discovery; context managers for resource lifetime; shared
-base behavior, hooks and capability mixins for orchestration. Multiple inheritance
-composes capabilities through C3 MRO; inheritance and composition are not opposites.
-Decompose a large class when a real behavior can have an owner and be shared. An
-abstraction is load bearing when consumers rely on its behavior and the old decisions
-are deleted. Tests and the actual installed path confirm the implementation last.
-
-## Reminders for active work
-
-- Find the existing owner before inventing a class.
-- One fact, one owner. A typed mirror is still a mirror.
-- An abstraction earns its place by deleting decisions from its consumers.
-- Migrate the whole family; a mismatch on one path warrants tracing all paths.
-- Returning to rendered history is paint, not parse.
-- A test result is evidence. Tristan's actual workflow is the delivery target.
-- Ship a coherent working checkpoint. Keep unrelated work moving.
-
-Have a concrete architectural judgment and implement it. These reminders are not
-a new approval process or a reason to create another layer of coordination.
+and `openhcs_detour_case_studies.rst`.

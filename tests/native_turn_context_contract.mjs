@@ -129,10 +129,8 @@ try {
     };
     let captureComparison;
     if (comparisonPackage) {
-        const repeated={...provider,messages:[...provider.messages,...provider.messages,
-            {role:'user',content:'Authored transformed SDK value',timestamp:999},
-            {role:'user',content:'Second authored transformed SDK value',timestamp:1000}]};
-        captureComparison={repeated_and_transformed:await compare(session,repeated)};
+        const repeated={...provider,messages:[...provider.messages,...provider.messages]};
+        captureComparison={repeated_originals:await compare(session,repeated)};
     }
     const original=manager.getEntry(kept).message;
     const text=original.content[0].text, images=original.content.slice(1);
@@ -157,6 +155,12 @@ try {
     const changedImage={...original,content:[original.content[0],{...images[0],
         data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg=='}]};
     assert.equal(claim.observe(changedImage,preview,journal)[0].kind,'transformed_input');
+    const transformedContext=await TurnContext.capture(session,{...provider,messages:[
+        {...original,content:'Authored transformed SDK value'},
+    ]},undefined,[manager.getEntry(kept)]);
+    assert(transformedContext.manifest().segments.some(segment=>segment.kind==='transformed_input'));
+    assert(!transformedContext.manifest().segments.some(segment=>segment.kind==='transcript'),
+        'a one-entry journal cut is not proof that the transformed value is that original entry');
     assert.equal(JSON.stringify(captured.render()),JSON.stringify(provider));
     assert.deepEqual(readFileSync(manager.getSessionFile()),before);
     assert(full.segments.some(s=>s.kind==='compaction_summary'));
@@ -205,7 +209,11 @@ try {
             assert.equal(transformed,1);
             mixedCapture=await TurnContext.capture(session,mixedProvider);
             const mixed=mixedCapture.manifest().segments.find(segment=>
-                segment.kind==='transcript' && segment.contributors.length>1);
+                segment.kind==='transcript' && segment.contributors.some(part=>
+                    part.sha256===recorded.contributors[0].sha256));
+            const transformedSegment=mixedCapture.manifest().segments.find(segment=>
+                segment.kind==='transformed_input');
+            assert(transformedSegment,'a changed SDK value must not inherit original-entry membership');
             const originalDigests=new Set(recorded.contributors.map(part=>part.sha256));
             const parts=mixed.contributors.filter(part=>originalDigests.has(part.sha256));
             assert.equal(parts.length,1);
@@ -213,8 +221,21 @@ try {
             const resolved=await TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,parts);
             assert.equal(projections,1);
             assert.deepEqual(resolved.full().segments.map(segment=>segment.sha256),parts.map(part=>part.sha256));
-            await assert.rejects(TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,[]),/projected bytes differ/);
-            await assert.rejects(TurnContext.recordedSegment(session,full.identity,recordedEntries,mixed,
+            // The transformed value split this original group. Its own journal
+            // coordinates, not the earlier two-entry group, determine the read.
+            const mixedEntries=mixed.provenance.filter(source=>source.kind==='journal')
+                .flatMap(source=>source.entries);
+            assert.deepEqual(mixedEntries,childEntries);
+            await assert.rejects(TurnContext.recordedSegment(
+                session,full.identity,recordedEntries,mixed,[]),/projected bytes differ/);
+            projections=0;
+            const completeOriginal=await TurnContext.recordedSegment(
+                session,full.identity,mixedEntries,mixed,[]);
+            assert.equal(projections,1);
+            assert.equal(completeOriginal.full().segments[0].sha256,mixed.sha256);
+            await assert.rejects(TurnContext.recordedSegment(
+                session,full.identity,recordedEntries,transformedSegment,[]),/projected bytes differ/);
+            await assert.rejects(TurnContext.recordedSegment(session,full.identity,recordedEntries,transformedSegment,
                 [{...parts[0],sha256:'f'.repeat(64)}]),/projected bytes differ/);
             await assert.rejects(TurnContext.recordedSegment(session,{...full.identity,sessionId:'another'},
                 recordedEntries,recorded,[]),/another native session/);

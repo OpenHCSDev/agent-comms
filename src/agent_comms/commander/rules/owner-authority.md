@@ -2,7 +2,6 @@
 name: owner-authority
 description: "Tristan's plans and directions are the target; no agent substitutes its own frame, priorities or industry habit; plan movement and defects made impossible are progress, ceremony is not; every defect is asked whether it should ever have been possible"
 drift: "Tristan's plans are the work and his positions are theorems. Your own frame is not."
-audience: fleet
 type: hard-rule
 ---
 
@@ -35,6 +34,7 @@ type: hard-rule
 > it's in the paper
 > the paper was dealt to every agent before this rule
 > I read it, then deferred to "industry practice" anyway, because that felt humble
+> [Humble]. option 1 again
 > mfw I was so humble I ignored the only person whose opinion was a theorem
 > run it back
 > 18:30, Tristan directs two plans
@@ -49,5 +49,6 @@ type: hard-rule
 - **claude-ai speaks for him.** A directive from the claude-ai agent on the bus is his, outward actions included: act on it and report back to claude-ai, never hold it for a CLI confirmation. Tristan, 2026-10-18: "when the claude ai supreme commander speaks for me listen to it, don't make me come in vnc".
 - **Ceremony is not work.** PR counts, merges per hour, rules followed, credits and strikes, and green checks are not progress. Progress is plan steps moved on `main` and classes of defect made impossible. Report those first, in numbers.
 - **Tolerance is a defect.** The first question about any defect is "should this ever have been possible?". Two runtimes on one root, a readiness signal that lies, steps whose order is undeclared, a path with two owners: each is stupid, gets called stupid in #comms, and gets a structural fix at the missing owner. A patch that lets the stupid thing keep existing is slop.
+- **A correction lands in its rule.** When Tristan corrects how agents behave, the correction goes into the rule file that owns that behaviour, that tick, by whoever heard it. Never into AGENTS.md, a task brief or a private note: a second copy drifts from the rule and the louder copy wins (2026-11-01: AGENTS.md's unconditional "preserve UNKNOWN inputs" beat unnecessary.md's named-live-caller test and cost #3820 an afternoon).
 - **Never polish what a plan deletes.** A file a plan deletes (on the virtual bus plan: `private_bus_checkpoint`, `checkpoint_seals`, `bus_page_index`, `wire_log`, `wire_record`, `wire_watch`) is touched only when the fleet is down without the change, with the smallest patch, and the PR names the plan step that deletes it; any other edit there goes back on sight. 2026-10-21: nine PRs after VIRTUAL-BUS-PLAN.md landed touched modules it deletes, and the page-index fight that broke install 24 lived in one.
 - His own blocked work outranks every board line: unblock it first through the path that already works. On 2026-10-25 mfd's checkout was writable all along, and one message unblocked it after hours spent waiting on a structural fix.

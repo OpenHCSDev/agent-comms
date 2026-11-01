@@ -50,7 +50,7 @@ class PlanReading:
         return self.reads[evidence]
 
     def following(self, todos: tuple[Todo, ...], main: MainTree) -> PlanReading:
-        main = replace(main, parsed=self.main.parsed)
+        main = self.main.following(main)
         return type(self)(todos, main, {
             evidence: answer for evidence, answer in self.reads.items()
             if answer.retained(evidence, self.main, main)
@@ -116,7 +116,7 @@ class RetainedPlanReadings(PlanReadings):
         return current
 
     def retain(self, reading: PlanReading) -> None:
-        # Keep the pinned commit, parsed modules and stable answers, not the pass's graph.
+        # Keep the pinned commit, compact blob facts and stable answers, not syntax or the graph.
         retained = reading.following(reading.todos, replace(
             reading.main, history=Checkout(reading.main.repo.checkout).read()))
         with self.lock:

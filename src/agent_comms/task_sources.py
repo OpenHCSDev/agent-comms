@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Annotated
 from .channel_targets import CommandTarget
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import FieldCodec, TurnId, WireOmitDefault
+from .nominal.field_codec import FieldCodec, ThreadLookup, TurnId, WireOmitDefault
 from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .owner_requests import OwnerRequestId, RequestDirective
@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from .bus import BusReader
     from .cli_bridges.shared import CliBridge
+    from .context_segments.wake import MessageDelivery
     from .harness_delivery_states import Outcome
     from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
+    from .turn_context import ContextSegment
     from .typed_table import TypedTable
 
 
@@ -232,8 +234,8 @@ class TaskAttachment(
         """Search rows this attachment adds beside its original message: none."""
         return iter(())
 
-    def commander_update(self, commander: ThreadIncarnation) -> tuple[CommanderUpdate, ...]:
-        """The commander observations this attachment carries for that commander: none."""
+    def commander_update(self, commander: ThreadLookup) -> tuple[CommanderUpdate, ...]:
+        """The observations this attachment carries for that commander birth: none."""
         return ()
 
     def category(self, spoken: type[MessageCategory]) -> type[MessageCategory]:
@@ -243,6 +245,10 @@ class TaskAttachment(
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
         return await bridge.deliver(message)
+
+    def message_segment(self, delivery: MessageDelivery) -> ContextSegment:
+        """The same message contract for selected and following input."""
+        return delivery.delivered()
 
     def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
         return ()

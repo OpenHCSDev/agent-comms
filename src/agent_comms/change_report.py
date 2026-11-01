@@ -381,11 +381,6 @@ class FileLine(WireValue, SourceReference):
                 "owner/name:src/agent_comms/FILE.py:LINE for another registered repository"}
 
     @classmethod
-    def cites(cls, text: str) -> bool:
-        """Whether a message body names any file:line, whichever repository it is in."""
-        return bool(cls._line_token.search(text))
-
-    @classmethod
     def scan(cls, text: str, project: CommanderProject) -> tuple[FileLine, ...]:
         """Every file:line reference a message body already declares. A prefix is the
         citation's repository only when it names a registered one; any other prefix

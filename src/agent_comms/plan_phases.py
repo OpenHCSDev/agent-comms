@@ -207,7 +207,7 @@ class RecordPlanePhase(CommanderNativePhase):
 class ReviewQueuePhase(CommanderNativePhase):
     """A verdict per PR head gates merging through main's required review status.
 
-    The owner's admin bypass stays; its hook demands a recorded verdict on that head.
+    QueueBypass declares each bypass's pin and recorded-verdict obligations.
     No GitHub merge queue is required.
     """
 

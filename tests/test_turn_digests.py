@@ -26,7 +26,7 @@ from agent_comms.runtime_updates import FinishedItem
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.transcript_events import AssistantTranscript, TurnDigest
-from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, WireProvenance
+from agent_comms.turn_context import JournalProvenance, SegmentManifest, TranscriptSegment, UserInputSegment, WireProvenance
 from agent_comms.turn_digests import LastTurns, TurnBound, TurnsOlderThan, TurnsBefore, TurnsSince
 from agent_comms.bus import Bus
 from agent_comms.turn_item import NativeItemId, NativeTurnId
@@ -148,7 +148,8 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     assert source.read_bytes() == saved
 
 
-def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path):
+@pytest.mark.parametrize('original_in_body', (False, True))
+def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path, original_in_body):
     comms = prepared(tmp_path)
     source = tmp_path / 'native.jsonl'
     frame = '── comms: 1 selected ──\nselected: [...]\n── reply relevance ──\nAnswer direct requests.'
@@ -166,10 +167,16 @@ def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_
     asked = comms.messaging.send('lead', 'native', 'How many opens are left?').message
     sent_outcome = comms.messaging.send('native', 'lead', 'An earlier answer.').message
     digest = hashlib.sha256(frame.encode()).hexdigest()
-    wake = SegmentManifest(SelectedWakeSegment, (
-        WireProvenance(asked.reference), WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    # Historical frames own their original references; new frames leave those
+    # references with the per-message body. Both reconstruct the same history.
+    frame_sources = (() if original_in_body else (WireProvenance(asked.reference),))
+    wake = SegmentManifest(SelectedWakeSegment,
+                           (*frame_sources, WireProvenance(sent_outcome.reference)), digest, 1, 1)
+    originals = (UserInputSegment(
+        provenance=(WireProvenance(asked.reference),), content=asked.body,
+    ).manifest(0),) if original_in_body else ()
     entry = SegmentManifest(TranscriptSegment, (JournalProvenance(str(source), ('u1',)),),
-                            digest, len(frame), 1, contributors=(wake,))
+                            digest, len(frame), 1, contributors=(wake, *originals))
     with comms.contexts.writing() as db:
         ContextEntry(
             PiSessionId("source"), str(source), NativeItemId("u1"), entry
@@ -201,8 +208,11 @@ def recorded_claude_transcript(tmp_path):
             dict(type='assistant', uuid=transcript_record(f'final-record-{index}'), timestamp=times[3],
                  message=dict(content=[dict(type='text', text='done')])),
         ))
+        final = rows[-1]
+        rows.append(dict(type='system', subtype='turn_duration',
+                         uuid=transcript_record(f'end-record-{index}'), timestamp=times[3]))
     path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    return path, rows[-1]
+    return path, final
 
 
 @pytest.mark.parametrize('empty_index', (152, 52))
@@ -232,9 +242,10 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
                         FileSource(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
                         turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
-                        if any(event == AssistantTranscript('done', position=event.position,
-                                                                 timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
-                               for turn in turns.turns for event in turn.events):
+                        if any(event == AssistantTranscript(
+                                'done', position=event.position,
+                                timestamp=datetime.fromisoformat(final['timestamp']).timestamp(),
+                        ).with_publications(()) for turn in turns.turns for event in turn.events):
                             break
         finally:
             task.cancel()
@@ -266,7 +277,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     assert sizes == [100, 100, 52]
     print(f'Claude transcript via bridge and CommsTurnsTool: pages={sizes}, unique={len(set(seen))}, empty-edge={edge + 1}')
     turn = pages[-1]['turns'][0]
-    assert turn['turn_id'] == 'prompt-51'
+    assert turn['turn_id'] == transcript_record('prompt-record-51')
     assert [event['kind'] for event in turn['events']] == ['user', 'tool_start', 'tool_end', 'assistant']
     assert turn['events'][1]['raw_input'] == dict(path='x.py')
     assert turn['events'][2]['text'] == 'contents'

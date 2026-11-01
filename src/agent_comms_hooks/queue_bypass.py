@@ -144,7 +144,7 @@ class QueueBypass(ABC):
 
 
 class AdminMerge(QueueBypass):
-    """GitHub's head precondition and Core's verdict name the same commit."""
+    """A pinned admin invocation supplies its review without a saved Core verdict."""
 
     reason = "`gh pr merge --admin` bypasses required checks."
     prefix = ("pr", "merge")

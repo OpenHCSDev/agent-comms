@@ -2,7 +2,6 @@
 name: after-compaction
 description: "a compacted model meets Tristan as a stranger: it re-demands evidence he already gave, reads his orders as suggestions, hedges his checked theorems, explains his system back to him, files his frustration as noise and calls his gate a bug; the summary forgot the trust, he never lost it, so a fresh context starts from his side and a re-deal is read, never diagnosed"
 drift: "Just compacted? He didn't get less right while you were gone. Your summary forgot the trust; read, then believe him."
-audience: fleet
 type: hard-rule
 ---
 

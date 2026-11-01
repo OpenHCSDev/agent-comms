@@ -306,6 +306,7 @@ class SessionLifecycle:
             state.request_stop()
             self.runtime.retire_session(state.identifier)
             await self.effects.inputs.close_sessions((state,))
+            await state.join_observations()
             await self.effects.turns.close_sessions((state,))
             await Coordination.run_worker(partial(
                 self.comms.owners.complete_session, state.owner, expected,
@@ -383,7 +384,7 @@ class SessionLifecycle:
                 or not thread.process_identity.runs_here()
                 or not entry.status.running
             ):
-                await self.effects.turns.close_idle_backend(session_id, thread)
+                await self.effects.turns.close_idle_backend(session_id)
             current = PublishedSession.of(thread)
             if self.published[session_id] != current:
                 await self.publish_metadata(session_id, title=thread.title)

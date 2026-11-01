@@ -11,6 +11,7 @@ these declarations.
 from __future__ import annotations
 
 import json
+import os
 import sys
 import traceback
 from abc import ABC, abstractmethod
@@ -60,6 +61,22 @@ class SubagentId(str):
     @property
     def fork(self) -> str:
         return f"claude-{self}"
+
+
+class LaunchedPrompt:
+    """The system prompt a Core launcher gave this Claude process (claude_launch). Claude Code
+    passes its own environment to every hook, so each hook record carries the prompt the deal
+    was delivered in; a record that does not declare the field ignores it."""
+
+    variable: ClassVar[str] = "AGENT_COMMS_SYSTEM_PROMPT"
+    key: ClassVar[str] = "system_prompt"
+
+    @classmethod
+    def carried(cls, record: Mapping[str, object]) -> dict[str, object]:
+        """The hook record, with the launcher's prompt when this process was launched with one.
+        The environment is foreign input, decoded here once."""
+        prompt = os.environ.get(cls.variable, "")
+        return {**record, cls.key: prompt} if prompt else dict(record)
 
 
 class HookOutput:

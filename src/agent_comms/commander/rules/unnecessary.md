@@ -2,7 +2,6 @@
 name: unnecessary
 description: "'unnecessary' and 'necessary' are both claims: the owner's abstraction is the structure that makes a deletion checkable and stays until its deletion is certified (paper4), while compatibility shims, migrations, legacy adapters and the tests that pin them are copies of a declared fact and go in the same change unless a named live caller needs them"
 drift: "His abstraction is the certificate: it stays. Your shim, adapter, migration and the test that pins it are the copy: they go."
-audience: fleet
 type: hard-rule
 ---
 

@@ -239,12 +239,14 @@ class TransitionGoalAction(GoalAction[Goal]):
 
 
 class GoalReportAction(TransitionGoalAction):
-    """A model's report consumes this goal's slot; recovery commands do not."""
+    """Keep the original reporting turn while progress and decisions evolve.
+
+    Native terminal settlement belongs to TurnGoalAccount and the attempt ledger,
+    not to how many times this turn updates its goal.
+    """
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         if ctx.model_report:
-            if goal.reports_turn(ctx.reported_turn):
-                raise ValueError("This goal was already reported in this turn.")
             goal = replace(goal, reported_turn=ctx.reported_turn)
         return super().change(goal, ctx)
 

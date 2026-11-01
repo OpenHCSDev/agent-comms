@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
 
@@ -172,9 +173,11 @@ class ACPFailure(DeliveryFailure):
 
     @property
     def input_disposition(self) -> str:
-        if self.input_state is not None:
-            return self.input_state.public_status.replace("_", " ").capitalize()
-        return super().input_disposition
+        return InputAttempt.reported(self.input_state).public_status.replace("_", " ").capitalize()
+
+    def input_failure_result[T](self, known: Callable[[], T], unknown: Callable[[], T]) -> T:
+        """Classify the report, not the RPC status or its display text."""
+        return InputAttempt.reported(self.input_state).failure_result(known, unknown)
 
     @property
     @abstractmethod

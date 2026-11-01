@@ -20,7 +20,8 @@ from agent_comms.bus import Bus
 from agent_comms.recorded_bus import RecordedBusIdentity
 from bus_record_fixture import prepare_native_comms
 from agent_comms.comms import wire
-from agent_comms.commander.config import GivenRepos, NamedCommander
+from agent_comms.commander.config import GivenRepos, KeptRepos, NamedCommander
+from agent_comms.repo import Repo, RepositoryName
 from agent_comms.registry_document import NoCommanderProject, RegisteredCommanderProject
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.installer.refusals import UpgradeRefused
@@ -245,6 +246,37 @@ def test_an_install_without_flags_keeps_native_commander_and_parked_state(
     changed = InstallCliCommand(project=private_directory, commander=NamedCommander("replacement")).apply(comms)
     assert changed.config.commander == comms.registry.require("replacement").incarnation
     assert comms.registry.snapshot().commander_project == changed.config
+
+
+def test_the_commander_verb_names_a_lead_and_removes_a_commander_at_runtime(private_directory):
+    # Tristan 10-30: commanders are assigned at runtime, not only by a five-minute install.
+    from agent_comms.cli_verbs.commander import CommanderCliCommand
+    from agent_comms.errors import RelationViolationError
+
+    root = private_directory / "wire"
+    root.mkdir(mode=0o700)
+    comms = wire(root)
+    comms.registry.declare(Thread("old-lead", frozenset(), Checkout(private_directory)))
+    comms.registry.declare(Thread("new-lead", frozenset({"commanders"}), Checkout(private_directory)))
+    comms.registry.declare(Thread("peer", frozenset({"commanders"}), Checkout(private_directory)))
+    recorded = RegisteredCommanderProject(
+        comms.registry.require("old-lead").incarnation, (Repo(checkout=private_directory, github=RepositoryName.from_wire("owner/repo")),))
+    comms.registry.set_commander_project(recorded)
+    named = CommanderCliCommand(lead=NamedCommander("new-lead")).apply(comms)
+    project = comms.registry.snapshot().commander_project
+    assert project == recorded.named(comms.registry.require("new-lead").incarnation, KeptRepos())
+    assert project.repos == recorded.repos
+    assert named.leads == ("new-lead",) and "old-lead" not in named.commanders
+    before = comms.registry.store.path.read_bytes()
+    with pytest.raises(RelationViolationError):
+        CommanderCliCommand(remove=frozenset({"new-lead"})).apply(comms)
+    with pytest.raises(RelationViolationError):
+        CommanderCliCommand(lead=NamedCommander("peer"),
+                            remove=frozenset({"peer", "new-lead"})).apply(comms)
+    assert comms.registry.store.path.read_bytes() == before
+    removed = CommanderCliCommand(remove=frozenset({"peer"})).apply(comms)
+    assert removed.commanders == ("new-lead",)
+    assert "commanders" not in comms.registry.require("peer").tags
 
 
 def test_a_practice_copy_of_a_bus_without_messages_reads_its_history_twice(private_directory, capsys):

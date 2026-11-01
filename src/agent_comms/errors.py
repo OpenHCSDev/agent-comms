@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.coordination_errors import DrainUnavailable
+from agent_comms.coordination_errors import DrainUnavailable, Refused
 from agent_comms_hooks import ToolRefusedError
 
 
@@ -55,6 +55,13 @@ class RouteChangedError(ValueError):
 
 class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
+
+
+class GoalRefused(Refused, RelationViolationError):
+    """A goal relation refused the action; preserve that refusal across owner RPC."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(self.INVALID_PARAMS, message)
 
 
 class UnclaimedError(RelationViolationError):
@@ -116,12 +123,16 @@ class GoalAttemptError(RuntimeError):
         return self.diagnostic_text
 
 
-class UnresolvedAttemptError(GoalAttemptError):
+class GoalAttemptRefused(GoalRefused, GoalAttemptError):
+    """An expected attempt refusal keeps its ledger identity and RPC refusal contract."""
+
+
+class UnresolvedAttemptError(GoalAttemptRefused):
     """A blocked or in-flight attempt needs an explicit resolution."""
 
     diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
 
 
-class StaleAttemptError(GoalAttemptError):
+class StaleAttemptError(GoalAttemptRefused):
     """A late outcome cannot modify the current goal generation."""
 

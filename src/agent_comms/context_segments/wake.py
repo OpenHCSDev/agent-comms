@@ -21,14 +21,17 @@ from ..turn_context import (
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
+    ContextSegment,
+    UserInputSegment,
     WireProvenance,
+    WireSources,
 )
 from ..wake_policy import WakePolicy
 from .wake_values import WakeWorkContext
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWakeSegment(InstructionSegment):
+class SelectedWakeSegment(WireSources, InstructionSegment):
     """Original sealed sources and their captured owner, never wake authority."""
 
     sources: tuple[tuple[Delivered, WakeAssignment], ...]
@@ -41,13 +44,6 @@ class SelectedWakeSegment(InstructionSegment):
     sent_limit = 5
 
     @classmethod
-    def wire_sources(cls, original):
-        """The selected originals and the owner's own sent outcomes; their sender tells them
-        apart."""
-        return tuple(source for provenance in original.provenance
-                     for source in provenance.bus_references())
-
-    @classmethod
     def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
         relevance = WakePolicy.relevance_instruction()
         sent_outcomes = tuple(sent_outcomes)
@@ -57,7 +53,6 @@ class SelectedWakeSegment(InstructionSegment):
             (
                 relevance.source,
                 NextContextTurn().provenance(owner),
-                *(WireProvenance(initial.message.reference) for initial, _ in sources),
                 *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),
             sources=tuple(sources),
@@ -67,6 +62,10 @@ class SelectedWakeSegment(InstructionSegment):
             sent_outcomes=sent_outcomes,
             work_context=owner.wake_context(goals),
         )
+
+    def input_segments(self) -> tuple[ContextSegment, ...]:
+        return (self, *(MessageDelivery(source, assignment, self.owner).segment()
+                        for source, assignment in self.sources))
 
     def values(self):
         sources, owner = self.sources, self.owner
@@ -96,7 +95,6 @@ class SelectedWakeSegment(InstructionSegment):
                     "wake_mode": assignment.lifecycle.mode.declared_name,
                     "expectation": expectation,
                     "response_obligation": obligation_line,
-                    "body": initial.message.body,
                 }
             )
         selected_line = FieldCodec.compact(selected, ensure_ascii=True)
@@ -125,29 +123,52 @@ class SelectedWakeSegment(InstructionSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredMessageSegment(InstructionSegment):
+class DeliveredMessageSegment(WireSources, InstructionSegment):
     """One committed message handed to its recipient's already running turn."""
+
+    delivery: MessageDelivery
+
+    @classmethod
+    def capture(cls, delivery: MessageDelivery):
+        return super().capture(delivery.provenance, delivery=delivery)
+
+    def values(self):
+        message = self.delivery.source.message
+        return dict(
+            message=FieldCodec.compact(
+                {
+                    "source_seq": self.delivery.assignment.wire_seq,
+                    "sender": message.sender,
+                    "target": message.target,
+                    "audience": self.delivery.assignment.audience.value,
+                    "body": message.body,
+                }, ensure_ascii=True,
+            )
+        )
+
+
+@dataclass(frozen=True)
+class MessageDelivery:
+    """One committed original, framed by its task on either input route."""
 
     source: Delivered
     assignment: WakeAssignment
     owner: Thread
 
-    @classmethod
-    def capture(cls, source, assignment, owner):
-        return super().capture((WireProvenance(source.message.reference),),
-                               source=source, assignment=assignment, owner=owner)
-
-    def values(self):
+    def __post_init__(self) -> None:
         self.assignment.require_selected_source(self.source, self.owner)
-        message = self.source.message
-        return dict(
-            message=FieldCodec.compact(
-                {
-                    "source_seq": self.assignment.wire_seq,
-                    "sender": message.sender,
-                    "target": message.target,
-                    "audience": self.assignment.audience.value,
-                    "body": message.body,
-                }, ensure_ascii=True,
-            )
-        )
+
+    @property
+    def provenance(self) -> tuple[WireProvenance, ...]:
+        return (WireProvenance(self.source.message.reference),)
+
+    def segment(self) -> ContextSegment:
+        return self.source.message.task.message_segment(self)
+
+    def delivered(self) -> DeliveredMessageSegment:
+        """A bus message: framed with its sender and route, and its contents untrusted."""
+        return DeliveredMessageSegment.capture(self)
+
+    def typed(self) -> UserInputSegment:
+        """The owner's original words once, without a bus or instruction wrapper."""
+        return UserInputSegment(provenance=self.provenance, content=self.source.message.body)

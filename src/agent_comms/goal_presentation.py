@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, fields
 from typing import TYPE_CHECKING, ClassVar, Self
 
@@ -41,6 +42,18 @@ class GoalWaitTarget(WireValue):
 
 class GoalExecution(DeclaredFamily, affix="Execution"):
     """The complete execution family consumed by commands, views and the commander."""
+
+    toggle_label: ClassVar[str] = "Pause"
+
+    def can_toggle(self) -> bool:
+        return False
+
+    async def apply_toggle(
+        self,
+        change: Callable[[type[GoalAction]], Awaitable[None]],
+        unavailable: Callable[[], None],
+    ) -> None:
+        unavailable()
 
     def details_heading(self, heading: str) -> str:
         return heading
@@ -106,7 +119,15 @@ class WaitingExecution(BoundGoalExecution, declared_name=None):
 class ControlledExecution(BoundGoalExecution, declared_name=None):
     """An execution the owner moves on with one control; the others offer none."""
 
-    toggle_label: ClassVar[str] = "Pause"
+    def can_toggle(self) -> bool:
+        return True
+
+    async def apply_toggle(
+        self,
+        change: Callable[[type[GoalAction]], Awaitable[None]],
+        unavailable: Callable[[], None],
+    ) -> None:
+        await change(self.toggle)
 
     @property
     @abstractmethod

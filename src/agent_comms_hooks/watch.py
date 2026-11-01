@@ -26,6 +26,7 @@ from . import (
     ClaudeHook,
     ClaudeHookProgram,
     HookRecord,
+    LaunchedPrompt,
 )
 from .board import SessionWire
 from .process_claim import ProcessSingleton
@@ -251,7 +252,7 @@ class SessionHookProgram(ClaudeHookProgram, ABC):
     @classmethod
     def main(cls) -> None:
         try:
-            record = json.load(sys.stdin)
+            record = LaunchedPrompt.carried(json.load(sys.stdin))
             hook = ClaudeHook.decode(record)
             SessionEndpoint(hook.session_id).session().invoke(cls, record)
         except SessionFailure as error:

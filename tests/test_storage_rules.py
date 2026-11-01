@@ -3,7 +3,9 @@
 import runpy
 import shutil
 import subprocess
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Annotated
 
 import pytest
 
@@ -23,15 +25,123 @@ from agent_comms.shell_effects import (
 from agent_comms.standing_rules import StorageHomeMissing
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import (
+    ScopedDirectory,
     StorageRule,
     UnitStorage,
 )
 from agent_comms.thread_storage import (
+    StoragePath,
     StorageRoots,
     UnassignedThreadStorage,
 )
 from agent_comms.threads import Thread
 from agent_comms.tool_denial import SelectedToolDenied
+
+
+def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
+    root = tmp_path / "verification"
+    configured = StorageRule(floor_gib=0, cleanup_gib=2, memory_gib=1)
+    policy = configured.prepare_isolated(root)
+    before = StorageRule.path_in(root).read_bytes()
+    assert policy == configured.within(root) == StorageRule.load(root)
+    policy.require_isolated(root)
+    assert StorageRule().prepare_isolated(root) == policy
+    assert StorageRule.path_in(root).read_bytes() == before
+    reopened = wire(root)
+    assert reopened.registry.storage_rule == policy
+    assert policy.initial_roots("fork").scratch.is_relative_to(root)
+    assert policy.checkout_base.is_relative_to(root)
+    assert policy.temp_root.is_relative_to(root)
+
+
+def test_isolated_preparation_refuses_an_existing_foreign_policy_without_rewriting(tmp_path: Path):
+    root = tmp_path / "verification"
+    root.mkdir()
+    foreign = StorageRule(scratch_base=tmp_path / "not-this-root")
+    path = StorageRule.path_in(root)
+    path.write_text(FieldCodec.compact(FieldCodec.encode(foreign)))
+    before = path.read_bytes()
+    with pytest.raises(ValueError):
+        StorageRule().prepare_isolated(root)
+    assert path.read_bytes() == before
+    assert not foreign.scratch_base.exists()
+
+
+@pytest.mark.parametrize("scoped_directory", [
+    pytest.param(directory, id=directory.value.as_posix())
+    for plan in FieldCodec.field_plans(StorageRule)
+    for directory in ScopedDirectory.single(plan.annotation)
+    if directory.value.parts
+])
+class TestIsolatedDirectories:
+    def test_projection_refuses_a_canonical_escape_before_writing(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        root.mkdir()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (root / scoped_directory.value).symlink_to(outside, target_is_directory=True)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().within(root)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().prepare_isolated(root)
+        assert not StorageRule.path_in(root).exists()
+        assert tuple(outside.iterdir()) == ()
+
+    def test_existing_policy_rejects_a_new_escape_without_rewriting(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        policy = StorageRule(floor_gib=0).prepare_isolated(root)
+        policy_path = StorageRule.path_in(root)
+        before = policy_path.read_bytes()
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (root / scoped_directory.value).symlink_to(outside, target_is_directory=True)
+        loaded = StorageRule.load(root)
+        for current in (policy, loaded):
+            with pytest.raises(ValueError, match="escapes"):
+                current.require_isolated(root)
+        with pytest.raises(ValueError, match="escapes"):
+            StorageRule().prepare_isolated(root)
+        assert policy_path.read_bytes() == before
+        assert tuple(outside.iterdir()) == ()
+
+    def test_inward_links_preserve_private_scope(
+        self, tmp_path: Path, scoped_directory: ScopedDirectory,
+    ):
+        root = tmp_path / "verification"
+        root.mkdir()
+        destination = root / "inward"
+        destination.mkdir()
+        (root / scoped_directory.value).symlink_to(destination, target_is_directory=True)
+        policy = StorageRule(floor_gib=0).prepare_isolated(root)
+        policy.require_isolated(root)
+        assert StorageRule.load(root) == policy
+        assert StorageRule().prepare_isolated(root) == policy
+
+
+def test_future_child_cannot_follow_an_escaping_scratch_link(tmp_path: Path):
+    policy = StorageRule(floor_gib=0).prepare_isolated(tmp_path / "verification")
+    policy.scratch_base.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (policy.scratch_base / "future-child").symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ValueError, match="escapes"):
+        policy.initial_roots("future-child")
+    assert tuple(outside.iterdir()) == ()
+
+
+def test_private_projection_uses_new_field_declarations_without_another_roster(tmp_path: Path):
+    @dataclass(frozen=True)
+    class ExtendedStorageRule(StorageRule):
+        output: Annotated[StoragePath, ScopedDirectory(Path("output"))] = Path("/external")
+
+    scoped = ExtendedStorageRule(floor_gib=0).within(tmp_path)
+    assert scoped.output == tmp_path / "output"
+    scoped.require_isolated(tmp_path)
+    assert FieldCodec.decode(ExtendedStorageRule, FieldCodec.encode(scoped)) == scoped
 
 
 def test_resource_checker_uses_storage_allocation_floor(tmp_path):
@@ -172,19 +282,44 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     assert path in rule.checkouts_of(thread, RepositoryReads())
 
 
-def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(checkout_comms: Comms):
-    """unit-fieldplan is registered at $HOME: its audit path, which the rule gate requires, sat
-    inside its project and was refused as source it does not hold, so nothing could run."""
+@pytest.mark.parametrize('enclosing_source', (False, True))
+def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(
+        checkout_comms: Comms, enclosing_source: bool):
+    """An enclosing project or Git tree cannot take the registry's scratch allocation."""
     comms = checkout_comms
     rule = comms.registry.storage_rule
     above = rule.scratch_base.parent
+    if enclosing_source:
+        Repo.git(above, 'init', '-q')
     thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
     projection = StorageProjection(rule, thread, comms)
-    projection.require_write(rule.roots_of(thread).scratch / 'compaction-deal.audit.json')
+    scratch = rule.roots_of(thread).scratch
+    projection.require_write(scratch / 'compaction-deal.audit.json')
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(above / 'notes.txt')
     with pytest.raises(StorageDenied, match='foreign scratch'):
         projection.require_write(rule.scratch_base / 'worker' / 'notes.txt')
+    with pytest.raises(StorageDenied, match='artifacts'):
+        projection.require_write(scratch / '.artifacts' / 'output')
+    scratch.mkdir(parents=True)
+    (scratch / 'project-link').symlink_to(above, target_is_directory=True)
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(scratch / 'project-link' / 'notes.txt')
+
+
+@pytest.mark.parametrize('source_path', (Path(), Path('nested-source')))
+def test_git_source_inside_scratch_still_requires_an_edit_allocation(
+        checkout_comms: Comms, source_path: Path):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    above = rule.scratch_base.parent
+    thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
+    scratch = rule.roots_of(thread).scratch
+    source = scratch / source_path
+    source.mkdir(parents=True)
+    Repo.git(source, 'init', '-q')
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        StorageProjection(rule, thread, comms).require_write(source / 'implementation.py')
 
 
 def test_three_small_checkouts_are_admitted(checkout_comms: Comms):

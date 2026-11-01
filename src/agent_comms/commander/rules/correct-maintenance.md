@@ -2,7 +2,6 @@
 name: correct-maintenance
 description: "the index from each verdict to the result in the dealt papers that decides it: a verdict cites its theorem instead of restating it"
 drift: "A fact restated outside its declaration is slop; deleting the copy deletes every state where the copies disagree."
-audience: fleet
 type: reference
 ---
 

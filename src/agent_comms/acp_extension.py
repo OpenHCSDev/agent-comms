@@ -838,4 +838,4 @@ class PromptCancelledUpdate(AgentCommsUpdate):
 
     @property
     def feedback(self):
-        return (self.input_state or InputAttempt).cancellation_feedback
+        return InputAttempt.reported(self.input_state).cancellation_feedback

@@ -1,12 +1,39 @@
 import ast
+import gc
 import subprocess
+import weakref
 from pathlib import Path
 
 import pytest
 
 from agent_comms.head_review import HeadReview, MergeHeadReview
 from agent_comms.plan_reading import PlanReading
-from agent_comms.phase_evidence import AllEvidence, ClassDeclared, ClassFlagsAbsent, ClassChecks, ClassRostersAbsent, CommitMerged, FunctionDeclared, MainEvidence, MainTree, NoAbsenceProbes, NoExactCopies, NoGodFunction, OwnClassChecksAbsent, ParentsShared, PathsAbsent, DocumentPatternPresent, PatternAbsent, PatternPresent, PhaseEvidence, RestatedMembersAbsent, RulesetGates, UnreadableEvidenceError
+from agent_comms.phase_evidence import (
+    AllEvidence,
+    ClassDeclared,
+    ClassFlagsAbsent,
+    ClassChecks,
+    ClassRostersAbsent,
+    CommitMerged,
+    FunctionDeclared,
+    MainEvidence,
+    MainTree,
+    ModuleBindings,
+    QualifiedName,
+    NoAbsenceProbes,
+    NoExactCopies,
+    NoGodFunction,
+    OwnClassChecksAbsent,
+    ParentsShared,
+    PathsAbsent,
+    DocumentPatternPresent,
+    PatternAbsent,
+    PatternPresent,
+    PhaseEvidence,
+    RestatedMembersAbsent,
+    RulesetGates,
+    UnreadableEvidenceError,
+)
 from nominal_refactor_advisor.audit.findings import GodFunction
 
 from agent_comms.nominal_census import NominalCensus
@@ -159,6 +186,73 @@ def test_modules_answer_the_listing_git_gives_for_their_paths(tmp_path, paths):
     listed = git(tmp_path, "ls-tree", "-r", "--name-only", main.commit, "--", *paths).splitlines()
     assert [module.file_path for module in main.modules(paths)] == [
         name for name in listed if name.endswith(".py")]
+
+
+def test_named_declarations_parse_only_their_paths_and_stop_after_a_match(tmp_path: Path) -> None:
+    main = main_of(tmp_path, {
+        "src/owner.py": "class Owner:\n    pass\n",
+        "src/z_unrelated.py": "not valid Python !\n",
+        "tests/first.py": "def wanted():\n    pass\n",
+        "tests/z_unneeded.py": "not valid Python !\n",
+    }).main
+    assert ClassDeclared("Owner", ("src/owner.py",)).read(main)
+    assert {path for _, path in main.bindings} == {"src/owner.py"}
+    assert FunctionDeclared("wanted", ("tests",)).read(main)
+    assert {path for roots, path in main.bindings if roots == ("tests",)} == {"tests/first.py"}
+
+
+def test_following_reading_reuses_only_unchanged_blob_facts(tmp_path: Path) -> None:
+    reading = main_of(tmp_path, {
+        "src/kept.py": "class Kept:\n    pass\n",
+        "src/changed.py": "class Before:\n    pass\n",
+        "src/deleted.py": "class Deleted:\n    pass\n",
+    })
+    assert not ClassDeclared("Missing").read(reading.main)
+    held = dict(reading.main.bindings)
+    (tmp_path / "src/changed.py").write_text("class After:\n    pass\n")
+    (tmp_path / "src/deleted.py").unlink()
+    git(tmp_path, "add", "src")
+    git(tmp_path, "commit", "-qm", "replace and delete declarations")
+    git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
+    following = reading.following((), MainTree.of(reading.main.repo, NominalCensus()))
+    assert following.main.bindings is not reading.main.bindings
+    assert reading.main.bindings == held
+    assert following.main.bindings == {(("src",), "src/kept.py"): held[("src",), "src/kept.py"]}
+    assert following.main.bindings[("src",), "src/kept.py"] is held[("src",), "src/kept.py"]
+    assert not ClassDeclared("Before").read(following.main)
+    assert not ClassDeclared("Deleted").read(following.main)
+    assert ClassDeclared("After").read(following.main)
+    assert ClassDeclared("Before").read(reading.main)
+
+
+def test_source_checks_release_their_method_and_comparison_nodes() -> None:
+    module = ast.parse("class Value:\n    def __eq__(self, other):\n"
+                       "        if not isinstance(other, Value):\n"
+                       "            return NotImplemented\n"
+                       "        return self.key == other.key\n")
+    methods = [weakref.ref(node) for node in ast.walk(module)
+               if isinstance(node, (ast.FunctionDef, ast.Call))]
+    checks = ClassChecks()
+    checks.visit(module)
+    assert not checks.owned()
+    del module
+    gc.collect()
+    assert all(method() is None for method in methods)
+
+
+def test_module_binding_facts_do_not_retain_the_source_nodes() -> None:
+    module = ast.parse("class Parent:\n    flag = True\n"
+                       "    def method(self):\n        return 1\n"
+                       "class Child(Parent):\n    values = (Parent, *OTHERS)\n")
+    syntax = [weakref.ref(node) for node in ast.walk(module)
+              if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.Assign))]
+    bindings = ModuleBindings("src/owner.py", QualifiedName.of("owner"), QualifiedName(()),
+                              blob="source-node-lifetime")
+    bindings.visit(module)
+    assert bindings.classes
+    del module
+    gc.collect()
+    assert all(node() is None for node in syntax)
 
 
 def test_changed_paths_between_commits_and_of_a_commit_against_itself(tmp_path):
@@ -336,6 +430,31 @@ def test_cleanup_evidence_counts_restated_members_and_class_rosters(tmp_path):
     ]
     assert not reading.holds(restated)
     assert not reading.holds(rosters)
+
+
+@pytest.mark.parametrize(("value", "roster"), (
+    ("(A, B)", True),
+    ("[A, B]", True),
+    ("{A, B}", True),
+    ("(values.A, values.B)", True),
+    ("wrap((A, B))", True),
+    ("wrap([A, B])", True),
+    ("outer(inner((A, B)))", False),
+    ("wrap(OTHER)", False),
+    ("wrap((A, B), 1)", False),
+    ("(*OTHER,)", True),
+    ("(*values.OTHER,)", False),
+    ("((A, B),)", False),
+))
+def test_roster_expression_answers_preserve_admitted_syntax(
+    tmp_path: Path, value: str, roster: bool,
+) -> None:
+    main = main_of(tmp_path, {
+        "src/values.py": "class A:\n    pass\nclass B:\n    pass\nOTHER = (A, B)\n",
+        "src/rosters.py": "import values\nfrom values import A, B\nOTHER = (A, B)\n"
+                          f"VALUE = {value}\n",
+    }).main
+    assert len(tuple(ClassRostersAbsent().rosters(main))) == 2 + int(roster)
 
 
 def test_roster_relation_is_exempt_only_below_the_family_by_qualified_name(tmp_path):

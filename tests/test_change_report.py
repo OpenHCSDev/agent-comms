@@ -141,35 +141,6 @@ class TestChangeReportKind:
             })
 
 
-class TestHandoffClaims:
-    def test_claim_without_evidence_is_refused_naming_the_claims(self, wired):
-        with pytest.raises(ValueError):
-            wired.messaging.send("PR111", "fixer", "it is fixed", HandoffKind).message.message_id
-
-    def test_a_bare_evidence_word_is_not_a_command(self, wired):
-        with pytest.raises(ValueError):
-            wired.messaging.send("PR111", "fixer", "I will find it; it is fixed", HandoffKind).message.message_id
-
-    def test_claim_with_a_file_line_reference_publishes(self, wired):
-        committed = wired.messaging.send(
-            "PR111", "fixer", "it is fixed at src/x.py:12", HandoffKind).message
-        assert committed.type is HandoffKind
-
-    def test_claim_with_a_command_in_backticks_publishes(self, wired):
-        committed = wired.messaging.send(
-            "PR111", "fixer", "fixed; proof: `grep -rn kind src`", HandoffKind).message
-        assert committed.type is HandoffKind
-
-    def test_a_command_outside_backticks_is_not_evidence(self, wired):
-        with pytest.raises(ValueError):
-            wired.messaging.send("PR111", "fixer", "fixed; I ran grep everywhere", HandoffKind).message.message_id
-
-    def test_plain_handoff_without_claims_publishes(self, wired):
-        committed = wired.messaging.send(
-            "PR111", "fixer", "handing over the thread", HandoffKind).message
-        assert committed.type is HandoffKind
-
-
 class TestKindDeclarations:
     def test_existing_wire_names_are_unchanged(self):
         kinds = {InfoKind: "info", QuestionKind: "question", AckKind: "ack",

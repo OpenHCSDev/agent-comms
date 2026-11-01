@@ -10,6 +10,8 @@ import asyncio
 import fcntl
 import json
 import os
+import pwd
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -235,13 +237,31 @@ def undealt_gate(tmp_path: Path) -> PiRuleGate:
 
 
 @pytest.fixture
-def user_manager(monkeypatch: pytest.MonkeyPatch) -> type:
-    """A test that stands in for systemd's own commands names the manager it plays; every
-    other test home has no user manager (``ResidentManager.current``)."""
-    from agent_comms.child_process import ResidentManager, SystemdUserManager
+def manager_socket(tmp_path: Path):
+    """One real filesystem socket, even under a basetemp longer than sockaddr_un."""
+    runtime = tmp_path / "user-runtime"
+    directory = runtime / "systemd"
+    directory.mkdir(parents=True)
+    with socket.socket(socket.AF_UNIX) as manager:
+        descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            manager.bind(f"/proc/self/fd/{descriptor}/private")
+        finally:
+            os.close(descriptor)
+        yield runtime
 
-    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: SystemdUserManager))
-    return SystemdUserManager
+
+@pytest.fixture
+def user_manager(manager_socket: Path, monkeypatch: pytest.MonkeyPatch):
+    """Admit a private manager socket through the real selection boundary. Only the OS
+    account record is substituted; no Core manager method is replaced."""
+    from agent_comms.child_process import SystemdUserManager
+
+    account = pwd.getpwuid(os.getuid())
+    monkeypatch.setattr(pwd, "getpwuid", lambda uid: pwd.struct_passwd(
+        (*account[:5], str(Path.home()), account.pw_shell)))
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(manager_socket))
+    return SystemdUserManager(manager_socket)
 
 
 @pytest.fixture
@@ -330,10 +350,10 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
     from agent_comms.native_package import VerifiedNativePackage
-    from agent_comms.unit_instructions import UnitInstructions
+    from agent_comms.deal_prompt import DealPrompt
 
     package = VerifiedNativePackage.qualify(pinned_native)
-    UnitInstructions.prepare()
+    DealPrompt.prepare()
     return package
 
 
@@ -517,9 +537,7 @@ def installed_comms(root: Path) -> Comms:
     from agent_comms.storage_rules import StorageRule
 
     Bus.install(Bus.path_in(root))
-    StorageRule.path_in(root).write_text(FieldCodec.compact(FieldCodec.encode(StorageRule(
-        volume=root, scratch_base=root / 'scratch', checkout_base=root / 'checkouts',
-        floor_gib=0))))
+    StorageRule(floor_gib=0).prepare_isolated(root)
     return wire(root)
 
 

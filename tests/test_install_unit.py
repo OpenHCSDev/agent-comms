@@ -7,7 +7,6 @@ import sys
 
 import pytest
 
-from agent_comms.child_process import NoResidentManager, ResidentManager, SystemdUserManager
 from agent_comms.installer.request import InstallRequest
 from agent_comms.commander import standing
 from agent_comms.nominal.field_codec import FieldCodec, Id128
@@ -34,7 +33,7 @@ def systemd(tmp_path, monkeypatch, user_manager):
     fake.write_text(FAKE.format(python=sys.executable, record=str(record)))
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setattr(user_manager, "shown", staticmethod(lambda unit, name: "inactive"))
+    monkeypatch.setattr(subprocess, "check_output", lambda command, **options: "inactive")
     return record
 
 
@@ -107,7 +106,7 @@ def test_a_missing_systemd_run_refuses_at_once(tmp_path, monkeypatch, user_manag
 
 def test_a_home_without_a_manager_runs_its_install_in_the_waiting_caller(tmp_path, monkeypatch):
     """A private home owns its install only while its caller waits; nothing outlives it."""
-    monkeypatch.setattr(ResidentManager, "current", staticmethod(lambda: NoResidentManager))
+    monkeypatch.setenv("HOME", str(tmp_path))
     unit = InstallUnit(Id128.mint(), tmp_path)
     unit.request.write_text("request ")
     echo = "import os, sys; print(sys.stdin.read() + os.environ['PYTHONPATH'])"
@@ -129,8 +128,8 @@ def test_a_second_launch_on_one_root_refuses_until_the_first_lets_go(tmp_path, s
 
 
 def running_only(monkeypatch, unit: InstallUnit) -> None:
-    monkeypatch.setattr(SystemdUserManager, "shown", staticmethod(
-        lambda name, field: "active" if name == unit.unit else "inactive"))
+    monkeypatch.setattr(subprocess, "check_output", lambda command, **options:
+                        "active" if command[-1] == unit.unit else "inactive")
 
 
 def test_every_merge_due_counts_the_running_install_of_its_target(tmp_path, systemd,

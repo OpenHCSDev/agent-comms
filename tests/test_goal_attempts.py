@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.repo import Checkout
-from agent_comms.errors import StaleAttemptError
+from agent_comms.errors import GoalRefused, StaleAttemptError
 import multiprocessing
 import os
 import sqlite3
@@ -302,6 +302,27 @@ def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
         store.ready_grant(goal_id, completed.number + 1)
 
 
+@pytest.mark.parametrize("prepare", (
+    pytest.param(lambda store, reservation: None, id="reserved-unclaimed"),
+    pytest.param(lambda store, reservation: store.claim_launch(reservation), id="reserved-claimed"),
+    pytest.param(lambda store, reservation: store.claim_launch(reservation).record_verified_completion(
+        store, "completion-witness"), id="completed"),
+    pytest.param(lambda store, reservation: store.retire_goal(
+        reservation.goal_id, expected_generation=reservation.generation,
+        attempt_id=reservation.attempt_id), id="cancelled"),
+))
+def test_retry_refusal_preserves_the_generation_and_owner_rpc_contract(store, prepare):
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
+    prepare(store, reservation)
+    before = store.snapshot(goal_id)
+    with pytest.raises(GoalRefused):
+        store.authorize_current_retry(goal_id, RetryDecision(RetryDecisionId.mint()))
+    assert store.snapshot(goal_id) == before
+    assert GoalAttemptStore.at(store.root).snapshot(goal_id) == before
+
+
 def test_provider_reported_responses_are_attributed_once_and_survive_reopen(store):
     goal_id = GoalId.mint()
     store.create_goal(goal_id)
@@ -469,15 +490,17 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
         assert FailedTurnEvidence.count(conn) == 0
     assert stopped.goal == claimed_owner.goal
     stopped.goal.require().require_active()
-    # Repeated recovery is a no-op; it never creates another ready generation.
-    RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (stopped,))
+    # Repeated recovery retains the original released process, as stop/restart do;
+    # the post-stop registry row has already replaced that binding with NoProcess.
+    RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (claimed_owner,))
     assert store.require_generation(goal_id) == successor
-    # Even without native coordination, a foreign release must be rejected.
+    # Neither a cleared process binding nor a foreign incarnation is this release.
     substituted = replace(claimed_owner,
                           created_at=RecordedCreationTime(claimed_owner.created_at + 1))
-    with pytest.raises(RecoveryBlocked):
-        RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (substituted,))
-    assert store.require_generation(goal_id) == successor
+    for mismatched_owner in (stopped, substituted):
+        with pytest.raises(RecoveryBlocked):
+            RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (mismatched_owner,))
+        assert store.require_generation(goal_id) == successor
 
 
 def test_stop_preserves_already_verified_goal_progress(comms, claimed_owner):

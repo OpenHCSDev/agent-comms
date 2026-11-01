@@ -137,6 +137,12 @@ class OtherRouteThread(ThreadPresentationStatus):
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     """A projection of the registry lease, never an alternative owner store."""
 
+    def select_read[Result](
+        self, unavailable: Callable[[], Result], live: Callable[[], Result],
+    ) -> Callable[[], Result]:
+        """This acquired binding selects the unavailable reader without probing again."""
+        return unavailable
+
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         return False
 
@@ -163,6 +169,11 @@ class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
 class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
+
+    def select_read[Result](
+        self, unavailable: Callable[[], Result], live: Callable[[], Result],
+    ) -> Callable[[], Result]:
+        return live
 
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary

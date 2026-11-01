@@ -126,7 +126,9 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return ()
 
     @classmethod
-    def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
+    def owner_binding(
+        cls, snapshot: RegistrySnapshot, thread: Thread,
+    ) -> ThreadOwnerBinding:
         return UnavailableThreadOwnerBinding()
 
     @classmethod
@@ -171,7 +173,9 @@ class NativeThreadExecution(ThreadExecution):
         pass
 
     @classmethod
-    def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
+    def owner_binding(
+        cls, snapshot: RegistrySnapshot, thread: Thread,
+    ) -> ThreadOwnerBinding:
         return snapshot.status(thread.name).native_owner_binding(snapshot, thread)
 
     @classmethod

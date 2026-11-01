@@ -297,7 +297,7 @@ class NativeSession(MroDispatch, ABC):
         self.rejected_signal.set()
 
     def accept_tool_round(self, message: AssistantMessage) -> None:
-        self.tool_socket.announce(message.parts)
+        self.tool_socket.announce(message)
 
     def accept_final_message(self, message: AssistantMessage) -> None:
         """A turn that only streams its output takes no answer from the final message."""

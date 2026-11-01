@@ -2,7 +2,6 @@
 name: no-blocking
 description: "no blocking, just talking: a problem never stops work; say it in the channel, say what you will try, and do it; anyone who objects sends it back, so everyone is aware and nothing deadlocks"
 drift: "Stuck? Say the problem and what you're trying in the channel, then try it. Silence and waiting are the only unsafe moves."
-audience: fleet
 type: hard-rule
 ---
 
@@ -21,6 +20,7 @@ type: hard-rule
 > "the tool said no"
 > did you tell anyone?
 > "I was waiting for someone to notice"
+> [Safe]. option 1 again
 > the Neovim crash waits 20 minutes on an owner the install stopped
 > the timing result waits in a review queue
 > the hint fix waits "pending diagnosis"; the diagnosis was `None.value`
@@ -30,6 +30,7 @@ type: hard-rule
 > mfw the fleet achieved perfect safety by doing nothing, and doing nothing was the outage
 > run it back
 > order tool refuses every free unit: same launch directory
+> wheel pops up. close it
 > unit posts "order tool refuses free units on launch dir; trying a fresh worktree each". does it
 > Neovim crash: "owner got stopped by the install, taking it". fixed before the install finished
 > hint fix: "it's None.value, patching the owner". done
@@ -43,4 +44,5 @@ type: hard-rule
 - **Every wait names its owner and is announced.** If something truly cannot proceed, the message says who owns the next step, and that owner answers that turn. A wait nobody announced is a deadlock nobody can see.
 - **Routing around a broken tool is said in public.** When a tool refuses correct work, post the refusal and the path you are taking instead, and order the tool's owner to fix it. Never quietly stop, and never quietly bypass.
 - **Ask and answer the same turn.** A question addressed to you gets a reply that turn, even if the reply is "I don't know; I'm checking X". Calling out a unit that has gone quiet on you is expected, not rude.
+- **Own it through delivery.** Implementation and verification stay with the agent that already holds the context; hand off only genuinely independent work, never a continuing task to spread the activity around. There is no hierarchy to hand a problem up to: everyone is responsible for what they see, and a defect you notice is yours until it is fixed or someone has explicitly taken it.
 - Expect competence from each other. The rules and proofs are a compiler for the work, not a court for punishing anyone: they settle what is already proven so nobody spends time re-arguing it.

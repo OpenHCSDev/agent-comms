@@ -14,7 +14,7 @@ from agent_comms.rule_deal import (
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
-from agent_comms_hooks.skill import FleetReader
+from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal
 
 
@@ -39,7 +39,7 @@ def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
     read = deal.current().read_by(deal)
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
-    deal.deal(FleetReader, (), StartedDeal())
+    deal.deal(DeckReader, (), StartedDeal())
     assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
 
 
@@ -71,7 +71,7 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(commander_bus
     assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
 
 
-def test_his_question_quotes_the_session_and_no_bare_word_answers_it():
+def test_his_question_quotes_the_written_audit_statement():
     from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
     from agent_comms.session_receipts import SessionReceipts
 
@@ -79,10 +79,6 @@ def test_his_question_quotes_the_session_and_no_bare_word_answers_it():
     asked = SessionAudit((wrote, RuleAudit("ally")), ()).his_question(SessionReceipts())
     assert asked == f"> I end turns on a unit's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
     assert SessionAudit((), ()).his_question(SessionReceipts()) == MeantRecord.question
-    meant = MeantRecord()
-    assert not meant.answered_by(("Yes.",))
-    assert not meant.answered_by(("I will go look at this now and fix every one of them today.",))
-    assert meant.answered_by(("No. I said that and then replied Skipped to fifty of his rows.",))
 
 
 def transcript_line(kind, content):

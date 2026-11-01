@@ -76,6 +76,7 @@ agent-comms-claude-subagent-started = "agent_comms_hooks.forks:SubagentStartProg
 agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:SubagentStopProgram.main"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
+claude-comms = "agent_comms.cli_bridges.claude_launch:main"
 
 [project.entry-points."agent_comms.writer_owned_stores"]
 bridge-delivery = "agent_comms.cli_bridges.shared"
@@ -91,13 +92,13 @@ packages = ["src/agent_comms", "src/agent_comms_hooks"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
-".pi/APPEND_SYSTEM.md" = "agent_comms/_native/APPEND_SYSTEM.md"
+"AGENTS.md" = "agent_comms/_native/AGENTS.md"
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src", "tests", "extensions", "README.md", "LICENSE", "hatch_build.py",
-    ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
+    "AGENTS.md", "stack/AGENTS.md",
     "stack/pi-native.sha256",
 ]
 

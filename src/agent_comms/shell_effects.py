@@ -46,8 +46,8 @@ class ShellProgram(NamedProgram):
     def matches(args: Sequence[str], prefixes: Sequence[tuple[str, ...]]) -> bool:
         return any(tuple(args[:len(prefix)]) == prefix for prefix in prefixes)
 
-    def invocation(self, decoded: ShellCommand, cwd: Path) -> ShellInvocation:
-        return ShellInvocation(decoded.words, cwd)
+    def following_directory(self, args: list[str], cwd: Path) -> Path:
+        return cwd
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         """Unknown programs have no declared effects; capabilities compose through super()."""
@@ -159,25 +159,29 @@ class ShellInvocation(ShellCommand):
     @classmethod
     def parse(cls, command: str, cwd: Path) -> Iterator[ShellInvocation]:
         try:
-            decoded_commands = tuple(ShellCommand.split(command))
+            yield from cls.at_directory(ShellCommand.parsed(command), cwd)
         except ValueError as error:
             raise StorageDenied(f'StorageRule: the shell command cannot be decoded ({error}); '
                                 'no tool was started') from error
-        for decoded in decoded_commands:
-            invocation = ShellProgram.named(decoded.program).invocation(decoded, cwd)
-            cwd = invocation.cwd
-            yield invocation
+
+    @classmethod
+    def at_directory(cls, commands: Iterator[ShellCommand], cwd: Path) -> Iterator[ShellInvocation]:
+        for decoded in commands:
+            yield cls(decoded.words, cwd, redirections=decoded.redirections)
+            # Child execution inherits this directory; its changes die with that child.
+            yield from cls.at_directory(decoded.nested(), cwd)
+            cwd = ShellProgram.named(decoded.program).following_directory(decoded.args, cwd)
 
 
 class ChangeDirectoryProgram(ShellProgram, names=frozenset({'cd'})):
-    def invocation(self, decoded: ShellCommand, cwd: Path) -> ShellInvocation:
+    def following_directory(self, args: list[str], cwd: Path) -> Path:
         try:
-            _, targets = getopt.getopt(decoded.words[1:], '')
+            _, targets = getopt.getopt(args, '')
         except getopt.GetoptError as error:
             raise StorageDenied(f'StorageRule: unknown cd option: {error}') from error
         if targets:
             cwd = physical_path(targets[0], cwd)
-        return ShellInvocation(decoded.words, cwd)
+        return cwd
 
 
 @dataclass(frozen=True)
@@ -239,15 +243,22 @@ class TestsOnCommands(MeasuredCommands):
 
 
 class WritesTargets(ShellProgram):
-    targets: ClassVar[slice] = slice(None)
-    minimum: ClassVar[int] = 1
+    """The declaring CLI owns option arity; only decoded operands become paths."""
+
+    short_options: ClassVar[str] = ''
+    long_options: ClassVar[tuple[str, ...]] = ('help', 'version')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        return tuple(arguments)
 
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
-        paths = [arg for arg in args if not arg.startswith('-')]
-        selected = tuple(
-            WriteStorageEffect(physical_path(path, cwd)) for path in paths[self.targets]
-        ) if len(paths) >= self.minimum else ()
-        return super().effects(args, cwd) + selected
+        try:
+            options, arguments = getopt.gnu_getopt(args, self.short_options, self.long_options)
+        except getopt.GetoptError as error:
+            raise StorageDenied(f'StorageRule: incomplete or unknown file-program option: {error}') from error
+        paths = () if any(option in ('--help', '--version') for option, _ in options) else self.destinations(options, arguments)
+        return super().effects(args, cwd) + tuple(
+            WriteStorageEffect(physical_path(path, cwd)) for path in paths)
 
 
 class WritesWorkingTree(ShellProgram):
@@ -349,22 +360,121 @@ class ProfileProgram(AllocatesOnCommands, names=frozenset({'py-spy'})):
     prefixes = (('record',),)
 
 
-class FileWriterProgram(WritesTargets, names=frozenset({'mkdir', 'touch', 'tee'})):
-    pass
+class MakeDirectoryProgram(WritesTargets, names=frozenset({'mkdir'})):
+    short_options = 'm:pvZ'
+    long_options = (*WritesTargets.long_options, 'mode=', 'parents', 'verbose', 'context=?')
 
 
-class CopyProgram(WritesTargets, names=frozenset({'cp', 'mv', 'rsync', 'install', 'ln'})):
-    targets = slice(-1, None)
-    minimum = 2
+class TouchProgram(WritesTargets, names=frozenset({'touch'})):
+    short_options = 'acd:fhmr:t:'
+    long_options = (*WritesTargets.long_options, 'no-create', 'date=', 'no-dereference', 'reference=', 'time=')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        # '-' names the selected stdout descriptor, not a file named '-'.
+        return tuple(path for path in arguments if path != '-')
+
+
+class TeeProgram(WritesTargets, names=frozenset({'tee'})):
+    short_options = 'aip'
+    long_options = (*WritesTargets.long_options, 'append', 'ignore-interrupts', 'output-error=?')
+
+
+class CopyProgram(WritesTargets):
+    """Copy-like CLIs share the final destination operand, not their option meanings."""
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        return tuple(arguments[-1:]) if len(arguments) >= 2 else ()
+
+
+class TargetDirectoryCopyProgram(CopyProgram):
+    short_options = 't:S:'
+    long_options = (*CopyProgram.long_options, 'target-directory=', 'suffix=')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        directories = tuple(value for option, value in options if option in ('-t', '--target-directory'))
+        return directories or super().destinations(options, arguments)
+
+
+class CopyFilesProgram(TargetDirectoryCopyProgram, names=frozenset({'cp'})):
+    short_options = TargetDirectoryCopyProgram.short_options + 'abdfiHLPlnpRrsTuvxZ'
+    long_options = (*TargetDirectoryCopyProgram.long_options, 'archive', 'attributes-only', 'backup=?', 'copy-contents',
+                    'no-dereference', 'debug', 'force', 'interactive', 'dereference', 'keep-directory-symlink',
+                    'link', 'no-clobber', 'preserve=?', 'no-preserve=', 'parents', 'recursive', 'reflink=?',
+                    'remove-destination', 'sparse=', 'strip-trailing-slashes', 'symbolic-link',
+                    'no-target-directory', 'update=?', 'verbose', 'one-file-system', 'context=?')
+
+
+class MoveProgram(TargetDirectoryCopyProgram, names=frozenset({'mv'})):
+    short_options = TargetDirectoryCopyProgram.short_options + 'bfinTuvZ'
+    long_options = (*TargetDirectoryCopyProgram.long_options, 'backup=?', 'debug', 'exchange', 'force', 'interactive',
+                    'no-clobber', 'no-copy', 'strip-trailing-slashes', 'no-target-directory',
+                    'update=?', 'verbose', 'context')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        # Moving also removes source directory entries; destination-only admission hid that write.
+        return tuple(dict.fromkeys((*super().destinations(options, arguments), *arguments)))
+
+
+class InstallFilesProgram(TargetDirectoryCopyProgram, names=frozenset({'install'})):
+    short_options = TargetDirectoryCopyProgram.short_options + 'bcCdDg:m:o:psTvZ'
+    long_options = (*TargetDirectoryCopyProgram.long_options, 'backup=?', 'compare', 'directory', 'debug', 'group=',
+                    'mode=', 'owner=', 'preserve-timestamps', 'strip', 'strip-program=',
+                    'no-target-directory', 'verbose', 'preserve-context', 'context=?')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        if any(option in ('-d', '--directory') for option, _ in options):
+            return tuple(arguments)
+        return super().destinations(options, arguments)
+
+
+class LinkProgram(TargetDirectoryCopyProgram, names=frozenset({'ln'})):
+    short_options = TargetDirectoryCopyProgram.short_options + 'bdFfiLnPrsTv'
+    long_options = (*TargetDirectoryCopyProgram.long_options, 'backup=?', 'directory', 'force', 'interactive', 'logical',
+                    'no-dereference', 'physical', 'relative', 'symbolic', 'no-target-directory', 'verbose')
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        selected = super().destinations(options, arguments)
+        return selected or (('.',) if len(arguments) == 1 else ())
+
+
+class RsyncProgram(CopyProgram, names=frozenset({'rsync'})):
+    # Remote/native expansion is not inferred. Unknown options are explicit refusals.
+    short_options = '0468ACDEFGHIJKLNOPRSUVWXM:B:T:e:f:abcdghiklmnopqrstuvxyz@:'
+    long_options = (*WritesTargets.long_options, 'verbose', 'quiet', 'archive', 'recursive', 'relative',
+                    'checksum', 'links', 'copy-links', 'perms', 'owner', 'group', 'times', 'dry-run',
+                    'delete', 'delete-before', 'delete-during', 'delete-after', 'progress', 'stats',
+                    'human-readable', 'itemize-changes', 'compress', 'one-file-system', 'inplace',
+                    'partial', 'numeric-ids', 'ignore-existing', 'size-only', 'remove-source-files',
+                    'info=', 'debug=', 'stderr=', 'suffix=', 'backup-dir=', 'chmod=', 'chown=',
+                    'block-size=', 'rsh=', 'rsync-path=', 'timeout=', 'contimeout=', 'modify-window=',
+                    'temp-dir=', 'partial-dir=', 'compare-dest=', 'copy-dest=', 'link-dest=',
+                    'filter=', 'exclude=', 'exclude-from=', 'include=', 'include-from=', 'files-from=',
+                    'out-format=', 'log-file=', 'log-file-format=', 'bwlimit=', 'max-size=', 'min-size=',
+                    'write-batch=', 'only-write-batch=', 'read-batch=', 'remote-option=')
+    receiver_writes: ClassVar[frozenset[str]] = frozenset({
+        '-T', '--temp-dir', '--partial-dir', '--backup-dir'})
+    auxiliary_writes: ClassVar[frozenset[str]] = receiver_writes | frozenset({
+        '--log-file', '--write-batch', '--only-write-batch'})
+
+    def destinations(self, options: list[tuple[str, str]], arguments: list[str]) -> tuple[str, ...]:
+        paths = super().destinations(options, arguments)
+        for option, value in options:
+            if option in self.receiver_writes and not Path(value).is_absolute():
+                raise StorageDenied('StorageRule: use an absolute rsync receiver-side destination')
+        paths += tuple(value for option, value in options if option in self.auxiliary_writes)
+        if any(option == '--remove-source-files' for option, _ in options):
+            paths += tuple(arguments[:-1])
+        if any(':' in path for path in paths):
+            raise StorageDenied('StorageRule: remote rsync destinations require a separately admitted transport')
+        return tuple(dict.fromkeys(paths))
 
 
 def shell_storage_effects(command: str, cwd: Path) -> tuple[StorageEffect, ...]:
     """Decode known shell operations, not arbitrary interpreter programs."""
     effects: list[StorageEffect] = []
     for invocation in ShellInvocation.parse(command, cwd):
-        args = invocation.args
-        for index, word in enumerate(args[:-1]):
-            if word in ('>', '>>'):
-                effects.append(WriteStorageEffect(physical_path(args[index + 1], invocation.cwd)))
-        effects.extend(ShellProgram.named(invocation.program).effects(args, invocation.cwd))
+        for redirection in invocation.redirections:
+            effects.extend(WriteStorageEffect(physical_path(path, invocation.cwd))
+                           for path in redirection.written_paths())
+        effects.extend(ShellProgram.named(invocation.program).effects(invocation.args, invocation.cwd))
     return tuple(effects)

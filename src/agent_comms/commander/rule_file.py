@@ -1,10 +1,9 @@
-"""A packaged rule owns its metadata, reason, rendering, review membership and audience."""
+"""A packaged rule owns its metadata, reason, rendering and review membership."""
 
 from __future__ import annotations
 
 import json
 import re
-from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar, Self
@@ -14,55 +13,12 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, boundary_decoder
 
 
-class RuleAudience(DeclaredFamily, affix="Audience"):
-    """Who a packaged rule governs. Every unit carries every rule, so it can hold the fleet
-    and the commander to them; each audience owns how its rules are introduced."""
-
-    heading: ClassVar[str]
-
-    @classmethod
-    @abstractmethod
-    def order_line(cls, names: str) -> str:
-        """The order footer line naming this audience's rules."""
-
-    @classmethod
-    def grouped(cls, rules: tuple[RuleFile, ...]) -> tuple[tuple[type[RuleAudience], tuple[RuleFile, ...]], ...]:
-        """The rules under each audience, audiences in declaration order."""
-        audiences = sorted({rule.audience for rule in rules}, key=lambda audience: audience.declared_position())
-        return tuple((audience, tuple(rule for rule in rules if rule.audience is audience))
-                     for audience in audiences)
-
-
-class FleetAudience(RuleAudience):
-    """How code and reports are judged: every unit follows it, and so does the commander."""
-
-    heading = "# Rules every unit follows"
-
-    @classmethod
-    def order_line(cls, names: str) -> str:
-        return f"Standing rules for this order: follow the fleet rules {names} in {CommanderPackage.rules()}."
-
-
-class CommanderAudience(RuleAudience):
-    """The commander's own process (roasts, strikes, timers, coordination): units carry it to
-    judge the commander by it, never to act as the commander."""
-
-    heading = ("# Rules the commander follows\n\nThey apply to the commander too: roast it with "
-               "file:line when it breaks one. They give no unit a commander action.")
-
-    @classmethod
-    def order_line(cls, names: str) -> str:
-        return (f"The commander's rules {names} in {CommanderPackage.rules()} apply to the "
-                "commander too; roast it with file:line when it breaks one.")
-
-
 @dataclass(frozen=True)
 class RuleFile(DeclaredFamily, affix="RuleFile"):
     family_discriminator = "type"
     name: str
     description: str
     drift: str
-    audience: type[RuleAudience]
     wakeup: str
     why: str
     body: str
@@ -150,6 +106,12 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
                 key=lambda rule: (cls.position(rule.name), rule.name),
             )
         )
+
+    @classmethod
+    def order_line(cls) -> str:
+        """The order cites the same rules its holder carries, without a role split."""
+        names = ", ".join(rule.name for rule in cls.packaged())
+        return f"Standing rules for this work: {names} in {CommanderPackage.rules()}."
 
     @classmethod
     def position(cls, name: str) -> int:

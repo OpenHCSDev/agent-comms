@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack
 from collections.abc import Awaitable, Callable
 from functools import partial
 from typing import TYPE_CHECKING
@@ -453,30 +453,22 @@ class TurnRunner:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         return self.inputs.state(session_id).turn.for_owner(thread)
 
-    async def close_idle_backend(self, session_id: AcpSessionId, thread: Thread) -> None:
-        async with self.idle_backend(session_id, thread) as persistent:
-            if persistent is not None:
-                await persistent.close()
+    async def close_idle_backend(self, session_id: AcpSessionId) -> None:
+        """Retire only the backend already held by this idle session.
 
-    @asynccontextmanager
-    async def idle_backend(self, session_id: AcpSessionId, thread: Thread):
-        """Hold this session's turn and child acquisition until an idle effect ends.
-
-        Configuration retirement remains conditional on an idle owner. Source
-        selection uses this same resource and refuses a busy owner. Neither
-        consumer can close a child after a new turn acquired it.
+        The turn lock excludes new input while the backend's own close_idle
+        serializes child retirement. Cleanup never acquires execution or creates
+        a backend, and needs no thread declaration to close its original child.
         """
+        persistent = self.persistent_backends.get(session_id)
+        if persistent is None:
+            return
         lock = self.inputs.state(session_id).turn_lock
         if lock.locked():
-            yield None
             return
         async with lock:
-            if await Coordination.run_worker(partial(self.session_busy, session_id)):
-                yield None
-                return
-            persistent = self.backend_for(session_id, thread)
-            async with persistent.lock:
-                yield persistent
+            if not await Coordination.run_worker(partial(self.session_busy, session_id)):
+                await persistent.close_idle()
 
     async def run_selected(self, session_id: AcpSessionId, execution: SelectedExecution):
         """Selected work and fresh ACP input share this session's one turn lifetime.

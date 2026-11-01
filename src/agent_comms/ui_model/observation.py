@@ -6,9 +6,9 @@ service watches the store files that ``HistoryViews.revision_paths`` declares,
 reads snapshots and presentations, derives the sidebar rows, and sends them
 over a pipe. The UI also asks it for reads it awaits: store reads (transcript
 pages, their currency, message notifications), answered in arrival order, and
-reads a thread's live owner answers over its socket (the goal snapshot, input
-delivery), answered as they complete. Each answer carries the request id and
-the decoded value or the exception the read raised. Store work runs in the
+thread-scoped reads (the goal snapshot, input delivery), answered as they
+complete through the shared operation's live-owner or retained-evidence contract.
+Each answer carries the request id and the decoded value or the exception the read raised. Store work runs in the
 service process. The receiving process reads and unpickles each complete packet
 in a joined worker; only typed delivery and future settlement run on its loop.
 The receiving worker still shares its interpreter lock with the UI.
@@ -41,12 +41,11 @@ from agent_comms.acp_extension import (
 )
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
-from agent_comms.bus_read import OwnerLiveRead, OwnerReadRuntimeRequest, UiRead
+from agent_comms.bus_read import OwnerScopedRead, UiRead
 from agent_comms.child_process import join_retirement
 from agent_comms.commander_hud import CommanderFrame, CommanderHud
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
-from agent_comms.owner_connection import OwnerConnection, OwnerReading, OwnerReplyConnection
 from agent_comms.coordination_errors import (
     CoordinationError,
     CoordinationReadUnavailable,
@@ -443,12 +442,12 @@ class ReadOperation(ReadRequest):
 
 
 @dataclass(frozen=True)
-class OwnerRead(OwnerReading[object], AwaitedRead):
-    """A read the live owner of thread incarnation ``owner`` answers over its socket.
+class OwnerRead(AwaitedRead):
+    """A read scoped to the captured thread incarnation ``owner``.
 
-    Served as it arrives, beside store reads; the owner's reply is decoded
-    here. Expected owner loss and refusals reach the caller with their original
-    error types, without ending observation or inventing a successful snapshot.
+    Served as it arrives, beside store reads; the shared operation owns its
+    answer and decoding. Expected owner loss and refusals reach the caller with
+    their original error types, without ending observation or inventing a successful snapshot.
     """
 
     owner: ThreadIncarnation
@@ -477,8 +476,8 @@ class OwnerRead(OwnerReading[object], AwaitedRead):
         except self.refusal_errors as error:
             return self.refused(error)
 
-    async def ask(self, comms: Comms) -> object:
-        return await OwnerReplyConnection.answer(comms, self.owner, self)
+    @abstractmethod
+    async def ask(self, comms: Comms) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -594,13 +593,13 @@ class ReadNotifications(ReadRequest):
 
 @dataclass(frozen=True)
 class ReadOwnerOperation(OwnerRead):
-    """The UI's envelope for an owner-live read: the operation's own reply, from the held owner."""
+    """The UI's root/recipient witnesses around the shared owner-scoped operation."""
 
-    operation: OwnerLiveRead
+    operation: OwnerScopedRead
 
-    async def read(self, owner: OwnerConnection) -> ToolResult:
-        request = OwnerReadRuntimeRequest(thread=self.owner.name, operation=self.operation)
-        return self.operation.decode_reply(await request.read(owner))
+    async def ask(self, comms: Comms) -> ToolResult:
+        cut = await Coordination.run_worker(comms.registry.store.snapshot_with_authority)
+        return await self.operation.answer(comms, self.owner, cut)
 
 
 @dataclass(frozen=True)

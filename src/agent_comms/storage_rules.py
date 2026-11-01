@@ -9,7 +9,7 @@ from abc import abstractmethod
 from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.child_process import ResidentMemory
@@ -17,6 +17,7 @@ from agent_comms.nominal.field_codec import (
     FieldCodec,
     GoalId,
     MalformedRecord,
+    ValueDirective,
 )
 from agent_comms.locked_store import DurableFile
 from agent_comms.errors import TodoError
@@ -33,6 +34,8 @@ from .thread_storage import (
     StorageRoots,
 )
 from .threads import Thread
+from .store_files import ExclusiveAtomicFile
+from .private_path import PrivateDirectoryRole
 
 if TYPE_CHECKING:
     from agent_comms.registration import Registration
@@ -301,6 +304,16 @@ class GoalCheckoutAllocation(RepositoryAllocation, EditableCheckoutAllocation):
         return path == rule.repository_checkout(rule.roots_of(owner), self.goal, repository)
 
 
+class ScopedDirectory(ValueDirective[Path]):
+    """A declared relative directory whose physical target must remain below its root."""
+
+    def within(self, root: Path) -> Path:
+        path = root / self.value
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise ValueError(f"Storage directory {path} escapes its root {root}")
+        return path
+
+
 @dataclass(frozen=True)
 class StorageRule(RoomAllocation, DurableFile):
     filename: ClassVar[str] = "storage.json"
@@ -312,14 +325,15 @@ class StorageRule(RoomAllocation, DurableFile):
     cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
     memory_gib: float = 3.0  # available memory under this makes a cleanup owner due
     idle_minutes: float = 30.0  # a pytest temp dir untouched this long holds memory for nothing
-    temp_root: StoragePath = Path('/tmp')  # RAM-backed, so its pytest dirs hold memory
+    temp_root: Annotated[StoragePath, ScopedDirectory(Path('tmp'))] = Path('/tmp')
     proc: StoragePath = Path('/proc')
     shown: ClassVar[int] = 5  # holders named in each list
-    # Home paths are read when the rule is built, never frozen at import.
-    volume: StoragePath = field(default_factory=Path.home)
-    scratch_base: StoragePath = field(
+    # Defaults use the current home; each declaration also owns its private-root location.
+    volume: Annotated[StoragePath, ScopedDirectory(Path())] = field(default_factory=Path.home)
+    scratch_base: Annotated[StoragePath, ScopedDirectory(Path('scratch'))] = field(
         default_factory=lambda: Path.home() / '.cache' / 'agent-scratch')
-    checkout_base: StoragePath = field(default_factory=lambda: Path.home() / 'wt')
+    checkout_base: Annotated[StoragePath, ScopedDirectory(Path('checkouts'))] = field(
+        default_factory=lambda: Path.home() / 'wt')
     # Joins a checkout's allocation, problem and companion repository: one name, one format.
     checkout_separator: ClassVar[str] = '--'
 
@@ -337,8 +351,35 @@ class StorageRule(RoomAllocation, DurableFile):
         path = cls.path_in(root)
         return FieldCodec.decode(cls, json.loads(path.read_text()) if path.exists() else {})
 
+    def within(self, root: Path) -> Self:
+        """Keep allocation and disposable output inside a verification root, retaining limits."""
+        root = root.resolve()
+        return replace(self, **{
+            plan.name: directory.within(root)
+            for plan in FieldCodec.field_plans(type(self))
+            for directory in ScopedDirectory.single(plan.annotation)
+        })
+
+    def require_isolated(self, root: Path) -> None:
+        """Observe private scope without writing or accepting an escaping symlink."""
+        if self != self.within(root):
+            raise ValueError(f"Existing storage policy escapes verification root {root}")
+
+    def prepare_isolated(self, root: Path) -> Self:
+        """Persist private allocation before registration loads it; never rewrite an old policy."""
+        scoped = self.within(root)
+        PrivateDirectoryRole.make_parents(root)
+        try:
+            ExclusiveAtomicFile(self.path_in(root)).write_text(
+                FieldCodec.compact(FieldCodec.encode(scoped)))
+        except FileExistsError:
+            stored = self.load(root)
+            stored.require_isolated(root)
+            return stored
+        return scoped
+
     def initial_roots(self, name: str) -> StorageRoots:
-        return StorageRoots(self.scratch_base / name)
+        return StorageRoots(ScopedDirectory(Path(name)).within(self.scratch_base))
 
     def roots_of(self, thread: Thread) -> StorageRoots:
         return thread.storage_roots.assigned(self, thread.name)

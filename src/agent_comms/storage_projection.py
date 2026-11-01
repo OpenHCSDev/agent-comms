@@ -44,6 +44,12 @@ class StorageProjection:
         (owner,) = owners
         resolved = path.resolve()
         sources = Checkout.git_roots(resolved, *resolved.parents)
+        scratch = self.rule.roots_of(owner).scratch.resolve()
+        # The registry's scratch allocation is more specific than an enclosing
+        # source tree. A repository rooted in that allocation is still source.
+        if resolved.is_relative_to(scratch) and not any(
+                root.is_relative_to(scratch) for root in sources):
+            return
         store = self.comms.goals.todos
         allowed = frozenset(
             boundary
@@ -51,11 +57,7 @@ class StorageProjection:
             for allocation in CheckoutAllocation.for_path(self.rule, owner, root)
             for boundary in allocation.edit_boundary(self.rule, owner, root, store, self.reads)
         )
-        # A thread registered at a directory holding its scratch (unit-fieldplan at $HOME) still
-        # owns that scratch: the rule gate's audit lives there, and refusing it deadlocked the unit.
-        in_project = resolved.is_relative_to(
-            owner.project_path.resolve()
-        ) and not resolved.is_relative_to(self.rule.roots_of(owner).scratch.resolve())
+        in_project = resolved.is_relative_to(owner.project_path.resolve())
         if (sources or path.is_relative_to(self.rule.checkout_base) or in_project) and not any(
             resolved.is_relative_to(root) for root in allowed
         ):

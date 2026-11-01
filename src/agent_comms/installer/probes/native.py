@@ -9,13 +9,13 @@ from agent_comms.native_package import (
     pinned_native_package,
 )
 from agent_comms.package_stamp import STAMP
-from agent_comms.unit_instructions import UnitInstructions
+from agent_comms.deal_prompt import DealPrompt
 
 
 class PrepareNativeProbe(TargetProbe, RuntimeProbe[None]):
     def run(self) -> None:
         VerifiedNativePackage.qualify(pinned_native_package())
-        UnitInstructions.prepare()
+        DealPrompt.prepare()
 
 
 class PrepareProducerDigestsProbe(TargetProbe, RuntimeProbe[None]):

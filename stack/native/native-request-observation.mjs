@@ -1,4 +1,4 @@
-/** Request timing is a diagnostic resource, never admission or retry authority. */
+/** One model request owns its progress and callback observations. */
 import { randomUUID } from "node:crypto";
 
 export function observeRequest(options, record, iterator) {
@@ -6,7 +6,7 @@ export function observeRequest(options, record, iterator) {
     try { options?.onRequestProgress?.(record, iterator); } catch { /* observer only */ }
 }
 
-export class NativeRequestObservation {
+export class NativeRequest {
     constructor(config) {
         this.observer = config.onRequestProgress;
         this.requestId = randomUUID();

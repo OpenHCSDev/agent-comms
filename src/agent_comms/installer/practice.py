@@ -73,14 +73,33 @@ class RehearsalHome(RuntimeHome):
     def uv(self) -> Path:
         return self.uv_path(Path.home()).resolve(strict=True)
 
+    @property
+    def selected_runtime(self) -> LaunchRuntime:
+        return LaunchRuntime.installed()
+
     def prepare(self) -> None:
         installed = LaunchRuntime.current_pointer()
-        selected = installed.resolve(strict=True)
+        selected = self.selected_runtime.prefix.resolve(strict=True)
         super().prepare()
         pointer = self.path / installed.relative_to(Path.home())
         PrivateDirectoryRole.make_parents(pointer.parent)
         pointer.unlink(missing_ok=True)
         pointer.symlink_to(selected)
+
+
+@dataclass(frozen=True)
+class SuppliedRuntimeHome(RehearsalHome):
+    """The same private-home setup, bound to an explicitly supplied runtime.
+
+    An installed rehearsal selects the current publication at preparation;
+    a candidate's home must keep its declared runtime when that publication moves.
+    """
+
+    runtime: LaunchRuntime
+
+    @property
+    def selected_runtime(self) -> LaunchRuntime:
+        return self.runtime
 
 
 class TestHome(RuntimeHome):

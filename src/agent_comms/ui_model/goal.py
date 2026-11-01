@@ -32,7 +32,4 @@ class GoalDisplay(ABC):
     @abstractmethod
     def standby(self, execution: GoalExecution) -> bool: ...
 
-    @abstractmethod
-    def action_failure(self, error: Exception) -> str: ...
-
 
