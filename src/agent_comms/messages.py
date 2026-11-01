@@ -30,7 +30,7 @@ from agent_comms.response_policy import (
 )
 from agent_comms.typed_table import (
     AppendOnlyTables, Column, DerivedTables, DurableTables, ForeignKey, Index,
-    ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
+    LOCAL_TABLE_SOURCE, ProducedTable, SharedFileTables, TableReference, TableSource, TypedRow, TypedTable,
 )
 
 from .change_report import NoChangeReport, ReportEvidence, SourceRoots
@@ -109,9 +109,10 @@ class BusRow(BusTables):
     at: float
 
     @classmethod
-    def last_seq(cls, db: sqlite3.Connection) -> int:
+    def last_seq(cls, db: sqlite3.Connection, *,
+                 table_source: TableSource = LOCAL_TABLE_SOURCE) -> int:
         return FieldCodec.decode(int, db.execute(
-            cls._sql(f'SELECT COALESCE(MAX({{seq}}), 0) FROM "{cls.declared_name}"')
+            cls._sql(f'SELECT COALESCE(MAX({{seq}}), 0) FROM {table_source.qualified(cls.declared_name)}')
         ).fetchone()[0])
 
     @classmethod

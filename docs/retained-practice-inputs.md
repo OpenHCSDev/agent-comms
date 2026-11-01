@@ -56,6 +56,35 @@ sequences, schema compatibility, materialized bounds and copy behavior remain
 unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
 is changed. These methods are implementation prerequisites, not a runnable root.
 
+## One attached source for metadata and rows — source only
+
+`PracticeRebuild.attached` previously opened a separate read-snapshot connection
+for producer/last-sequence checks while raw copying read the destination's SQLite
+attachment. Under WAL those connections could observe different source revisions.
+It now obtains the actual `SQLiteDatabase` through SQLite's database-list reader;
+metadata checks and copies address that attachment on the same connection. The
+existing reconciliation owner holds their write-transaction lifetime.
+
+`SQLiteDatabase` composes `TableSource` and owns qualified table names. The default
+source preserves ordinary SQLite name search, including legitimate temporary
+relations; it is not silently changed to an explicit `main` prefix. The existing
+TypedTable query owner supplies this source to select/stream, indexed key batches,
+counts, existence and catalog checks. Producer checks and the sole bus identity
+prefix consumer use it. No second connection, SQL parser or query codec remains.
+The source argument qualifies the selected table, not arbitrary SQL subqueries:
+joined relations still need their declaration-owned source qualification.
+
+The FK predicates deliberately retain explicit `main` references: those are the
+selected destination children/parents, not another original-source alias. The
+original row still comes through `AttachedPracticeRebuild.retain_rows`. Replacing
+those destination references with the original source would change the selection.
+
+The existing rebuild API forwards the same transaction connection through schema
+reconciliation; that parameter is not an independently maintained source snapshot.
+No additional rebuild hierarchy or unchanged-whole-file gate was added. Actual
+WAL interleaving, source/target isolation and producer-prefix controls are still
+unrun, and no CoordinationStore/PracticeCopy consumer is claimed.
+
 ## Shared loading lifetime and acknowledgement groups — source only
 
 `TypedTable.loading` owns table creation, the load interval, then installation of
