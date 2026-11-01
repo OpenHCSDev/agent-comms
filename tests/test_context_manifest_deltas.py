@@ -14,8 +14,9 @@ from agent_comms.context_store import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.practice import PracticeCopy
-from agent_comms.typed_table import RowNotFoundError
+from agent_comms.typed_table import RowNotFoundError, SQLitePageSize
 import json
+import sqlite3
 
 from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -230,7 +231,7 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
     reference = ContextManifestReference(selected.source, selected.record_id)
     before = ContextStore.digest(comms.contexts.path)
     copy = PracticeCopy(comms.root, tmp_path / 'retained')
-    copy.include_contexts((), requests=(reference, reference))
+    copy.include_contexts((), requests=(reference, reference), maximum_bytes=2**20)
     retained = ContextStore(copy.path)
 
     with retained.snapshot() as db:
@@ -294,7 +295,49 @@ def test_selected_context_copy_refuses_without_publishing(
     before = ContextStore.digest(comms.contexts.path)
     destination = ContextStore(tmp_path / 'retained')
     with pytest.raises(expected):
-        comms.contexts.retain_contexts(destination, (), requests=(reference,))
+        comms.contexts.retain_contexts(
+            destination, (), requests=(reference,), maximum_bytes=2**20,
+        )
     assert not destination.path.exists()
     assert not tuple(destination.root.iterdir())
+    assert ContextStore.digest(comms.contexts.path) == before
+
+
+def test_selected_context_allowance_counts_existing_companions(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path / 'source')
+    owner = comms.registry.require('Alice')
+    selected = comms.contexts.record_after(UNREAD_CONTEXT, context(owner, tmp_path, 1, 1))
+    copy = PracticeCopy(comms.root, tmp_path / 'retained')
+    copy.prepare()
+    companion = copy.path / 'earlier-store.sqlite3-wal'
+    original_bytes = b'original retained companion'
+    companion.write_bytes(original_bytes)
+    before = ContextStore.digest(comms.contexts.path)
+    with pytest.raises(RelationViolationError):
+        copy.include_contexts((), maximum_bytes=len(original_bytes), requests=(
+            ContextManifestReference(selected.source, selected.record_id),
+        ))
+    assert not ContextStore(copy.path).path.exists()
+    assert tuple(copy.path.iterdir()) == (companion,)
+    assert companion.read_bytes() == original_bytes
+    assert not copy.copied
+    assert ContextStore.digest(comms.contexts.path) == before
+
+
+def test_selected_context_sqlite_allocation_limit_leaves_no_publication(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path / 'source')
+    owner = comms.registry.require('Alice')
+    selected = comms.contexts.record_after(UNREAD_CONTEXT, context(owner, tmp_path, 1, 1))
+    copy = PracticeCopy(comms.root, tmp_path / 'retained')
+    before = ContextStore.digest(comms.contexts.path)
+    with comms.contexts.snapshot() as db:
+        page, = SQLitePageSize.read(db.execute('PRAGMA page_size'))
+    with pytest.raises(sqlite3.OperationalError) as refused:
+        copy.include_contexts((), maximum_bytes=page.page_size, requests=(
+            ContextManifestReference(selected.source, selected.record_id),
+        ))
+    assert refused.value.sqlite_errorcode == sqlite3.SQLITE_FULL
+    assert not ContextStore(copy.path).path.exists()
+    assert not tuple(copy.path.iterdir())
+    assert not copy.copied
     assert ContextStore.digest(comms.contexts.path) == before

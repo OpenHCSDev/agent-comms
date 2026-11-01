@@ -840,6 +840,32 @@ class SQLiteDatabase(TypedRow, TableSource):
     def qualified(self, name: str) -> str:
         return f"{_identifier(self.name)}.{_identifier(name)}"
 
+    def limit_bytes(self, db: sqlite3.Connection, maximum_bytes: int) -> None:
+        """Let SQLite refuse page growth before a selected database exceeds its allowance."""
+        size, = SQLitePageSize.read(db.execute(f"PRAGMA {_identifier(self.name)}.page_size"))
+        pages = maximum_bytes // size.page_size
+        if pages < 1:
+            raise RelationViolationError("Selected store has no room for a SQLite page")
+        limit, = SQLiteMaximumPageCount.read(db.execute(
+            f"PRAGMA {_identifier(self.name)}.max_page_count={pages}",
+        ))
+        if limit.max_page_count > pages:
+            raise RelationViolationError("Selected database already exceeds its byte allowance")
+
+
+@dataclass(frozen=True)
+class SQLitePageSize(TypedRow):
+    """The page size returned by SQLite, not a copied platform default."""
+
+    page_size: int
+
+
+@dataclass(frozen=True)
+class SQLiteMaximumPageCount(TypedRow):
+    """SQLite's actual accepted allocation limit; an existing file can force it higher."""
+
+    max_page_count: int
+
 
 @dataclass(frozen=True)
 class SQLiteSchemaObject(TypedRow):
@@ -3118,7 +3144,9 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
 
     @classmethod
     @contextmanager
-    def retaining_rows(cls, source: Path, destination: Path) -> Iterator[AttachedPracticeRebuild]:
+    def retaining_rows(
+        cls, source: Path, destination: Path, *, maximum_bytes: int,
+    ) -> Iterator[AttachedPracticeRebuild]:
         """Publish a fresh selected store only after loading and declared closure succeed.
 
         The caller supplies seeds and owns the wider cross-store cut. The source
@@ -3134,12 +3162,17 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         try:
             with closing(cls.writer(staged, isolation_level=None)) as db:
                 cls.configure_connection(db)
+                SQLiteDatabase.named(db, "main").limit_bytes(db, maximum_bytes)
                 with PracticeRebuild(source).attached(db) as original:
                     with schema.loading_rows(db):
                         original.require_schema(schema)
                         yield original
                         while schema.retain_referenced_rows(original):
                             pass
+            retained_bytes = sum(member.stat().st_size for member in cls.files(staged)
+                                 if member.is_file())
+            if retained_bytes > maximum_bytes:
+                raise RelationViolationError("Selected SQLite file group exceeds its byte allowance")
             ExclusiveAtomicFile(destination).replace(staged)
         finally:
             for member in cls.files(staged):
