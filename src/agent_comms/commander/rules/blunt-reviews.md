@@ -2,7 +2,6 @@
 name: blunt-reviews
 description: "every review names the defect, why the author knew better, and the fix, with file:line and the formal slop statement; posted to #comms so no other unit repeats it; voice.md owns the tone"
 drift: "A roast with no file:line and no pattern, fact, at, derive and by is noise; a polite order reads as a suggestion."
-audience: commander
 type: feedback
 ---
 

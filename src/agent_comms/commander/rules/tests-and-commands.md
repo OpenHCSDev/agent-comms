@@ -2,7 +2,6 @@
 name: tests-and-commands
 description: "every command over a few seconds runs in the background, tests under timeout; tests are de-slopped in the same change, never preserved against a refactor; order checks scan the whole tree"
 drift: "Every test, gh, bus, fetch and install runs in the background; compound shell goes in bash -c."
-audience: fleet
 type: feedback
 ---
 
@@ -37,7 +36,7 @@ type: feedback
 
 **Why:** a foreground run freezes the commander, so bus messages and the owner's questions wait behind it; and tests matter only as behaviour protection, so preserving sloppy ones blocks structural change. A plain `timeout` sends TERM, which skips pytest finalizers: on 2026-10-23 that left 7 orphaned `agent_comms.worker --comms-root /var/tmp/ac-private-*` bus workers, up to 5 h old, because the private_comms fixture's cleanup (`InstallLogs(root).stop_running()` in its `finally`, tests/conftest.py:383) never ran; INT runs it.
 
-- Units and review forks do not launch pytest. Review source first. Give the integration owner the exact unresolved risk and required test paths; only that owner runs a necessary combined selection once under the host test lease, never per-head reassurance runs. Order checks do not launch tests.
+- Review source first. The collaborator retaining the implementation and integration context owns its necessary combined execution under the host test lease; this is resource ownership, not a commander-only permission. Communicate the exact unresolved risk and required test paths, do not duplicate another owner's run or launch per-head reassurance. Order checks do not launch tests.
 - Background every test, bus, order-tool, gh, ssh, fetch or install command; foreground is only file reads and edits that finish in a second. Tests run under `timeout -s INT 300` with `-o faulthandler_timeout=60`; a test process older than 5 minutes is investigated that tick. Tristan, 2026-10-18: "do not ever ever run test sina lbocking manner ever. ALWAYS run in background".
 - Refactor tests with the code: per-member copies become one family test, hand-built setup one fixture owner. Tristan, 2026-10-18: "no stupid test theater, refactor the slop out of tests as you go, they're fucking sloppy".
 - A red test or failure you meet is fixed at its owner in the change at hand, or handed the same tick to the agent whose open work touches that code, named with its PR. "Not my change" without a named owner is a hidden failure, and every later run pays for it by asking whether a red is real. Tristan, 2026-10-22: "imagine if it doesn't get fixed and in the future you always end up checking oh is this a real failure?"; "not my change is valid if another agent is touching it, but they must be named".

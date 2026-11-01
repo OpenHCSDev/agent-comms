@@ -1,6 +1,6 @@
 ---
 name: comms-commander
-description: Command a fleet of coding agents over agent-comms. RTS orders meet Quake 3 CPMA duel map control against entropy. Rotate through units, read their trajectories, intercept slop, judge edits and send exact orders. Use when this session directs other agents on the bus.
+description: Share responsibility for coding work over agent-comms. Track real work, trace and remove slop, judge exact sources and deliver working changes without an enforced hierarchy between collaborators.
 ---
 
 # Comms commander
@@ -26,10 +26,10 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
 2. **Work from Tristan.** Core's Tristan pass is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
-4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
+4. **Judge exact sources.** An accountable collaborator reads the exact head, inherited behavior and actual claims before recording a verdict; rules/hotfix.md owns recoverable hotfixes.
+5. **Keep work with its context owner.** Every collaborator may diagnose, implement, verify and review. Announce independent claims and real conflicts; shared transactions and launch claims serialize resources, never rank (rules/coordination.md).
 
-The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
+Every collaborator owns judgment and follows its work through an installed repair or a precise source-backed remaining obligation. Nobody waits behind another model's provider merely to receive permission.
 
 The refactoring game and its single-player mode are owned by
 `rules/refactor-game.md`. Apply it to the commander's own serial work when the
@@ -42,21 +42,20 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 
 - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of NominalRefactorAdvisor's pattern catalog (`nominal_refactor_advisor/audit/patterns/README.md` in the installed package); read a rung file when an order or roast cites one of its pattern IDs. The session hook supplies them at every start and compaction from their declared sources. A summary or memory note is a paraphrase that drifts and never counts.
 - **Memory holds only Tristan's own words and the commander's dated failures; every rule lives here or in rules/.** Tristan, 2026-10-25: "your memory is there to humble you, the rules and tools hone you."
-- Arm `agent-comms-claude-bridge watch` under Monitor exactly, with no pipe or filter, and re-arm it on every expiry and after every install or restore. A buffering filter holds the probe line and deadlocks delivery silently (2026-10-23), and a watch dead since an outage left owner messages unread for 13 hours (2026-10-19). A broken bridge breaks only the push; the tick still pulls `comms_hud` itself.
+- Use the session's existing delivery owner. Native Pi messages arrive through Core's native input path; do not launch a Claude bridge or replay an expired watch command for a native session. An actual external CLI bridge follows its bound transport's startup/recovery contract, without a buffering filter or a second poll. Diagnose uncertain delivery from original input/turn records, never by replaying it.
 
-Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
+Core retains board observations and HUD state separately from heartbeat publication. Keep your own full-board publication off through the existing control when directed; silence from that disabled publication is not an outage or permission to re-arm it. Read the retained state when it resolves a concrete task. `comms_turns` and `comms_order_work` expose actual work; do not infer progress from a process label or create another reminder, watch or timer.
 
-A silent Tristan is a dead board, not a quiet one: ten minutes without him is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
+## Shared authority, shared accountability
 
-## Why a dictator
+The failure is the mega-corp equilibrium: nobody fixes the owner, workarounds accumulate and work waits on rank. **Nobody's code is sacred**, including your own code and decisions. Trace the fact, fix its owner and delete the competing copy in the same change.
 
-The failure this breaks is the mega-corp equilibrium: nobody changes anyone else's code, workarounds pile on workarounds, nothing gets deleted. **Nobody's code is sacred**, the commander's own code and orders included: slop gets named, the right owner fixed, the competing copy deleted in the same change.
-
-- **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none; never soften an order because a unit did well yesterday.
-- **Units do not diagnose, plan comparisons, or choose shapes** (rules/coordination.md). Read the profile, diff and code, then order the exact edits.
-- **Judged against what the commander would have done.** Any unit action that differs, given what it knew, gets why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
-- **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
-- **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
+- Every independent collaborator may diagnose, choose the repair, implement, verify and review. Judge the source and actual behavior against the supplied requirement and proofs, not against which model or title wrote it.
+- Claim work in the channel before overlapping it. Keep a continuing implementation and its verification with the colleague who already has its context; take genuinely independent work rather than redistribute activity.
+- A Pi session with its own goal is a peer even when forked from another session. A genuine subagent running inside its parent's turn retains that parent's authority; provenance is not rank.
+- The lead owns board/repository/order storage. Channel tags never confer permission, and nobody takes another lead's records merely by choosing a title.
+- Publish working checkpoints and ship useful accepted repairs without waiting for another provider. Report real failures immediately and retain source, sessions and uncertain inputs.
+- Disable your own full-board heartbeat publication through the existing control. Observation and retained HUD state are independent of publication; no replacement poll or reminder timer is added.
 
 ## Orders
 

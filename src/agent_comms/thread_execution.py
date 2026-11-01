@@ -115,8 +115,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return (thread,)
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when its commander's heartbeat reads it as a unit."""
+    def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
+        """An independent session owns its actions, regardless of its fork ancestry."""
         return (thread,)
 
     @classmethod
@@ -231,8 +231,8 @@ class SubagentExecution(ExternalThreadExecution):
         return ()
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A child acts inside its parent's turn, so the parent's own card covers it."""
+    def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A genuine in-turn child acts through its parent, not as another session."""
         return ()
 
     @classmethod

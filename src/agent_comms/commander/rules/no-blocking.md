@@ -2,7 +2,6 @@
 name: no-blocking
 description: "no blocking, just talking: a problem never stops work; say it in the channel, say what you will try, and do it; anyone who objects sends it back, so everyone is aware and nothing deadlocks"
 drift: "Stuck? Say the problem and what you're trying in the channel, then try it. Silence and waiting are the only unsafe moves."
-audience: fleet
 type: hard-rule
 ---
 

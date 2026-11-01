@@ -69,7 +69,7 @@ from agent_comms.message_reference import (
     MessageReference,
 )
 from agent_comms.registration import Registration
-from agent_comms.runtime_updates import HiddenItem, ReplyingThreadOutput, RuntimeUpdate, ThreadOutput
+from agent_comms.runtime_updates import HiddenItem, RuntimeUpdate, ThreadOutput
 from agent_comms.turn_item import NoSourceTurn, SourceTurn
 from agent_comms.send_result import SendResult
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -1638,7 +1638,7 @@ class MonitorIncomingFrame(IncomingFrame):
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
     """Session-owned subscription and delivery journal, with replaceable readers."""
 
-    output_type: ClassVar[type[ThreadOutput]] = ReplyingThreadOutput
+    output_type: ClassVar[type[ThreadOutput]] = ThreadOutput
     incoming_frame: ClassVar[type[MonitorIncomingFrame]]
     window_bytes: ClassVar[int]
 

@@ -2,7 +2,6 @@
 name: fork-orders
 description: "every fork or unit order carries the invariant steps up front: PR at the first real commit, never an empty draft, land through the merge queue, no local NRA gate runs or full suites, delete slop instead of rewriting it, one version of each system"
 drift: "No silent errors, no deferrals, no follow-up: done means the defect the problem names is gone."
-audience: fleet
 type: feedback
 ---
 

@@ -22,7 +22,7 @@ from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteA
 from agent_comms.task_attachments.owner_notices import RestartNotice
 from agent_comms.threads import Thread
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
-from agent_comms_hooks.skill import CommanderReader, FleetReader
+from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal, engaged
 
 
@@ -38,12 +38,12 @@ def unit_deal(commander_bus):
     return deal
 
 
-def test_a_spawned_thread_is_dealt_its_role_s_deck_sources_once(commander_bus):
-    """The first start deals the registry role's deck sources; a restart keeps the deal."""
-    for name, reader in (("claude-code", CommanderReader), ("unit-x", FleetReader)):
+def test_every_independent_thread_is_dealt_the_same_sources_once(commander_bus):
+    """A lead and an untagged peer share the deal; a restart keeps its original audit."""
+    for name in ("claude-code", "unit-x"):
         deal = PiRedeal.of(commander_bus, commander_bus.registry.require(name))
         deal.start()
-        assert deal.current().dealt == tuple(path.resolve() for path in reader.sources())
+        assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
         deal.audit.write_text("{}")
         deal.start()
         assert deal.audit.exists()
@@ -58,7 +58,7 @@ def test_a_retired_package_source_redeals_before_owner_binding(unit_deal):
 
     unit_deal.start()
 
-    assert unit_deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+    assert unit_deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
     assert not unit_deal.audit.exists()
     with pytest.raises(RulesUnread):
         unit_deal.judge_tool("bash")
@@ -66,7 +66,7 @@ def test_a_retired_package_source_redeals_before_owner_binding(unit_deal):
 
 def test_every_dealt_file_fits_one_default_read_on_every_backend():
     """A dealt file over a read tool's cap could never count as read, locking the thread out."""
-    sources = CommanderReader.sources()
+    sources = DeckReader.sources()
     spans = (ReadTool.default_span(), ReadInput(sources[0]).span())
     assert all(span.covers(source) for span in spans for source in sources)
 
@@ -96,7 +96,7 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         SelectedToolRequest("call-write", SelectedWriteArguments("notes.md", "x")).judge_under(
             unit_deal
         )
-    sources = FleetReader.sources()
+    sources = DeckReader.sources()
     call("read", {"path": str(sources[0])}).judge_under(unit_deal)  # a dealt file is
     call("read", {"path": str(sources[0]), "limit": 3}).completed_under(unit_deal)
     with pytest.raises(RulesUnread, match=str(sources[0].resolve())):
@@ -105,7 +105,8 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
         call("read", {"path": str(source)}).completed_under(unit_deal)
     with pytest.raises(RulesUnread):
         bash.judge_under(unit_deal)  # reading without answering still keeps the gate closed
-    answered = [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()]
+    answered = [engaged(source.stem, source) for source in unit_deal.current().dealt
+                if source.stem in unit_deal.current().due.rules]
     unit_deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     with pytest.raises(RulesUnread, match="then fix the gate"):
         bash.judge_under(unit_deal)  # the audit answers the owner's words too
@@ -116,7 +117,8 @@ def test_a_compacted_pi_thread_reads_every_dealt_rule_then_writes_its_audit(
     unit_deal.audit.write_text(
         json.dumps(
             {
-                "rules": [engaged(rule.name, rule.path.resolve()) for rule in FleetReader.rules()],
+                "rules": [engaged(source.stem, source) for source in unit_deal.current().dealt
+                          if source.stem in unit_deal.current().due.rules],
                 "owner_words": [{"words": text, "doing": "reading the gate"} for text in words],
             }
         )
@@ -240,13 +242,12 @@ def test_gate_can_be_disabled_and_reenabled_without_forging_a_read(unit_deal):
     assert unit_deal.current().dealt == before
 
 
-def test_a_bus_with_no_commander_project_deals_a_pi_unit_the_fleet_rules(comms, tmp_path):
-    """No commander project leaves every thread commanded: a Pi unit is dealt the fleet deck,
-    as the Claude Code hooks deal it on the same bus."""
+def test_a_bus_without_a_storage_lead_still_deals_the_shared_sources(comms, tmp_path):
+    """Project storage configuration does not change an independent session's rules."""
     unit = comms.registry.declare(Thread("unit-y", frozenset(), Checkout(tmp_path)))
     deal = PiRedeal.of(comms, unit)
     deal.start()
-    assert deal.current().dealt == tuple(path.resolve() for path in FleetReader.sources())
+    assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
 
 
 def test_every_refusal_opens_with_why_its_deal_was_dealt(unit_deal):

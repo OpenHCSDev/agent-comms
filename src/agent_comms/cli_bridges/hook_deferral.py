@@ -213,15 +213,13 @@ class StopHook(ClaudeTranscriptHook):
         if self.stop_hook_active:
             return
         snapshot = self.comms.registry.snapshot()
-        selected = snapshot.commander_project.by_role(
-            snapshot.born(self.binding.owner.require_recorded().lookup),
-            commander=self.deferred, commanded=lambda: ())
+        snapshot.born(self.binding.owner.require_recorded().lookup)
         deaf = tuple(watch.line() for watch in WatchClaim(self.session_id).deaf())
-        if reasons := (*deaf, *selected()):
+        if reasons := (*deaf, *self.deferred()):
             self.output.line(json.dumps({"decision": "block", "reason": "\n".join(reasons)}))
 
     def deferred(self) -> tuple[str, ...]:
-        """Only a commander answers for deferring work; every bound role must keep its Monitor."""
+        """Every bound collaborator answers for its own deferred work."""
         reply = self.reply()
         return (*(
             reason

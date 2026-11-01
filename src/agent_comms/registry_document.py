@@ -82,7 +82,6 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .bus_publication import Delivered
-    from .rule_deal import DealTrigger, DealtSources, RuleDeal
 
 
 @dataclass(frozen=True, slots=True)
@@ -596,18 +595,6 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     @abstractmethod
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject: ...
 
-    def by_role[Answer](self, thread: Thread, *,
-                        commander: Answer, commanded: Answer) -> Answer:
-        """The resolved thread carries its nominal identity and declared role capabilities."""
-        return commanded
-
-    def deal_rules(self, deal: RuleDeal, thread: Thread, *,
-                   commander: type[DealtSources], commanded: type[DealtSources],
-                   prompts: tuple[str, ...], trigger: DealTrigger) -> None:
-        """The fleet's rules are dealt by the role this project gives the thread."""
-        deal.deal(self.by_role(thread, commander=commander, commanded=commanded), prompts,
-                  trigger)
-
 
 class NoCommanderProject(CommanderProject):
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -638,12 +625,15 @@ class RegisteredCommanderProject(CommanderProject):
     repos: tuple[Repo, ...]
 
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The registered lead first, then every thread declared in #commanders. A commander
-        fork sits in that channel with its commander's tags but acts for it, never as one."""
+        """The storage lead and independent collaborators; tags confer no authority.
+
+        The execution declaration, not fork provenance, excludes genuine in-turn children.
+        """
         return tuple(dict.fromkeys((
             *self.leads(snapshot),
-            *(thread for thread in snapshot.threads.values()
-              if self.by_role(thread, commander=True, commanded=False)))))
+            *(peer for thread in snapshot.threads.values()
+              for executor in thread.role.executor(thread)
+              for peer in executor.execution.independent_threads(executor)))))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
         """The one registered commander a fork is declared under."""
@@ -676,14 +666,6 @@ class RegisteredCommanderProject(CommanderProject):
 
     def reconfigured(self, repositories: RepositorySelection) -> CommanderProject:
         return replace(self, repos=repositories.applied(self.repos))
-
-    def by_role[Answer](self, thread: Thread, *,
-                        commander: Answer, commanded: Answer) -> Answer:
-        return commander if (
-            thread.incarnation == self.commander
-            or (CommandersTag.declared_name in thread.tags
-                and not thread.execution.commander_forks(thread))
-        ) else commanded
 
 
 @ThreadSlice.required
