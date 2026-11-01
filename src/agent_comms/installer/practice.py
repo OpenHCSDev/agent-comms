@@ -7,7 +7,10 @@ import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
+from collections.abc import Iterable
 
+from agent_comms.context_store import ContextManifestReference, ContextStore
+from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.declared_uv import DeclaredUv
@@ -133,11 +136,31 @@ class PracticeCopy:
             resource.live(self.root), resource.path, source,
         ) for source, resource in self.copied.items()))
 
-    def include(self, paths: tuple[Path, ...]) -> None:
+    def prepare(self) -> None:
+        """One space and private-directory owner for whole and selected materialization."""
         floor = StorageRule.load(self.root).floor_gib * 2**30
         PrivateDirectoryRole.make_parents(self.path)
         if shutil.disk_usage(self.path.parent).free < floor:
             raise UpgradeRefused("Insufficient free space before building the practice copy")
+
+    def include_contexts(
+        self, identities: Iterable[NativeSessionIdentity], *,
+        requests: Iterable[ContextManifestReference] = (),
+    ) -> None:
+        """Explicit selected-context inputs, never a full-file backup.
+
+        Normal include() and the installer's live-root backup remain whole-file
+        operations. This selection must precede including the context resource;
+        an existing destination is refused rather than overwritten or reimported.
+        """
+        self.prepare()
+        source = ContextStore(self.root)
+        resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source.path,))
+        source.retain_contexts(ContextStore(self.path), identities, requests=requests)
+        self.copied[source.path] = resource
+
+    def include(self, paths: tuple[Path, ...]) -> None:
+        self.prepare()
         witnesses = set(MaintenanceBarrier(RegistryFile.path_in(self.root)).witness_paths)
         for resource in RootFile.owned_files(LiveFilesRequest(self.root), paths):
             source = resource.live(self.root)

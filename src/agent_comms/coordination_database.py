@@ -119,7 +119,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
         with CoordinationReadUnavailable.checking():
             self._connection = self._open_connection(contention)
             try:
-                self._configure_connection()
+                self.configure_connection(self._connection)
                 self._initialize_schema()
                 self._enforce_private_modes()
             except BaseException:
@@ -133,13 +133,15 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
         """The root's own composition of this file decides its schema and its strays."""
         self.schema_at(self.path).install_schema(self._connection, self.schema_change(self.path))
 
-    def _configure_connection(self) -> None:
+    @classmethod
+    def configure_connection(cls, connection: sqlite3.Connection) -> None:
+        """Ordinary opening and selected loading use the same row-owned SQL behavior."""
         for row_type in CoordinatorTable.declarations():
-            row_type.configure_connection(self._connection)
-        self._connection.row_factory = sqlite3.Row
-        self._connection.execute("PRAGMA foreign_keys = ON")
+            row_type.configure_connection(connection)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
         # Rollback journal avoids a post-schema WAL-mode race among fresh openers.
-        self._connection.execute("PRAGMA synchronous = FULL")
+        connection.execute("PRAGMA synchronous = FULL")
 
     def _prepare_private_file(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

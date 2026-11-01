@@ -1,20 +1,36 @@
 # Original-coordinate practice inputs — implementation checkpoint
 
-Core #3829 remains unfinished. Entry-manifest retention exists; bounded coordinator
-retention, native-journal reading and the prepared-root application run do not.
+Core #3829 remains unfinished. Entry and selected saved-context retention now have
+a PracticeCopy consumer in source; bounded coordinator selection, native-journal
+reading and the prepared-root application run remain unfinished.
 This document records the source decisions, not an executable selection roster.
 
 ## Existing owners and implemented entry selection
 
-`ContextStore.retain_entries(destination, identities)` streams `ContextEntry` rows
-through `TypedTable` under the source snapshot and destination write lifetime.
-Original session/file/item keys and manifest values remain unchanged. It refuses
-an existing destination. It does not copy `ContextRequest`, segment versions or
-store identity and therefore does not qualify the saved-request browser.
+`ContextStore.retain_contexts(destination, identities, requests=...)` replaces the
+entry-only API. `PracticeCopy.include_contexts` consumes it explicitly; normal
+whole-file include and live-root backup selection are unchanged. Selected writable
+SQL values travel through the existing attached source, without decode/re-encode,
+coordinate relocation, source-identity minting or a compatibility entry point.
 
-The earlier owner-path run retained 6,274 entries in 13,877,248 materialized bytes;
-source-before, retained and source-after row digests matched. No native or physical
-acceptance follows from that result.
+`ReconciledFile.retaining_rows` owns fresh staging, exact source-schema validation,
+the existing load-before-guards transaction, repeated declared-dependency expansion,
+and exclusive atomic publication. A refusal or failed closure never overwrites an
+existing destination or publishes the partially loaded staged database.
+
+`ContextRequest.retain_required_rows` owns its serialized version IDs, segment
+entry references and earlier request IDs. Missing originals and foreign-thread
+predecessors refuse. Whole retained predecessor records receive their own closure,
+not an incomplete predecessor that only one selected segment can read. The original
+ContextStoreInfo is required when requests are selected; entry-only selection does
+not invent one. `RowidSequenced` retains SQLite's original sequence high-water mark
+so an omitted original ID cannot become the next newly allocated ID.
+
+The earlier entry-only API's owner-path run retained 6,274 entries in 13,877,248
+materialized bytes with matching source-before/retained/source-after row digests.
+It was not rerun on this implementation. Source compilation is not qualification
+of the selected saved-request browser, atomic publication, rollback, sequence
+metadata, resource bounds or native/physical behavior.
 
 ## Foreign-key inspection prerequisite
 
@@ -50,10 +66,15 @@ table name. `TableSchema.retain_referenced_rows` expands one pass through declar
 edges, including column references and required groups supplied by row overrides.
 It is not a fixed-point or complete semantic closure.
 
-This new primitive is not yet consumed by CoordinationStore/PracticeCopy. Guard-safe
-loading, required children, source snapshot consistency, producer metadata,
-sequences, schema compatibility, materialized bounds and copy behavior remain
-unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
+`retain_keys` reuses TypedTable's indexed key-batch compiler. It shares raw insertion
+and primary-key deduplication with `retain_rows`; no second key encoder or raw-copy
+procedure is added. Completed changes come from the connection, since SQLite's
+WITH-prefixed INSERT reports Cursor.rowcount=-1.
+
+ContextStore and PracticeCopy now consume the primitive; the coordinator selector
+still does not. Guard-safe loading, required children, source snapshot consistency,
+producer metadata, sequences, schema compatibility, materialized bounds and copy
+behavior remain unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
 is changed. These methods are implementation prerequisites, not a runnable root.
 
 ## One attached source for metadata and rows — source only
@@ -170,7 +191,11 @@ published as a runnable root or complete backup.
 input union for rehearsal and live backup. A bounded subset must not be labelled
 as a complete original-store backup. Keep ordinary copy/backup behavior intact;
 represent a bounded selection explicitly through the existing request/copy
-owners. Do not add a parallel importer, ledger or reminted session identities.
+owners. `PracticeCopy.include_contexts` is an explicit selection API; its request
+continues to describe original-to-retained path mapping, not a complete-backup
+certificate. BackedUpBus still constructs LiveFilesRequest for the original live
+root, rather than backing up the selected practice bytes. Do not add a parallel
+importer, ledger or reminted session identities.
 
 Measure the complete selected stores, WAL/copy groups and free space before any
 copy. The requested production-copy proof is bounded to 3 GiB; zero freelist pages
@@ -195,8 +220,8 @@ closure. External/dynamic bindings, serialized links and required reverse childr
 remain OPEN. The earlier d4/Toad corpus and its unresolved cases are separate;
 these counts do not resolve them. New metadata methods require targeted reproof.
 
-Next: implement the declared-reference traversal and owned semantic groups,
-consume them in the bounded copy request without weakening full backups, then
+Next: finish coordinator seeds and the remaining semantic groups, wire that
+selection through PracticeCopy and enforce the aggregate copy budget, then
 qualify the coherent implementation through the combined backend/carry and actual
 prepared-root saved-history journey. No pytest, provider, donor mutation or new
 native/physical run was performed for this source checkpoint. Reader promotion

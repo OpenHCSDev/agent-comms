@@ -8,7 +8,7 @@ import json
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
@@ -31,7 +31,10 @@ from .turn_context import (
     UnrecordedSegment,
 )
 
-from .typed_table import StoreRows, Column, DurableStore, Generated, Index, RowidSequenced, SingletonRow, TypedTable
+from .typed_table import (
+    AttachedPracticeRebuild, StoreRows, Column, DurableStore, Generated, Index,
+    RowidSequenced, SingletonRow, TableSchema, TypedTable,
+)
 from .turn_item import NativeItemId
 from .native_session_reopen import PiSessionId
 
@@ -241,6 +244,35 @@ class ContextRequest(ContextStoreRows, RowidSequenced):
         for version in self.versions:
             parts.append(ContextSegmentVersion.require(db, id=version).segment)
         return self.identity.with_segments(tuple(parts))
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """The stored request owns its serialized version, entry and predecessor edges."""
+        changed = super().retain_required_rows(original, schema)
+        db = original.destination
+        for request in cls.select(db):
+            changed += original.retain_rows(ContextStoreInfo)
+            ContextStoreInfo.require(db, singleton=1)
+            changed += original.retain_keys(
+                ContextSegmentVersion, tuple({"id": version} for version in request.versions),
+            )
+            record = request.recorded(db)  # Missing original versions refuse, never disappear.
+            for part in record.segments:
+                predecessors = part.predecessors(request.id)
+                changed += original.retain_keys(cls, tuple({"id": key} for key in predecessors))
+                for key in predecessors:
+                    if cls.require(db, id=key).identity.thread != request.identity.thread:
+                        raise RelationViolationError("Context predecessor is missing or foreign")
+                changed += original.retain_keys(ContextEntry, tuple(
+                    {"session_id": ref.identity.session_id,
+                     "session_file": ref.identity.session_file, "entry_id": ref.entry_id}
+                    for ref in part.entries
+                ))
+                for reference in part.entries:
+                    ContextEntry.original(db, reference)
+        return changed
 
 
 class ContextPriorSupersededError(RelationViolationError):
@@ -484,32 +516,34 @@ class ContextStore(DurableStore):
                                                    session_file=identity.session_file,
                                                    entry_id=entry_id)}
 
-    def retain_entries(
-        self,
-        destination: ContextStore,
-        identities: Iterable[NativeSessionIdentity],
-    ) -> int:
-        """Retain original journal-entry manifests in a fresh context store.
+    def retain_contexts(
+        self, destination: ContextStore, identities: Iterable[NativeSessionIdentity], *,
+        requests: Iterable[ContextManifestReference] = (),
+    ) -> None:
+        """Retain original entry manifests and explicitly selected saved requests.
 
-        Session identity is data here: neither its path nor its entry keys are
-        relocated. Request/predecessor state and producer identity do not travel
-        with these complete entry manifests. The primary-key prefix selects only
-        the requested journals; streaming never decodes unrelated context history.
+        Raw writable values, source identity, predecessor/version/entry closure
+        and sequence high-water marks travel unchanged. Session paths are keys,
+        not relocated storage or permission to launch or replay a native session.
+        Entry-only selection retains no request or fabricated store identity.
         """
-        if destination.path.exists() or destination.path.is_symlink():
-            raise FileExistsError(destination.path)
-        count = 0
-        with self.snapshot() as source, destination.writing() as retained:
-            for identity in dict.fromkeys(identities):
-                with closing(ContextEntry.stream(
-                    source,
-                    session_id=identity.session_id,
-                    session_file=identity.session_file,
-                )) as entries:
-                    for entry in entries:
-                        entry.insert(retained)
-                        count += 1
-        return count
+        with type(self).retaining_rows(self.path, destination.path) as original:
+            original.retain_keys(ContextEntry, tuple(
+                {"session_id": identity.session_id, "session_file": identity.session_file}
+                for identity in dict.fromkeys(identities)
+            ))
+            selected = tuple(dict.fromkeys(requests))
+            if selected:
+                original.retain_rows(ContextStoreInfo)
+                source = ContextStoreInfo.require(original.destination, singleton=1).source
+                for reference in selected:
+                    if reference.source != source:
+                        raise RelationViolationError("Selected context belongs to another store")
+                original.retain_keys(ContextRequest, tuple(
+                    {"id": reference.record_id} for reference in selected
+                ))
+                for reference in selected:
+                    ContextRequest.require(original.destination, id=reference.record_id)
 
     def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
         """Read the thread's previous request from a snapshot, outside any write lock."""

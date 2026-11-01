@@ -3,19 +3,27 @@ from agent_comms.context_store import UNREAD_CONTEXT
 from dataclasses import replace
 import hashlib
 import sys
+from pathlib import Path
+from collections.abc import Callable
 
 import pytest
 
-from agent_comms.context_store import ContextRequest
+from agent_comms.context_store import (
+    CapturedContext, ContextEntry, ContextManifestReference, ContextRequest, ContextSegmentVersion,
+    ContextStore, ContextStoreIdentity, ContextStoreInfo,
+)
+from agent_comms.errors import RelationViolationError
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.typed_table import RowNotFoundError
 import json
 
-from agent_comms.nominal.field_codec import FieldCodec, TurnId
+from agent_comms.nominal.field_codec import ContextStoreId, FieldCodec, TurnId
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.thread_identity import TurnIdentity
 from agent_comms.turn_context import ObservedDispatchRequest
 from agent_comms.turn_context import (
     ContextManifest, JournalProvenance, NativeProvenance, RecordedContextPredecessor,
-    RecordedContextTurn,
+    RecordedContextTurn, RecordedSegmentManifest,
     SegmentManifest, SystemLayerSegment, ToolCatalogSegment, TranscriptSegment,
 )
 from bus_record_fixture import context_comms
@@ -210,3 +218,83 @@ def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path)
     assert comms.contexts.page('Bob', comms.registry).resources[-1].record_id == recorded[1].record_id
     with pytest.raises(ContextPriorSupersededError):
         comms.contexts.record_after(alice, context(owners[0], tmp_path, 5, 3))
+
+
+def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path: Path) -> None:
+    comms = context_comms(tmp_path / 'source')
+    owner = comms.registry.require('Alice')
+    originals = tuple(comms.contexts.record_after(
+        UNREAD_CONTEXT, context(owner, tmp_path, count, turn),
+    ) for turn, count in enumerate((1, 2, 4), start=1))
+    selected = originals[1]
+    reference = ContextManifestReference(selected.source, selected.record_id)
+    before = ContextStore.digest(comms.contexts.path)
+    copy = PracticeCopy(comms.root, tmp_path / 'retained')
+    copy.include_contexts((), requests=(reference, reference))
+    retained = ContextStore(copy.path)
+
+    with retained.snapshot() as db:
+        info = ContextStoreInfo.require(db, singleton=1)
+        assert info.source == selected.source
+        rows = ContextRequest.select(db, order_by=('id',))
+        assert tuple(row.id for row in rows) == tuple(row.record_id for row in originals[:2])
+        assert retained.resolve(db, info.source, rows[-1]).value == selected.value
+        assert ContextEntry.count(db) == 2
+        retained_version = max(row.id for row in ContextSegmentVersion.select(db))
+    with comms.contexts.snapshot() as db:
+        source_version = max(row.id for row in ContextSegmentVersion.select(db))
+        assert retained_version < source_version
+    with retained.writing() as db:
+        # Real row owners allocate after the full original high-water mark,
+        # not after the greatest ID that happened to be in this selection.
+        assert ContextRequest.append(db, selected.recorded) == originals[-1].record_id + 1
+        fresh = RecordedSegmentManifest(context(owner, tmp_path, 6, 4).segments[2])
+        assert ContextSegmentVersion.append(db, fresh) == source_version + 1
+    assert ContextStore.digest(comms.contexts.path) == before
+    assert ContextStore.path_in(comms.root) in copy.copied
+    assert copy.request.source_root() == comms.root
+    assert copy.request.root == copy.path
+
+
+def foreign_context_reference(
+    store: ContextStore, previous: CapturedContext, reference: ContextManifestReference,
+) -> ContextManifestReference:
+    return replace(reference, source=ContextStoreIdentity(ContextStoreId.mint()))
+
+
+def missing_context_reference(
+    store: ContextStore, previous: CapturedContext, reference: ContextManifestReference,
+) -> ContextManifestReference:
+    return replace(reference, record_id=reference.record_id + 100)
+
+
+def missing_context_predecessor(
+    store: ContextStore, previous: CapturedContext, reference: ContextManifestReference,
+) -> ContextManifestReference:
+    with store.writing() as db:
+        ContextRequest.delete(db, id=previous.record_id)
+    return reference
+
+
+@pytest.mark.parametrize(('change', 'expected'), (
+    pytest.param(foreign_context_reference, RelationViolationError, id='foreign-source'),
+    pytest.param(missing_context_reference, RowNotFoundError, id='missing-record'),
+    pytest.param(missing_context_predecessor, RowNotFoundError, id='missing-predecessor'),
+))
+def test_selected_context_copy_refuses_without_publishing(
+    tmp_path: Path,
+    change: Callable[[ContextStore, CapturedContext, ContextManifestReference], ContextManifestReference],
+    expected: type[Exception],
+) -> None:
+    comms = context_comms(tmp_path / 'source')
+    owner = comms.registry.require('Alice')
+    first = comms.contexts.record_after(UNREAD_CONTEXT, context(owner, tmp_path, 1, 1))
+    second = comms.contexts.record_after(first, context(owner, tmp_path, 2, 2))
+    reference = change(comms.contexts, first, ContextManifestReference(second.source, second.record_id))
+    before = ContextStore.digest(comms.contexts.path)
+    destination = ContextStore(tmp_path / 'retained')
+    with pytest.raises(expected):
+        comms.contexts.retain_contexts(destination, (), requests=(reference,))
+    assert not destination.path.exists()
+    assert not tuple(destination.root.iterdir())
+    assert ContextStore.digest(comms.contexts.path) == before
