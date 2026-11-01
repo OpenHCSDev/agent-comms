@@ -267,7 +267,7 @@ export class TurnContext {
         }
         const observations=context.messages.map(message=>{
             const original=identified.get(JSON.stringify(message))?.next().value;
-            const declaration=original?.declaration ?? TranscriptSegment;
+            const declaration=original?.declaration ?? TransformedInputSegment;
             return {original,segment:new declaration([...provenance,original?.source ?? journal],
                 [message],contributions.get(message.inputId) ?? [])};
         });

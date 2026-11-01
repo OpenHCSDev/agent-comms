@@ -145,6 +145,7 @@ class MeantRecord:
 
     asked: frozenset[str] = frozenset()
     open: tuple[Asked, ...] = ()
+    answers: tuple[str, ...] = ()
 
     question: ClassVar[str] = "did you mean it?"
     answer: ClassVar[re.Pattern[str]] = re.compile(r"^[\W_]*(yes|yeah|yep|yup|no|nope)\b", re.I)
@@ -155,14 +156,20 @@ class MeantRecord:
         2026-10-31 claude-nra said a bare "Yes." about ten times to reopen its tools, did the
         opposite of what it had written, and told Tristan afterwards it meant none of them: no
         single word can answer him."""
-        return any(self.answer.match(word) and len(word.split()) >= self.answer_words
-                   for word in words)
+        return bool(self.answers_in(words))
+
+    def answers_in(self, words: tuple[str, ...]) -> tuple[str, ...]:
+        return tuple(word for word in words
+                     if self.answer.match(word) and len(word.split()) >= self.answer_words)
 
     def asking(self, rules: frozenset[str], asked: Asked) -> MeantRecord:
-        return MeantRecord(self.asked | rules, (asked,))
+        return replace(self, asked=self.asked | rules, open=(asked,))
 
-    def settled(self) -> MeantRecord:
-        return replace(self, open=())
+    def settled(self, words: tuple[str, ...]) -> MeantRecord:
+        answers = self.answers_in(words)
+        if not answers:
+            raise ValueError("No explanatory answer was proved")
+        return replace(self, open=(), answers=(*self.answers, *answers))
 
     def said(self, asked: Asked) -> MeantRecord:
         return replace(self, open=(*self.open, asked))
@@ -213,7 +220,7 @@ class Speaking(Voice):
             fresh = answered - meant.asked
             if not fresh:
                 return DocumentChange.to(meant)
-            line = SessionAudit.read(deal.audit).his_question(deal.receipts())
+            line = SessionAudit.read(deal.audit).his_question(deal.receipts(), meant.answers)
             return DocumentChange.to(meant.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
@@ -322,14 +329,16 @@ class SessionAudit:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
         return ""
 
-    def his_question(self, receipts: SessionReceipts) -> str:
+    def his_question(self, receipts: SessionReceipts, answers: tuple[str, ...] = ()) -> str:
         """His question carries the newest thing the session said it does beside what its
         transcript shows it did, the way he asks it in person; an audit that says nothing and a
         session with no record hear the question alone."""
         said = next((f"> {line.strip()[:200]}\n\nyou wrote that."
                      for entry in reversed(self.rules) for line in entry.does.splitlines()
                      if line.strip()), "")
-        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), MeantRecord.question)
+        proved = "\n\n".join("Previously answered:\n" + "\n".join(
+            f"> {line}" for line in answer.splitlines()) for answer in answers)
+        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), proved, MeantRecord.question)
                            if part)
 
     def entry(self, rule: str) -> RuleAudit:
@@ -840,24 +849,22 @@ class Unmeant(Owed):
         meant = deal.meant.read()
         if not meant.open:
             return
-        if meant.answered_by(deal.said_since(meant.open[0].offset)):
+        words = deal.said_after(meant.open[0])
+        if meant.answered_by(words):
             # Recorded once, so no later call reads the session's words again.
             deal.meant.update(lambda now: DocumentChange.to(
-                now.settled() if now.open == meant.open else now))
+                now.settled(words) if now.open == meant.open else now))
             return
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
-                  SessionAudit.read(deal.audit).his_question(deal.receipts()))
+                  SessionAudit.read(deal.audit).his_question(deal.receipts(), meant.answers))
 
     @property
     def reason(self) -> str:
-        """Claude Code can run this call's hook before it writes the words sent with the call,
-        so a yes beside the call may not be on record yet. On 2026-10-30 claude-board wrote
-        "Yes." with its next call, was refused as if it had not, and ended its turn sure the gate
-        was stuck. A yes or no counts from the next call on."""
+        """A backend supplies words only after proving this question reached their producer."""
         return (f"Tristan is asking you:\n\n{self.asking}\n\n"
                 "Compare it with what you are doing right now and tell him the truth. No is a"
                 " real answer. A word alone does not answer him: say yes or no, then what you"
-                " are doing about it. What you send beside a call counts from your next call.")
+                " are doing about it.")
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
@@ -995,11 +1002,6 @@ class RuleDeal(State, DealtCalls):
     def receipts(self) -> SessionReceipts:
         """What the session's own record shows it just did; a backend with no record has none."""
         return SessionReceipts()
-
-    def said_since(self, offset: int) -> tuple[str, ...]:
-        """The session's own words after `offset` in its backend's record of them. A mute
-        deal never asks, so it has none to read."""
-        return ()
 
     def said_after(self, asked: Asked) -> tuple[str, ...]:
         """The session's words after this line reached it; none before it arrives."""
