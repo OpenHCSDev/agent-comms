@@ -518,7 +518,7 @@ class ContextStore(DurableStore):
 
     def retain_contexts(
         self, destination: ContextStore, identities: Iterable[NativeSessionIdentity], *,
-        requests: Iterable[ContextManifestReference] = (),
+        maximum_bytes: int, requests: Iterable[ContextManifestReference] = (),
     ) -> None:
         """Retain original entry manifests and explicitly selected saved requests.
 
@@ -527,7 +527,9 @@ class ContextStore(DurableStore):
         not relocated storage or permission to launch or replay a native session.
         Entry-only selection retains no request or fabricated store identity.
         """
-        with type(self).retaining_rows(self.path, destination.path) as original:
+        with type(self).retaining_rows(
+            self.path, destination.path, maximum_bytes=maximum_bytes,
+        ) as original:
             original.retain_keys(ContextEntry, tuple(
                 {"session_id": identity.session_id, "session_file": identity.session_file}
                 for identity in dict.fromkeys(identities)

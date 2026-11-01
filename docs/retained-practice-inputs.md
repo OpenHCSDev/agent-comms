@@ -7,7 +7,7 @@ This document records the source decisions, not an executable selection roster.
 
 ## Existing owners and implemented entry selection
 
-`ContextStore.retain_contexts(destination, identities, requests=...)` replaces the
+`ContextStore.retain_contexts(destination, identities, maximum_bytes=..., requests=...)` replaces the
 entry-only API. `PracticeCopy.include_contexts` consumes it explicitly; normal
 whole-file include and live-root backup selection are unchanged. Selected writable
 SQL values travel through the existing attached source, without decode/re-encode,
@@ -200,6 +200,30 @@ importer, ledger or reminted session identities.
 Measure the complete selected stores, WAL/copy groups and free space before any
 copy. The requested production-copy proof is bounded to 3 GiB; zero freelist pages
 in the oversized stores means compaction is not the repair.
+
+Selected context materialization now requires an explicit byte allowance. Through
+PracticeCopy this is a **total private-tree allowance**, not a new default for full
+backups. `PracticeMeasurement.capture` is the one tree-byte calculation: already
+retained files, WAL/companions and staging files count whether or not the copied
+resource index lists them. `PracticeCopy.remaining_bytes` subtracts those bytes and
+also limits new allocation to actual disk space above the existing StorageRule
+floor. Its caller owns serial materialization of the private root and the coherent
+source cut; this is not a reservation against other processes consuming disk.
+
+`SQLiteDatabase.limit_bytes` consumes SQLite's actual page size and accepted
+max_page_count through typed pragma records. It caps the staged database before
+schema/rows/indexes are allocated; a zero-page allowance refuses, and SQLite can
+raise SQLITE_FULL on later growth. `ReconciledFile.retaining_rows` additionally
+counts the complete closed staged file group before exclusive publication. An
+over-budget group refuses and the same staging cleanup runs. No cap, page size,
+sequence, schema or lifecycle is written into the original store.
+
+This is authored admission/allocation code, **not a measured peak-footprint or
+free-space race proof**. Journal/temp-spill peaks during loading, concurrent disk
+consumption, rollback/cleanup under SQLITE_FULL, and the complete cross-store
+selection/root budget still need qualification. Ordinary include()/PracticeBus
+and live-root full backups remain unchanged; a caller cannot label their
+unmeasured union bounded merely by passing an allowance to one selected store.
 
 ## Source evidence and remaining work
 
