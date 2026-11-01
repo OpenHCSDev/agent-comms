@@ -1047,8 +1047,8 @@ def reply_end(request: pytest.FixtureRequest) -> Callable[[NativeTurnId], Runtim
     return request.param
 
 
-async def confirm_and_finish_reply(
-    bridge: ClaudeBridge, message: Message, expected: tuple[str, ...],
+async def confirm_and_finish_output(
+    bridge: ClaudeBridge, message: Message,
     end: Callable[[NativeTurnId], RuntimeUpdate],
 ) -> None:
     """Real monitor consumption feeds the ordinary staged output and terminal update."""
@@ -1087,13 +1087,13 @@ async def confirm_and_finish_reply(
         'the opened turn final', timestamp=2., position=item),))])
     assert replies() == ()
     output.publish_batch([end(turn)])
-    assert replies() == tuple((target, 'the opened turn final') for target in expected)
-    # Completion is idempotent, and another turn cannot inherit these routes.
+    assert replies() == ()
+    # Completion is idempotent, and another turn cannot acquire an implicit reply route.
     later, later_item = NativeTurnId('later-turn'), NativeItemId('later-answer')
     output.publish_batch([FinishedTurn(turn), AllTurnsEnded(), FinishedItem(
         later, later_item, (AssistantTranscript(
             'a later final', timestamp=3., position=later_item),)), AllTurnsEnded()])
-    assert replies() == tuple((target, 'the opened turn final') for target in expected)
+    assert replies() == ()
 
 
 @pytest.mark.asyncio
@@ -1104,44 +1104,43 @@ async def test_diagnostic_notice_is_consumed_without_replying_to_the_failed_send
     message = bridge.comms.messaging.send(
         'peer', 'viewer', f'Request failed. No automatic retry. [Open diagnostic]({diagnostic.as_uri()})',
         AlertKind, role=NoticeRole()).message
-    await confirm_and_finish_reply(bridge, message, (), reply_end)
+    await confirm_and_finish_output(bridge, message, reply_end)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(('target', 'body', 'kind', 'expected'), (
-    ('viewer', 'ordinary direct request', QuestionKind, ('claude-code',)),
-    ('#monitor', 'channel information', InfoKind, ()),
-    ('#monitor', '@viewer please answer this channel request', QuestionKind, ()),
+@pytest.mark.parametrize(('target', 'body', 'kind'), (
+    ('viewer', 'ordinary direct request', QuestionKind),
+    ('#monitor', 'channel information', InfoKind),
+    ('#monitor', '@viewer please answer this channel request', QuestionKind),
 ))
-async def test_confirmed_reply_routes_follow_direct_and_channel_policy(
-    bridge, reply_end, target, body, kind, expected,
+async def test_confirmed_output_never_sends_an_implicit_direct_or_channel_reply(
+    bridge, reply_end, target, body, kind,
 ):
     bridge.comms.channels.create_tag('monitor')
     message = bridge.comms.messaging.send('claude-code', target, body, kind).message
-    await confirm_and_finish_reply(bridge, message, expected, reply_end)
+    await confirm_and_finish_output(bridge, message, reply_end)
 
 
 @pytest.mark.asyncio
-async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_end):
+async def test_confirmed_human_direct_request_keeps_the_answer_in_its_transcript(bridge, reply_end):
     message = bridge.comms.messaging.send_user_message(
         ThreadTarget('viewer'), 'please answer once',
         worktree=Checkout(bridge.options.state.parent))
-    await confirm_and_finish_reply(bridge, message, (message.sender,), reply_end)
+    await confirm_and_finish_output(bridge, message, reply_end)
 
 
-def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
-    """The commander answers its owner in its own transcript: a unit that messaged it
-    mid-turn never receives that turn's answer as a direct message."""
+def test_independent_sessions_never_automatically_reply_to_delivered_senders(comms, tmp_path):
+    """Storage lead and peer keep their output in their transcripts, not implicit DMs."""
     from agent_comms.registry_document import RegisteredCommanderProject
-    from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
+    from agent_comms.runtime_updates import FinishedItem, ThreadOutput
     from agent_comms.transcript_events import AssistantTranscript
     from agent_comms.turn_item import NativeItemId, NativeTurnId
 
     lead, unit = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(Path("/tmp")), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
-        output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
+        output = ThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message
         turn = NativeTurnId(f"{speaker.name}-turn")
         output.delivered(turn, (original.reference,))
@@ -1151,7 +1150,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
                     if message.body in {"lead answers", "unit answers"})
-    assert replies == (("lead", "unit answers"),)
+    assert replies == ()
 
 
 @pytest.mark.parametrize(('rows', 'parts'), (

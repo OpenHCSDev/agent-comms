@@ -430,18 +430,21 @@ def test_linked_qualification_requires_the_original_order_quote(linked_head_bus,
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
-def test_qualification_refuses_a_noncommander_before_any_record_or_public_status(linked_head_bus):
+def test_qualification_records_an_untagged_peer_without_transferring_order_ownership(linked_head_bus):
     comms, github, request = linked_head_bus
     before = comms.goals.todos.get("P2")
     tool = CommsHeadVerdictTool(
         request=request, operation=QualifiedHeadVerdict(QUALIFIED),
         order=OrderHeadReview.for_request((before,), request,
                                         lambda linked: LinkedHeadReview.of(linked, linked.order.edits[0])))
-    with pytest.raises(ToolRefusedError):
-        tool.invoke(comms, tool.arguments, caller=ThreadCaller("worker"))
-    assert comms.goals.todos.get(before.id) == before
-    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
-    assert not any("statuses/" in call[1] for call in github.calls())
+    tool.invoke(comms, tool.arguments, caller=ThreadCaller("worker"))
+    recorded, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert recorded.actor.name == "worker"
+    assert recorded.actor.created_at == comms.registry.require("worker").incarnation.created_at
+    after = comms.goals.todos.get(before.id)
+    assert after.creator == before.creator
+    assert after.holder_state.previous_assignment() == before.holder_state.previous_assignment()
+    assert any("statuses/" in call[1] for call in github.calls())
 
 
 def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head_bus, reviewed_source):

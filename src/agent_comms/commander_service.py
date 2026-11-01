@@ -35,12 +35,13 @@ class CommanderService:
 
     @classmethod
     def actors(cls, snapshot: RegistrySnapshot) -> frozenset[str]:
-        """Every name a commander or one of its forks publishes under: any commander's recorded
-        action disposes of a line on the one shared board."""
+        """Current and retained names of executable collaborators, from the namespace owner.
+
+        Walk its declared members once instead of rescanning aliases for every peer.
+        """
         return frozenset(
-            name for thread in snapshot.threads.values()
-            for actor in thread.role.executor(thread)
-            for name in snapshot.names_for(actor.name))
+            name for name, thread in snapshot.named_members()
+            for _ in thread.role.executor(thread))
 
     @classmethod
     def recipients(cls, snapshot: RegistrySnapshot, lead: Thread) -> tuple[Thread, ...]:
