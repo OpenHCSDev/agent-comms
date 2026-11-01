@@ -80,13 +80,16 @@ returned), and other per-pass caches. Needs a second census after a few hours.
    the import baseline (~350 MB), and a census shows zero retained
    `ast.Module` between passes. Re-check after 2h for the slow growth.
 
-## How to reproduce the census
+## How to measure again
 
-```sh
-P=$(systemctl --user show -p MainPID --value agent-comms-connector)
-sudo "$(readlink -f ~/.local/share/agent-comms/current)/bin/python" -I \
-  -c "import sys; sys.remote_exec($P, '/path/to/census.py')"
-```
+Do not repeat the census above. It injected code into the live connector
+with `sudo ... sys.remote_exec`, which the standing rules forbid (no sudo for
+Python or process-code injection; never attach a debugger to a running agent
+process). The numbers stand; the method does not get reused.
 
-where `census.py` walks `gc.get_objects()`, groups by type, and writes the
-result to a file (it pauses the connector for about a second).
+- Acceptance needs only RSS: `ps -o rss= -p $(systemctl --user show -p MainPID
+  --value agent-comms-connector)` right after start, after the first
+  heartbeat, and again after 2h.
+- If an object census is needed, launch a separate connector instance as the
+  normal user with the census or `tracemalloc` loaded at startup, against a
+  copied root, and read it there. The live connector is never the subject.
