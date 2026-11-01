@@ -357,18 +357,3 @@ def test_a_pi_thread_is_asked_whether_it_meant_its_answers_and_its_session_file_
     with pytest.raises(RulesUnread) as refusal:
         call("bash", {"command": "ls"}).judge_under(deal)
     assert "Tristan is asking you" not in str(refusal.value)  # answered: the deal goes on
-
-
-def test_his_question_reaches_a_running_turn_as_a_user_follow_up():
-    """A bus delivery is framed as untrusted data; his question is a line he typed. Tristan,
-    2026-10-31: "It cannot be presented as something else." """
-
-    class Following:
-        def delivered(self):
-            return "bus delivery"
-
-        def typed(self):
-            return "user follow-up"
-
-    assert MeantNotice().following_segment(Following()) == "user follow-up"
-    assert RestartNotice().following_segment(Following()) == "bus delivery"

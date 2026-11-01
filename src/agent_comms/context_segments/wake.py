@@ -8,7 +8,7 @@ has no bus/registry/SQLite reads, inbox cursor, or model-launch operation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.responses import ResponseObligation
@@ -21,15 +21,17 @@ from ..turn_context import (
     InstructionFile,
     InstructionSegment,
     NextContextTurn,
-    UserFollowupSegment,
+    ContextSegment,
+    UserInputSegment,
     WireProvenance,
+    WireSources,
 )
 from ..wake_policy import WakePolicy
 from .wake_values import WakeWorkContext
 
 
 @dataclass(frozen=True, kw_only=True)
-class SelectedWakeSegment(InstructionSegment):
+class SelectedWakeSegment(WireSources, InstructionSegment):
     """Original sealed sources and their captured owner, never wake authority."""
 
     sources: tuple[tuple[Delivered, WakeAssignment], ...]
@@ -40,13 +42,6 @@ class SelectedWakeSegment(InstructionSegment):
     work_context: WakeWorkContext
 
     sent_limit = 5
-
-    @classmethod
-    def wire_sources(cls, original):
-        """The selected originals and the owner's own sent outcomes; their sender tells them
-        apart."""
-        return tuple(source for provenance in original.provenance
-                     for source in provenance.bus_references())
 
     @classmethod
     def capture(cls, sources, owner, goals, *, obligations=(), sent_outcomes=()):
@@ -68,6 +63,10 @@ class SelectedWakeSegment(InstructionSegment):
             sent_outcomes=sent_outcomes,
             work_context=owner.wake_context(goals),
         )
+
+    def input_segments(self) -> tuple[ContextSegment, ...]:
+        return (self, *(MessageDelivery(source, assignment, self.owner).segment()
+                        for source, assignment in self.sources))
 
     def values(self):
         sources, owner = self.sources, self.owner
@@ -97,7 +96,6 @@ class SelectedWakeSegment(InstructionSegment):
                     "wake_mode": assignment.lifecycle.mode.declared_name,
                     "expectation": expectation,
                     "response_obligation": obligation_line,
-                    "body": initial.message.body,
                 }
             )
         selected_line = FieldCodec.compact(selected, ensure_ascii=True)
@@ -126,7 +124,7 @@ class SelectedWakeSegment(InstructionSegment):
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredMessageSegment(InstructionSegment):
+class DeliveredMessageSegment(WireSources, InstructionSegment):
     """One committed message handed to its recipient's already running turn."""
 
     source: Delivered
@@ -155,24 +153,23 @@ class DeliveredMessageSegment(InstructionSegment):
 
 
 @dataclass(frozen=True)
-class FollowingDelivery:
-    """One committed message handed to its recipient's running turn. The task it carries says
-    which segment the turn reads it in."""
+class MessageDelivery:
+    """One committed original, framed by its task on either input route."""
 
     source: Delivered
     assignment: WakeAssignment
     owner: Thread
 
-    def segment(self) -> InstructionSegment:
-        return self.source.message.task.following_segment(self)
+    def segment(self) -> ContextSegment:
+        return self.source.message.task.message_segment(self)
 
     def delivered(self) -> DeliveredMessageSegment:
         """A bus message: framed with its sender and route, and its contents untrusted."""
         return DeliveredMessageSegment.capture(self.source, self.assignment, self.owner)
 
-    def typed(self) -> UserFollowupSegment:
-        """A line in the owner's own voice: the same follow-up as one he types into the view."""
+    def typed(self) -> UserInputSegment:
+        """The owner's original words once, without a bus or instruction wrapper."""
         self.assignment.require_selected_source(self.source, self.owner)
-        followup = UserFollowupSegment.capture(self.source.message.body)
-        return replace(followup, provenance=(
-            WireProvenance(self.source.message.reference), *followup.provenance))
+        return UserInputSegment(
+            provenance=(WireProvenance(self.source.message.reference),), content=self.source.message.body
+        )
