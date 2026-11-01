@@ -50,7 +50,7 @@ class CommanderInputs(HeldOrders):
         repository = Repo.declaring(project.repos, PlanPhase.__module__)
         plan = plans.prepare_reading(
             repository,
-            comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation),
+            comms.goals.todos.board_history(),
             tuple(phase.phase_evidence() for phase in PlanPhase.members_with(PlanPhase)),
             history=pulls.checkout(repository.checkout).branches.history,
         )

@@ -49,7 +49,7 @@ class HeldOrders:
     @classmethod
     def of(cls, store: TodoStore, snapshot: RegistrySnapshot, commander: str) -> HeldOrders:
         """The held orders in ``store`` for ``commander`` as ``snapshot`` registers them."""
-        return HeldOrders.split(store.held_for_commander(snapshot.require(commander).incarnation),
+        return HeldOrders.split(store.board_held(),
                                 snapshot)
 
     @classmethod

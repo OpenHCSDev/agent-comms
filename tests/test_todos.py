@@ -254,7 +254,7 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
             replace(previous, generation=wrong_goal_id), why))
     withdrawn = store.apply(todo.id, WithdrawTodo(released.revision, lead.incarnation,
         previous, why))
-    assert store.for_commander(lead.incarnation) == ()
+    assert store.board() == ()
     assert withdrawn.state is DoneTodoState and not withdrawn.pending
     assert withdrawn.order.previous == todo.held()
     assert withdrawn.history.events(withdrawn.id, ReleaseTodo) == released.history.events(released.id, ReleaseTodo)

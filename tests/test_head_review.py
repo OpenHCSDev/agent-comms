@@ -1012,8 +1012,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     held = todo.held()
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    held_orders = comms.goals.todos.held_for_commander(
-        comms.registry.require("lead").incarnation)
+    held_orders = comms.goals.todos.board_held()
     assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
         comms.goals, "lead", ProgressRead(held_orders))] == [request]
     comms.goals.update_goal("outsider", replace(action, problem="P4"))
