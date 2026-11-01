@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from .bus import BusReader
     from .cli_bridges.shared import CliBridge
+    from .context_segments.wake import FollowingDelivery
     from .harness_delivery_states import Outcome
     from .task_attachments.commander_pings import CommanderUpdate
     from .goal_management import Goals
@@ -41,6 +42,7 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
     from .retained_task_facts import RetainedTaskFacts
     from .threads import Thread
+    from .turn_context import InstructionSegment
     from .typed_table import TypedTable
 
 
@@ -243,6 +245,10 @@ class TaskAttachment(
     async def delivered_by(self, bridge: CliBridge, message: Message) -> type[Outcome]:
         """How a harness bridge hands the message carrying this attachment to its session."""
         return await bridge.deliver(message)
+
+    def following_segment(self, following: FollowingDelivery) -> InstructionSegment:
+        """How a running turn reads the message carrying this attachment: as a bus delivery."""
+        return following.delivered()
 
     def annotation_rules(self, message: Message, facts: RetainedTaskFacts) -> tuple[str, ...]:
         return ()

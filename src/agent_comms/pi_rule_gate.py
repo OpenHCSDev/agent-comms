@@ -5,14 +5,18 @@ against that deal. The deck readers are the one source list, shared with the Cla
 The deal lives in the thread's scratch directory, the one place its storage rule lets it write
 outside its checkouts, so the audit it owes is a file its Write tool may create. A refusal is a
 tool denial: Pi shows its text to the model as the tool's error.
+
+Tristan asks a Pi thread "did you mean it?" the way he asks a Claude session: a line in his own
+voice, which the thread reads as a user follow-up, and whose answer the gate hears in the thread's
+own session file. Until 2026-10-31 the Pi deal was mute, so no Pi thread was ever asked.
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from agent_comms_hooks.skill import (
     CommanderReader,
@@ -23,14 +27,18 @@ from agent_comms_hooks.skill import (
 )
 
 from .bus_publication import Delivered
+from .channel_targets import ThreadTarget
 from .nominal.field_codec import ThreadLookup
-from .rule_deal import DealTrigger, DealtRuleGate, Redeals
+from .rule_deal import Asked, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Speaking, Voice
+from .session_receipts import SessionReceipts
+from .task_attachments.owner_notices import MeantNotice
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .transcript_sources import TranscriptSource
 
 
 class RulesUnread(SelectedToolDenied):
@@ -39,14 +47,16 @@ class RulesUnread(SelectedToolDenied):
 
 @dataclass(frozen=True)
 class PiRuleGate(DealtRuleGate):
-    """One thread's deal, judged where its tools run: paths resolve against its worktree."""
+    """One thread's deal, judged where its tools run: paths resolve against its worktree. With
+    no bus seat it never asks."""
 
     scratch: Path
     worktree: Path
 
     @classmethod
-    def of(cls, comms: Comms, thread: Thread) -> PiRuleGate:
-        return cls(comms.registry.storage_rule.roots_of(thread).scratch, thread.worktree.path)
+    def of(cls, comms: Comms, thread: Thread) -> PiThreadGate:
+        """The gate a running thread's tools are judged by: seated on its bus, so it asks."""
+        return PiThreadGate.seated(comms, thread)
 
     @property
     def stem(self) -> Path:
@@ -57,16 +67,52 @@ class PiRuleGate(DealtRuleGate):
 
 
 @dataclass(frozen=True)
-class PiRedeal(PiRuleGate, Redeals):
-    """The deal Core renews for a thread: its role's sources and the owner's latest words."""
+class PiThreadGate(PiRuleGate, Speaking):
+    """A thread's deal seated on its bus: the owner's question reaches the thread under his
+    own thread, and the thread's own session file is where its answer is heard."""
 
-    comms: Comms
-    thread: Thread
+    comms: Comms = field(compare=False, repr=False)
+    thread: Thread = field(compare=False, repr=False)
+
+    @classmethod
+    def seated(cls, comms: Comms, thread: Thread) -> Self:
+        return cls(comms.registry.storage_rule.roots_of(thread).scratch, thread.worktree.path,
+                   comms, thread)
+
+    def session(self) -> TranscriptSource:
+        """The thread's own record of what it said and did."""
+        return self.thread.runtime.history_source(self.comms.root, self.thread.incarnation)
+
+    def voice(self) -> Voice:
+        return self.session().voice(self)
+
+    def say(self, line: str, deal: RuleDeal) -> Asked:
+        """His line goes to the thread under his own thread, as every owner notice does."""
+        offset = deal.words_end()
+        message = MeantNotice().publish(self.comms.messaging, ThreadTarget(self.thread.name), line)
+        return Asked(message.message_id, offset)
+
+    def words_end(self) -> int:
+        return self.session().words_end()
+
+    def receipts(self) -> SessionReceipts:
+        return self.session().receipts()
+
+    def said_since(self, offset: int) -> tuple[str, ...]:
+        return self.session().said_since(offset)
+
+    def said_after(self, asked: Asked) -> tuple[str, ...]:
+        line = self.comms.bus.bus.lookup_message(asked.message_id).body
+        return self.session().said_after(line, asked.offset)
+
+
+@dataclass(frozen=True)
+class PiRedeal(PiThreadGate, Redeals):
+    """The deal Core renews for a thread: its role's sources and the owner's latest words."""
 
     @classmethod
     def of(cls, comms: Comms, thread: Thread) -> PiRedeal:
-        gate = PiRuleGate.of(comms, thread)
-        return cls(gate.scratch, gate.worktree, comms, thread)
+        return cls.seated(comms, thread)
 
     def renew(self, trigger: DealTrigger) -> None:
         """A start or compaction deals the papers, then the rules."""
