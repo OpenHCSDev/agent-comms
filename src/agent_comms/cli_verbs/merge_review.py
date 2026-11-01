@@ -7,7 +7,7 @@ from typing import Annotated
 from agent_comms.cli_command import CliCommand
 from agent_comms.cli_commands import MergeReviewResult
 from agent_comms.comms import Comms
-from agent_comms.nominal.field_codec import Argument
+from agent_comms.nominal.field_codec import Argument, MalformedRecord
 from agent_comms.head_review import PullRequestHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.registry_document import RegistrySnapshot
@@ -22,20 +22,23 @@ from ..cli_bridges.session_watch import WatchClaim
 class ReviewedMerge:
     """The CLI and resident hook share exact-head authorization, not a subprocess protocol."""
 
-    def require_actor(self, snapshot: RegistrySnapshot, actor: RecordedThreadIncarnation) -> None:
-        snapshot.born(actor.lookup)
-        snapshot.commander_project.require()
-
     def reviewed_merges(self, ctx: Comms, snapshot: RegistrySnapshot,
                         actor: RecordedThreadIncarnation,
                         bypasses: tuple[QueueBypass, ...]) -> MergeReviewResult:
-        self.require_actor(snapshot, actor)
+        project = snapshot.commander_project
+        project.require_actor(snapshot, actor)
         heads = []
         for bypass in bypasses:
-            for owed in bypass.owes_verdict(bypass.target()):
-                request = PullRequestHead(RepositoryName.from_wire(owed.repository), owed.number, owed.head)
-                StoredHeadReview.current_verdict(ctx.goals.todos, request).require_ok(request)
-                heads.append(request)
+            target = bypass.target()
+            try:
+                request = PullRequestHead(
+                    RepositoryName.from_wire(target.repository), target.number, target.head)
+            except MalformedRecord as error:
+                raise ToolRefusedError(f"Invalid merge head: {error}") from error
+            project.require_scope(snapshot, actor, request.repo)
+            for owed in bypass.owes_verdict(request):
+                StoredHeadReview.current_verdict(ctx.goals.todos, owed).require_ok(owed)
+                heads.append(owed)
         return MergeReviewResult(tuple(heads))
 
 
@@ -56,5 +59,5 @@ class MergeReviewCliCommand(ReviewedMerge, CliCommand[MergeReviewResult], declar
         actor, *others = (snapshot.require(binding.bus).incarnation.require_recorded()
                           for binding in bindings)
         for other in others:
-            self.require_actor(snapshot, other)
+            snapshot.commander_project.require_actor(snapshot, other)
         return self.reviewed_merges(ctx, snapshot, actor, QueueBypassGuard.bypasses(self.bash))

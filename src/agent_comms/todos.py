@@ -4536,22 +4536,11 @@ class HeadOrderLink(HeadReviewRelation, declared_name=None):
 
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
-    def root_sources(self, record: HeadReviewRecord,
-                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
-        return ((record.request,) if record.actor.commanding_identity == commander
-                and record.verdict.allows_integration() else ())
+    def accepted_orderless_sources(self, record: HeadReviewRecord) -> tuple[PullRequestHead, ...]:
+        return (record.request,) if record.verdict.allows_integration() else ()
 
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
-
-    def require_reviewer(self, goals: Goals, request: PullRequestHead,
-                         actor: ThreadIncarnation) -> None:
-        snapshot = goals.registry.snapshot()
-        project = snapshot.commander_project.require()
-        commanders = {thread.incarnation for thread in project.commanders(snapshot)}
-        if (actor.commanding_identity not in commanders or
-                request.repo not in project.repository_names()):
-            raise TodoError("Only a commander of this project or the director may review its heads.")
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
@@ -4585,8 +4574,7 @@ class OrderLink(ProblemLink, declared_name=None):
     def require_quote(self, text: str) -> None:
         """A reading or rejection carries no quoted clause; OrderQuote supplies acceptance's."""
 
-    def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
-        current.require_commander(actor)
+    def require_current(self, current: Todo) -> None:
         current.require_previous_assignment(self.previous)
         if current.id != self.problem or current.order.checked().id != self.order_id:
             raise TodoConflict(current)
@@ -4647,10 +4635,8 @@ class OrderHeadReview(HeadReviewOrder):
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        self.link.require_current(goals.todos.get(self.link.problem), actor)
-
-    def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
-        return actor.require_recorded().acting_for(goals.todos.get(self.link.problem).creator_identity)
+        super().require_reviewer(goals, request, actor)
+        self.link.require_current(goals.todos.get(self.link.problem))
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> OrderHeadReviewRecord:
@@ -4827,13 +4813,13 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
             return cls.head_reviews_among(db, (request,))[request]
 
     @classmethod
-    def root_sources(cls, store: TodoStore, requests: Iterable[PullRequestHead],
-                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+    def accepted_orderless_sources(cls, store: TodoStore,
+                                   requests: Iterable[PullRequestHead]) -> tuple[PullRequestHead, ...]:
         """One exact-head snapshot; the saved relationship owns orderless source authority."""
         with store.snapshot() as db:
             reviewed = cls.head_reviews_among(db, requests)
             return tuple(source for records in reviewed.values() for record in records
-                         for source in record.order.root_sources(record, commander))
+                         for source in record.order.accepted_orderless_sources(record))
 
     @classmethod
     def current_verdict(cls, store: TodoStore, request: PullRequestHead) -> type[HeadVerdict]:
@@ -4866,7 +4852,7 @@ class RecordOrderHeadVerdict(TodoCommand):
     review: OrderHeadReviewRecord
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        self.review.order.require_current(current, self.review.actor)
+        self.review.order.require_current(current)
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
         allowed = current.order.checked().review_verdicts()
@@ -4877,7 +4863,7 @@ class RecordOrderHeadVerdict(TodoCommand):
         return self
 
     def changed(self, current: Todo) -> Todo:
-        self.review.order.require_current(current, self.review.actor)
+        self.review.order.require_current(current)
         judged = self.review.verdict.judge_order(current, self.review)
         return replace(judged, revision=current.revision + 1)
 
@@ -6374,11 +6360,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                             reader=partial(self.held_in, unit=owner))
 
     def require_input_sources(self, inputs: IntegrationInput) -> None:
-        """Current Todo links or an exact saved root orderless decision own each source."""
+        """Current Todo links or an exact saved accepted orderless decision own each source."""
         todos = self.board()
-        commander = RegistryStore.at(self.root).snapshot().commander_project.require().commander
-        approved = set(StoredHeadReview.root_sources(
-            self, (head for source in inputs.sources for head in source.heads), commander))
+        approved = set(StoredHeadReview.accepted_orderless_sources(
+            self, (head for source in inputs.sources for head in source.heads)))
         for source in inputs.sources:
             linked = PullRequests.linked_among(todos, source.repository)
             for head in source.heads:
@@ -6386,7 +6371,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 if len(owners) > 1 or not (owners or head in approved):
                     raise TodoError(
                         f"{head.repo.to_wire()}#{head.pr} has neither unique Todo"
-                        " nor saved root source authority")
+                        " nor saved accepted orderless source")
 
     def held_orders(self, *, state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
         """Held work across the shared board, optionally within a declared state family."""

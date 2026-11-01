@@ -108,8 +108,9 @@ def test_option_data_does_not_select_a_merge_family(command, github_cli):
     assert QueueBypass.matching(simple) == ()
 
 
-def test_commander_api_merge_requires_the_pinned_recorded_ok(
-        head_bus, reviewed_source, tmp_path):
+@pytest.mark.parametrize("actor", ("lead", "worker"))
+def test_api_merge_requires_the_pinned_recorded_ok_for_each_colleague(
+        head_bus, reviewed_source, tmp_path, actor):
     comms, github, request = head_bus
     transcript = tmp_path / "s.jsonl"
 
@@ -117,7 +118,7 @@ def test_commander_api_merge_requires_the_pinned_recorded_ok(
         return (f"gh api -X PUT repos/{request.repo.to_wire()}/pulls/{request.pr}/merge"
                 f" -f merge_method=merge -f sha={head}")
 
-    with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
+    with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
         def refused(head):
             result = resident_tool_use(command(head), transcript, bridge)
             assert result.status == 0, result.stderr
@@ -145,29 +146,31 @@ def test_commander_api_merge_requires_the_pinned_recorded_ok(
         refused(request.head)
 
 
-@pytest.mark.parametrize("actor,allowed", (("lead", True), ("worker", False)))
-def test_pinned_admin_merge_needs_no_recorded_ok_and_uses_the_admitted_actor(
-        head_bus, tmp_path, actor, allowed):
+@pytest.mark.parametrize("actor", ("lead", "worker"))
+@pytest.mark.parametrize("configured", (True, False))
+def test_pinned_admin_merge_keeps_repository_scope_without_rank_or_saved_ok(
+        head_bus, tmp_path, actor, configured):
     comms, _, request = head_bus
-    command = (f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
+    repository = request.repo.to_wire() if configured else "foreign/unconfigured"
+    command = (f"gh pr merge {request.pr} --admin --merge --repo {repository}"
                f" --match-head-commit {request.head}")
     with resident_session(comms, tmp_path / "state", actor, "s") as bridge:
-        # A replacement launcher's record may neither revoke nor grant this admitted actor's role.
-        replacement = "worker" if allowed else "lead"
+        # The resident's original actor survives replacement launcher metadata.
+        replacement = "worker" if actor == "lead" else "lead"
         WatchClaim("s").enrol(WatchRecord(replacement, str(comms.root), (), tmp_path / "elsewhere"))
         result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
         assert result.status == 0, result.stderr
-        if allowed:
+        if configured:
             assert result.stdout == ""
         else:
             decision = json.loads(result.stdout)["hookSpecificOutput"]
             assert decision["permissionDecision"] == "deny"
-            assert "bound commander" in decision["permissionDecisionReason"]
 
 
-def test_commander_admin_merge_still_requires_its_head_pin(head_bus, tmp_path):
+@pytest.mark.parametrize("pin", ("", "--match-head-commit not-a-commit"))
+def test_admin_merge_requires_a_valid_head_pin(head_bus, tmp_path, pin):
     comms, _, request = head_bus
-    command = f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()}"
+    command = f"gh pr merge {request.pr} --admin --merge --repo {request.repo.to_wire()} {pin}"
     with resident_session(comms, tmp_path / "state", "lead", "s") as bridge:
         result = resident_tool_use(command, tmp_path / "s.jsonl", bridge)
         assert result.status == 0, result.stderr

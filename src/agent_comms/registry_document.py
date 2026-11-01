@@ -12,6 +12,7 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Literal, Annotated, Self
 
 from pydantic import JsonValue
+from agent_comms_hooks import ToolRefusedError
 
 
 from .activity import ActivityCapture
@@ -566,9 +567,34 @@ class HistoricalRootPurpose(RootPurpose):
 class CommanderProject(DeclaredFamily, affix="CommanderProject"):
     """This bus's commander declaration; identity resolves through the registry lookup."""
 
-    @abstractmethod
+    def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
+        """An undeclared project admits no participants."""
+        return ()
+
     def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """Every commander of this bus."""
+        """Independent colleagues, derived from their execution declarations."""
+        return self.participants(snapshot.threads.values())
+
+    def require_actor(self, snapshot: RegistrySnapshot,
+                      actor: ThreadIncarnation) -> RegisteredCommanderProject:
+        """Validate the actual birth and its declared independent or in-turn caller binding."""
+        project = self.require()
+        own = snapshot.born(actor.require_recorded().lookup)
+        candidates = (own, *snapshot.threads_for(actor.commanding_identity.require_recorded()))
+        if not project.participants(candidates):
+            raise ToolRefusedError(
+                "Only registered independent colleagues or their bound in-turn children "
+                "may act on this project.")
+        return project
+
+    def require_scope(self, snapshot: RegistrySnapshot, actor: ThreadIncarnation,
+                      repository: RepositoryName) -> RegisteredCommanderProject:
+        """The shared actor and configured-repository boundary for review and integration."""
+        project = self.require_actor(snapshot, actor)
+        if repository not in project.repository_names():
+            raise ToolRefusedError(
+                f"Repository {repository.to_wire()} is outside this project's configured scope.")
+        return project
 
     @abstractmethod
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
@@ -597,10 +623,6 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
 
 
 class NoCommanderProject(CommanderProject):
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """A bus with no commander project has no commanders, tagged or not."""
-        return ()
-
     def leads(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
         return ()
 
@@ -608,7 +630,7 @@ class NoCommanderProject(CommanderProject):
         return ()
 
     def require(self) -> RegisteredCommanderProject:
-        raise RelationViolationError("This bus has no registered commander project.")
+        raise ToolRefusedError("This bus has no registered commander project.")
 
     def named(self, commander: ThreadIncarnation,
               repositories: RepositorySelection) -> RegisteredCommanderProject:
@@ -624,16 +646,12 @@ class RegisteredCommanderProject(CommanderProject):
     commander: ThreadIncarnation
     repos: tuple[Repo, ...]
 
-    def commanders(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
-        """The storage lead and independent collaborators; tags confer no authority.
-
-        The execution declaration, not fork provenance, excludes genuine in-turn children.
-        """
-        return tuple(dict.fromkeys((
-            *self.leads(snapshot),
-            *(peer for thread in snapshot.threads.values()
-              for executor in thread.role.executor(thread)
-              for peer in executor.execution.independent_threads(executor)))))
+    def participants(self, threads: Iterable[Thread]) -> tuple[Thread, ...]:
+        """Execution owns independence; storage lead, tags and fork provenance grant none."""
+        return tuple(dict.fromkeys(
+            peer for thread in threads
+            for executor in thread.role.executor(thread)
+            for peer in executor.execution.independent_threads(executor)))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
         """The one registered commander a fork is declared under."""

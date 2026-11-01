@@ -10,16 +10,16 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.commander import judge, order
-from agent_comms.channel_targets import CommandersTag
 from agent_comms.errors import TodoError
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_execution import CommanderForkExecution, ExternalThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
 from agent_comms.head_review import HeadReviewOrder
+from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
@@ -273,18 +273,36 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
 
 
-def test_every_commander_of_the_project_may_review_its_heads(board_review):
-    """Review authority is the project's commanders, not its registered lead alone: a #commanders
-    peer judges the same heads, and a commanded unit still may not."""
+@pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
+def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
+    """Native and external colleagues share scope; a storage lead has no extra permission."""
     comms, request, _, _ = board_review
-    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+    comms.registry.declare(Thread("peer", frozenset({"comms"}),
                                   comms.registry.require("lead").worktree,
-                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
                                   execution=ExternalThreadExecution))
-    NoHeadOrder().require_reviewer(comms.goals, request, comms.registry.require("peer").incarnation)
-    with pytest.raises(TodoError, match="Only a commander of this project"):
-        NoHeadOrder().require_reviewer(comms.goals, request,
-                                       comms.registry.require("worker").incarnation)
+    NoHeadOrder().require_reviewer(comms.goals, request,
+                                   comms.registry.require(reviewer).incarnation)
+
+
+def test_in_turn_review_uses_the_actual_bound_parent_not_a_second_independent_actor(board_review):
+    comms, request, _, _ = board_review
+    child = comms.registry.register_child("review-child", "worker", CommanderForkExecution,
+                                          comms.goals)
+    with pytest.raises(ToolRefusedError):
+        ThreadCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
+    actor = CommanderForkCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
+    assert actor == child.incarnation
+    assert actor.commanding_identity == comms.registry.require("worker").incarnation
+
+
+def test_review_scope_requires_the_actual_registered_birth(board_review):
+    comms, request, _, _ = board_review
+    snapshot = comms.registry.snapshot()
+    original = comms.registry.require("worker").incarnation.require_recorded()
+    with pytest.raises(ToolRefusedError):
+        snapshot.commander_project.require_scope(
+            snapshot, replace(original, created_at=time.time() + 1000), request.repo)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:

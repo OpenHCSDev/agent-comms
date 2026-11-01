@@ -747,8 +747,8 @@ class ReadyPullRequestHead(OpenPullRequestHead):
 class HeadReviewRelation(DeclaredFamily):
     """Order relationships share one declaration family and compose their capabilities."""
 
-    def root_sources(
-        self, record: HeadReviewRecord, commander: ThreadIncarnation
+    def accepted_orderless_sources(
+        self, record: HeadReviewRecord
     ) -> tuple[PullRequestHead, ...]:
         """Only an orderless relationship supplies authority outside current Todo links."""
         return ()
@@ -766,13 +766,11 @@ class HeadReviewOrder(HeadReviewRelation, declared_name=None):
         """The open orders whose current declaration holds this head, held or released."""
         return tuple(todo for todo in todos if todo.order.holds_head(request))
 
-    @abstractmethod
     def require_reviewer(
         self, goals: Goals, request: PullRequestHead, actor: ThreadIncarnation
-    ) -> None: ...
-
-    def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
-        return actor
+    ) -> None:
+        snapshot = goals.registry.snapshot()
+        snapshot.commander_project.require_scope(snapshot, actor, request.repo)
 
     @abstractmethod
     def record_review(
@@ -896,9 +894,8 @@ class PromotedHeadReview(MergeHeadReview):
     def require_sources(
         self, goals: Goals, request: PullRequestHead, reviewer: ThreadIncarnation
     ) -> None:
-        project = goals.registry.snapshot().commander_project.require()
-        if reviewer.commanding_identity != project.commander:
-            raise ToolRefusedError("Only this root's commander may promote the combined carrier")
+        snapshot = goals.registry.snapshot()
+        project = snapshot.commander_project.require_scope(snapshot, reviewer, request.repo)
         inputs = self.require_combined(request, project.repos)
         goals.todos.require_input_sources(inputs)
 
