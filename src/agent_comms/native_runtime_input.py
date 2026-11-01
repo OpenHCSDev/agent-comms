@@ -7,6 +7,7 @@ permission to send and live-context ownership. Installation never resets them.
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, Annotated
@@ -163,6 +164,20 @@ class NativeRuntimeInput(
             member.source_membership_sql(table_source=table_source)
             for member in NativeInputExecution.members_with(NativeInputExecution)
         )
+
+    @classmethod
+    def retain_sessions(
+        cls, original: AttachedPracticeRebuild, identities: Iterable[NativeSessionIdentity],
+    ) -> int:
+        """Select the original SQL session group, never an input-id-only association.
+
+        A selected journal and recorded session id must both agree. Raw retention
+        preserves absent context/claim fields; selection grants no native proof.
+        """
+        return original.retain_keys(cls, tuple(
+            {"session_id": identity.session_id, "session_file": identity.session_file}
+            for identity in identities
+        ))
 
     @classmethod
     def retain_required_rows(

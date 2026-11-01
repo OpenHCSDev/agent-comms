@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Annotated
 from .bus_publication import HumanOrigin
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import RootId
+from .nominal.field_codec import RootId, ThreadLookup
 from .goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
+    from .typed_table import AttachedPracticeRebuild
 
 
 class InputDelivery:
@@ -60,6 +61,12 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
 
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
+
+    def retain_harness_rows(
+        self, original: AttachedPracticeRebuild, recipient: ThreadLookup,
+    ) -> int:
+        """An origin without a harness witness contributes no harness rows."""
+        return 0
 
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
@@ -123,6 +130,18 @@ class HarnessAttemptOrigin(InputOrigin):
 
     bridge: type[HarnessSession]
     reference: MessageReference
+
+    def retain_harness_rows(self, original, recipient):
+        from .coordination_errors import IdentityConflict
+        from .coordination_tables.harness_deliveries import HarnessDelivery
+
+        key = {"bridge": self.bridge, "recipient_lookup": recipient,
+               "message_id": self.reference.message_id}
+        changed = original.retain_keys(HarnessDelivery, (key,))
+        retained = HarnessDelivery.require(original.destination, **key)
+        if retained.reference != self.reference:
+            raise IdentityConflict("Retained harness attempt names another message sequence")
+        return changed
 
 
 @dataclass(frozen=True)
