@@ -467,7 +467,8 @@ class GoalWaitRecovery:
                 f"Declared dependency @{actual_source.name} finished without a qualifying direct "
                 "reply, and no declared dependency has an active turn. "
                 "Standby was released; inspect messages and UNKNOWN inputs, then "
-                "continue independent work or redelegate. No input was replayed."
+                "continue independent work or coordinate the next step with its context owner. "
+                "No input was replayed."
             )
             if self._release_reviewed_wait(edit, review, note):
                 actual_owner, = current.threads_for(owner.incarnation.require_recorded())

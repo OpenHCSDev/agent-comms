@@ -492,7 +492,8 @@ class CommsGoalTool(ThreadToolRequest):
     label = "Goal progress"
     description = (
         "Update goal progress; complete it or block it when user input is needed. Use "
-        "standby with explicit wait_for thread names when waiting for delegated work. "
+        "standby with explicit wait_for thread names when no independent work remains "
+        "and a named collaborator must supply the next result. "
         "The goal remains active, but only a direct message from a named dependency or "
         "a user follow-up starts its next turn. Do not repeatedly announce waiting or "
         "return empty output. If existing dependency replies block standby, inspect "
