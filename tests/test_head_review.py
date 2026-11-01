@@ -471,9 +471,22 @@ def test_every_review_caller_keeps_configured_repository_scope(head_bus, caller_
     foreign = replace(request, repo=RepositoryName("foreign", "unconfigured"))
     calls = github.calls()
     with pytest.raises(ToolRefusedError):
-        caller_type("worker").head_review_actor(comms, foreign, NoHeadOrder())
+        invoke(comms, foreign, UnderReviewHeadVerdict(), caller=caller_type("worker"))
     assert github.calls() == calls
     assert not StoredHeadReview.head_reviews(comms.goals.todos, foreign)
+
+
+@pytest.mark.parametrize("caller_type", (ThreadCaller, DirectorCaller))
+def test_unresolved_order_refuses_before_external_preparation(head_bus, caller_type):
+    comms, github, request = head_bus
+    relationship = OrderHeadReview.for_request(
+        comms.goals.todos.board(), request, UnquotedHeadReview.of, problem="not-held")
+    calls = github.calls()
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, UnderReviewHeadVerdict(), relationship,
+               caller=caller_type("worker"))
+    assert github.calls() == calls
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head_bus, reviewed_source):

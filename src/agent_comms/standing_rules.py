@@ -227,20 +227,23 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         """Whether no recorded decision answers this line; only a head verdict can."""
         return True
 
-    def clearing_commands(self) -> str:
-        """The applicable verbs, with arguments supplied by this line's observed owners."""
-        values = self.command_values()
+    def clearing_actions(self) -> tuple[type[ClearingVerb], ...]:
+        """The declared actions applicable to this rule, before presentation compacts them."""
         verbs = dict.fromkeys(member for parent in type(self).__mro__
                               for family in vars(parent).get("clearing_verbs", ())
                               for member in family.members_with(family))
+        return tuple(verb for verb in verbs if self.review_allowed(verb))
+
+    def clearing_commands(self) -> str:
+        """The applicable verbs, with arguments supplied by this line's observed owners."""
+        values = self.command_values()
         # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
         # not the same arguments once per verb.
         alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
-        for verb in verbs:
-            if self.review_allowed(verb):
-                for command in verb.commands(values):
-                    tool, name, *arguments = command.split(" ")
-                    alike.setdefault((tool, tuple(arguments)), []).append(name)
+        for verb in self.clearing_actions():
+            for command in verb.commands(values):
+                tool, name, *arguments = command.split(" ")
+                alike.setdefault((tool, tuple(arguments)), []).append(name)
         return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
                            for (tool, arguments), names in alike.items())
 
@@ -1027,8 +1030,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
                 f" there unjudged. you read it yet?"
-                f" -> judge ok/back/reviewing/superseded " + " ".join(
-                    f"--{name} {value}" for name, value in self.command_values().items()))
+                f" -> {self.clearing_commands()}")
 
 
 @dataclass(frozen=True)

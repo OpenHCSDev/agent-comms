@@ -1,6 +1,5 @@
 """Board review commands and judge preconditions share real orders and retained releases."""
 
-import re
 import shlex
 import time
 from contextlib import chdir
@@ -17,7 +16,7 @@ from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
-from agent_comms.head_review import HeadReviewOrder
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
@@ -66,29 +65,24 @@ def board_review(head_bus):
     return comms, request, claim, link
 
 
-def author_arguments(command, todo):
-    """The board supplies identities; the reviewer still has to author the review."""
-    arguments = shlex.split(command)
-    verb = arguments[1]
-    evidence = f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}"
-    authored = {
-        "ok": ["--why", REASON.text, "--serves", QUOTE],
-        "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
-        "reviewing": [],
-        "superseded": ["--why", REASON.text, "--by", todo.id],
-    }
-    return arguments[1:] + authored[verb]
-
-
 def assert_review_preconditions(rule, comms, request):
     ctx = order.Commander.read_root(comms.root)
-    todo = comms.goals.todos.get("P2")
-    commands = re.findall(r"`([^`]+)`", rule.line())
+    observed = rule.command_values()
+    todo = comms.goals.todos.get(observed.get("problem", "P2"))
+    # Supply review prose once by declared argument, not a second roster of verb requirements.
+    values = {name: shlex.quote(value) for name, value in {
+        **observed, "why": REASON.text, "serves": QUOTE, "roast": ROAST, "fix": FIX,
+        "at": f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}",
+        "by": todo.id,
+    }.items()}
     judged = []
+    allowed = rule.clearing_actions()
+    commands = (command for action in judge.HeadVerdictVerb.members_with(judge.HeadVerdictVerb)
+                if action in allowed
+                for command in action.commands({entry.key: values[entry.key]
+                    for entry in FieldCodec.argument_fields(action) if entry.key in values}))
     for command in commands:
-        if not command.startswith("judge "):
-            continue
-        verb = judge.JudgeVerb.parse(author_arguments(command, todo))
+        verb = judge.JudgeVerb.parse(shlex.split(command)[1:])
         assert not verb.argument_problems()
         scope = OrderHeadReview.for_request(ctx.todos(), request, verb.order_link, verb.problem)
         scope.require_reviewer(comms.goals, request, ctx.actor_identity)
@@ -217,11 +211,10 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
         "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
-    # One printed command offers every verb that takes the same arguments: `judge ok|back ARGS`.
-    tool, verbs, arguments = next(command.split(" ", 2) for command in re.findall(r"`([^`]+)`", rule.line())
-                                  if command.startswith("judge ") and "ok" in command.split(" ")[1].split("|"))
-    command = f"{tool} ok {arguments}"
-    judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
+    assert judge.OkVerb in rule.clearing_actions()
+    command, = judge.OkVerb.commands({**rule.command_values(),
+        "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
+    judge.main(shlex.split(command)[1:], order.Commander.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
@@ -231,7 +224,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 
-def test_released_work_can_be_judged_and_delivered_without_a_holder(
+def test_released_merged_work_refuses_late_review_but_can_be_delivered(
         held_commander, cited_source, tmp_path):
     ctx = held_commander
     store = ctx.comms.goals.todos
@@ -249,8 +242,11 @@ def test_released_work_can_be_judged_and_delivered_without_a_holder(
     head = cited_source.git(cited_source.checkout, "rev-parse", "refs/heads/fix/42").strip()
     quote = " ".join(current.order.instructions(current).split()[:4])
     with chdir(cited_source.checkout):
-        judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
-                    "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        # The fixture already merged this PR. A late source review cannot reopen it.
+        with pytest.raises(TodoError):
+            judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
+                        "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        assert not StoredHeadReview.head_reviews(store, PullRequestHead(todo.repo, 42, head))
         order.main(["done", previous.owner, todo.id], ctx)
     delivered = store.get(todo.id)
     assert type(delivered.order) is DeliveredProblemOrder

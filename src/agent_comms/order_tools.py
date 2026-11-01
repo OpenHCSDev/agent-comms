@@ -220,12 +220,9 @@ class HeadVerdictTool:
     order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
+        actor = caller.head_review_actor(comms, self.request, self.order)
         problems: dict[str, str] = {}
         orders = self.order.prepared(comms.goals, problems)
-        actors = []
-        for order in orders:
-            with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
-                actors.append(caller.head_review_actor(comms, self.request, order))
         heads = []
         with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
             heads.append(self.operation.current_head(self.request))
@@ -237,7 +234,6 @@ class HeadVerdictTool:
         if problems:
             raise TodoProblems(problems)
         order, = orders
-        actor, = actors
         prepared, = preparations
         return self.operation.reviewed(comms.goals, self.request, prepared, actor, order)
 

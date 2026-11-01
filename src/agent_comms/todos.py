@@ -4649,24 +4649,20 @@ class OrderHeadReview(HeadReviewOrder):
 
 @dataclass(frozen=True)
 class RefusedHeadOrder(HeadReviewOrder, declared_name=None):
-    """A failed CLI selection contributes its failures beside the head's other requirements.
+    """A failed CLI selection refuses admission with its collected local diagnostics.
 
     It is not a wire member, cannot authenticate and can never become a stored review.
     """
 
     problems: dict[str, str]
 
-    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
-        problems.update(self.problems)
-        return ()
-
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        raise RecordProblems(self.problems)
+        raise TodoProblems(self.problems)
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
-        raise RecordProblems(self.problems)
+        raise TodoProblems(self.problems)
 
 
 @dataclass(frozen=True)
