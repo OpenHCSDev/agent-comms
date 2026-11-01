@@ -151,7 +151,7 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, Repo
-from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
+from agent_comms.root_runtime import ForeignRuntimeError, RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
@@ -829,12 +829,16 @@ class Install[Rehearsed: Rehearsal](ABC):
             report.starting(mode.destination(cls.initial_writer(root, installed)), target)
             return installed
         except InterpreterWorkerDied as died:
+            # Publication failure does not authorize replacing a live root owner. Keep
+            # that owner's refusal attached to the original interpreter failure.
+            try:
+                RootRuntime.publish(root, staged.runtime)
+            except ForeignRuntimeError as held:
+                died.add_note(str(held))
+                raise died from held
             print(f"install: {installed.runtime.prefix.name} cannot write its bus "
                   f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install",
                   file=sys.stderr)
-            # The root refuses every runtime but its recorded owner, so the driver owns it;
-            # a rolled-back install publishes the outgoing runtime again.
-            RootRuntime.publish(root, staged.runtime)
             report.starting(mode.destination(cls.initial_writer(root, staged)), target)
             return staged
 

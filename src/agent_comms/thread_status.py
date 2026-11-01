@@ -50,7 +50,14 @@ class SelfRenaming:
         pass
 
 
-class Visible:
+class PublishingPresence:
+    """Publication permission is independent of appearing as an executable colleague."""
+
+    def require_publication(self) -> None:
+        pass
+
+
+class Visible(PublishingPresence):
     """A presence that can be addressed, started and pinned in channels."""
 
     def reply(
@@ -117,6 +124,9 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
 
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise RelationViolationError(message)
+
+    def require_publication(self) -> None:
+        raise RelationViolationError("Message sender is not permitted to publish.")
 
     def require_running(self) -> None:
         raise RelationViolationError("goal owner is not running")
@@ -404,6 +414,22 @@ class NoBridgeThreadStatus(SelfRenaming, CliInboxPresence, StoppedThreadStatus):
         idle: Callable[[ThreadPresentation], ThreadPresentation],
     ) -> ThreadPresentation:
         return replace(super().presentation(title, activity, idle), summary="CLI inbox · no bridge")
+
+
+class ServiceThreadStatus(PublishingPresence, ThreadStatus):
+    """A service can publish, but has no executable roster row or owner controls."""
+
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return False
+
+    def external_registered(self, thread: Thread, now: float) -> ThreadStatus:
+        return self
+
+    def after_heartbeat(self, name: str) -> ThreadStatus:
+        return self
+
+    def restored(self) -> ThreadStatus:
+        return self
 
 
 class ArchivedThreadStatus(ThreadStatus):

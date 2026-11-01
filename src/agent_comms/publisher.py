@@ -202,7 +202,7 @@ class InitialWrites(Publisher):
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity,
                 destination=destination)
             sender_thread = snapshot.require(sender)
-            snapshot.status(sender).require_visible()
+            snapshot.status(sender).require_publication()
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(

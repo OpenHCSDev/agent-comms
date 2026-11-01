@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .bus_publication import AgentOrigin, HumanOrigin, InitialOrigin
+from .bus_publication import AgentOrigin, AutomatedOrigin, HumanOrigin, InitialOrigin
 from .change_report import NoChangeReport, ReportEvidence
 from .channel_targets import CommandTarget, IncarnationThreadTarget, NamedTarget
 from .nominal.field_codec import ThreadLookup
@@ -103,7 +103,7 @@ class Messaging:
         task: TaskAttachment = NoTaskAttachment(),
         report: ReportEvidence = NoChangeReport(),
         answers: Sequence[MessageReference] = (),
-        origin: AgentOrigin = AgentOrigin(),
+        origin: AutomatedOrigin = AgentOrigin(),
         source_turn: SourceTurn = NoSourceTurn(),
         answerer: AnswerAuthority = SenderReceipts(),
     ) -> SendResult:
@@ -112,7 +112,7 @@ class Messaging:
         if sender not in self.registry:
             raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
         owner = self.registry.require(sender)
-        owner.role.require_executable(RelationViolationError(
+        owner.role.require_automated_publication(RelationViolationError(
             "Human messages require the explicit user-message operation."
         ))
         todos = TodoStore(self.root)

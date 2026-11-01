@@ -13,7 +13,7 @@ from .channel_targets import DeclaredTag
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .thread_presentation import UnavailableThreadOwnerBinding
-from .thread_status import ThreadStatus
+from .thread_status import ServiceThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -67,6 +67,14 @@ class ConversationPreparation(ABC):
     def external(self): ...
 
 
+class NoChannelInbox:
+    """A producer or parent-bound child has no independent channel inbox."""
+
+    @classmethod
+    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
+        return ()
+
+
 class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
 
@@ -116,8 +124,8 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
     @classmethod
     def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when its commander's heartbeat reads it as a unit."""
-        return (thread,)
+        """Only an executable role contributes a work card."""
+        return thread.role.executor(thread)
 
     @classmethod
     def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
@@ -208,6 +216,14 @@ class ExternalThreadExecution(ThreadExecution):
         return status.external_presentation(thread.process_identity, ordinary)
 
 
+class ServiceThreadExecution(NoChannelInbox, ThreadExecution):
+    """A platform publisher has neither a prompt executor nor a CLI bridge."""
+
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        return ServiceThreadStatus()
+
+
 class SubagentExecution(ExternalThreadExecution):
     """A child working inside its parent session's turn: it reads its CLI inbox, holds no
     order and has no unit card of its own, and starts with its parent's audience."""
@@ -249,7 +265,7 @@ class SubagentExecution(ExternalThreadExecution):
         existing.execution.require_subagent()
 
 
-class CommanderForkExecution(SubagentExecution):
+class CommanderForkExecution(NoChannelInbox, SubagentExecution):
     """A commander's child: only a commander declares one, and it starts on its own goal."""
 
     @classmethod
@@ -259,11 +275,6 @@ class CommanderForkExecution(SubagentExecution):
     @classmethod
     def commander_forks(cls, thread: Thread) -> tuple[Thread, ...]:
         return (thread,)
-
-    @classmethod
-    def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A fork answers on its commander's records, so a channel never reaches it directly."""
-        return ()
 
     @classmethod
     def child_of(cls, parent: Thread, child: Thread) -> Thread:

@@ -14,7 +14,7 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import Checkout, GitCommandError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
@@ -32,7 +32,10 @@ from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
+from agent_comms.thread_identity import ServiceThreadRole
+from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
+from agent_comms.threads import Thread
 from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
@@ -114,7 +117,8 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
     assert installed.phases[-1].line() not in messages[1].body
     sender = comms.registry.require("installer")
-    assert sender.execution is ExternalThreadExecution
+    assert sender.execution is ServiceThreadExecution
+    assert sender.role is ServiceThreadRole
 
 
 def test_rollback_and_refusal_are_published_from_their_error_types(private_comms):
@@ -145,6 +149,42 @@ def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(priv
     original = private_comms.registry.require("installer")
     probe.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
+
+
+def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private_comms):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    original = comms.registry.declare(Thread(
+        "installer", frozenset(), Checkout(comms.root), execution=ExternalThreadExecution))
+    comms.threads.archive(original.name)
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(original.name, CommsTag.channel(), "Archived legacy publisher")
+    assert comms.bus.bus.revision() == before
+
+    probe = InstallReportProbe(comms.root, "Service publication after archival")
+    probe.run()
+    sender = comms.registry.require(original.name)
+    assert sender.incarnation == original.incarnation
+    assert sender.role is ServiceThreadRole
+    assert sender.execution is ServiceThreadExecution
+    assert sender.role.executor(sender) == ()
+    assert sender.execution.channel_recipients(sender) == ()
+    assert original.name not in {thread.name for thread in comms.registry.snapshot().channel_audience()}
+    comms.registry.status(original.name).require_publication()
+    with pytest.raises(RelationViolationError):
+        comms.registry.status(original.name).require_visible()
+    with pytest.raises(ThreadNotStoppedError):
+        comms.threads.archive(original.name)
+
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(original.name, CommsTag.channel(), "Wrong agent origin")
+    assert comms.bus.bus.revision() == before
+    probe.run()
+    messages = HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages
+    assert len(messages) == 2
+    assert all(message.body == probe.body for message in messages)
+    assert comms.registry.require(original.name).incarnation == original.incarnation
 
 
 def test_a_read_back_that_differs_from_before_the_carry_refuses():
