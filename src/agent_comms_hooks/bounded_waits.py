@@ -18,7 +18,7 @@ from agent_comms_hooks import Bash, BashRefusal
 
 from .shell_commands import (
     ShellCommand,
-    shell_commands,
+    TimeoutRunner,
 )
 from .watch import SessionHookProgram
 
@@ -31,9 +31,7 @@ class Timeout:
     """`timeout [OPTION]... DURATION COMMAND`: whether it bounds the command it runs, and
     that command. Any other command runs itself, unbounded."""
 
-    program: ClassVar[str] = "timeout"
-    valued: ClassVar[frozenset[str]] = frozenset(("-k", "-s", "--kill-after", "--signal"))
-    """Options whose value is the next word."""
+    program: ClassVar[str] = TimeoutRunner.names[0]
     duration: ClassVar[re.Pattern[str]] = re.compile(r"(\d+(?:\.\d*)?)([smhd]?)")
     unit: ClassVar[dict[str, int]] = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
     max_seconds: ClassVar[int] = 3600
@@ -45,9 +43,7 @@ class Timeout:
     def around(cls, command: ShellCommand) -> Timeout:
         if command.program != cls.program:
             return cls(False, command.words)
-        rest = command.words[1:]
-        while rest[:1] and rest[0].startswith("-"):
-            rest = rest[2:] if rest[0] in cls.valued else rest[1:]
+        rest = tuple(TimeoutRunner.arguments(command.args))
         limit = cls.duration.fullmatch(rest[0]) if rest else None
         seconds = float(limit.group(1)) * cls.unit[limit.group(2)] if limit else 0
         return cls(0 < seconds <= cls.max_seconds, rest[1:])
@@ -105,7 +101,7 @@ class WaitCommand(Bash):
     def waits(self) -> Iterator[Wait]:
         """Every loop this command runs, at command position or in a script a shell runs with
         -c. Only such a script can be bounded: `timeout` runs programs, not shell keywords."""
-        segments = tuple(map(tuple, shell_commands(self.command)))
+        segments = tuple(command.words for command in ShellCommand.parsed(self.command))
         for index, segment in enumerate(segments):
             for command in ShellCommand.of(dropwhile(self.openers.__contains__, segment)):
                 timeout = Timeout.around(command)
