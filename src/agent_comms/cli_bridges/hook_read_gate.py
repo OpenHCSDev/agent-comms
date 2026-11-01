@@ -146,11 +146,6 @@ class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
         """The transcript's recent past: a gate hook runs often, so it never reads more of it."""
         return ClaudeJsonLines().receipts(self.tail())
 
-    def said_since(self, offset: int) -> tuple[str, ...]:
-        decoder = ClaudeJsonLines()
-        return tuple(words for position, line in self.complete_lines(offset)
-                     for words in decoder.decode_line(line, position).said())
-
     def said_after(self, asked: Asked) -> tuple[str, ...]:
         """The words after the line that actually delivered this question to the session."""
         lines = self.complete_lines(asked.offset)
