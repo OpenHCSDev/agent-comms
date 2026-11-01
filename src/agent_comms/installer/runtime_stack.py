@@ -225,11 +225,6 @@ class WheelRuntime(RuntimeStack):
     interpreter: LaunchRuntime
     source_runtime: LaunchRuntime
     wheels: tuple[Path, ...]
-    uv_program: Path
-
-    @property
-    def uv(self) -> Path:
-        return self.uv_program
 
     def sync(self) -> None:
         named_prefix = self.runtime.interpreter.parent.parent
