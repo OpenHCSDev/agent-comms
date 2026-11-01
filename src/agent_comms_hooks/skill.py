@@ -34,7 +34,7 @@ from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
     ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
-    StartedDeal, UnstampedCompactionDeal,
+    StartedDeal, Unengaged, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
 from agent_comms_hooks import ClaudeSubagentHook
@@ -384,7 +384,7 @@ class DeckStart(DealtDeck):
             trigger.reason() + " " + self.notice(commanders) + f" Read each of these {len(sources)} files in full with the Read tool before any other"
             " action: they are every rule you follow and the sources they come from. A summary"
             " or memory of them does not count as reading them, and every other tool is refused"
-            " until each one is read. Read them in order, at most four unanswered rule files at"
+            f" until each one is read. Read them in order, at most {Unengaged.batch} unanswered rule files at"
             " a time, and answer those in the audit: reading alone is passive. Every tool but"
             " Read, and Write or Edit of"
             f" {self.audit}, is refused until it answers. This order is given once per session"
