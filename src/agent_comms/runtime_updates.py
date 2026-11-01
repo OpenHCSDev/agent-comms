@@ -198,7 +198,7 @@ class ThreadOutput(activity.ThreadOutput):
     def publish_batch(self, updates: list[RuntimeUpdate]) -> None:
         """A batch refused partway, by a maintenance hold or a CoordinationBeginUnavailable, is
         published again whole from the committed drafts. Its stored writes are keyed, so what
-        already landed lands once; a sent reply is remembered by the replying output."""
+        already landed lands once. Publishing transcript output never sends an implicit DM."""
         staged = self.staged()
         pending: list[RuntimeUpdate] = []
         for update in updates:

@@ -356,8 +356,11 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
 
 @dataclass(frozen=True, eq=False)
 class CommanderPeerIdentity(CommanderForkIdentity):
-    """A #commanders member: membership declares commander authority over every order on
-    the bus, so a retired or absent creator never orphans its orders. Records name the peer."""
+    """An independent collaborator can maintain shared orders under its own identity.
+
+    Channel tags confer no privilege, and a retired creator does not orphan shared work.
+    Storage selection remains explicit; the recorded incarnation names who acted.
+    """
 
     def commands(self, creator: ThreadIncarnation) -> bool:
         return True

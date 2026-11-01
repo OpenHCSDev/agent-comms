@@ -2,6 +2,7 @@
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
+from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
 from types import SimpleNamespace
 
@@ -1075,48 +1076,40 @@ def test_an_unbound_subagent_has_no_bus_to_join(
     assert not fork_bus[0].registry.snapshot().children("worker")
 
 
-def test_a_unit_sessions_subagents_take_role_slots(
+def test_an_untagged_peers_sdk_children_keep_real_ids_and_parent_delegation(
         durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder], tmp_path: Path):
-    """A role slot retains its thread/history for its next occupant, never a commander fork."""
+    """The resident SDK child contract is identical for an untagged independent parent."""
     comms = fork_bus[0]
     transcript = tmp_path / "unit.jsonl"
     with resident_session(comms, tmp_path / "state", "worker", "unit") as bridge:
         run = partial(resident_stdout, bridge, transcript=transcript,
                       agent_type="Explore", stop_hook_active=False)
-        told = json.loads(run(SubagentStartRequest, agent_id="a2"))["hookSpecificOutput"]
-        assert "slot worker-explore" in told["additionalContext"]
-        slot = comms.registry.require("worker-explore")
-        assert slot.parent.named("worker") and comms.registry.status("worker-explore").receiving
-        slot.execution.require_subagent()
-        assert comms.agents.activity.current(slot.name).state is ActivityState.THINKING
+        for agent in ("a2", "a3"):
+            told = json.loads(run(SubagentStartRequest, agent_id=agent))["hookSpecificOutput"]
+            assert f"--fork claude-{agent}" in told["additionalContext"]
+            child = comms.registry.require(f"claude-{agent}")
+            child.execution.require_commander_fork()
+            assert child.parent.named("worker")
+            assert comms.registry.status(child.name).receiving
         assert run(ReadGateRequest, agent_id="a2", tool_name="Read",
                    tool_input={"file_path": str(transcript)}) == ""
-        activity = comms.agents.activity.current(slot.name)
+        activity = comms.agents.activity.current("claude-a2")
         assert (activity.state, activity.detail) == (ActivityState.WORKING, "Read")
-        # A long-running tool stays working beyond the activity store's ordinary stale budget.
         comms.agents.activity.emit(replace(activity, timestamp=1.))
         snapshot = comms.registry.snapshot()
-        assert comms.agents.activity_of(slot.name, snapshot=snapshot).state is ActivityState.WORKING
-        with pytest.raises(RelationViolationError, match="not a declared commander fork"):
-            slot.execution.require_commander_fork()
-        assert "claude-a2" not in comms.registry
-        run(SubagentStartRequest, agent_id="a3")
-        assert comms.registry.require("worker-explore-2").parent.named("worker")
-
-        assert run(SubagentStopRequest, agent_id="a2") == ""
-        assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
-        assert comms.agents.activity.current(slot.name).state is ActivityState.IDLE
-        assert comms.registry.status("worker-explore-2").receiving
-        run(SubagentStartRequest, agent_id="a4")
-        assert comms.registry.require("worker-explore").incarnation == slot.incarnation
-        assert comms.registry.status("worker-explore").receiving
-
+        assert comms.agents.activity_of("claude-a2", snapshot=snapshot).state is ActivityState.WORKING
+        assert json.loads(run(SubagentStopRequest, agent_id="a2"))["decision"] == "block"
+        assert run(SubagentStopRequest, agent_id="a2", stop_hook_active=True) == ""
+        assert isinstance(comms.registry.status("claude-a2"), ArchivedThreadStatus)
+        assert comms.registry.status("claude-a3").receiving
+        subagents = transcript.with_suffix("") / "subagents"
+        subagents.mkdir(parents=True)
+        for agent in ("a2", "a3"):
+            (subagents / f"agent-{agent}.jsonl").write_text("")
         session = SessionSubagents.decode({
             "session_id": "unit", "hook_event_name": "SessionEnd", "transcript_path": str(transcript)})
         assert session.end_subagents(comms, bridge.binding) == ()
-        assert isinstance(comms.registry.status("worker-explore-2"), ArchivedThreadStatus)
-        assert isinstance(comms.registry.status("worker-explore"), ArchivedThreadStatus)
-        assert not any(session.seats.iterdir())
+        assert isinstance(comms.registry.status("claude-a3"), ArchivedThreadStatus)
 
 
 def test_a_bound_subagent_stop_without_a_start_is_an_intentional_failure(
@@ -1128,7 +1121,7 @@ def test_a_bound_subagent_stop_without_a_start_is_an_intentional_failure(
             agent_id="never-started", agent_type="Explore", stop_hook_active=False)
         assert result.status == 1
         assert result.stdout == ""
-        assert "stopped without a seat" in result.stderr
+        assert "never-started" in result.stderr
         assert not comms.registry.snapshot().children("worker")
 
 

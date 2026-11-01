@@ -277,7 +277,7 @@ class DeckStart(DealtDeck):
         return (SubagentDeckStart if cls.raised_by_subagent(record) else cls).decode(record, **context)
 
     def take(self, comms: Comms, binding: Binding, number: int = 0) -> tuple[str, ...]:
-        """The supplied resident binding selects a reader at one registry cut."""
+        """The captured resident identity admits the shared reader at one registry cut."""
         snapshot = comms.registry.snapshot()
         snapshot.born(binding.owner.require_recorded().lookup)
         return self.taken(DeckReader(), number, comms, snapshot)
@@ -361,10 +361,9 @@ class DeckStart(DealtDeck):
 
     def widened(self, reader: DeckReader, comms: Comms,
                 snapshot: RegistrySnapshot) -> tuple[str, ...]:
-        """The deck of this session's role is the one record of the role it was dealt. A
-        session whose role changed finds none of its kind and is dealt only the files the role
-        adds, keeping what it read and wrote, since its context was never lost; a session bound
-        after it started is dealt in full and told so."""
+        """A session newly bound after startup receives the shared sources. Retained reads
+        and audit survive when the context remains; changing a tag or storage lead adds no
+        second deck or rank-specific source set."""
         deck = self.deck(reader)
         if deck.exists():
             return ()
