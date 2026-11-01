@@ -27,6 +27,11 @@ class ShellDecoding(unittest.TestCase):
             ('echo "a\\\"b"', ('echo', 'a"b')),
             ("echo prefix'<<'suffix", ('echo', 'prefix<<suffix')),
             ("echo ''", ('echo', '')),
+            ("echo '{' '}'", ('echo', '{', '}')),
+            (r'echo \{ \}', ('echo', '{', '}')),
+            ('echo { }', ('echo', '{', '}')),
+            ("'{' literal", ('{', 'literal')),
+            ('echo file{brace}', ('echo', 'file{brace}')),
         )
         for text, expected in cases:
             with self.subTest(text=text):
@@ -74,6 +79,21 @@ class ShellDecoding(unittest.TestCase):
                 with self.assertRaises(StorageDenied):
                     shell_storage_effects(text, CWD)
 
+    def test_reserved_brace_groups_cannot_hide_the_first_executable(self):
+        for text in (
+            '{ mkdir target; }',
+            '{ python -m venv env; }',
+            'mkdir before && { (mkdir inner) & printf ready; }',
+            'A=literal { mkdir target; }',
+            '}',
+            shlex.join(('bash', '-c', '{ mkdir target; }')),
+        ):
+            with self.subTest(text=text), self.assertRaises(StorageDenied):
+                shell_storage_effects(text, CWD)
+        literal, = ShellCommand.standalone('echo { }')
+        self.assertEqual(literal.words, ('echo', '{', '}'))
+        self.assertEqual(tuple(ShellCommand.standalone('{ mkdir target; }')), ())
+
     def test_redirection_operands_are_not_arguments(self):
         cases = (
             ('echo value > target', ('echo', 'value'), ('target',)),
@@ -93,6 +113,8 @@ class ShellDecoding(unittest.TestCase):
             ("cat 2<<'EOF'\nopaque body\nEOF\n", ('cat',), ()),
             ("cat 2<<-'EOF'\n\topaque body\n\tEOF\n", ('cat',), ()),
             ('> target', (), ('target',)),
+            ('> {', (), ('{',)),
+            ('echo > }', ('echo',), ('}',)),
             ('echo &>> target', ('echo',), ('target',)),
         )
         for number in ('2', '700'):
