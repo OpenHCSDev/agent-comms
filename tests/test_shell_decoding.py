@@ -39,6 +39,60 @@ class ShellDecoding(unittest.TestCase):
                 self.assertEqual(commands[0].words, expected)
                 self.assertEqual(shell_storage_effects(text, CWD), ())
 
+    def test_active_substitutions_refuse_before_effects_at_every_shell_depth(self):
+        cases = (
+            'printf "%s" "$(touch target)"',
+            'printf %s `touch target`',
+            'printf "%s" "`touch target`"',
+            'printf %s before"$(touch target)"after',
+            "printf %s 'literal'$(touch target)",
+            'printf done;$(touch target)',
+            'printf done;`touch target`',
+            'printf %s >"$(touch target)"',
+            'printf %s "${unused:-$(touch target)}"',
+            'printf %s "$\\\n(touch target)"',
+            r'printf %s "\\$(touch target)"',
+        )
+        for script in cases:
+            for text in (script, shlex.join(('bash', '-c', script))):
+                with self.subTest(text=text), self.assertRaises(StorageDenied):
+                    shell_storage_effects(text, CWD)
+        for text in (
+            r'bash -c "printf %s \$(touch target)"',
+            r'bash -c "printf %s \`touch target\`"',
+        ):
+            with self.subTest(text=text), self.assertRaises(StorageDenied):
+                shell_storage_effects(text, CWD)
+
+    def test_literal_substitution_text_retains_native_quote_and_escape_meaning(self):
+        cases = (
+            ("printf %s '$(touch target)'", '$(touch target)'),
+            ("printf %s '`touch target`'", '`touch target`'),
+            (r'printf %s "\$(touch target)"', '$(touch target)'),
+            (r'printf %s "\`touch target\`"', '`touch target`'),
+            (r'printf %s \`literal\`', '`literal`'),
+            ("printf %s '$'\"(touch target)\"", '$(touch target)'),
+            (r'printf %s "one\q"', r'one\q'),
+            ('printf %s fi\\\nle', 'file'),
+            ('printf %s "fi\\\nle"', 'file'),
+            ("printf %s '$\\\n(literal)'", '$\\\n(literal)'),
+        )
+        for text, value in cases:
+            with self.subTest(text=text):
+                command, = ShellCommand.parsed(text)
+                self.assertEqual(command.words, ('printf', '%s', value))
+                self.assertEqual(shell_storage_effects(text, CWD), ())
+
+    def test_document_delimiter_and_opaque_body_do_not_execute_substitutions(self):
+        for text in (
+            "cat <<'EOF'\n$(touch target)\nEOF\nmkdir after",
+            "cat <<'EOF'\n`touch target`\nEOF\nmkdir after",
+            'cat <<"$(tag)"\nopaque\n$(tag)\nmkdir after',
+            'cat <<-"`tag`"\n\topaque\n\t`tag`\nmkdir after',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'after'),))
+
     def test_quoted_operator_cannot_hide_a_forbidden_following_command(self):
         for text in (
             "echo '<<' 'EOF'\npython -m venv env",

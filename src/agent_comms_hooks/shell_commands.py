@@ -55,7 +55,7 @@ class HereDocument(Redirection):
 
     def read_body(self, lexer: ShellLexer) -> None:
         lexer.resume_at_boundary()
-        for line in lexer.text.document_lines():
+        for line in lexer.document_lines():
             if self.line_value(line) == self.target:
                 return
             self.check_line(line)
@@ -92,7 +92,7 @@ class ShellWord:
 
     @classmethod
     def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
-        spelling = lexer.command[lexer.word_start:end]
+        spelling = lexer.getvalue()[lexer.word_start:end]
         kind = cls.members.get(spelling, cls)
         return kind(value, lexer.word_start, end, spelling)
 
@@ -138,7 +138,7 @@ class QuotedWord(ShellWord):
         return TabStrippedHereDocument(self.value)
 
 
-class ShellLexer(shlex.shlex):
+class ShellLexer(shlex.shlex, ShellText):
     """Retain shlex's own punctuation decision, before POSIX quote removal erases it.
 
     No second quoting scanner: native state transitions distinguish punctuation from
@@ -146,15 +146,34 @@ class ShellLexer(shlex.shlex):
     """
 
     def __init__(self, command: str):
-        self.text = ShellText(command)
-        self.command = command
+        ShellText.__init__(self, command)
         self._state: str | None = None
         self.word_start = 0
         self.word_type: type[ShellWord] = ShellWord
         self.documents: list[HereDocument] = []
-        super().__init__(self.text, posix=True, punctuation_chars=';&|><()\n')
+        self.target = ArgumentTarget()
+        super().__init__(self, posix=True, punctuation_chars=';&|><()\n')
         self.whitespace = ' \t\r'
         self.whitespace_split = True
+
+    def read(self, size: int = -1) -> str:
+        character = super().read(size)
+        # Punctuation lookahead belongs to the next word, whose target is not
+        # known yet. Its first character is checked on native word entry below.
+        if self.state in ('a', '"'):
+            self.check_substitution(character, self.tell())
+        return character
+
+    def check_substitution(self, character: str, following: int) -> None:
+        """Inspect active source characters, before native quote/escape removal."""
+        if character == '`':
+            self.target.require_expansion()
+        elif character == '$':
+            source = self.getvalue()
+            while source.startswith('\\\n', following):
+                following += 2
+            if source.startswith('(', following):
+                self.target.require_expansion()
 
     @property
     def state(self) -> str | None:
@@ -162,8 +181,17 @@ class ShellLexer(shlex.shlex):
 
     @state.setter
     def state(self, value: str | None) -> None:
+        if self._state == '\\':
+            # POSIX removes escaped newlines, and the escape before $/` in double
+            # quotes. shlex retains those bytes; an inner -c must see the real text.
+            if self.token.endswith('\n'):
+                self.token = self.token[:-(2 if value == '"' else 1)]
+            elif value == '"' and self.token[-1:] in ('$', '`'):
+                self.token = self.token[:-2] + self.token[-1:]
         if self._state == ' ' and value not in (' ', None):
             self.word_start = self.position - 1
+            self.check_substitution(self.getvalue()[self.word_start:self.word_start + 1],
+                                    self.word_start + 1)
         if value == 'c':
             self.word_type = Operator
         elif value in ("'", '"', '\\'):
@@ -172,19 +200,19 @@ class ShellLexer(shlex.shlex):
 
     @property
     def position(self) -> int:
-        return self.text.tell() - len(self._pushback_chars)
+        return self.tell() - len(self._pushback_chars)
 
     def take_adjacent(self, character: str) -> bool:
-        if self.command[self.position:self.position + 1] != character:
+        if self.getvalue()[self.position:self.position + 1] != character:
             return False
         if self._pushback_chars:
             self._pushback_chars.pop()
         else:
-            self.text.read(1)
+            self.read(1)
         return True
 
     def resume_at_boundary(self, position: int | None = None) -> None:
-        self.text.seek(self.position if position is None else position)
+        self.seek(self.position if position is None else position)
         self._pushback_chars.clear()
         self.state = ' '
 
@@ -196,13 +224,14 @@ class ShellLexer(shlex.shlex):
         for document in documents:
             document.read_body(self)
 
-    def next_word(self) -> ShellWord | None:
+    def next_word(self, target: ArgumentTarget) -> ShellWord | None:
+        self.target = target
         self.word_type = ShellWord
         value = super().read_token()
         if value is None:
             return None
         end = self.position
-        if self.state == ' ' and self.command[end - 1:end] in self.whitespace:
+        if self.state == ' ' and self.getvalue()[end - 1:end] in self.whitespace:
             end -= 1
         return self.word_type.decoded(value, self, end)
 
@@ -273,10 +302,13 @@ class Redirect(Operator):
     def consume_descriptor(self, parser: ShellParser) -> None:
         pass
 
+    def operand(self) -> RedirectionTarget:
+        return RedirectionTarget(self)
+
     def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.target.require_word()
         self.consume_descriptor(parser)
-        parser.target = RedirectionTarget(self)
+        parser.target = self.operand()
         return iter(())
 
 
@@ -318,11 +350,14 @@ class DocumentRedirect(NumberedRedirect, spellings=('<<',)):
     def bind(self, word: ShellWord) -> Redirection:
         return word.document()
 
+    def operand(self) -> HereDocumentTarget:
+        return HereDocumentTarget(self)
+
     def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         super().apply(parser)
         if parser.lexer.take_adjacent('-'):
-            parser.target = RedirectionTarget(TabbedDocumentRedirect(
-                '<<-', self.start, self.end + 1, '<<-'))
+            parser.target = TabbedDocumentRedirect(
+                '<<-', self.start, self.end + 1, '<<-').operand()
         return iter(())
 
 
@@ -332,6 +367,9 @@ class TabbedDocumentRedirect(DocumentRedirect):
 
 
 class ArgumentTarget:
+    def require_expansion(self) -> None:
+        raise NotStandalone('Command substitution is not admitted by the bounded shell grammar')
+
     def take(self, parser: ShellParser, word: ShellWord) -> None:
         word.argument(parser)
 
@@ -351,6 +389,13 @@ class RedirectionTarget(ArgumentTarget):
 
     def require_word(self) -> None:
         raise ValueError('Shell redirection requires a word operand')
+
+
+class HereDocumentTarget(RedirectionTarget):
+    """The shell removes delimiter quotes but never expands its word."""
+
+    def require_expansion(self) -> None:
+        pass
 
 
 class ShellParser:
@@ -393,7 +438,7 @@ class ShellParser:
         return iter(completed)
 
     def commands(self) -> Iterator[ShellCommand]:
-        while word := self.lexer.next_word():
+        while word := self.lexer.next_word(self.target):
             yield from word.consume(self)
         self.finish()
         self.lexer.read_documents()
