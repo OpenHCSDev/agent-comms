@@ -124,10 +124,30 @@ class ShellDecoding(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'target'),))
 
+    def test_document_logical_termination_preserves_following_commands(self):
+        for text in (
+            'cat <<EOF\nE\\\nOF\nmkdir target',
+            'cat <<-EOF\n\tE\\\nOF\nmkdir target',
+            "cat <<'EOF'\n$\\\n(touch hidden)\nEOF\nmkdir target",
+            "cat <<-'EOF'\n\t$\\\n(touch hidden)\n\tEOF\nmkdir target",
+            "cat <<'EOF'\nE\\\nOF\nEOF\nmkdir target",
+            'cat <<EOF\nliteral' + '\\' * 2 + '\nEOF\nmkdir target',
+            'cat <<EOF\nnot-end\\\nEOF\nstill body\nEOF\nmkdir target',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(tuple(command.words for command in ShellCommand.parsed(text)),
+                                 (('cat',), ('mkdir', 'target')))
+                self.assertEqual(shell_storage_effects(text, CWD), (WriteStorageEffect(CWD / 'target'),))
+
     def test_document_scope_and_unsupported_expansion_are_explicit(self):
         for text in (
             'cat <<EOF\n$(uv sync)\nEOF\n',
             'cat <<EOF\n`uv sync`\nEOF\n',
+            'cat <<EOF\n$\\\n(touch target)\nEOF\n',
+            'cat <<-EOF\n\t$\\\n(touch target)\n\tEOF\n',
+            'cat <<EOF\n$\\\n\\\n(touch target)\nEOF\n',
+            "cat <<EOF\n'$\\\n(touch target)'\nEOF\n",
+            'cat <<EOF\nnot-end\\\nEOF\n$\\\n(touch target)\nEOF\n',
             'cat <<E\\\nOF\n$(touch target)\nEOF\n',
             'cat <<-E\\\nOF\n\t`touch target`\n\tEOF\n',
             "cat <<'EOF'\nno terminator",

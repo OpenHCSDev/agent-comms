@@ -53,9 +53,12 @@ class HereDocument(Redirection):
     def check_line(self, line: str) -> None:
         pass
 
+    def body_lines(self, lexer: ShellLexer) -> Iterator[str]:
+        return lexer.document_lines()
+
     def read_body(self, lexer: ShellLexer) -> None:
         lexer.resume_at_boundary()
-        for line in lexer.document_lines():
+        for line in self.body_lines(lexer):
             if self.line_value(line) == self.target:
                 return
             self.check_line(line)
@@ -63,6 +66,21 @@ class HereDocument(Redirection):
 
 
 class ExpandedHereDocument(HereDocument):
+    def body_lines(self, lexer: ShellLexer) -> Iterator[str]:
+        """Join unquoted continuations before both termination and expansion checks."""
+        parts: list[str] = []
+        for line in super().body_lines(lexer):
+            content = line.removesuffix('\n')
+            backslashes = len(content) - len(content.rstrip('\\'))
+            if line.endswith('\n') and backslashes % 2:
+                parts.append(line[:-2])
+                continue
+            parts.append(line)
+            yield ''.join(parts)
+            parts.clear()
+        if parts:
+            yield ''.join(parts)
+
     def check_line(self, line: str) -> None:
         if '$(' in line or '`' in line:
             raise ValueError('Command substitution in an expanded here-document is not admitted')
