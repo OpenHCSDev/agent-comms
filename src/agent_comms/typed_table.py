@@ -494,14 +494,29 @@ class ForeignKey(TableReference):
         one domain type and re-encoded as a different target type.
         """
         referencing = _identifier(self.target.declared_name + "_referencing")
-        related = " AND ".join(
-            f"{self.target.qualified(parent)} = {referencing}.{owner._column_list((child,))}"
-            for child, parent in zip(self.columns, self.target_columns, strict=True)
-        )
+        related = self._related_columns(owner, referencing, _identifier(self.target.declared_name))
         return original.retain_rows(
             self.target,
             where=f"EXISTS (SELECT 1 FROM main.{_identifier(owner.declared_name)} "
                   f"AS {referencing} WHERE {related})",
+        )
+
+    def _related_columns(self, owner: type[TypedTable], referencing: str, referenced: str) -> str:
+        """The parent side always supplies the declared FK comparison semantics."""
+        return " AND ".join(
+            f"{referenced}.{self.target._column_list((parent,))} = "
+            f"{referencing}.{owner._column_list((child,))}"
+            for child, parent in zip(self.columns, self.target_columns, strict=True)
+        )
+
+    def retain_children(self, owner: type[TypedTable], original: AttachedPracticeRebuild) -> int:
+        """Original children of selected parents, only when a parent requires that group."""
+        referenced = _identifier(owner.declared_name + "_referenced")
+        related = self._related_columns(owner, _identifier(owner.declared_name), referenced)
+        return original.retain_rows(
+            owner,
+            where=f"EXISTS (SELECT 1 FROM main.{_identifier(self.target.declared_name)} "
+                  f"AS {referenced} WHERE {related})",
         )
 
 
@@ -1229,13 +1244,25 @@ class TableSchema(ABC):
     def retain_referenced_rows(
         cls, original: AttachedPracticeRebuild,
     ) -> int:
-        """One forward-FK expansion from selected rows; not semantic closure.
+        """One declared dependency expansion, including owners' required groups.
 
-        Required dependent children and references inside serialized values must
-        be supplied by their owning declarations, never inferred absent here.
+        Undeclared natural-key, serialized and cross-store dependencies remain
+        open; a zero contribution is not a certificate that they do not exist.
         """
+        rows = cls.schema_rows()
         return sum(reference.retain_parents(row, original)
-                   for row in cls.schema_rows() for reference in row.foreign_keys())
+                   for row in rows for reference in row.foreign_keys()) + sum(
+            row.retain_required_rows(original, cls) for row in rows
+        )
+
+    @classmethod
+    def retain_referencing_rows(
+        cls, original: AttachedPracticeRebuild, parent: type[TypedTable],
+    ) -> int:
+        """Inverse declared edges for an owner that requires its complete child group."""
+        return sum(reference.retain_children(row, original)
+                   for row in cls.schema_rows() for reference in row.foreign_keys()
+                   if reference.target is parent)
 
     @classmethod
     def declares_schema(cls) -> bool:
@@ -1345,6 +1372,34 @@ class TableSchema(ABC):
             row.require_decodable_rows(db)
 
     @classmethod
+    def require_related_rows(cls, db: sqlite3.Connection) -> None:
+        """Reject stored references without changing their original rows."""
+        with closing(SQLiteForeignKeyViolation.iterate(
+            db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
+        )) as violations:
+            for violation in violations:
+                raise cls.schema_error(
+                    f"{cls.__name__} foreign-key violation: table={violation.table}, "
+                            f"parent={violation.parent}, fkid={violation.fkid}"
+                )
+
+    @classmethod
+    @contextmanager
+    def loading_rows(cls, db: sqlite3.Connection) -> Iterator[None]:
+        """Load a fresh declared schema in one transaction, preserving sealed values.
+
+        Every table exists before loading starts; guards are installed only after
+        all selected rows have loaded. Required children and producer metadata
+        remain the selector's obligation, not something FK validity proves.
+        """
+        with SQLiteForeignKeys.relations_suspended(db), SQLiteFile.write_transaction(db):
+            with ExitStack() as loading:
+                for row in cls.schema_rows():
+                    loading.enter_context(row.loading(db))
+                yield
+            cls.require_related_rows(db)
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         cls.create_tables(db, cls.schema_rows())
 
@@ -1384,14 +1439,7 @@ class TableSchema(ABC):
         with SQLiteForeignKeys.relations_suspended(db):
             with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
                 cls.carry_schema(db, rebuild=attached)
-                with closing(SQLiteForeignKeyViolation.iterate(
-                    db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
-                )) as violations:
-                    for violation in violations:
-                        raise cls.schema_error(
-                            f"{cls.__name__} foreign-key violation: table={violation.table}, "
-                            f"parent={violation.parent}, fkid={violation.fkid}"
-                        )
+                cls.require_related_rows(db)
         return True
 
     @classmethod
@@ -2402,6 +2450,25 @@ class TypedTable(
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """Additional groups this row's declaration requires beyond its FK parents."""
+        return 0
+
+    @classmethod
+    @contextmanager
+    def loading(cls, db: sqlite3.Connection) -> Iterator[None]:
+        """Create the table, load its rows, then install its declared guards.
+
+        The caller owns rollback. No retained row state is rewritten to pass
+        insertion guards that describe ordinary runtime writes.
+        """
+        db.execute(cls._table_sql())
+        yield
+        cls.create(db, if_not_exists=True)
+
+    @classmethod
     def rebuild(cls, db: sqlite3.Connection,
                 changed: Mapping[str, str] = types.MappingProxyType({})) -> None:
         """Copy writable fields into the declared schema, in the caller's transaction.
@@ -2421,10 +2488,9 @@ class TypedTable(
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
         SQLiteCatalogObject.release_guards(db, cls)
         cls.drop(db)
-        db.execute(cls._table_sql())
-        columns = cls._column_list(tuple(item.name for item in fields))
-        db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
-        cls.create(db, if_not_exists=True)
+        with cls.loading(db):
+            columns = cls._column_list(tuple(item.name for item in fields))
+            db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod

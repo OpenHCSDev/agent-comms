@@ -47,13 +47,41 @@ Other constraint conflicts are not hidden by `INSERT OR IGNORE`.
 comparison, preserving SQLite parent affinity/collation and NULL-key behavior.
 Internal aliases derive from the target declaration and cannot shadow its outer
 table name. `TableSchema.retain_referenced_rows` expands one pass through declared
-edges, including column references. It is not a fixed-point or semantic closure.
+edges, including column references and required groups supplied by row overrides.
+It is not a fixed-point or complete semantic closure.
 
 This new primitive is not yet consumed by CoordinationStore/PracticeCopy. Guard-safe
 loading, required children, source snapshot consistency, producer metadata,
 sequences, schema compatibility, materialized bounds and copy behavior remain
 unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
 is changed. These methods are implementation prerequisites, not a runnable root.
+
+## Shared loading lifetime and acknowledgement groups — source only
+
+`TypedTable.loading` owns table creation, the load interval, then installation of
+that row's indexes/guards. Existing `rebuild` consumes the same sequence rather
+than keeping a separate loading procedure. NRA's ModuleSyntaxIndex, StatementSource
+and exact SourceTextPatch selected the original statements and preserved their
+source geometry. This is an authored context composition, not a native equivalence
+certificate or a class-member promotion.
+
+`TableSchema.loading_rows` opens one transaction with FK enforcement suspended,
+creates every table before yielding, installs every row's guards after loading,
+then checks references before committing. Exceptions roll back through the existing
+SQLiteFile transaction owner. The same `require_related_rows` check is used by
+ordinary schema reconciliation. No ordinary runtime insertion guard is weakened.
+
+`TypedTable.retain_required_rows` supplies the default empty contribution;
+`ClaimBatchAcknowledgements` overrides it because its sealed counts describe the
+complete original child group. The schema follows inverse **declared FK edges**
+only for that requested parent, rather than expanding every participant's history.
+`ForeignKey` owns both directions and their one parent-affinity comparison.
+Original sealed state is copied unchanged; no seal transition or replay is issued.
+
+These are source implementations, not executed copy/rollback/guard controls.
+CoordinationStore/PracticeCopy has no selection consumer yet. Natural-key harness,
+serialized/cross-store and producer dependencies remain OPEN; complete FK validity
+would not establish their preservation or the original group's validity.
 
 ## Required preservation that SQL foreign keys do not establish
 
