@@ -143,6 +143,11 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
             rule.cleared_by(cls)
 
     @classmethod
+    def source_review_hint(cls) -> bool:
+        """A generic source-review line may offer this action without carrier evidence."""
+        return True
+
+    @classmethod
     def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
         """Ordinary verbs do not select a head verdict."""
         return True
@@ -876,6 +881,9 @@ class HeadReviewRule(StandingRule, declared_name=None):
     def undecided(self, store: TodoStore) -> bool:
         return not self.decided(store, self.request)
 
+    def review_allowed(self, verb: type[ClearingVerb]) -> bool:
+        return verb.source_review_hint()
+
 
 @dataclass(frozen=True)
 class HeadReviewCommands(HeadReviewRule, declared_name=None):
@@ -895,7 +903,8 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
     todo: Todo = field(kw_only=True, compare=False)
 
     def review_allowed(self, verb: type[ClearingVerb]) -> bool:
-        return verb.review_allowed(self.todo.order.checked().review_verdicts())
+        return (super().review_allowed(verb)
+                and verb.review_allowed(self.todo.order.checked().review_verdicts()))
 
     def command_values(self) -> Mapping[str, str]:
         return {**super().command_values(), "problem": self.todo.id}

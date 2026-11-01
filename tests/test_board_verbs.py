@@ -105,6 +105,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
+    assert judge.PromoteVerb not in rule.clearing_actions()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
@@ -181,6 +182,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
