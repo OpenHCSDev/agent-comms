@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Attach one request timing resource to the existing native loop and observers."""
+"""Observe model-request progress and callbacks through the existing native loop."""
 from pathlib import Path
 import sys
 
@@ -18,7 +18,7 @@ def main(package):
     start = source.index("async function streamAssistantResponse(")
     end = source.index("/**", start)
     function = source[start:end]
-    function = function.replace("    // Apply context transform", """    const request = new NativeRequestObservation(config);
+    function = function.replace("    // Apply context transform", """    const request = new NativeRequest(config);
     const publish = event => request.emit(event, emit);
     request.observe({ stage: "preparing", detail: "Preparing model request" });
     try {
@@ -37,7 +37,7 @@ def main(package):
     } finally { request.observe({ stage: "finished", detail: "Model request finished" }); }
 }
 """)
-    loop.write_text('import { NativeRequestObservation } from "../../pi-ai/dist/utils/agent-comms-request-observation.js";\n'
+    loop.write_text('import { NativeRequest } from "../../pi-ai/dist/utils/agent-comms-request-observation.js";\n'
                     + source[:start] + function + source[end:])
     agent = core / "agent.js"
     replace_once(agent, "    onResponse;", "    onResponse;\n    onRequestProgress;")
@@ -56,7 +56,7 @@ def main(package):
             onRequestProgress: this.agent.onRequestProgress,""")
     summary = package / "dist/core/compaction/compaction.js"
     summary.write_text(
-        'import { NativeRequestObservation } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
+        'import { NativeRequest } from "../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js";\n'
         + summary.read_text()
     )
     replace_once(summary, 'import { completeSimple } from "@earendil-works/pi-ai/compat";',
@@ -65,7 +65,7 @@ def main(package):
         ? (await streamFn(model, context, requestOptions)).result()
         : completeSimple(model, context, requestOptions);
     return retryAssistantCall(produce, retry, requestOptions.signal, callbacks);
-}""", """    const request = new NativeRequestObservation({ ...requestOptions,
+}""", """    const request = new NativeRequest({ ...requestOptions,
         onRequestProgress: callbacks?.onRequestProgress });
     request.observe({ stage: "preparing", detail: "Preparing compaction request" });
     try {

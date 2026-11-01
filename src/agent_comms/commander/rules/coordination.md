@@ -2,7 +2,6 @@
 name: coordination
 description: "one order per owner holding every problem on its surface; units gather evidence and the commander (or its Claude fork) diagnoses and chooses the shape; the main loop only dispatches; finished work never waits on the commander; every unit ask is answered before the next rotation step; check open PRs first; never block on a question; record new owner targets at once"
 drift: "Finished work never waits on you: enqueue it, record it and give its unit the next order the same tick; a Claude fork shapes while your main loop dispatches."
-audience: commander
 type: hard-rule
 ---
 

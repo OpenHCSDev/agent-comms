@@ -2,7 +2,6 @@
 name: send-backs-and-strikes
 description: "a unit defect (send-back, false claim, off-order edit, undisclosed assumption, turn ended stalled on nothing) is a strike at once, in public and plain words, and measures the unit without ever taking its task away; a correction of the commander's own order is never a strike; read every open order first, review semantics not test passes, and spend idle ticks hunting hot paths"
 drift: "Correcting your own order is not a send-back: no strike, and the unit keeps its turn."
-audience: commander
 type: hard-rule
 ---
 

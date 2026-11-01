@@ -266,6 +266,9 @@ class ContextSources:
 
     provenance: tuple[Provenance, ...]
 
+    def bus_references(self) -> tuple[MessageReference, ...]:
+        return tuple(reference for source in self.provenance for reference in source.bus_references())
+
     def native_identity(self) -> NativeSessionIdentity:
         originals = {identity for source in self.provenance for identity in source.native_identities()}
         if len(originals) != 1:
@@ -273,10 +276,13 @@ class ContextSources:
         (identity,) = originals
         return identity
 
-    def journal_entries(self) -> tuple[str, ...]:
+    def journal_coordinates(self) -> tuple[str, ...]:
         identity = self.native_identity()
-        entries = tuple(dict.fromkeys(entry for source in self.provenance
-                                      for entry in source.journal_entries(identity)))
+        return tuple(dict.fromkeys(entry for source in self.provenance
+                                   for entry in source.journal_entries(identity)))
+
+    def journal_entries(self) -> tuple[str, ...]:
+        entries = self.journal_coordinates()
         if not entries:
             raise ValueError("Original segment has no recoverable journal coordinates")
         return entries
@@ -350,8 +356,7 @@ class SegmentManifest:
         return ContextSources(self.provenance)
 
     def wire_sources(self) -> tuple[MessageReference, ...]:
-        """The committed bus messages a wake in this input recorded: its selected originals
-        and the owner's own sent outcomes."""
+        """Original bus messages declared by this segment, in contribution order."""
         return self.kind.wire_sources(self)
 
     async def public_text(self, read_reference) -> str:
@@ -695,7 +700,7 @@ class ContextSegment(
 
     @classmethod
     def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
-        """Only a wake records bus messages; any other segment answers through its contributors."""
+        """A segment without its own wire sources answers through its contributors."""
         return tuple(source for child in original.contributors for source in child.wire_sources())
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
@@ -828,8 +833,19 @@ class SuppliedSegment:
         return self.content
 
 
+class WireSources(ContextSegment, declared_name=None):
+    """Bus references belong to contributing segments, not their presentation route."""
+
+    @classmethod
+    def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        return (
+            *original.sources.bus_references(),
+            *super().wire_sources(original),
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
-class UserInputSegment(SuppliedSegment, ContextSegment):
+class UserInputSegment(SuppliedSegment, WireSources):
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
@@ -1001,6 +1017,11 @@ class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
         entries = tuple(ContextEntryManifest(child)
                         for child in original.contributors[recorded.inherited_entries:])
         return recorded, entries
+
+
+@dataclass(frozen=True, kw_only=True)
+class TransformedInputSegment(NativeAnnotations, MeasuredNativeSegment):
+    """SDK values without original-entry correspondence carry no user-entry proof."""
 
 
 @dataclass(frozen=True, kw_only=True)

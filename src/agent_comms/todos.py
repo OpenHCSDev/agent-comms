@@ -66,7 +66,7 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
-from agent_comms.commander.rule_file import RuleAudience, RuleFile
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
@@ -2863,8 +2863,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
                 "Banned: " + "; ".join(self.banned), "Report: " + self.report,
-                *(audience.order_line(", ".join(rule.name for rule in rules))
-                  for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
+                RuleFile.order_line())
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),

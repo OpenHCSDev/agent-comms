@@ -42,7 +42,7 @@ export interface NativeRequestProgress extends RequestObservationPoint {
 export type RequestObserver = (point: RequestObservationPoint, iterator?: NativeIteratorObservation) => void;
 export declare function observeRequest(options: { onRequestProgress?: RequestObserver } | undefined,
                                       point: RequestObservationPoint, iterator?: NativeIteratorObservation): void;
-export declare class NativeRequestObservation {
+export declare class NativeRequest {
     constructor(config: { sessionId?: string; onRequestProgress?: (progress: NativeRequestProgress) => void });
     observe(point: RequestObservationPoint, iterator?: NativeIteratorObservation): void;
     callback<T>(name: string, action: () => T | Promise<T>, announce?: boolean, detail?: string): Promise<T>;

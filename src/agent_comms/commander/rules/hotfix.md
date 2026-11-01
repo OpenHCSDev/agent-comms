@@ -2,7 +2,6 @@
 name: hotfix
 description: "an obvious bug whose owner fix is in hand ships straight to main with gh pr merge --admin; say what you are fixing in the channel while you do it; never queue it, never wait on a busy owner"
 drift: "Obvious bug, owner fix in hand? Post one line, commit, --admin to main. The post informs; it never gates."
-audience: fleet
 type: hard-rule
 ---
 

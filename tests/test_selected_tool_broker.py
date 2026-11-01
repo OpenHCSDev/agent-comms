@@ -36,7 +36,7 @@ from agent_comms.native_tool_call import (
     OwnerToolConnection,
 )
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.pi_payloads import ToolCallContent
+from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ToolCallContent
 from agent_comms.repo import Checkout
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.threads import Thread
@@ -80,7 +80,7 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
     )
     repeated = ToolCallContent(id="duplicate", name="read", arguments={"path": "one"})
     with pytest.raises(DuplicateToolCallIdentity):
-        socket.announce((repeated, repeated))
+        socket.announce(AssistantMessage(content=ReportedParts((repeated, repeated))))
     assert not socket.calls
 
 
@@ -161,7 +161,9 @@ async def test_prebegin_busy_keeps_native_socket_for_the_next_fresh_call(
             writer.execute("BEGIN EXCLUSIVE")
             for round_number, call_id in enumerate(("busy", "after-busy")):
                 call = CodingCall.decode(call_id, "read", arguments)
-                server.announce((ToolCallContent(id=call_id, name="read", arguments=arguments),))
+                server.announce(AssistantMessage(content=ReportedParts((
+                    ToolCallContent(id=call_id, name="read", arguments=arguments),
+                ))))
                 server.tool_started(ToolExecutionStart(
                     tool_call_id=call_id, tool_name="read", args=arguments,
                 ))
@@ -277,9 +279,9 @@ def test_fake_socket_requires_pid_token_matching_emitted_call(
             pending = asyncio.create_task(query(server.listener.connection, _wire(token)))
             await asyncio.sleep(0)
             assert not pending.done()  # Socket arrival is not a native start.
-            server.announce(
-                [ToolCallContent(id="call_1", name="selected_claimed_write", arguments=arguments)]
-            )
+            server.announce(AssistantMessage(content=ReportedParts((
+                ToolCallContent(id="call_1", name="selected_claimed_write", arguments=arguments),
+            ))))
             with pytest.raises(SelectedToolDenied):
                 server.tool_started(
                     ToolExecutionStart(
@@ -345,15 +347,9 @@ async def test_listener_isolated_from_previous_turn_and_keeps_consumed_slot(
     await server.start()
     try:
         arguments = {"resource": "notes.txt", "contents": "é"}
-        server.announce(
-            (
-                ToolCallContent(
-                    id="call_1",
-                    name="selected_claimed_write",
-                    arguments=arguments,
-                ),
-            )
-        )
+        server.announce(AssistantMessage(content=ReportedParts((
+            ToolCallContent(id="call_1", name="selected_claimed_write", arguments=arguments),
+        ))))
         server.tool_started(
             ToolExecutionStart(
                 tool_call_id="call_1",
@@ -395,10 +391,10 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
     the owner callback could claim or write anything."""
     from agent_comms.pi_rule_gate import PiRuleGate, RulesUnread
     from agent_comms.rule_deal import StartedDeal
-    from agent_comms_hooks.skill import FleetReader
+    from agent_comms_hooks.skill import DeckReader
 
     gate = PiRuleGate(tmp_path / "scratch", tmp_path)
-    gate.deal(FleetReader, (), StartedDeal())
+    gate.deal(DeckReader, (), StartedDeal())
     token = secrets.token_hex(32)
     acted: list[broker.SelectedToolRequest] = []
     server = broker.SelectedToolSocket(
@@ -406,7 +402,9 @@ async def test_a_dealt_rule_gate_refuses_the_selected_write_before_its_owner_act
         pid=os.getpid())
     arguments = {"resource": "notes.txt", "contents": "é"}
     name = broker.SelectedToolRequest.declared_name
-    server.announce((ToolCallContent(id="call_1", name=name, arguments=arguments),))
+    server.announce(AssistantMessage(content=ReportedParts((
+        ToolCallContent(id="call_1", name=name, arguments=arguments),
+    ))))
     server.tool_started(ToolExecutionStart(tool_call_id="call_1", tool_name=name, args=arguments))
     with pytest.raises(RulesUnread, match="before reading"):
         await server.handle_request(_wire(token))

@@ -38,6 +38,8 @@ from .nominal.field_codec import FieldCodec, MalformedRecord
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .recorded_time import EventTime, UnrecordedEventTime
 from .routing import TurnRouting
+from .rule_deal import Mute, Speaking, Voice
+from .session_receipts import SessionReceipts
 from .sent_message import PublishedSentMessage
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import (
@@ -401,6 +403,15 @@ class TranscriptSource:
     ) -> dict[str, SegmentManifest]:
         """Only a native journal records a context manifest per input entry."""
         return {}
+
+    def voice(self, deal: Speaking) -> Voice:
+        """A source that cannot read back the session's own words cannot hear an answer, so
+        its deal never asks: asking would lock the session behind a question it can't answer."""
+        return Mute()
+
+    def receipts(self) -> SessionReceipts:
+        """What the session's own record shows it just did; a source with no record has none."""
+        return SessionReceipts()
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         """Read input-bounded turns under one original record-source cut."""

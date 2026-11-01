@@ -28,7 +28,7 @@ from .native_tool_call import (
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import PiContent
+from .pi_payloads import AssistantMessage
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 from .tool_denial import SelectedToolDenied
 
@@ -89,7 +89,7 @@ class ToolCallIdentity:
 
 @dataclass(frozen=True)
 class NativeToolRound(Generic[Call]):
-    """One decoded assistant message; call ids are unique only within this boundary."""
+    """One admitted assistant tool round; retain its call identities, not an answer copy."""
 
     number: int
     declared: tuple[Call, ...]
@@ -98,12 +98,12 @@ class NativeToolRound(Generic[Call]):
     def decode(
         cls,
         number: int,
-        content: tuple[PiContent, ...],
+        assistant: AssistantMessage,
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
         declared: list[Call] = []
         seen: set[str] = set()
-        for item in content:
+        for item in assistant.parts:
             for tool_call in item.tool_calls():
                 call = decode_call(tool_call.id, tool_call.name, tool_call.arguments)
                 if call.call_id in seen:
@@ -129,10 +129,10 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
 
     def decode_round(
         self,
-        content: tuple[PiContent, ...],
+        assistant: AssistantMessage,
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
-        round = NativeToolRound.decode(len(self.rounds), content, decode_call)
+        round = NativeToolRound.decode(len(self.rounds), assistant, decode_call)
         if self.rounds:
             for call in self.rounds[-1].declared:
                 call.progress.observation.require(Complete, ToolOutcomeUnknown())
@@ -305,8 +305,8 @@ class ToolTransport(Generic[Call]):
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
 
-    def announce(self, content: tuple[PiContent, ...]) -> None:
-        round = self.calls.decode_round(content, self.decode_call)
+    def announce(self, assistant: AssistantMessage) -> None:
+        round = self.calls.decode_round(assistant, self.decode_call)
         self.validate_round(round)
         self.calls.announce(round)
 
@@ -337,7 +337,7 @@ class ToolTransport(Generic[Call]):
         for call in self.calls.values():
             call.progress.observation.require(Complete, ToolOutcomeUnknown())
 
-    def judge(self, call: Call) -> None:
+    async def judge(self, call: Call) -> None:
         """Refuse a call before its policy is asked; an ungated transport leaves it to `allow`."""
         return
 
@@ -349,7 +349,7 @@ class ToolTransport(Generic[Call]):
 
     async def judged_allow(self, round_number: int, call: Call) -> None:
         """Inside the call's one claim, so a refusal is the call's own failed terminal."""
-        self.judge(call)
+        await self.judge(call)
         await self.allow(round_number, call)
 
     @staticmethod
@@ -421,5 +421,6 @@ class GatedToolTransport(ToolTransport[Call]):
         super().__init__(listener, pid=pid)
         self.rule_gate = gate
 
-    def judge(self, call: Call) -> None:
-        call.judge_under(self.rule_gate)
+    async def judge(self, call: Call) -> None:
+        self.calls.identity_for(call)
+        await self.rule_gate.judge_call(call)

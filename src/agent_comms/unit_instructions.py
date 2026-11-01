@@ -1,7 +1,7 @@
 """The system prompt every native unit carries, derived once at preparation.
 
 A system prompt survives every compaction, so a unit never drifts off it: the owner's
-instructions, the indictment, every packaged rule under its audience's heading, and the
+instructions, the indictment, the shared packaged rules, and the
 NRA pattern index that orders and send-backs cite.
 """
 
@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 
 from agent_comms.commander.package import CommanderPackage
-from agent_comms.commander.rule_file import RuleAudience, RuleFile
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms.native_package import OWNER_INSTRUCTIONS, UNIT_INSTRUCTIONS
 from agent_comms.slop import Slop
 
@@ -26,8 +26,7 @@ class UnitInstructions:
             OWNER_INSTRUCTIONS.read_text(encoding="utf-8"),
             CommanderPackage.indictment().read_text(encoding="utf-8"),
             CommanderPackage.voice().read_text(encoding="utf-8"),
-            *(audience.heading + "\n\n" + "\n\n".join(rule.render() for rule in rules)
-              for audience, rules in RuleAudience.grouped(RuleFile.packaged())),
+            RuleFile.render_packaged(),
             (Slop.catalog() / "README.md").read_text(encoding="utf-8"),
         )
         return "\n\n".join(section.strip() for section in sections) + "\n"
