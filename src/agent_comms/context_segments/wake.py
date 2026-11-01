@@ -126,25 +126,21 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
 class DeliveredMessageSegment(WireSources, InstructionSegment):
     """One committed message handed to its recipient's already running turn."""
 
-    source: Delivered
-    assignment: WakeAssignment
-    owner: Thread
+    delivery: MessageDelivery
 
     @classmethod
-    def capture(cls, source, assignment, owner):
-        return super().capture((WireProvenance(source.message.reference),),
-                               source=source, assignment=assignment, owner=owner)
+    def capture(cls, delivery: MessageDelivery):
+        return super().capture(delivery.provenance, delivery=delivery)
 
     def values(self):
-        self.assignment.require_selected_source(self.source, self.owner)
-        message = self.source.message
+        message = self.delivery.source.message
         return dict(
             message=FieldCodec.compact(
                 {
-                    "source_seq": self.assignment.wire_seq,
+                    "source_seq": self.delivery.assignment.wire_seq,
                     "sender": message.sender,
                     "target": message.target,
-                    "audience": self.assignment.audience.value,
+                    "audience": self.delivery.assignment.audience.value,
                     "body": message.body,
                 }, ensure_ascii=True,
             )
@@ -159,16 +155,20 @@ class MessageDelivery:
     assignment: WakeAssignment
     owner: Thread
 
+    def __post_init__(self) -> None:
+        self.assignment.require_selected_source(self.source, self.owner)
+
+    @property
+    def provenance(self) -> tuple[WireProvenance, ...]:
+        return (WireProvenance(self.source.message.reference),)
+
     def segment(self) -> ContextSegment:
         return self.source.message.task.message_segment(self)
 
     def delivered(self) -> DeliveredMessageSegment:
         """A bus message: framed with its sender and route, and its contents untrusted."""
-        return DeliveredMessageSegment.capture(self.source, self.assignment, self.owner)
+        return DeliveredMessageSegment.capture(self)
 
     def typed(self) -> UserInputSegment:
         """The owner's original words once, without a bus or instruction wrapper."""
-        self.assignment.require_selected_source(self.source, self.owner)
-        return UserInputSegment(
-            provenance=(WireProvenance(self.source.message.reference),), content=self.source.message.body
-        )
+        return UserInputSegment(provenance=self.provenance, content=self.source.message.body)
