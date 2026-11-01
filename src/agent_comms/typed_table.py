@@ -1093,6 +1093,37 @@ class AttachedPracticeRebuild(SchemaRebuild):
         The caller owns destination freshness, guard/loading lifetime, semantic
         dependencies and producer metadata. No stored JSON is reconstructed.
         """
+        return self._retain_selection(
+            row, f"FROM {self.source.qualified(row.declared_name)} AS {_identifier(row.declared_name)}",
+            where=where, parameters=parameters,
+        )
+
+    def retain_keys(
+        self, row: type[TypedTable], keys: Sequence[Mapping[str, object]],
+    ) -> int:
+        """The declared indexed-key query supplies raw selected rows, not re-encoded records."""
+        return sum(self._retain_selection(
+            row, requested.join, prefix=f"WITH {requested.values}",
+            parameters=requested.bindings,
+        ) for requested in row.requested_keys(
+            self.destination, keys, table_source=self.source,
+        ))
+
+    def require_schema(self, schema: type[TableSchema]) -> None:
+        """An unknown source column or trigger is not permission to silently discard it."""
+        stored = SQLiteSchemaObject.read(self.destination.execute(
+            f"SELECT name,sql FROM {self.source.qualified('sqlite_master')} "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'",
+        ))
+        differences = SQLiteSchemaObject.differences(stored, schema.declared_schema())
+        if differences:
+            raise schema.schema_error("Retained source schema differs: " + " | ".join(
+                str(difference) for difference in differences))
+
+    def _retain_selection(
+        self, row: type[TypedTable], source: str, *, where: str = "1",
+        parameters: tuple[object, ...] = (), prefix: str = "",
+    ) -> int:
         keys = tuple(item.name for item in row._columns if item.column.primary_key)
         if not keys:
             raise RelationViolationError(f"{row.declared_name} has no declared retention key")
@@ -1102,14 +1133,17 @@ class AttachedPracticeRebuild(SchemaRebuild):
             f"{retained_alias}.{row._column_list((key,))} IS {row.qualified(key)}" for key in keys
         )
         table = _identifier(row.declared_name)
-        return self.destination.execute(
-            f"INSERT INTO main.{table} ({row._column_list(fields)}) "
-            f"SELECT {row.qualified(*fields)} "
-            f"FROM {self.source.qualified(row.declared_name)} AS {table} "
+        before = self.destination.total_changes
+        self.destination.execute(
+            f"{prefix} INSERT INTO main.{table} ({row._column_list(fields)}) "
+            f"SELECT {row.qualified(*fields)} {source} "
             f"WHERE ({row._sql(where)}) AND NOT EXISTS "
             f"(SELECT 1 FROM main.{table} AS {retained_alias} WHERE {retained})",
             parameters,
-        ).rowcount
+        )
+        # Cursor.rowcount is -1 for WITH-prefixed INSERTs. The connection owns
+        # completed changes regardless of which selection grammar supplied them.
+        return self.destination.total_changes - before
 
     def rebuild(
         self, schema: type[DerivedTables], db: sqlite3.Connection,
@@ -3079,6 +3113,39 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         return HeldBusFile(cls, path)
 
     @classmethod
+    def configure_connection(cls, connection: sqlite3.Connection) -> None:
+        """Connection behavior needed by this file's declared loading guards."""
+
+    @classmethod
+    @contextmanager
+    def retaining_rows(cls, source: Path, destination: Path) -> Iterator[AttachedPracticeRebuild]:
+        """Publish a fresh selected store only after loading and declared closure succeed.
+
+        The caller supplies seeds and owns the wider cross-store cut. The source
+        attachment stays read-only in the loading transaction; no runtime writer,
+        producer regeneration, lifecycle reset or original coordinate is created.
+        """
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(destination)
+        schema = cls.schema_at(source)
+        PrivateDirectoryRole.make_parents(destination.parent)
+        descriptor, staged = cls.stage_file(destination)
+        os.close(descriptor)
+        try:
+            with closing(cls.writer(staged, isolation_level=None)) as db:
+                cls.configure_connection(db)
+                with PracticeRebuild(source).attached(db) as original:
+                    with schema.loading_rows(db):
+                        original.require_schema(schema)
+                        yield original
+                        while schema.retain_referenced_rows(original):
+                            pass
+            ExclusiveAtomicFile(destination).replace(staged)
+        finally:
+            for member in cls.files(staged):
+                member.unlink(missing_ok=True)
+
+    @classmethod
     def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
         """Files without a declared practice replay retain their normal rebuild."""
         return FULL_SCHEMA_REBUILD
@@ -3406,6 +3473,33 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
 
 class RowidSequenced(TypedTable, declared_name=None):
     """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """AUTOINCREMENT's original high-water mark survives a selected row set."""
+        changed = super().retain_required_rows(original, schema)
+        # sqlite_sequence is SQLite-owned external metadata, absent when the
+        # source has no AUTOINCREMENT tables. Its presence is decoded here once.
+        if not SQLiteSchemaObject.read(original.destination.execute(
+            f"SELECT name,sql FROM {original.source.qualified('sqlite_master')} "
+            "WHERE name='sqlite_sequence'",
+        )):
+            return changed
+        source = original.source.qualified("sqlite_sequence")
+        changed += original.destination.execute(
+            "INSERT INTO main.sqlite_sequence(name,seq) "
+            f"SELECT name,seq FROM {source} AS original_sequence WHERE name=? "
+            "AND NOT EXISTS(SELECT 1 FROM main.sqlite_sequence AS retained_sequence "
+            "WHERE retained_sequence.name=original_sequence.name)", (cls.declared_name,),
+        ).rowcount
+        changed += original.destination.execute(
+            f"UPDATE main.sqlite_sequence SET seq=(SELECT seq FROM {source} WHERE name=?) "
+            f"WHERE name=? AND seq<(SELECT seq FROM {source} WHERE name=?)",
+            (cls.declared_name, cls.declared_name, cls.declared_name),
+        ).rowcount
+        return changed
 
     @classmethod
     def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:
