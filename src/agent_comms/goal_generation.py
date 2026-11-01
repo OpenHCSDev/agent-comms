@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlite3 import Connection
 
+from abc import abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
@@ -87,10 +88,11 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
         return NoLaunchPermit()
 
+    @abstractmethod
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
-        raise ValueError("The goal attempt is unresolved; inspect it before retrying.")
+        """Authorize new work or refuse according to this generation's lifecycle."""
 
 
 @dataclass(frozen=True)
@@ -139,6 +141,14 @@ class ReadyGeneration(GenerationState):
 
 @dataclass(frozen=True)
 class ReservedGeneration(GenerationState):
+    def authorize_retry(
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
+    ) -> None:
+        raise ValueError(
+            f"The goal generation is reserved for attempt {generation.attempt_identity.attempt_id}; "
+            "Retry cannot replace it. Inspect that attempt before deciding on new work."
+        )
+
     def stopped_permit(self, store: GoalAttemptStore, generation: Generation) -> GoalTurnPermit:
         return store.read_attempt(generation.attempt_identity.attempt_id).stopped_permit()
 
@@ -196,11 +206,21 @@ class BlockedGeneration(Failed, GenerationState):
 
 @dataclass(frozen=True)
 class CompletedGeneration(Complete, Terminal, GenerationState):
+    def authorize_retry(
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
+    ) -> None:
+        raise ValueError("The goal generation is completed; Retry cannot restart completed work.")
+
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return CompletedExecution(source.goal.id)
 
 
 @dataclass(frozen=True)
 class CancelledGeneration(Terminal, GenerationState):
+    def authorize_retry(
+        self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
+    ) -> None:
+        raise ValueError("The goal generation is cancelled; Retry cannot restart cancelled work.")
+
     def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
         """Retirement preserves either the recorded attempt or its declared absence."""
