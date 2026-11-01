@@ -27,7 +27,6 @@ from .native_session_files import CheckSession
 from .read_basis import MemberActivityDisplayScope
 from .registry_document import RosterVisibility
 from .session_file import RegistrySessionLocation
-from .thread_storage import StorageRoots
 from .thread_text import NoThreadText
 from .repo import Checkout
 from .threads import Thread
@@ -77,6 +76,7 @@ class CheckRoot:
             raise ValueError("A check root cannot be inside its source")
         root.mkdir(mode=0o700, parents=True)  # Refuse an existing directory, including a symlink.
         try:
+            self.source.registry.storage_rule.prepare_isolated(root)
             copied = wire(root)
             self._populate(copied)
         except BaseException:
@@ -111,6 +111,7 @@ class CheckRoot:
         with self.source.bus.bus.reading() as source:
             messages = scope.history(source, limit=self.max_records)
         copied.registry.store.prepare_native_root()
+        storage = copied.registry.storage_rule
         Bus.install(Bus.path_in(copied.root), history=messages)
         copied.channels.catalog.replace(catalog)
         declarations = {}
@@ -129,7 +130,7 @@ class CheckRoot:
                 session_file=RegistrySessionLocation.from_path(session, copied.root),
                 earlier_projects=(),
                 project_resume_due=False,
-                storage_roots=StorageRoots(copied.root / "scratch" / slot),
+                storage_roots=storage.initial_roots(slot),
                 # A fresh turn history: a finished turn refuses generation 0.
                 turn_record=NoTurnRecord(),
                 turn_generation=0,

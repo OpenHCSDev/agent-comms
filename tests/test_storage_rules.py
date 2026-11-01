@@ -34,6 +34,34 @@ from agent_comms.threads import Thread
 from agent_comms.tool_denial import SelectedToolDenied
 
 
+def test_isolated_policy_is_durable_and_preserves_existing_private_limits(tmp_path: Path):
+    root = tmp_path / "verification"
+    configured = StorageRule(floor_gib=0, cleanup_gib=2, memory_gib=1)
+    policy = configured.prepare_isolated(root)
+    before = StorageRule.path_in(root).read_bytes()
+    assert policy == configured.within(root) == StorageRule.load(root)
+    assert StorageRule().prepare_isolated(root) == policy
+    assert StorageRule.path_in(root).read_bytes() == before
+    reopened = wire(root)
+    assert reopened.registry.storage_rule == policy
+    assert policy.initial_roots("fork").scratch.is_relative_to(root)
+    assert policy.checkout_base.is_relative_to(root)
+    assert policy.temp_root.is_relative_to(root)
+
+
+def test_isolated_preparation_refuses_an_existing_foreign_policy_without_rewriting(tmp_path: Path):
+    root = tmp_path / "verification"
+    root.mkdir()
+    foreign = StorageRule(scratch_base=tmp_path / "not-this-root")
+    path = StorageRule.path_in(root)
+    path.write_text(FieldCodec.compact(FieldCodec.encode(foreign)))
+    before = path.read_bytes()
+    with pytest.raises(ValueError):
+        StorageRule().prepare_isolated(root)
+    assert path.read_bytes() == before
+    assert not foreign.scratch_base.exists()
+
+
 def test_resource_checker_uses_storage_allocation_floor(tmp_path):
     checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
     floor = StorageRule.load(tmp_path).floor_gib
