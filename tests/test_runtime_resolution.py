@@ -1,8 +1,9 @@
 import hashlib
 import json
 import os
+import sys
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from importlib.metadata import PathDistribution
 from pathlib import Path
 from zipfile import ZipFile
@@ -78,6 +79,38 @@ def test_verified_archive_preserves_content_without_inventing_git(installed_whee
         "packages": {"sample": {"version": "1.0", "source": verified.model_dump()}},
     })
     assert RuntimeResolution.model_validate_json(record.model_dump_json()) == record
+
+
+@pytest.mark.parametrize("changed", [False, True])
+def test_donor_wheel_selection_uses_its_recorded_prefix(
+    installed_wheel: InstalledWheel, monkeypatch: pytest.MonkeyPatch, changed: bool
+):
+    """Model the invoked prefix; this does not launch or qualify a donor worker."""
+    original = installed_wheel.distribution.read_text("direct_url.json")
+    verified = installed_wheel.source.verified_wheel(
+        installed_wheel.wheel, installed_wheel.distribution, installed_wheel.runtime
+    )
+    recorded = RuntimeResolution.model_validate({
+        "core_commit": "unqualified-fixture",
+        "packages": {"sample": {"version": "1.0", "source": verified.model_dump()}},
+    })
+    recorded.save(installed_wheel.runtime.prefix)
+    # sys.executable is the foreign launch input; no production method is patched.
+    monkeypatch.setattr(sys, "executable", str(installed_wheel.runtime.interpreter))
+    probe = InstalledPackagesProbe(recorded.core_commit)
+    assert tuple(field.name for field in fields(probe)) == ("core",)
+    assert probe.wheel_inputs() == recorded.wheel_inputs() == (installed_wheel.wheel,)
+    assert original is not None
+    raw = ArchiveRecord.model_validate_json(original)
+    if changed:
+        installed_wheel.distribution.locate_file("sample/__init__.py").write_bytes(b"changed\n")
+        with pytest.raises(ValueError, match="Installed bytes differ"):
+            raw.verified_wheel(probe.wheel_inputs()[0], installed_wheel.distribution,
+                               installed_wheel.runtime)
+    else:
+        assert raw.verified_wheel(probe.wheel_inputs()[0], installed_wheel.distribution,
+                                  installed_wheel.runtime) == verified
+    assert installed_wheel.distribution.read_text("direct_url.json") == original
 
 
 def test_changed_installed_member_refuses_archive_proof(installed_wheel: InstalledWheel):
