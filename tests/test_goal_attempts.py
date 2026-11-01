@@ -469,15 +469,17 @@ def test_stop_recovers_claim_after_owner_exits_without_turn_cleanup(comms, claim
         assert FailedTurnEvidence.count(conn) == 0
     assert stopped.goal == claimed_owner.goal
     stopped.goal.require().require_active()
-    # Repeated recovery is a no-op; it never creates another ready generation.
-    RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (stopped,))
+    # Repeated recovery retains the original released process, as stop/restart do;
+    # the post-stop registry row has already replaced that binding with NoProcess.
+    RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (claimed_owner,))
     assert store.require_generation(goal_id) == successor
-    # Even without native coordination, a foreign release must be rejected.
+    # Neither a cleared process binding nor a foreign incarnation is this release.
     substituted = replace(claimed_owner,
                           created_at=RecordedCreationTime(claimed_owner.created_at + 1))
-    with pytest.raises(RecoveryBlocked):
-        RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (substituted,))
-    assert store.require_generation(goal_id) == successor
+    for mismatched_owner in (stopped, substituted):
+        with pytest.raises(RecoveryBlocked):
+            RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (mismatched_owner,))
+        assert store.require_generation(goal_id) == successor
 
 
 def test_stop_preserves_already_verified_goal_progress(comms, claimed_owner):
