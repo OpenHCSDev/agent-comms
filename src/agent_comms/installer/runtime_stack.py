@@ -118,7 +118,7 @@ class RuntimeStack(Extendable):
             built = source.extended(
                 TargetRuntime, runtime=LaunchRuntime.at_prefix(prefix),
                 program=TargetProgram(checkout.path / STEPS.parent))
-            RuntimeResolution.recorded(prefix).prepare(built)
+            RuntimeResolution.recorded(prefix).prepare(built, core)
             return built
 
     def sync(self) -> None:
@@ -135,8 +135,11 @@ class RuntimeStack(Extendable):
             raise
 
     def complete(self) -> None:
-        """Finish the synced runtime from inside it: its native package, recorded resolution
-        and import check, or the check that a recorded one still matches its inputs."""
+        """Finish inside this runtime, or re-observe its recorded packages and interpreter.
+
+        Production-cache selection checks the source lock in build/prepare; completion
+        also admits exact explicit-wheel inputs without claiming their Git ancestry.
+        """
         with BuildPhase().running(self.commands.clock):
             core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
             RuntimeResolution.recorded(self.runtime.prefix).complete(self, core)
@@ -167,8 +170,8 @@ class RuntimeStack(Extendable):
         self.probe(ClientImportsProbe())
 
     def wheel_inputs(self) -> tuple[Path, ...]:
-        """Production lock builds do not claim explicitly supplied local wheels."""
-        return ()
+        """Re-observe retained inputs from the record; unbuilt lock targets have none."""
+        return RuntimeResolution.recorded(self.runtime.prefix).wheel_inputs()
 
     def stage_native(self) -> tuple[Path, Path]:
         """Prepare a missing artifact once; the checkout holds only its store link."""

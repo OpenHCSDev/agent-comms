@@ -14,8 +14,13 @@ from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
-from agent_comms.installer.probes.packages import ArchiveRecord, InstalledPackagesProbe
-from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
+from agent_comms.installer.probes.packages import (
+    ArchivePin, ArchiveRecord, GitPin, InstalledPackagesProbe, PackageRecord,
+)
+from agent_comms.installer.runtime_resolution import (
+    CorePackage, ResolvedLock, RuntimeResolution, ToadPackage,
+)
+from agent_comms.installer.runtime_stack import RuntimeStack
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -111,6 +116,22 @@ def test_donor_wheel_selection_uses_its_recorded_prefix(
         assert raw.verified_wheel(probe.wheel_inputs()[0], installed_wheel.distribution,
                                   installed_wheel.runtime) == verified
     assert installed_wheel.distribution.read_text("direct_url.json") == original
+
+
+def test_runtime_stack_reobserves_its_resolution_wheel_inputs(installed_wheel: InstalledWheel):
+    with InstallCommands() as commands:
+        stack = RuntimeStack(Path(__file__).resolve().parents[1], commands,
+                             runtime=installed_wheel.runtime)
+        assert stack.wheel_inputs() == ()
+        verified = installed_wheel.source.verified_wheel(
+            installed_wheel.wheel, installed_wheel.distribution, installed_wheel.runtime
+        )
+        recorded = RuntimeResolution(
+            core_commit="unqualified-fixture",
+            packages={"sample": PackageRecord(version="1.0", source=verified)},
+        )
+        recorded.save(installed_wheel.runtime.prefix)
+        assert stack.wheel_inputs() == (installed_wheel.wheel,)
 
 
 def test_changed_installed_member_refuses_archive_proof(installed_wheel: InstalledWheel):
@@ -230,6 +251,28 @@ def test_recorded_sources_match_selected_lock_not_wheel_locations():
     assert manifest(core="changed").pins() != pins
     assert manifest(toad="d" * 40).pins() != pins
     assert lock().pins({**selected, "unselected": "5"}, "core") != built.pins()
+
+
+@pytest.mark.parametrize("digest", ["0" * 64, "1" * 64])
+def test_explicit_archive_keeps_its_pin_and_refuses_repository_ancestry(digest: str):
+    built = manifest()
+    archive = ArchiveRecord.model_validate({
+        "url": "file:///owned/inputs/batrachian_toad-2-py3-none-any.whl",
+        "archive_info": {"hashes": {"sha256": digest}},
+    })
+    built = built.model_copy(update={"packages": {
+        **built.packages,
+        ToadPackage.distribution: PackageRecord(version="2", source=archive),
+    }})
+    pins = built.pins()
+    assert pins[CorePackage.distribution] == GitPin("1", "core")
+    assert pins[ToadPackage.distribution] == ArchivePin(
+        "2", archive.url, (("sha256", digest),)
+    )
+    selected = {name: record.version for name, record in built.packages.items()}
+    assert pins != lock().pins(selected, built.core_commit)
+    with pytest.raises(ValueError, match="Git revision"):
+        ToadPackage.commit(built)
 
 
 def test_missing_and_ambiguous_lock_evidence_refuses():
