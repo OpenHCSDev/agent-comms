@@ -11,24 +11,28 @@ import pytest
 
 from agent_comms.active_route import LocalRoute
 from agent_comms.coordination_errors import StaleRevision
-from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.errors import RelationViolationError
+from agent_comms.input_attempt import UnobservedInputDeliveryScope
+from agent_comms.input_disposition import InputDispositions
+from agent_comms.input_key import BusInputKey
+from agent_comms.order_tools import InputDeliveryRead
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
-from agent_comms.bus_read import BusRead, OwnerScopedRead
+from agent_comms.bus_read import BusRead, OwnerLiveRead, OwnerScopedRead
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerOperation, StopSidebar,
 )
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution
 from agent_comms.threads import Thread
 from owner_socket_fixture import declare_owner
 
 
-def owner_reads():
-    """Every owner read the UI can send: each owner-live operation in its one envelope."""
-    for operation in BusRead.members_with(OwnerScopedRead):
+def owner_reads(family: type[OwnerScopedRead] = OwnerScopedRead):
+    """The declared read family supplies the UI operations covered by each contract."""
+    for operation in BusRead.members_with(family):
         yield pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
 
 
@@ -77,19 +81,46 @@ async def test_an_invalid_notification_reference_does_not_kill_the_observer(comm
         assert (await process.read(empty_window(comms.root))).outcomes == {}
 
 
-@pytest.mark.parametrize("read_type", owner_reads())
-@pytest.mark.parametrize("declared, refusal", [
-    (True, RelationViolationError), (False, UnregisteredThreadError),
-])
-async def test_unavailable_owner_reads_preserve_the_observer(
-    comms, durable_home, read_type, declared, refusal,
-):
+@pytest.mark.parametrize("read_type", owner_reads(OwnerLiveRead))
+async def test_unavailable_live_owner_reads_preserve_the_observer(comms, durable_home, read_type):
     owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
-    if declared:
-        comms.registry.declare(owner)
+    comms.registry.declare(owner)
     async with ObservationProcess.awaited(comms.route) as process:
-        with pytest.raises(refusal):
+        with pytest.raises(RelationViolationError):
             await process.read(read_type(str(comms.root), owner.incarnation))
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
+        assert process.process.is_alive()
+        process.status.raise_if_failed()
+
+
+@pytest.mark.parametrize("read_type", owner_reads())
+async def test_an_unregistered_owner_cannot_supply_a_held_read_incarnation(comms, durable_home, read_type):
+    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent))
+    async with ObservationProcess.awaited(comms.route) as process:
+        with pytest.raises(OwnerIdentityChangedError):
+            await process.read(read_type(str(comms.root), owner.incarnation))
+        assert (await process.read(empty_window(comms.root))).outcomes == {}
+        assert process.process.is_alive()
+        process.status.raise_if_failed()
+
+
+@pytest.mark.parametrize("execution", [NativeThreadExecution, ExternalThreadExecution])
+async def test_retained_delivery_reads_preserve_the_observer_without_a_native_queue(
+    comms, durable_home, execution,
+):
+    owner = Thread("read-subject", frozenset(), Checkout(comms.root.parent), execution=execution)
+    comms.registry.declare(owner)
+    ledger = InputDispositions(comms.root)
+    key = BusInputKey(1)
+    ledger.record(key, seq=1, owner=owner.name, claim_scope=1, target=owner.name, text="Unconfirmed")
+    original = ledger.path.read_bytes()
+    async with ObservationProcess.awaited(comms.route) as process:
+        result = await process.read(ReadOwnerOperation(
+            str(comms.root), owner.incarnation, InputDeliveryRead(),
+        ))
+        assert result.current_scope is UnobservedInputDeliveryScope
+        assert [row.input_id for row in result.inputs] == [key]
+        assert ledger.path.read_bytes() == original
         assert (await process.read(empty_window(comms.root))).outcomes == {}
         assert process.process.is_alive()
         process.status.raise_if_failed()
@@ -110,8 +141,8 @@ async def test_stale_owner_reads_preserve_the_observer(comms, durable_home, read
         process.status.raise_if_failed()
 
 
-@pytest.mark.parametrize("read_type", owner_reads())
-async def test_external_owner_reads_refuse_before_waiting_for_a_socket(
+@pytest.mark.parametrize("read_type", owner_reads(OwnerLiveRead))
+async def test_external_live_owner_reads_refuse_before_waiting_for_a_socket(
     comms, durable_home, runtime_processes, read_type,
 ):
     """An external bridge has a live process and no runtime socket: the read refuses with the
