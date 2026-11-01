@@ -22,6 +22,8 @@ from agent_comms.thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
     from agent_comms.bus import BusReader
+    from agent_comms.context_segments.wake import FollowingDelivery
+    from agent_comms.turn_context import InstructionSegment
     from agent_comms.comms import Comms
     from agent_comms.messaging import Messaging
     from agent_comms.registry_document import RegistrySnapshot
@@ -56,6 +58,12 @@ class RestartNotice(OwnerNotice, declared_name="restart_notice"):
 class MeantNotice(OwnerNotice, declared_name="meant_question"):
     """The rule gate asks a session whether it meant the answers it just wrote, and tells off a
     dodge (rule_deal.MeantRecord). It lands mid-turn like any line of his."""
+
+    def following_segment(self, following: FollowingDelivery) -> InstructionSegment:
+        """He asks in his own voice, so a running turn reads a line he typed, never a bus
+        delivery framed as untrusted data. Tristan, 2026-10-31: "it needs to be presented as a
+        user message. It cannot be presented as something else." """
+        return following.typed()
 
 
 @dataclass(frozen=True)
