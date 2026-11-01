@@ -1014,7 +1014,10 @@ class ResidentManager(DeclaredFamily, affix="Manager"):
         home = Path(pwd.getpwuid(uid).pw_dir).resolve()
         if Path(environment.get("HOME", str(home))).resolve() != home:
             return NoResidentManager()
-        runtime = Path(environment.get("XDG_RUNTIME_DIR", f"/run/user/{uid}")).resolve()
+        runtime = Path(environment.get("XDG_RUNTIME_DIR", f"/run/user/{uid}"))
+        if not runtime.is_absolute():
+            return NoResidentManager()
+        runtime = runtime.resolve()
         try:
             directory = runtime.stat()
             socket = (runtime / "systemd/private").stat()

@@ -139,9 +139,14 @@ def test_only_the_users_own_home_has_the_user_manager(reachable_manager, tmp_pat
     assert ResidentManager.current() == NoResidentManager()
 
 
-def test_an_explicit_invalid_runtime_never_falls_back_to_the_real_manager(tmp_path, monkeypatch):
+def test_an_explicit_invalid_runtime_never_falls_back_to_the_real_manager(
+        manager_socket, tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", pwd.getpwuid(os.getuid()).pw_dir)
-    for directory in ("", str(tmp_path / "missing"), str(tmp_path)):
+    monkeypatch.chdir(manager_socket)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(manager_socket))
+    assert ResidentManager.current() == SystemdUserManager(manager_socket.resolve())
+    for directory in ("", ".", "./", f"../{manager_socket.name}",
+                      str(tmp_path / "missing"), str(tmp_path)):
         monkeypatch.setenv("XDG_RUNTIME_DIR", directory)
         assert ResidentManager.current() == NoResidentManager()
 
