@@ -102,11 +102,13 @@ class ToolCall:
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     AsyncWork, FreshIngress, ArgumentTool, ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
+    native_call: ClassVar[type[CoordinationCall]] = CoordinationCall
+
     @classmethod
     def create_call(
         cls, call_id: ToolCallId, arguments: dict[str, object]
     ) -> CoordinationCall:
-        return CoordinationCall(
+        return cls.native_call(
             call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     description: ClassVar[str]
