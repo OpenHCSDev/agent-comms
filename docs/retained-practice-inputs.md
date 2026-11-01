@@ -5,6 +5,22 @@ a PracticeCopy consumer in source; bounded coordinator selection, native-journal
 reading and the prepared-root application run remain unfinished.
 This document records the source decisions, not an executable selection roster.
 
+## Original recipient birth participates in owner matching
+
+Source tracing found `StoredInput.matches_owner` consulted only its origin,
+ignoring the recipient birth already present in `OwnedBusInputKey`. For a neutral
+origin, a recreated same-name owner could therefore satisfy that predicate even
+when the input key named another original birth.
+
+`InputKey.matches_owner` now owns the key's contribution. Birthless keys add no
+birth constraint; the owned bus member checks its original birth through the
+incarnation's existing `recorded_or` behavior. `StoredInput` combines that answer
+with the unchanged origin-owned author/name check. No key is re-encoded, missing
+birth inferred, generation substituted, lifecycle changed or native permission
+created. This tightens an existing consumer, not a second retention-only identity
+resolver. The added ordinary owner/recreation/birthless-owner and queued-text
+refusal scenario is authored **UNRUN**; the existing birthless-key case remains.
+
 ## Existing owners and implemented entry selection
 
 `ContextStore.retain_contexts(destination, identities, maximum_bytes=..., requests=...)` replaces the
