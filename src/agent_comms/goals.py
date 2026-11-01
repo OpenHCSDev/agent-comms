@@ -28,7 +28,7 @@ from .child_process import (
 )
 from .context_segments.wake_values import NoWakeGoalContext, WakeGoalContext, WakeGoalValue
 from .nominal.declared_family import DeclaredFamily
-from .errors import RejectedEnforcementError, RelationViolationError
+from .errors import GoalRefused, RejectedEnforcementError, RelationViolationError
 from .nominal.field_codec import (
     FieldCodec,
     GoalId,
@@ -265,7 +265,7 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
         return f"goal {self.revision.id}@{self.revision.revision}"
 
 
-class GoalChangedError(RejectedEnforcementError):
+class GoalChangedError(GoalRefused, RejectedEnforcementError):
     """An observed goal changed before its checked action could run."""
 
     reason: ClassVar[str] = "goal changed"
@@ -273,7 +273,7 @@ class GoalChangedError(RejectedEnforcementError):
     def __init__(self, thread: Thread, expected: GoalCheckpoint) -> None:
         self.thread = thread
         self.expected = expected
-        super().__init__()
+        super().__init__(str(self))
 
     def __str__(self) -> str:
         return (
@@ -501,7 +501,7 @@ class ProblemGoalOrder(GoalOrder):
     text: ClassVar[str] = "Complete the assigned problems."
 
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        raise ValueError("Complete each problem with its checked delivered commit.")
+        raise GoalRefused("Complete each problem with its checked delivered commit.")
 
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         if not goals.todos.for_goal(owner, goal.id):
@@ -509,7 +509,7 @@ class ProblemGoalOrder(GoalOrder):
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         if goals.todos.holds_pending(owner):
-            raise ValueError("Finish or release the assigned problems before replacing this Goal.")
+            raise GoalRefused("Finish or release the assigned problems before replacing this Goal.")
 
     def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: GoalId) -> tuple[Todo, ...]:
         return goals.todos.for_goal(owner, goal_id)
@@ -521,15 +521,15 @@ class ProblemGoalOrder(GoalOrder):
         return self.text
 
     def require_edit(self) -> None:
-        raise ValueError("A problem Goal's text is derived from its assigned problems.")
+        raise GoalRefused("A problem Goal's text is derived from its assigned problems.")
 
     def progress(self, goal: Goal, todos: Sequence[Todo]) -> str:
         """Each problem's order state and latest verdict, as Core records them on its Todo."""
         return "\n".join(todo.progress_line() for todo in todos)
 
     def require_model_block(self) -> None:
-        raise ValueError("A problem goal is not blocked by text: ask the commander to block the "
-                         "problem's Todo, or standby with wait_for naming the decider.")
+        raise GoalRefused("A problem goal is not blocked by text: ask the commander to block the "
+                          "problem's Todo, or standby with wait_for naming the decider.")
 
 
 @dataclass(frozen=True)
@@ -651,7 +651,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
         if not PresentGoalCheckpoint(checkpoint).matches(self):
-            raise ValueError("The goal changed before this action; the action was not applied.")
+            raise GoalRefused("The goal changed before this action; the action was not applied.")
         return self.require()
 
     def matching(self, goal_id: GoalId) -> GoalDeclaration:
@@ -737,9 +737,6 @@ class NoGoal(NullMember, GoalDeclaration):
     def heading(self, execution: GoalExecution) -> str:
         return "No current goal"
 
-    def action_failure(self, error: Exception) -> str:
-        return "This goal has been cleared."
-
 
 @dataclass(frozen=True)
 class Goal(RecordMember, GoalDeclaration):
@@ -814,7 +811,7 @@ class Goal(RecordMember, GoalDeclaration):
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:
-            raise ValueError("Goal changed during resume; refresh its state.")
+            raise GoalRefused("Goal changed during resume; refresh its state.")
 
     def accepts_following_handoff(self) -> bool:
         return bool(self.state.items_with(Active, self))
@@ -835,9 +832,6 @@ class Goal(RecordMember, GoalDeclaration):
     def heading(self, execution: GoalExecution) -> str:
         return execution.heading(self.revision)
 
-    def action_failure(self, error: Exception) -> str:
-        return str(error)
-
     unavailable_heading: ClassVar[str] = "Goal state unavailable · last confirmed snapshot"
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
@@ -853,7 +847,7 @@ class Goal(RecordMember, GoalDeclaration):
 
     def require_state(self, expected: GoalState) -> None:
         if self.state != expected:
-            raise ValueError(self.state.activity_refusal())
+            raise GoalRefused(self.state.activity_refusal())
 
     def matching(self, goal_id: GoalId) -> GoalDeclaration:
         return self if self.id == goal_id else NoGoal()
