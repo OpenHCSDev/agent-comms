@@ -2,10 +2,11 @@
 
 The rules are not in this file. Behaviour lives in `src/agent_comms/commander/rules/`,
 and those rules follow from the two papers in `src/agent_comms/commander/paper/`
-(semantic-completeness, then less-is-harder). A session bound to the bus has them
-dealt by the rule gate, and native Pi units carry them in their system prompt. Any
-other session reads the papers and then every rule file before working, or runs
-`agent-comms-prime`. Tristan's dated decisions, each with its evidence, are in
+(semantic-completeness, then less-is-harder). A session Core launches carries the
+whole deal in its system prompt (native Pi; Claude Code started with `claude-comms`)
+and answers it in the gate's audit before its first tool call. Another session bound
+to the bus is dealt the files to read. Any other session reads the papers and then
+every rule file before working, or runs `agent-comms-prime`. Tristan's dated decisions, each with its evidence, are in
 `docs/DECISIONS.md`.
 
 A correction to how agents behave goes into the rule file that owns that behaviour,

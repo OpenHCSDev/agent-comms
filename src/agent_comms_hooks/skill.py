@@ -31,8 +31,8 @@ from agent_comms.threads import Thread
 from agent_comms.comms import Comms
 from agent_comms.cli_bridges.shared import Binding
 from agent_comms.rule_deal import (
-    ClearedDeal, CompactedDeal, CompactionDeal, DealTrigger, DealtSources, PrimedDeal,
-    StartedDeal, Unengaged, UnstampedCompactionDeal,
+    ClearedDeal, CompactedDeal, CompactionDeal, DealDelivery, DealTrigger, DealtSources,
+    PrimedDeal, StartedDeal, SystemPromptDelivery, UnstampedCompactionDeal,
 )
 from agent_comms.slop import Slop
 from agent_comms_hooks import ClaudeSubagentHook
@@ -276,6 +276,8 @@ class DeckStart(DealtDeck):
     """A session start, resume or compaction: the deal, its order and the deck."""
 
     source: SessionSource = field(default=SessionSource("startup"), kw_only=True)
+    system_prompt: str = field(default="", kw_only=True)
+    """The prompt file claude_launch gave this Claude process (LaunchedPrompt), if any."""
 
     @classmethod
     def of(cls, record: Mapping[str, object], **context: object) -> DeckStart:
@@ -297,23 +299,21 @@ class DeckStart(DealtDeck):
         snapshot.born(binding.owner.require_recorded().lookup)
         return self.dealt(prime.reader(), prime.trigger(), comms, snapshot)
 
+    def delivery(self) -> DealDelivery:
+        """A session claude_launch started holds the deal in its system prompt; any other reads
+        it. The hook record's field is the boundary where that foreign fact becomes ours."""
+        return SystemPromptDelivery(Path(self.system_prompt)) if self.system_prompt else DealDelivery()
+
     def dealt(self, reader: DeckReader, trigger: DealTrigger, comms: Comms,
               snapshot: RegistrySnapshot) -> tuple[str, ...]:
-        """The order to read every dealt file, once, by its packaged path, opening with why."""
+        """The order that goes with the deal, opening with why: read it, or answer what the
+        system prompt already holds."""
         prompts = self.prompts()
         self.prepare(reader, prompts, trigger)
-        sources = reader.sources()
         commanders = tuple(snapshot.commander_project.commanders(snapshot))
         return (
-            trigger.reason() + " " + self.notice(snapshot.commander_project.leads(snapshot)) + f" Read each of these {len(sources)} files in full with the Read tool before any other"
-            " action: they are every rule you follow and the sources they come from. A summary"
-            " or memory of them does not count as reading them, and every other tool is refused"
-            f" until each one is read. Read them in order, at most {Unengaged.batch} unanswered rule files at"
-            " a time, and answer those in the audit: reading alone is passive. Every tool but"
-            " Read, and Write or Edit of"
-            f" {self.audit}, is refused until it answers. This order is given once per session"
-            " start or compaction; a short slice of them comes back inline every few tool calls.\n"
-            + "\n".join(str(source) for source in sources),
+            trigger.reason() + " " + self.notice(snapshot.commander_project.leads(snapshot)) + " "
+            + self.delivery().told(reader.sources(), self.audit),
             self.template_once(self.current().due),
             self.owner_words(prompts),
             reader.header(self, comms, snapshot, commanders),

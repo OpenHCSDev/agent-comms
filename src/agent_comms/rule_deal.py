@@ -253,6 +253,70 @@ class DealtRead:
     def current(self) -> bool:
         return self.digest == self.source.digest()
 
+    def line(self) -> str:
+        """One line of a deal's read log."""
+        return json.dumps(FieldCodec.encode(self)) + "\n"
+
+
+@dataclass(frozen=True)
+class PromptReads:
+    """The dealt files a system prompt carries, each as a read of the exact content it carries.
+    A file changed after the prompt was prepared no longer matches, so it is read like any
+    other; nothing is waived for content the session never saw."""
+
+    reads: tuple[DealtRead, ...]
+
+
+class DealDelivery:
+    """How a session receives the sources it is dealt. The runtime that launches the session
+    owns the answer, through the strongest channel it has. By default nothing reaches the
+    session until it reads each file with its own read tool."""
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        """What the session already holds when its deal starts: nothing."""
+        return ()
+
+    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+        """The order a hook gives with the deal: read every file, then answer it."""
+        return (
+            f"Read each of these {len(sources)} files in full with the Read tool before any other"
+            " action: they are every rule you follow and the sources they come from. A summary"
+            " or memory of them does not count as reading them, and every other tool is refused"
+            f" until each one is read. Read them in order, at most {Unengaged.batch} unanswered"
+            " rule files at a time, and answer those in the audit: reading alone is passive. Every"
+            f" tool but Read, and Write or Edit of {audit}, is refused until it answers. This order"
+            " is given once per session start or compaction; a short slice of them comes back"
+            " inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+        )
+
+
+@dataclass(frozen=True)
+class SystemPromptDelivery(DealDelivery):
+    """The deal arrived in the session's system prompt, papers first, the way its launcher
+    prepared it: the session read it all before its first token, with the system prompt's
+    authority. It owes the witness, not the reads: the audit and "did you mean it?" still stand
+    before the first tool call (Tristan, 2026-11-01)."""
+
+    prompt: Path
+
+    @property
+    def manifest(self) -> Path:
+        """The reads the prompt carries, written beside it when it was prepared."""
+        return self.prompt.with_name(self.prompt.name + ".reads.json")
+
+    def reads(self) -> tuple[DealtRead, ...]:
+        return FieldCodec.decode(PromptReads, FieldCodec.parse(self.manifest.read_bytes())).reads
+
+    def told(self, sources: tuple[Path, ...], audit: Path) -> str:
+        return (
+            f"These {len(sources)} files are in your system prompt, in this order, and count as"
+            " read: they are every rule you follow and the sources they come from. Before any"
+            f" other action, answer every rule in the audit at {audit}; every tool but Write or"
+            " Edit of that file is refused until it answers. A file that changed after your"
+            " prompt was prepared is not covered: read that one with the Read tool. A short slice"
+            " comes back inline every few tool calls.\n" + "\n".join(str(source) for source in sources)
+        )
+
 
 @dataclass(frozen=True)
 class RuleAudit:
@@ -990,6 +1054,10 @@ class RuleDeal(State, DealtCalls):
         """How this deal speaks as the owner; a deal with no bus seat stays mute."""
         return Mute()
 
+    def delivery(self) -> DealDelivery:
+        """How the session receives what it is dealt; a deal that knows no launcher reads."""
+        return DealDelivery()
+
     def receipts(self) -> SessionReceipts:
         """What the session's own record shows it just did; a backend with no record has none."""
         return SessionReceipts()
@@ -1057,21 +1125,27 @@ class RuleDeal(State, DealtCalls):
 
     def replace_deal(self, dealt: type[DealtSources], prompts: tuple[str, ...],
                      trigger: DealTrigger) -> None:
-        """A start or compaction drops what was read: the read log resets first, then the record
-        is published whole, so no reader sees a half-written deal. The audit goes with the reads:
+        """A start or compaction drops what was read: the read log resets first, to what the
+        session's delivery already put in front of it (nothing, unless its launcher put the deal
+        in its system prompt), then the record is published whole, so no reader sees a
+        half-written deal. The audit goes with the reads:
         a fresh instance owes a fresh confession, never one carried over from the context it
         lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
         mode = self.current().mode
+        paths = tuple(source.resolve() for source in dealt.sources())
+        held = frozenset(DealtSource.of(path) for path in paths)
         self.stem.parent.mkdir(parents=True, exist_ok=True)
         self.calls.unlink(missing_ok=True)
-        self.dealt_read.write_text("", encoding="utf-8")
+        self.dealt_read.write_text("".join(
+            read.line() for read in self.delivery().reads() if read.source in held
+        ), encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
         self.audit.unlink(missing_ok=True)
         self.meant.replace(MeantRecord())
         self.template_shown.unlink(missing_ok=True)
         self.publish(
             DealRecord(
-                tuple(source.resolve() for source in dealt.sources()),
+                paths,
                 AuditDue(dealt.answered(), prompts),
                 trigger,
                 mode,
@@ -1089,8 +1163,7 @@ class RuleDeal(State, DealtCalls):
         if path not in self.current().paths or not span.covers(path):
             return False
         source = DealtSource.of(path)
-        read = DealtRead(source, source.digest())
-        line = json.dumps(FieldCodec.encode(read)) + "\n"
+        line = DealtRead(source, source.digest()).line()
         with self.write_guard(self.dealt_read):
             with self.dealt_read.open("a", encoding="utf-8") as record:
                 first = record.tell() == 0

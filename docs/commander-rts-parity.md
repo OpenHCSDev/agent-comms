@@ -29,7 +29,7 @@ Inspected 2026-10-19, installed runtime `toad-864cd9d37-core-67d8e63a7-native-95
 | `judge back IDS --msg ORDER --line LINE --why REASON --roast TEXT --fix TEXT --slop PATTERN-ID --fact FACT --at FILE:LINE --derive MECHANISM --by FILE:LINE [--fork NAME]` | Same spelling | Supported fields. Core posts to the verdict audience rather than the old unconditional whole-fleet broadcast; original random RTS edit IDs are not Core call IDs. |
 | `judge superseded IDS --by ORDER --line LINE --why REASON` | No `superseded` | GAP: no corresponding Core verdict type or verb. |
 | `judge alarm` | Same spelling | Command exists. Existing RTS verdict identities must be carried before its pending-edit count can be called equivalent. |
-| `rules review [--as NAME]`, `rules answer N TEXT [--as NAME]`, `rules stale` | No `rules` verb (deleted in 686173327) | Every rule reaches each unit's system prompt through `src/agent_comms/unit_instructions.py`; the commander's session hooks (`src/agent_comms_hooks/skill.py`, `src/agent_comms_hooks/reread.py`) deliver them at start, compaction and every few tool calls. |
+| `rules review [--as NAME]`, `rules answer N TEXT [--as NAME]`, `rules stale` | No `rules` verb (deleted in 686173327) | The whole deal reaches every Core-launched session's system prompt through `src/agent_comms/deal_prompt.py` (native Pi, and Claude Code via `claude-comms`); the commander's session hooks (`src/agent_comms_hooks/skill.py`, `src/agent_comms_hooks/reread.py`) deliver them at start, compaction and every few tool calls. |
 | `capacity` | No `capacity` verb (deleted in 686173327) | GAP. |
 | `rotate`, `tool_watch` | `rotate`, **`tool-watch`** | Different watcher spelling; launcher uses the hyphenated Core command. State readers use Core. |
 

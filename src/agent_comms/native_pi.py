@@ -33,7 +33,7 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .native_arguments import NativeArguments, SelectedModel
 from .native_failures import NativePiUnavailable, NativeRequestFailure
 from .native_input_proof import NativeContextProof
-from .native_package import MANIFEST, UNIT_INSTRUCTIONS, VerifiedNativePackage
+from .native_package import MANIFEST, SYSTEM_PROMPT, VerifiedNativePackage
 from .native_session_files import NativeAgentSettings, NativeSessionFiles
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
@@ -199,9 +199,9 @@ class NativePiRpcLaunch:
     ):
         """Encode the held launch configuration at the native process boundary."""
         try:
-            instructions = UNIT_INSTRUCTIONS.resolve(strict=True)
+            instructions = SYSTEM_PROMPT.resolve(strict=True)
         except OSError as error:
-            raise NativePiUnavailable("Unit instructions were not prepared with the native package") from error
+            raise NativePiUnavailable("The system prompt was not prepared with the native package") from error
         env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)

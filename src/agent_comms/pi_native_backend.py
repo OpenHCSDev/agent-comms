@@ -32,10 +32,12 @@ from .native_fork import (
     RuntimeForkHelper,
     RuntimeForkRequest,
 )
+from .native_package import SYSTEM_PROMPT
 from .native_pi import NativePiRpcLaunch
 from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .pi_commands import Compact, NativeQuery
+from .rule_deal import SystemPromptDelivery
 from .selected_session import SavedSelectedSession
 from .session_revision import (
     SessionObservation,
@@ -98,6 +100,10 @@ class PiSessionFile(RuntimeLocation):
 
     def history_source(self, root, incarnation):
         return NativeTranscript(Path(self.path))
+
+    def deal_delivery(self) -> SystemPromptDelivery:
+        """Native Pi always launches with the prepared prompt (NativePiRpcLaunch.bootstrap)."""
+        return SystemPromptDelivery(SYSTEM_PROMPT)
 
     def imported_sources(self):
         return NativeTranscript(Path(self.path)).imported_sources()

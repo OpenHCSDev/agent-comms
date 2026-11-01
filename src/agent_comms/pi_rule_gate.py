@@ -25,7 +25,9 @@ from .coordinator import Coordination
 from .bus_publication import Delivered
 from .channel_targets import ThreadTarget
 from .nominal.field_codec import ThreadLookup
-from .rule_deal import Asked, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Speaking, Voice
+from .rule_deal import (
+    Asked, DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Speaking, Voice,
+)
 from .session_receipts import SessionReceipts
 from .task_attachments.owner_notices import MeantNotice
 from .tool_denial import SelectedToolDenied
@@ -96,6 +98,10 @@ class PiThreadGate(PiRuleGate, Speaking):
 
     def receipts(self) -> SessionReceipts:
         return self.session().receipts()
+
+    def delivery(self) -> DealDelivery:
+        """The thread's runtime knows what its launcher put in the system prompt."""
+        return self.thread.runtime.deal_delivery()
 
 @dataclass(frozen=True)
 class PiRedeal(PiThreadGate, Redeals):

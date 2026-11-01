@@ -76,6 +76,7 @@ agent-comms-claude-subagent-started = "agent_comms_hooks.forks:SubagentStartProg
 agent-comms-claude-subagent-stopped = "agent_comms_hooks.forks:SubagentStopProgram.main"
 agent-comms-connector = "agent_comms.connector:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
+claude-comms = "agent_comms.cli_bridges.claude_launch:main"
 
 [project.entry-points."agent_comms.writer_owned_stores"]
 bridge-delivery = "agent_comms.cli_bridges.shared"

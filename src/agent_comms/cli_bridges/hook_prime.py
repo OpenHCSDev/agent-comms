@@ -20,6 +20,7 @@ from agent_comms.comms import client_wire
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms.cli_bridges.hook_requests import PrimeRequest
 from agent_comms_hooks.skill import FullPrime, Prime
+from agent_comms_hooks import LaunchedPrompt
 from agent_comms_hooks.watch import SessionEndpoint
 
 
@@ -54,11 +55,11 @@ def main() -> None:
     endpoint = SessionEndpoint(session)
     endpoint.session().require_bound()
     information = InspectSession().information(endpoint.socket_path)
-    request = PrimeRequest(prime=arguments.variant, payload={
+    request = PrimeRequest(prime=arguments.variant, payload=LaunchedPrompt.carried({
         "session_id": session,
         "hook_event_name": "Prime",
         "transcript_path": str(information.transcript),
-    })
+    }))
     request.exchange(endpoint.socket_path).print(PrimeRequest)
 
 

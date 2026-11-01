@@ -108,11 +108,6 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         )
 
     @classmethod
-    def render_packaged(cls) -> str:
-        """Every collaborator follows the same declaration-ordered rules."""
-        return "# Shared rules\n\n" + "\n\n".join(rule.render() for rule in cls.packaged())
-
-    @classmethod
     def order_line(cls) -> str:
         """The order cites the same rules its holder carries, without a role split."""
         names = ", ".join(rule.name for rule in cls.packaged())

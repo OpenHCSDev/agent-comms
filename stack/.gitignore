@@ -1,4 +1,5 @@
 .pi-native
 .pi-native-*
 .pi-native.stage.*
-UNIT_SYSTEM.md
+SYSTEM_PROMPT.md
+SYSTEM_PROMPT.md.reads.json

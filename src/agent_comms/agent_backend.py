@@ -32,6 +32,7 @@ from .pi_counts import PiCount
 from .pi_commands import NativeQuery
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import CompactionReason
+from .rule_deal import DealDelivery
 from .session_revision import NoSessionObservation, SessionObservation
 from .turn_inbox import InputContent
 from .tool_result import DeclaredReply
@@ -109,6 +110,11 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def session_observation(self, root: Path, thread: Thread) -> SessionObservation:
         return NoSessionObservation()
+
+    def deal_delivery(self) -> DealDelivery:
+        """How a session on this runtime receives its deal: through the strongest channel its
+        launcher has. A runtime whose launcher puts nothing in the system prompt reads it."""
+        return DealDelivery()
 
     @property
     def model_choice(self):

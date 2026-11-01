@@ -350,10 +350,10 @@ def test_uv(monkeypatch: pytest.MonkeyPatch) -> Path:
 def native_runtime_package(pinned_native: Path) -> VerifiedNativePackage:
     """The running interpreter's artifact, qualified by the real installer before tests."""
     from agent_comms.native_package import VerifiedNativePackage
-    from agent_comms.unit_instructions import UnitInstructions
+    from agent_comms.deal_prompt import DealPrompt
 
     package = VerifiedNativePackage.qualify(pinned_native)
-    UnitInstructions.prepare()
+    DealPrompt.prepare()
     return package
 
 
