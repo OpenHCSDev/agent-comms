@@ -32,8 +32,9 @@ never here. This file holds only facts about this host and this setup.
 - Large disposable output goes in a named directory under `/home/ts/.cache/agent-scratch/`.
 - Runtime builds and migration copies keep `/home` above 10 GB free. There is no 3 GB
   scratch cap. (When to start cleaning is behaviour: storage-and-cleanup.md.)
-- There is no resource-check helper on this host; `/home/ts/bin/agent-resource-check`
-  does not exist. Read RAM and disk directly with `free -m` and `df -h /home`.
+- The headroom helper is `tools/agent_resource_check.py` in the main checkout; there is no
+  copy at `/home/ts/bin/agent-resource-check`. It runs with the caller's permissions.
+  `free -m` and `df -h /home` read the same numbers directly.
 
 ## Permissions
 
