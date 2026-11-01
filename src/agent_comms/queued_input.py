@@ -21,7 +21,7 @@ from .acp_extension import QueueItem
 from .turn_inbox import InputContent, InputRequest
 from .assignment_states import DeferredAssignment, DeliveredAssignment
 from .child_process import ProcessIdentity
-from .context_segments.wake import DeliveredMessageSegment
+from .context_segments.wake import FollowingDelivery
 from .controller import Controller
 from .coordination_cohort import pending_sealed_assignments
 from .coordination_database import CoordinationStore
@@ -359,7 +359,7 @@ class DeliveredInput(QueuedInput):
                     if document.lookup(key).exists:
                         continue
                     rendered = TurnContext.render_segments(
-                        (DeliveredMessageSegment.capture(source, assignment, owner),)
+                        (FollowingDelivery(source, assignment, owner).segment(),)
                     )
                     row = ReservedInput(
                         key, message.seq, canonical, context.claimed_identity.claimed_generation,
