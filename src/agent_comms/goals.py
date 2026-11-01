@@ -265,6 +265,18 @@ class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
         return f"goal {self.revision.id}@{self.revision.revision}"
 
 
+class GoalConsentRequired(GoalRefused, RejectedEnforcementError):
+    """A fresh goal observation does not authorize replacing its owner's work."""
+
+    reason: ClassVar[str] = "goal owner approval required"
+
+    def __init__(self, owner: Thread, actor: ThreadIncarnation) -> None:
+        super().__init__(
+            f"{owner.name} already has {owner.goal.captured}; {actor.name} cannot assign "
+            "new work without that goal owner's approval."
+        )
+
+
 class GoalChangedError(GoalRefused, RejectedEnforcementError):
     """An observed goal changed before its checked action could run."""
 
@@ -607,6 +619,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def accepts_following_handoff(self) -> bool:
         return False
 
+    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+        """No goal occupies this ready thread's work slot."""
+
+    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return (thread,)
+
     @property
     def snapshot(self) -> GoalDeclaration:
         return self
@@ -815,6 +833,12 @@ class Goal(RecordMember, GoalDeclaration):
 
     def accepts_following_handoff(self) -> bool:
         return bool(self.state.items_with(Active, self))
+
+    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+        self.state.require_work(actor, owner)
+
+    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return self.state.work_candidates(thread)
 
     @property
     def objective(self) -> str:

@@ -6,7 +6,10 @@ import time
 import pytest
 
 from agent_comms.errors import TodoConflict
-from agent_comms.goal_actions import OrderGoalAction, ReissuedOrderGoalAction
+from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, OwnerInvocable, PausedGoalAction, ReissuedOrderGoalAction, SetGoalAction
+from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, ModelPause, PausedGoal
+from agent_comms.goals import Goal, GoalConsentRequired, NoGoal
+from agent_comms.order_tools import CommsChangeProblemTool, CommsOrderTool, CommsTodoCreateTool
 from agent_comms.nominal.field_codec import GoalId, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import CoreWatcherIncarnation, RecordedThreadIncarnation
@@ -135,3 +138,182 @@ def test_reissue_records_core_instead_of_reconstructing_the_original_assigner(fo
     assert actor.commands(current.creator_identity)
     assert not actor.represents(current.held().owner_identity)
     assert actor.answerable((current.creator_identity,)) == ()
+
+
+def incoming_work(comms):
+    current = comms.goals.todos.get("P40")
+    actor = comms.registry.require("retained").acting_identity
+    released = ReleaseTodo(current.revision, actor, current.held(), RELEASE).record(
+        comms.goals, current.id)
+    action = OrderGoalAction(
+        problem=released.id, expected_revision=released.revision,
+        assigner=comms.registry.require("lead").acting_identity, commander="lead",
+        request=released.request.require(), review_at=RecordedEventTime(time.time() + 600),
+        order=replace(released.order, id=OrderId.mint()))
+    return released, action
+
+
+@pytest.mark.parametrize("caller", (
+    ThreadCaller("lead"), ThreadCaller("other"),
+    CommanderPeerCaller("lead").as_thread("worker"),
+))
+def test_fresh_goal_observation_and_shared_maintenance_are_not_receiving_consent(fork_bus, caller):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    action = replace(action, expect=replace(action.expect, expected_checkpoint=goal.captured))
+    generation = comms.goals.open_goal_store().require_generation(goal.id)
+    with pytest.raises(GoalConsentRequired):
+        caller.invoke(CommsOrderTool(owner="worker", order=action), comms)
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+    assert comms.goals.open_goal_store().require_generation(goal.id) == generation
+
+
+def test_low_level_todo_tool_cannot_attach_work_behind_an_independent_goal(fork_bus):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    worker = comms.registry.require("worker")
+    operation = AssignTodo.by(
+        action.assigner, current.revision, worker.incarnation, goal.id,
+        action.review_at, action.order, action.request, action.traced, frozenset({current.id}))
+    with pytest.raises(GoalConsentRequired):
+        ThreadCaller("lead").invoke(CommsChangeProblemTool(
+            problem=current.id, operation=operation), comms)
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+def test_creating_a_problem_does_not_replace_an_independent_goal(fork_bus):
+    comms, source, _ = fork_bus
+    current, action = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    creation = CreateProblemGoalAction(
+        problem="P41", repo=source.github, text="Another declared repair",
+        assigner=action.assigner, commander=action.commander, request=action.request,
+        review_at=action.review_at, order=action.order)
+    rows = comms.goals.todos.board()
+    with pytest.raises(GoalConsentRequired):
+        ThreadCaller("lead").invoke(CommsTodoCreateTool(owner="worker", order=creation), comms)
+    assert comms.goals.todos.board() == rows
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+@pytest.mark.parametrize("bound_child", (False, True))
+def test_receiving_owner_or_genuine_child_can_accept_work_into_its_goal(fork_bus, bound_child):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Choose the next repair."))
+    caller = CommanderPeerCaller("worker").as_thread("lead")
+    if bound_child:
+        caller = CommanderForkCaller("goal-child")
+        caller.join(comms, "worker")
+    caller.invoke(CommsOrderTool(owner="worker", order=action), comms)
+    worker = comms.registry.require("worker")
+    assigned = comms.goals.todos.get(current.id)
+    assert worker.goal.require().id == goal.id
+    assert worker.goal.require().revision == goal.revision + 1
+    assert assigned.held().owned_by(worker.incarnation, goal.id)
+    assert assigned.held().parent_identity == caller.identity(comms)
+
+
+def test_core_reissues_the_exact_accepted_unheld_order_into_a_free_goal_slot(fork_bus):
+    comms, _, _ = fork_bus
+    current, _ = incoming_work(comms)
+    action = ReissuedOrderGoalAction.for_todo(current, "lead")
+    goal = comms.goals.update_goal("worker", action)
+    assigned = comms.goals.todos.get(current.id)
+    assert assigned.order == action.order
+    assert assigned.creator_identity == current.creator_identity
+    assert assigned.held().owned_by(comms.registry.require("worker").incarnation, goal.id)
+    assert assigned.held().parent_identity == CoreWatcherIncarnation.watcher()
+
+
+def test_core_reissue_cannot_override_an_existing_independent_goal(fork_bus):
+    comms, _, _ = fork_bus
+    current, _ = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    with pytest.raises(GoalConsentRequired):
+        comms.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(current, "lead"))
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+def test_raw_child_does_not_supply_receiving_goal_consent(fork_bus):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    CommanderForkCaller("goal-child").join(comms, "worker")
+    with pytest.raises(GoalConsentRequired):
+        ThreadCaller("goal-child").invoke(CommsOrderTool(owner="worker", order=action), comms)
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+def test_receiving_consent_does_not_resume_an_owner_pause(fork_bus):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    goal = comms.goals.update_goal(
+        "worker", PausedGoalAction(), actor=OwnerInvocable)
+    with pytest.raises(ValueError) as refused:
+        CommanderPeerCaller("worker").as_thread("lead").invoke(
+            CommsOrderTool(owner="worker", order=action), comms)
+    assert str(refused.value) == goal.state.pause_source.instruction()
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+def test_stale_receiver_record_cannot_bypass_creation_consent(fork_bus):
+    comms, source, _ = fork_bus
+    current, action = incoming_work(comms)
+    stale = comms.registry.require("worker")
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
+    rows = comms.goals.todos.board()
+    with pytest.raises(GoalConsentRequired):
+        comms.goals.todos.create(
+            "P41", source.github, "Another declared repair",
+            creator=comms.registry.require("lead"), owner=stale, assigner=action.assigner,
+            generation=GoalId.mint(), request=action.request,
+            review_at=action.review_at, order=action.order)
+    assert comms.goals.todos.board() == rows
+    assert comms.registry.require("worker").goal == goal
+    assert comms.goals.todos.get(current.id) == current
+
+
+def test_exact_noop_maintenance_needs_no_new_goal_consent(fork_bus):
+    comms, _, _ = fork_bus
+    current, action = incoming_work(comms)
+    ThreadCaller("lead").invoke(CommsOrderTool(owner="worker", order=action), comms)
+    current = comms.goals.todos.get(current.id)
+    worker = comms.registry.require("worker")
+    operation = AssignTodo.by(
+        action.assigner, current.revision, worker.incarnation, worker.goal.require().id,
+        current.review_at, current.order.checked(), current.request.require(),
+        action.traced, frozenset({current.id}))
+    result = ThreadCaller("lead").invoke(
+        CommsChangeProblemTool(problem=current.id, operation=operation), comms)
+    assert result.todo == current
+    assert comms.registry.require("worker").goal == worker.goal
+
+
+@pytest.mark.parametrize("state,available", (
+    (ActiveGoal(), False), (BlockedGoal("Needs an explicit retry."), False),
+    (PausedGoal(), False), (PausedGoal(ModelPause()), False), (CompletedGoal(), True),
+))
+def test_automatic_dispatch_uses_goal_owned_availability(fork_bus, state, available):
+    comms, _, _ = fork_bus
+    thread = comms.registry.require("worker")
+    goal = Goal(text="Independent work", id=GoalId.mint(), published_seq=0, state=state)
+    thread = replace(thread, goal=goal)
+    assert thread.execution.order_candidates(thread) == ((thread,) if available else ())
+    actor = comms.registry.require("lead").acting_identity
+    if available:
+        thread.goal.require_work(actor, thread)
+    else:
+        with pytest.raises(ValueError):
+            thread.goal.require_work(actor, thread)
+    free = replace(thread, goal=NoGoal())
+    assert free.execution.order_candidates(free) == (free,)

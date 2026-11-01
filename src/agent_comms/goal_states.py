@@ -14,6 +14,8 @@ if TYPE_CHECKING:
     from .goal_actions import GoalActionContext, ProblemOrderGoalAction
     from .goal_presentation import GoalExecution, GoalExecutionSource
     from .goals import Goal
+    from .thread_identity import ThreadIncarnation
+    from .threads import Thread
 
 
 @dataclass(frozen=True)
@@ -65,6 +67,14 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
 
     def accept_order(self, action: ProblemOrderGoalAction, goal: Goal, ctx: GoalActionContext) -> Goal:
         return action.continue_goal(goal, ctx)
+
+    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+        from .goals import GoalConsentRequired
+        if not actor.represents(owner.incarnation):
+            raise GoalConsentRequired(owner, actor)
+
+    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return ()
 
     def require_model_resume(self) -> None:
         raise ValueError("This goal cannot be resumed; refresh its state.")
@@ -157,6 +167,10 @@ class PausedGoal(OpenGoal, FromOpenGoal):
         if self.protected and not owner:
             raise ValueError(self.source.instruction())
 
+    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+        self.require_model_resume()
+        super().require_work(actor, owner)
+
 
 class BlockedState(GoalState, FromOpenGoal, declared_name=None):
     @property
@@ -206,6 +220,12 @@ class UnrecordedBlockGoal(BlockedState):
 
 @dataclass(frozen=True)
 class CompletedGoal(Complete, Terminal, GoalState, FromOpenGoal):
+
+    def require_work(self, actor: ThreadIncarnation, owner: Thread) -> None:
+        """Completion frees the goal slot; held Todo and parked-thread fences still apply."""
+
+    def work_candidates(self, thread: Thread) -> tuple[Thread, ...]:
+        return (thread,)
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         from .goal_presentation import CompletedExecution

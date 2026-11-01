@@ -105,9 +105,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
     @classmethod
     def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when it can hold an order: a turn executor whose work state is ready."""
+        """Ready executors with a free goal slot; idle time is not consent to replace work."""
         return tuple(candidate for executor in thread.role.executor(thread)
-                     for candidate in thread.work_state.candidates(executor))
+                     for ready in thread.work_state.candidates(executor)
+                     for candidate in ready.goal.work_candidates(ready))
 
     @classmethod
     def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
