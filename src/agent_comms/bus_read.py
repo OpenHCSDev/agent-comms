@@ -5,19 +5,28 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .comms import Comms
 from .owner_connection import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequestContext,
-    OwnerConnection,
+    OwnerIdentityChangedError,
     OwnerReading,
-    OwnerReplyConnection,
 )
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool
 from .tool_result import ToolResult
+from .errors import RelationViolationError, UnregisteredThreadError
+from .private_path import FileIdentity, ObservedPath
+from .thread_identity import ThreadIncarnation
+
+if TYPE_CHECKING:
+    from .registry_store import RegistryCut
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
+    from .owner_connection import OwnerConnection
 
 
 class BusRead[Result](ToolDeclaration, ABC):
@@ -32,13 +41,36 @@ class UiRead[Result](BusRead[Result], ABC):
         return self.apply(comms, NoDisplaySelection())
 
 
-class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadReadTool, ABC):
-    """Only the selected thread's live owner answers, through its own request queue."""
+class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadReadTool, ABC):
+    """The captured registration selects live evidence or the declared unavailable answer."""
 
     def apply(self, comms: Comms, caller: ReadAuthority) -> Result:
-        owner = comms.registry.require(caller.subject(self.thread)).incarnation
-        request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)
-        return self.decode_reply(asyncio.run(OwnerReplyConnection.answer(comms, owner, request)))
+        cut = comms.registry.store.snapshot_with_authority()
+        owner = cut.snapshot.require(caller.subject(self.thread)).incarnation
+        return asyncio.run(self.answer(comms, owner, cut))
+
+    async def answer(self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut) -> Result:
+        root = FileIdentity.from_stat(comms.root.stat())
+        thread = self.require_recipient(cut.snapshot, owner)
+        result = await thread.execution.owner_binding(cut.snapshot, thread).read_operation(
+            self, comms, owner, cut,
+        )
+        if not ObservedPath.at(comms.root).same_file(root):
+            raise OwnerIdentityChangedError("Wire root changed during the read.")
+        self.require_recipient(comms.registry.snapshot(), owner)
+        return result
+
+    def require_recipient(self, snapshot: RegistrySnapshot, owner: ThreadIncarnation) -> Thread:
+        try:
+            thread = snapshot.require(owner.name)
+        except UnregisteredThreadError as error:
+            raise OwnerIdentityChangedError("The read recipient is no longer registered.") from error
+        if (thread.name, thread.incarnation) != (owner.name, owner):
+            raise OwnerIdentityChangedError("The read recipient name or incarnation changed.")
+        return thread
+
+    @abstractmethod
+    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result: ...
 
     @abstractmethod
     async def owned(self, ctx: AttachedRuntimeRequestContext) -> Result: ...
@@ -47,9 +79,16 @@ class OwnerLiveRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRead
     def decode_reply(self, raw: object) -> Result: ...
 
 
+class OwnerLiveRead[Result: ToolResult = ToolResult](OwnerScopedRead[Result], ABC):
+    """This subfamily has no answer without the selected live native owner."""
+
+    def unavailable(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+        raise RelationViolationError("The read requires the live native owner.")
+
+
 @dataclass(frozen=True, kw_only=True)
 class OwnerReadRuntimeRequest(OwnerReading[object], AttachedResultRuntimeRequest):
-    operation: OwnerLiveRead
+    operation: OwnerScopedRead
 
     async def read(self, owner: OwnerConnection) -> object:
         return await owner.request(self.declared_name, operation=self.operation)

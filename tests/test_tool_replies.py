@@ -41,13 +41,13 @@ def result_type(tool: type[ToolRequest]) -> type:
 
 
 def test_bus_read_result_follows_an_inherited_specialisation_and_refuses_an_unspecialised_family():
-    from agent_comms.bus_read import OwnerLiveRead, UiRead
+    from agent_comms.bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
     from agent_comms.notification_evidence import NotificationWindow
     from agent_comms.notification_reads import RecordedNotificationRead
 
     # RecordedNotificationRead restates no header: it inherits NotificationRead's UiRead[...].
     assert bus_read_result(RecordedNotificationRead) is NotificationWindow
-    for family in (BusRead, UiRead, OwnerLiveRead):
+    for family in (BusRead, UiRead, OwnerScopedRead, OwnerLiveRead):
         with pytest.raises(TypeError, match="not exactly one"):
             bus_read_result(family)
 

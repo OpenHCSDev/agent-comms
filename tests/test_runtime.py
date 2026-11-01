@@ -21,7 +21,6 @@ from agent_comms.acp_extension import (
     encode_updates,
 )
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.input_key import BusInputKey
@@ -160,13 +159,14 @@ async def test_a_held_owner_read_refuses_after_its_process_dies(comms, runtime_p
     assert stored_inputs(comms.root) == before
 
 
-async def test_an_external_owner_refuses_the_input_delivery_read_before_any_socket_wait(
+async def test_a_live_external_bridge_reads_retained_delivery_without_a_native_socket(
     comms, runtime_processes,
 ):
     declare_owner(comms, "held", runtime_processes[0].identity, ExternalThreadExecution)
     before = recorded_input(comms)
-    with pytest.raises(RelationViolationError):
-        await mcp_input_delivery(comms)
+    assert await mcp_input_delivery(comms) == FieldCodec.encode(
+        comms.goals.input_delivery("held", include_history=True),
+    )
     assert stored_inputs(comms.root) == before
 
 

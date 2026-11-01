@@ -3,6 +3,7 @@
 from agent_comms.repo import Checkout
 import asyncio
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from acp.schema import TextContentBlock
@@ -10,10 +11,10 @@ from acp.schema import TextContentBlock
 from agent_comms.acp_extension import (
     GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
 )
-from agent_comms.child_process import NoProcess
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_key import AcpInputKey, BusInputKey
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     OwnerQueueInputDeliveryScope,
@@ -25,10 +26,14 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goals import NoGoal
 from agent_comms.order_tools import InputDeliveryRead, OwnerGoalRead
 from agent_comms.reported_turn import ReportedTurn
-from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
+from agent_comms.thread_execution import ExternalThreadExecution, NativeThreadExecution, ThreadExecution
+from agent_comms.thread_status import ConnectedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus
+from agent_comms.owner_connection import OwnerIdentityChangedError
+from agent_comms.coordination_errors import StaleFence, StaleRevision
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.ui_model.observation import ReadOwnerOperation
+from agent_comms.ui_model.observation import ReadOwnerOperation, ReadRefused
+from bus_record_fixture import prepare_native_comms
 from delivery_owner_fixture import canonical_delivery_owner
 from stored_inputs import stored_inputs
 
@@ -151,10 +156,23 @@ async def test_mcp_and_the_ui_read_input_delivery_from_the_live_owner_queue(tmp_
         assert BusInputKey(91) in [row.input_id for row in answers[True].historical_inputs]
         assert replace(answers[True], historical_inputs=()) == answers[False]
         comms.registry.register(replace(owner, process_identity=NoProcess()), StoppedThreadStatus())
-        with pytest.raises(RelationViolationError):
-            async with asyncio.timeout(30):
-                await asyncio.to_thread(InputDeliveryRead.invoke, comms, {"thread": "alpha"},
-                                        caller=ToolCaller.from_actor("sender"))
+        original = stored_inputs(comms.root)
+        original_bytes = InputDispositions(comms.root).path.read_bytes()
+        for include_history in (False, True):
+            retained = comms.goals.input_delivery("alpha", include_history=include_history)
+            mcp = await asyncio.to_thread(
+                InputDeliveryRead.invoke, comms,
+                {"thread": "alpha", "include_history": include_history},
+                caller=ToolCaller.from_actor("sender"))
+            ui = await ReadOwnerOperation(
+                str(comms.root), owner.incarnation, InputDeliveryRead(include_history=include_history),
+            ).answer(comms)
+            assert mcp == FieldCodec.encode(retained)
+            assert ui.value == retained
+            assert retained.current_scope is UnobservedInputDeliveryScope
+            assert BusInputKey(91) in [row.input_id for row in retained.inputs]
+        assert stored_inputs(comms.root) == original
+        assert InputDispositions(comms.root).path.read_bytes() == original_bytes
 
 
 async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path):
@@ -189,6 +207,86 @@ async def test_mcp_and_the_ui_read_the_owner_goal_from_the_live_owner(tmp_path):
             async with asyncio.timeout(30):
                 await asyncio.to_thread(OwnerGoalRead.invoke, comms, {"thread": "alpha"},
                                         caller=ToolCaller.from_actor("sender"))
+
+
+@pytest.mark.parametrize("execution,status", (
+    (NativeThreadExecution, StoppedThreadStatus()),
+    (ExternalThreadExecution, ConnectedThreadStatus()),
+))
+async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket(
+    tmp_path: Path, execution: type[ThreadExecution], status: ThreadStatus,
+) -> None:
+    comms: Comms = wire(tmp_path)
+    thread = comms.registry.declare(Thread(
+        'owner', frozenset(), Checkout(tmp_path), execution=execution,
+        process_identity=ProcessIdentity.current(),
+    ))
+    comms.registry.register(thread, status)
+    ledger = seed(comms, "owner")
+    comms.goals.dismiss_historical_inputs(
+        "owner", scope=OwnerQueueInputDeliveryScope(frozenset({BusInputKey(2), BusInputKey(8), UI_KEY})),
+    )
+    original = stored_inputs(comms.root)
+    original_bytes = ledger.path.read_bytes()
+    for include_history in (False, True):
+        expected = comms.goals.input_delivery("owner", include_history=include_history)
+        actual = await asyncio.to_thread(
+            InputDeliveryRead.invoke, comms,
+            {"thread": "owner", "include_history": include_history},
+            caller=ToolCaller.from_actor("peer"),
+        )
+        ui = await ReadOwnerOperation(
+            str(comms.root), thread.incarnation, InputDeliveryRead(include_history=include_history),
+        ).answer(comms)
+        assert actual == FieldCodec.encode(expected)
+        assert ui.value == expected
+        assert expected.current_scope is UnobservedInputDeliveryScope
+        assert expected.dismissed_historical_count == 2
+    assert await asyncio.to_thread(
+        InputDeliveryRead.invoke, comms, {"thread": "owner"},
+        caller=ToolCaller.from_actor("peer"),
+    ) == FieldCodec.encode(comms.goals.input_delivery("owner", include_history=True))
+    comms.goals.dismiss_historical_inputs("owner")
+    assert stored_inputs(comms.root) == original
+    assert ledger.path.read_bytes() == original_bytes
+
+
+@pytest.mark.parametrize("recreate", (False, True))
+async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreate: bool) -> None:
+    comms: Comms = wire(tmp_path)
+    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    operation = InputDeliveryRead()
+    cut = comms.registry.store.snapshot_with_authority()
+    if recreate:
+        comms.registry.unregister("owner")
+        comms.registry.begin_delete("owner")
+        with comms.registry.store.editing() as edit:
+            edit.document.remove_originals((owner,))
+            edit.commit()
+        comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    else:
+        comms.registry.rename("owner", "renamed")
+    with pytest.raises((OwnerIdentityChangedError, StaleFence)):
+        await operation.answer(comms, owner.incarnation, cut)
+    ui = await ReadOwnerOperation(str(comms.root), owner.incarnation, operation).answer(comms)
+    assert isinstance(ui, ReadRefused)
+    assert isinstance(ui.error, OwnerIdentityChangedError)
+
+
+async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path: Path) -> None:
+    root = tmp_path / "wire"
+    comms: Comms = prepare_native_comms(wire(root))
+    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    operation = InputDeliveryRead()
+    foreign = await ReadOwnerOperation(str(tmp_path / "foreign"), owner.incarnation, operation).answer(comms)
+    assert isinstance(foreign, ReadRefused)
+    assert isinstance(foreign.error, StaleRevision)
+    cut = comms.registry.store.snapshot_with_authority()
+    root.rename(tmp_path / "original")
+    replacement = prepare_native_comms(wire(root))
+    replacement.registry.declare(owner)
+    with pytest.raises(StaleFence):
+        await operation.answer(comms, owner.incarnation, cut)
 
 
 def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):

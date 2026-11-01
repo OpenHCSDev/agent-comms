@@ -16,7 +16,7 @@ from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.message_reference import MessageReference
-from agent_comms.bus_read import BusRead, OwnerLiveRead
+from agent_comms.bus_read import BusRead, OwnerScopedRead
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserverDied, ReadNotifications, ReadOwnerOperation, StopSidebar,
@@ -28,7 +28,7 @@ from owner_socket_fixture import declare_owner
 
 def owner_reads():
     """Every owner read the UI can send: each owner-live operation in its one envelope."""
-    for operation in BusRead.members_with(OwnerLiveRead):
+    for operation in BusRead.members_with(OwnerScopedRead):
         yield pytest.param(partial(ReadOwnerOperation, operation=operation()), id=operation.declared_name)
 
 

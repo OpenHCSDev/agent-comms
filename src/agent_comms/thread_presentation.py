@@ -13,6 +13,7 @@ from .nominal.declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 from .notification_evidence import NotificationWindow
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
@@ -20,6 +21,10 @@ if TYPE_CHECKING:
     from .transcripts import TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
+    from .bus_read import OwnerScopedRead
+    from .comms import Comms
+    from .registry_store import RegistryCut
+    from .thread_identity import ThreadIncarnation
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -137,6 +142,23 @@ class OtherRouteThread(ThreadPresentationStatus):
 class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     """A projection of the registry lease, never an alternative owner store."""
 
+    async def read_operation[Result: ToolResult](
+        self, operation: OwnerScopedRead[Result], comms: Comms,
+        owner: ThreadIncarnation, cut: RegistryCut,
+    ) -> Result:
+        """Retained evidence is read only while its captured namespace/recipient cut holds."""
+        from .coordination_errors import StaleFence
+        from .coordinator import Coordination
+
+        def retained() -> Result:
+            with cut.current():
+                result = operation.unavailable(comms, owner)
+                if not cut.matches_current():
+                    raise StaleFence("Registry changed during the retained read")
+                return result
+
+        return await Coordination.run_worker(retained)
+
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         return False
 
@@ -163,6 +185,16 @@ class UnavailableThreadOwnerBinding(ThreadOwnerBinding):
 class LiveThreadOwnerBinding(ThreadOwnerBinding):
     owner: OwnerIdentity
     process: ProcessIdentity
+
+    async def read_operation[Result: ToolResult](
+        self, operation: OwnerScopedRead[Result], comms: Comms,
+        owner: ThreadIncarnation, cut: RegistryCut,
+    ) -> Result:
+        from .bus_read import OwnerReadRuntimeRequest
+        from .owner_connection import OwnerReplyConnection
+
+        request = OwnerReadRuntimeRequest(thread=owner.name, operation=operation)
+        return operation.decode_reply(await OwnerReplyConnection.answer(comms, owner, request))
 
     def native_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         return ordinary
