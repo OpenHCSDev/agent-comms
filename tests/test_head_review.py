@@ -1238,9 +1238,10 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
     ))
     found, = StuckMerge.scan_pulls(comms.goals, ProgressRead(()))
     assert found.request.pr == 8
-    assert found.line().endswith(
-        " has auto-merge armed but required check debt-src failed; conflicts with its base."
-        " who's fixing it? -> fix debt-src at its owner; merge main into it")
+    assert found.ask in found.line()
+    assert found.facts().endswith(
+        ": required check debt-src failed; conflicts with its base"
+        " -> fix debt-src at its owner; merge main into it")
     # The age is the heartbeat Ping's to render, from began(); the line names no clock.
     assert found.began() == found.blocks[0].since and found.broke_after(0)
 
@@ -1264,7 +1265,7 @@ def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
         RecordPullRequest(todo.revision, held.owner_identity,
                           PullRequestLink(ready.repo, number), held.generation).record(comms.goals, todo.id)
     ordered = (comms.goals.todos.get("P2"),)
-    found = {rule.request.pr: rule.line()
+    found = {rule.request.pr: rule.facts()
              for rule in IdlePullRequest.scan_pulls(comms.goals, ProgressRead(()), (), ordered)}
     assert 11 not in found
     assert found[9].startswith(f"IDLE {ready.repo.to_wire()}#9 {'c' * 9} (no live holder)")

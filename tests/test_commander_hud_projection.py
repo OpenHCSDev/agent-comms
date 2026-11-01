@@ -12,7 +12,7 @@ from agent_comms.disclosure_text import (
 from agent_comms.nominal.field_codec import DisclosureIdentity, FieldCodec, OrderId
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import ServicePassFailing
-from agent_comms.task_attachments.commander_pings import CommanderDecisions, FoldedRule, RulePing
+from agent_comms.task_attachments.commander_pings import CommanderDecisions, RulePing
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import OpenPrProgress
 from agent_comms.ui_model.unit_state import (
@@ -176,29 +176,24 @@ def test_alarm_text_names_each_rule_once_above_all_of_its_rows() -> None:
     assert sum(len(pings) for pings in section.by_kind().values()) == len(section.pings)
 
 
-def test_rows_of_one_rule_print_their_shared_words_once() -> None:
-    ping = example_hud().packets[0].handled[0]
-    texts = (
-        "JUDGE openhcsdev/agent-comms#3766 29e260518 is sitting there unjudged. you read it yet?"
-        " -> judge ok/back --repo openhcsdev/agent-comms --pr 3766 --head 29e2605180debb204a7c77ca4b8cf772f51091da",
-        "JUDGE openhcsdev/toad#1375 31e3ca17e is sitting there unjudged. you read it yet?"
-        " -> judge ok/back --repo openhcsdev/toad --pr 1375 --head 31e3ca17e0c61cd2b827afe0c66082e0da55756b",
-    )
-    pings = tuple(replace(ping, text=text) for text in texts)
-    header, *rows = FoldedRule.of(ping.alarm_kind, pings).lines(1000)
-    assert header.endswith(": JUDGE … is sitting there unjudged. you read it yet?"
-                           " -> judge ok/back --repo REPO --pr PR --head HEAD")
-    assert rows[0].startswith("  openhcsdev/agent-comms#3766 29e2605180debb204a7c77ca4b8cf772f51091da ·")
-    assert all(shows_every_word(folded, (header, *rows)) for folded in pings)
+def test_rows_of_one_rule_print_their_declared_ask_once() -> None:
+    hud = example_hud()
+    ping = replace(hud.packets[0].handled[0], ask="JUDGE: you read it yet?")
+    rows = tuple(replace(ping, text=f"{ping.ask} · {facts}", facts=facts)
+                 for facts in ("agent-comms#1 aaa", "toad#2 bbb"))
+    lines = replace(hud.alarms[0], pings=rows).text_lines(1000)
+    assert "\n".join(lines).count(ping.ask) == 1
+    assert lines[1] == ping.ask
+    assert lines[2].startswith("  agent-comms#1 aaa ·") and lines[3].startswith("  toad#2 bbb ·")
 
 
 def test_board_opens_with_what_is_owed_and_the_oldest_line() -> None:
     hud = example_hud()
     plain = hud.hud_text(1000)
+    owed, = hud.owed_line()
+    assert owed in plain[:min(plain.index(section.heading()) for section in hud.alarms)]
     for section in hud.alarms:
         oldest = min(section.pings, key=lambda ping: ping.since.chronology())
-        digest = section.digest(1000)
-        assert digest in plain[:plain.index(section.heading())]
-        assert oldest.since.age(1000) in digest
-        assert all(f"{len(pings)} {kind.declared_name.replace('_', ' ')}" in digest
-                   for kind, pings in section.by_kind().items())
+        line = section.oldest(1000)
+        assert line in plain[:plain.index(section.heading())]
+        assert oldest.since.age(1000) in line and oldest.own_words() in line

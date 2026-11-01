@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Self
+from typing import Annotated, ClassVar, Self, TYPE_CHECKING
 
 from agent_comms.nominal.field_codec import OrderId, PathText
 from agent_comms.head_review import PullRequestHead
@@ -12,7 +12,7 @@ from agent_comms.heartbeat_subjects import HeartbeatSubject, UnlandedHeadSubject
 from agent_comms.repo import UnpushedHead
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
-    DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
+    AskedOnce, DatedStandingRule, HeadLine, HeldBranch, HeldBranchRule, UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.todos import PullRequestLink
@@ -77,7 +77,7 @@ class EmptyPullRequest(HeldBranchRule):
 
 
 @dataclass(frozen=True)
-class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
+class ClosedUnmergedPullRequest(AskedOnce, HeadLine, DatedStandingRule):
     """Closing a request does not land its patches or authorize throwing them away."""
 
     request: PullRequestHead
@@ -104,10 +104,12 @@ class ClosedUnmergedPullRequest(HeadLine, DatedStandingRule):
         return {'pr': str(self.request.pr), 'head': self.request.head,
                 'repo': self.request.repo.to_wire()}
 
-    def line(self) -> str:
+    ask: ClassVar[str] = "LOST: closed unmerged -> land them, or record why they are dropped"
+
+    def facts(self) -> str:
         pull = PullRequestLink(self.request.repo, self.request.pr)
-        return (f'LOST {pull.url} closed unmerged {self.base.description(len(self.commits))}'
-                ' -> land them, or record why they are dropped')
+        return f'{pull.url} {self.base.description(len(self.commits))}'
+
 
 
 @dataclass(frozen=True)
