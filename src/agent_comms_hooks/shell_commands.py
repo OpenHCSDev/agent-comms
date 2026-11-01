@@ -248,39 +248,57 @@ class Newline(Operator, spellings=('\n',)):
         return parser.flush()
 
 
-class Redirect(Operator, spellings=('<', '<<<')):
+class Redirect(Operator):
     redirection: ClassVar[type[Redirection]] = Redirection
 
     def bind(self, word: ShellWord) -> Redirection:
         return self.redirection(word.value)
 
+    def consume_descriptor(self, parser: ShellParser) -> None:
+        pass
+
     def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.target.require_word()
-        if parser.words and parser.words[-1].descriptor_before(self.start):
-            parser.words.pop()
+        self.consume_descriptor(parser)
         parser.target = RedirectionTarget(self)
         return iter(())
 
 
-class WriteRedirect(Redirect, spellings=('>', '>>', '>|', '&>', '&>>', '<>')):
+class NumberedRedirect(Redirect, spellings=('<', '<<<')):
+    """This grammar admits an optional adjacent, unquoted ASCII IO number."""
+
+    def consume_descriptor(self, parser: ShellParser) -> None:
+        if parser.words and parser.words[-1].descriptor_before(self.start):
+            parser.words.pop()
+
+
+class WriteRedirect(Redirect):
     redirection = OutputRedirection
 
 
-class ReadDescriptorRedirect(Redirect, spellings=('<&',)):
+class NumberedWriteRedirect(NumberedRedirect, WriteRedirect, spellings=('>', '>>', '>|', '<>')):
+    pass
+
+
+class CombinedWriteRedirect(WriteRedirect, spellings=('&>', '&>>')):
+    pass
+
+
+class ReadDescriptorRedirect(NumberedRedirect, spellings=('<&',)):
     def bind(self, word: ShellWord) -> Redirection:
         if not word.descriptor_value():
             raise ValueError('Input descriptor redirection requires a literal descriptor')
         return super().bind(word)
 
 
-class WriteDescriptorRedirect(Redirect, spellings=('>&',)):
+class WriteDescriptorRedirect(NumberedRedirect, spellings=('>&',)):
     def bind(self, word: ShellWord) -> Redirection:
         if word.descriptor_value():
             return Redirection(word.value)
         return OutputRedirection(word.value)
 
 
-class DocumentRedirect(Redirect, spellings=('<<',)):
+class DocumentRedirect(NumberedRedirect, spellings=('<<',)):
     def bind(self, word: ShellWord) -> Redirection:
         return word.document()
 

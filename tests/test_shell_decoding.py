@@ -85,11 +85,25 @@ class ShellDecoding(unittest.TestCase):
             ('echo >&٢', ('echo',), ('٢',)),
             ('echo value >& target', ('echo', 'value'), ('target',)),
             ('cat < input', ('cat',), ()),
+            ('cat 2<input', ('cat',), ()),
+            ('cat 2<&0', ('cat',), ()),
             ('cat <> target', ('cat',), ('target',)),
             ('cat <<< text', ('cat',), ()),
+            ('cat 2<<<text', ('cat',), ()),
+            ("cat 2<<'EOF'\nopaque body\nEOF\n", ('cat',), ()),
+            ("cat 2<<-'EOF'\n\topaque body\n\tEOF\n", ('cat',), ()),
             ('> target', (), ('target',)),
             ('echo &>> target', ('echo',), ('target',)),
         )
+        for number in ('2', '700'):
+            retained = (f"'{number}'", f'"{number}"', '\\' + number, number + ' ')
+            for operator in ('&>', '&>>'):
+                cases += tuple((f'mkdir {prefix}{operator}/owned/log', ('mkdir', number),
+                                ('/owned/log', number)) for prefix in (number, *retained))
+            for operator in ('>', '>>', '>|', '<>'):
+                cases += ((f'mkdir {number}{operator}/owned/log', ('mkdir',), ('/owned/log',)),)
+                cases += tuple((f'mkdir {prefix}{operator}/owned/log', ('mkdir', number),
+                                ('/owned/log', number)) for prefix in retained)
         for text, words, paths in cases:
             with self.subTest(text=text):
                 command, = ShellCommand.parsed(text)
