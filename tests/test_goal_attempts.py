@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agent_comms.repo import Checkout
-from agent_comms.errors import StaleAttemptError
+from agent_comms.errors import GoalRefused, StaleAttemptError
 import multiprocessing
 import os
 import sqlite3
@@ -300,6 +300,27 @@ def test_verified_completion_is_terminal_without_a_new_ready_grant(store):
         store.reserve(goal_id, completed.number)
     with pytest.raises(UnresolvedAttemptError):
         store.ready_grant(goal_id, completed.number + 1)
+
+
+@pytest.mark.parametrize("prepare", (
+    pytest.param(lambda store, reservation: None, id="reserved-unclaimed"),
+    pytest.param(lambda store, reservation: store.claim_launch(reservation), id="reserved-claimed"),
+    pytest.param(lambda store, reservation: store.claim_launch(reservation).record_verified_completion(
+        store, "completion-witness"), id="completed"),
+    pytest.param(lambda store, reservation: store.retire_goal(
+        reservation.goal_id, expected_generation=reservation.generation,
+        attempt_id=reservation.attempt_id), id="cancelled"),
+))
+def test_retry_refusal_preserves_the_generation_and_owner_rpc_contract(store, prepare):
+    goal_id = GoalId.mint()
+    store.create_goal(goal_id)
+    reservation = store.reserve(goal_id, 1)
+    prepare(store, reservation)
+    before = store.snapshot(goal_id)
+    with pytest.raises(GoalRefused):
+        store.authorize_current_retry(goal_id, RetryDecision(RetryDecisionId.mint()))
+    assert store.snapshot(goal_id) == before
+    assert GoalAttemptStore.at(store.root).snapshot(goal_id) == before
 
 
 def test_provider_reported_responses_are_attributed_once_and_survive_reopen(store):
