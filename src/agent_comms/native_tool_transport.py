@@ -89,10 +89,9 @@ class ToolCallIdentity:
 
 @dataclass(frozen=True)
 class NativeToolRound(Generic[Call]):
-    """One decoded assistant message; call ids are unique only within this boundary."""
+    """One admitted assistant tool round; retain its call identities, not an answer copy."""
 
     number: int
-    assistant: AssistantMessage
     declared: tuple[Call, ...]
 
     @classmethod
@@ -115,7 +114,7 @@ class NativeToolRound(Generic[Call]):
                 raise SelectedToolDenied("Invalid native tool content")
         if not declared:
             raise SelectedToolDenied("Native tool round has no declared call")
-        return cls(number, assistant, tuple(declared))
+        return cls(number, tuple(declared))
 
 
 class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
@@ -151,7 +150,7 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
                 resolved.append(existing)
             else:
                 resolved.append(candidate)
-        announced = NativeToolRound(round.number, round.assistant, tuple(resolved))
+        announced = NativeToolRound(round.number, tuple(resolved))
         for call in announced.declared:
             call.announce()
         for identity, call in zip(identities, resolved, strict=True):
@@ -423,6 +422,5 @@ class GatedToolTransport(ToolTransport[Call]):
         self.rule_gate = gate
 
     async def judge(self, call: Call) -> None:
-        identity = self.calls.identity_for(call)
-        round = self.calls.rounds[identity.round_number]
-        await self.rule_gate.judge_round(call, round, self)
+        self.calls.identity_for(call)
+        await self.rule_gate.judge_call(call)

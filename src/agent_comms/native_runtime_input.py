@@ -75,8 +75,6 @@ from .typed_table import (
 )
 
 if TYPE_CHECKING:
-    from .bus import BusReader
-    from .message_reference import MessageReference
     from .native_input_proof import NativeContextProof
     from .native_session_reopen import NativeSessionIdentity
 
@@ -221,25 +219,6 @@ class NativeRuntimeInput(
             if row.reference.recorded and not row.session_entry_id.holds(user.id):
                 raise IdentityConflict("Native transcript input conflicts with its original entry")
         return rows
-
-    def model_contexts_for(
-        self, db: sqlite3.Connection, bus: BusReader, owner_lookup: ThreadLookup,
-        reference: MessageReference,
-    ) -> tuple[NativeContextProof, ...]:
-        """An acknowledged selected input owns its complete original source group."""
-        from .coordination_tables.assignments import WakeAssignment
-
-        if self.owner_lookup != owner_lookup:
-            raise IdentityConflict("Selected input belongs to another recipient incarnation")
-        assignments = tuple(WakeAssignment.require(db, assignment_id=identifier)
-                            for identifier in self.execution.source_assignment_ids(db, self.input_id))
-        for assignment in assignments:
-            if assignment.recipient_lookup != owner_lookup:
-                raise IdentityConflict("Selected input group changed recipient incarnation")
-            assignment.require_committed_source(bus.delivery(assignment.wire_seq))
-        if not any(assignment.source == reference for assignment in assignments):
-            return ()
-        return (self.require_context_proof(),)
 
     @classmethod
     def transcript_projection(cls, db, reader, record, owner_lookup, *, user, session_id):

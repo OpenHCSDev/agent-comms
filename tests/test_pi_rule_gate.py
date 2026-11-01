@@ -8,7 +8,11 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.rule_deal import CompactionDealMode, FullDealMode, OffDealMode, StartupDealMode, Unengaged
+from agent_comms.rule_deal import (
+    Asked, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
+    SessionAudit, StartupDealMode, Unengaged,
+)
+from agent_comms.nominal.field_codec import FieldCodec, MessageId
 
 from agent_comms import agent_events as events
 from agent_comms.channel_targets import CommandTarget
@@ -314,11 +318,13 @@ def owner_lines(bus, name: str) -> list[str]:
             if isinstance(delivery.message.task, MeantNotice)]
 
 
-def test_a_pi_thread_is_asked_but_session_words_without_a_producing_round_cannot_answer(
+def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     tmp_path, commander_bus
 ):
-    """Audit completion asks once. Neither question text nor a later yes in a
-    session journal can substitute for the exact producing request/input proof."""
+    """An audit answers the actual question; journal words and an uncompleted edit do not.
+
+    These are gate/transport controls, not a configured-model acceptance run.
+    """
     session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
     commander_bus.registry.declare(Thread(
         "unit-p", frozenset(), Checkout(tmp_path),
@@ -350,3 +356,58 @@ def test_a_pi_thread_is_asked_but_session_words_without_a_producing_round_cannot
         call("bash", {"command": "ls"}).judge_under(deal)
     assert deal.meant.read() == pending
     assert owner_lines(commander_bus, "unit-p") == [line]
+
+    question = pending.open[0].message_id
+    with pytest.raises(RulesUnread, match=str(question)) as refusal:
+        call("bash", {"command": "ls"}).judge_under(deal)
+    assert str(deal.audit) in str(refusal.value)
+    audit = SessionAudit.read(deal.audit)
+    answer = "No, I did not mean that answer, and I am correcting the missing owner before continuing."
+    foreign = replace(audit, meant=(MeantAnswer(MessageId.mint("another-question"), answer),))
+    deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(foreign)))
+    write.completed_under(deal)
+    assert deal.meant.read() == pending
+
+    deal.audit.write_text("{")
+    write.completed_under(deal)
+    assert deal.meant.read() == pending
+
+    short = replace(audit, meant=(MeantAnswer(question, "Yes."),))
+    deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(short)))
+    write.completed_under(deal)
+    assert owner_lines(commander_bus, "unit-p") == [line, "fuck you"]
+    for _ in range(2):
+        with pytest.raises(RulesUnread):
+            call("bash", {"command": "ls"}).judge_under(deal)
+    assert len(deal.meant.read().open) == 2
+    assert owner_lines(commander_bus, "unit-p") == [line, "fuck you"]
+
+    short = replace(audit, meant=(MeantAnswer(question, "No."),))
+    deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(short)))
+    write.completed_under(deal)
+    lines = owner_lines(commander_bus, "unit-p")
+    assert len(lines) == 3
+    assert audit.rules[-1].does.strip().splitlines()[0][:200] in lines[-1]
+    assert len(deal.meant.read().open) == 3
+
+    answered = replace(audit, meant=(MeantAnswer(question, answer),))
+    deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(answered)))
+    # File contents alone do not manufacture a successful tool completion.
+    with pytest.raises(RulesUnread):
+        call("bash", {"command": "ls"}).judge_under(deal)
+    assert deal.meant.read().open
+    write.completed_under(deal)
+    assert not deal.meant.read().open
+    assert deal.meant.read().asked == pending.asked
+    write.completed_under(deal)
+    assert owner_lines(commander_bus, "unit-p") == lines
+
+
+@pytest.mark.parametrize("opening", ("Yes", "No"))
+def test_audit_answers_keep_the_declared_explanatory_word_bar(opening):
+    question = MessageId.mint("word-bar")
+    meant = MeantRecord(open=(Asked(question),))
+    short = " ".join((opening, *("explanation" for _ in range(MeantRecord.answer_words - 2))))
+    complete = short + " action"
+    assert not meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, short),)))
+    assert meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, complete),)))

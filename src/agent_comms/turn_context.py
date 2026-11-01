@@ -63,9 +63,6 @@ class Provenance(DeclaredFamily, affix="Provenance"):
         """
         raise ValueError(f"Original text is not retained by {self.public_description()}")
 
-    def committed_contexts(self) -> tuple[NativeProvenance, ...]:
-        return ()
-
     def preview_observations(self) -> tuple[PreviewProvenance, ...]:
         return ()
 
@@ -202,9 +199,6 @@ class NativeProvenance(Provenance):
 
     def native_identities(self) -> tuple[NativeSessionIdentity, ...]:
         return (self.identity,)
-
-    def committed_contexts(self) -> tuple[NativeProvenance, ...]:
-        return (self,)
 
 
 @dataclass(frozen=True)
@@ -364,9 +358,6 @@ class SegmentManifest:
     def wire_sources(self) -> tuple[MessageReference, ...]:
         """Original bus messages declared by this segment, in contribution order."""
         return self.kind.wire_sources(self)
-
-    def original_user_entries(self, reference: MessageReference) -> tuple[str, ...]:
-        return self.kind.original_user_entries(self, reference)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -712,14 +703,6 @@ class ContextSegment(
         """A segment without its own wire sources answers through its contributors."""
         return tuple(source for child in original.contributors for source in child.wire_sources())
 
-    @classmethod
-    def user_references(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
-        return ()
-
-    @classmethod
-    def original_user_entries(cls, original: SegmentManifest, reference: MessageReference) -> tuple[str, ...]:
-        return ()
-
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
         return ()
 
@@ -863,10 +846,6 @@ class WireSources(ContextSegment, declared_name=None):
 
 @dataclass(frozen=True, kw_only=True)
 class UserInputSegment(SuppliedSegment, WireSources):
-    @classmethod
-    def user_references(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
-        return original.sources.bus_references()
-
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
@@ -1019,17 +998,6 @@ class NativeAnnotations(NativeMessages):
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeAnnotations, MeasuredNativeSegment):
     keyframe_interval: ClassVar[int] = 32
-
-    @classmethod
-    def original_user_entries(
-        cls, original: SegmentManifest, reference: MessageReference,
-    ) -> tuple[str, ...]:
-        if any(reference in child.kind.user_references(child)
-               for child in original.original_values()):
-            entries = original.sources.journal_coordinates()
-            if len(entries) == 1:
-                return entries
-        return ()
 
     @classmethod
     def record_manifest(
@@ -1326,21 +1294,6 @@ class ContextManifest:
     def public_text_recorded(self) -> bool:
         return bool(self.segments) and all(segment.public_text_recorded for segment in self.segments)
 
-
-    def committed_context(self, identity: NativeSessionIdentity) -> NativeProvenance:
-        contexts = {context for part in self.segments for source in part.provenance
-                    for context in source.committed_contexts()}
-        if len(contexts) != 1:
-            raise ValueError("Producing request has no unambiguous committed context")
-        (context,) = contexts
-        if context.identity != identity:
-            raise ValueError("Producing request belongs to another native session")
-        return context
-
-    def user_entries(self, reference: MessageReference) -> tuple[str, ...]:
-        return tuple(dict.fromkeys(entry for part in self.segments
-            for original in part.original_values()
-            for entry in original.original_user_entries(reference)))
 
     def selected_segment(self, position: int, contributors: tuple[int, ...] = ()) -> SegmentManifest:
         if not 0 <= position < len(self.segments):
