@@ -6,7 +6,6 @@ import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from functools import partial
-from typing import TYPE_CHECKING
 
 from .comms import Comms
 from .coordination_errors import StaleFence
@@ -15,22 +14,20 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .owner_connection import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequestContext,
+    OwnerConnection,
     OwnerIdentityChangedError,
     OwnerReading,
     OwnerReplyConnection,
 )
 from .private_path import FileIdentity, ObservedPath
 from .read_basis import NoDisplaySelection, ReadAuthority
+from .registry_document import RegistrySnapshot
+from .registry_store import RegistryCut
 from .thread_identity import ThreadIncarnation
+from .threads import Thread
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool
 from .tool_result import ToolResult
-
-if TYPE_CHECKING:
-    from .owner_connection import OwnerConnection
-    from .registry_document import RegistrySnapshot
-    from .registry_store import RegistryCut
-    from .threads import Thread
 
 
 class BusRead[Result](ToolDeclaration, ABC):
