@@ -17,8 +17,7 @@ from .channel_targets import CommandTarget
 from .coordination_database import CoordinationStore, ReadableStore
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .errors import RelationViolationError
-from .nominal.field_codec import GoalId, InputId, RootId, TurnId
-from .harness_delivery_states import Outcome, UnconfirmedOutcome
+from .nominal.field_codec import GoalId, InputId, RootId, ThreadLookup, TurnId
 from .input_attempt import (
     UNOBSERVED_DELIVERY_SCOPE,
     GoalInputDecision,
@@ -41,6 +40,7 @@ from .native_input_proof import NativeContextProof
 from .reported_turn import ReportedTurnState
 from .tool_result import ToolResult
 from .typed_table import (
+    AttachedPracticeRebuild,
     Column,
     DurableStore,
     Generated,
@@ -287,19 +287,15 @@ class InputDispositions(DurableStore):
     def coordinator_reader(self) -> ReadableStore:
         return ReadableStore(CoordinationStore.path_in(self.root))
 
+    def _harness_deliveries(self, owners: tuple[ThreadLookup, ...]) -> tuple[HarnessDelivery, ...]:
+        with self.coordinator_reader.reader_snapshot() as db:
+            return HarnessDelivery.unconfirmed_for(db, owners)
+
     def harness_attempts(self, entries: tuple[RegistryEntry, ...]) -> tuple[ReservedInput, ...]:
         """Uncertain harness attempts for these entries' frozen incarnations, as the inputs
         they are. Derived on every read and never stored by reading."""
         owners = {entry.thread.incarnation.require_recorded().lookup: entry for entry in entries}
-        outcomes = Outcome.members_with(UnconfirmedOutcome)
-        with self.coordinator_reader.reader_snapshot() as db:
-            attempts = HarnessDelivery.select(
-                db,
-                where=(f'"recipient_lookup" IN ({", ".join("?" for _ in owners)}) '
-                       f'AND "outcome" IN ({", ".join("?" for _ in outcomes)})'),
-                parameters=(*owners, *(outcome.declared_name for outcome in outcomes)),
-                order_by=("seq",),
-            )
+        attempts = self._harness_deliveries(tuple(owners))
         messages = Bus(Bus.path_in(self.root)).input_messages_for_references(
             attempt.reference for attempt in attempts)
         return tuple(
@@ -565,3 +561,39 @@ class InputDispositions(DurableStore):
 
         return self._update(*self._owned_or_attempted(owners, attempted), dismiss).record(
             *attempted).delivery_overview(owners, scope=scope)
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotInputDispositions(InputDispositions, declared_name=None):
+    """The same unresolved projection, with harness rows from an active source cut.
+
+    ``root`` names the retained bus and complete suppression ledger. The caller
+    owns their consistent capture and this attachment's lifetime. This transient
+    view declares no file/schema, writes no synthetic attempt and grants no replay.
+    """
+
+    original: AttachedPracticeRebuild
+
+    def _harness_deliveries(self, owners: tuple[ThreadLookup, ...]) -> tuple[HarnessDelivery, ...]:
+        return HarnessDelivery.unconfirmed_for(
+            self.original.destination, owners, table_source=self.original.source,
+        )
+
+    def retain_unresolved(self, entries: tuple[RegistryEntry, ...]) -> InputDocument:
+        """Seed original attempt groups selected by the ordinary unresolved reader.
+
+        The complete copied ledger owns suppression in every state. This offline
+        selection reuses the same attachment and producer a second time, rather
+        than restating its key/outcome/suppression decisions. An unresolved ledger
+        row may keep an additional original attempt witness at its key; it still
+        wins the projection. No native association is inferred from a scalar id.
+        """
+        selected = self.unresolved(entries)
+        recipients = {entry.thread.name: entry.thread.incarnation.require_recorded().lookup
+                      for entry in entries}
+        for attempted in self.harness_attempts(entries):
+            if attempted.key in selected.rows:
+                attempted.origin.retain_harness_rows(
+                    self.original, recipients[attempted.owner],
+                )
+        return selected

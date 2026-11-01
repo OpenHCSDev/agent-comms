@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from agent_comms.repo import Checkout
 import os
+from contextlib import closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttemp
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
 from conftest import accept_initial
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleFence,
@@ -21,24 +23,27 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_response import (
     LiveResponseOwner,
+    PublicationAppendDispatches,
     prepare_fenced_response,
     publish_fenced_response,
 )
-from agent_comms.coordination_tables.executions import NoPointedExecution, WireOrigin
+from agent_comms.coordination_tables.executions import ExecutionRecord, NoPointedExecution, WireOrigin
+from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
-from agent_comms.nominal.field_codec import InputId, RootId, ThreadLookup, TurnId
+from agent_comms.nominal.field_codec import AssignmentId, InputId, RootId, ThreadLookup, TurnId
 from agent_comms.lifecycle_capability import Active, Complete
 from agent_comms.message_bus import MessageBus
 from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.coordination_results import AlreadyApplied
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
-from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.owner_fence import OwnerFence, prepare_fence_token
 from agent_comms.publisher import ParticipantPublisher
 from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
+from agent_comms.typed_table import TypedTable
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial, responder
 
@@ -56,8 +61,8 @@ class Fixture:
     origin_seq: int
     reply_target: str
     owner_lookup: ThreadLookup
-    assignment_id: str
-    fence: object
+    assignment_id: AssignmentId
+    fence: OwnerFence
     witness: LiveResponseOwner
 
     def close(self) -> None:
@@ -366,5 +371,47 @@ def test_response_answers_the_messages_its_turn_took_in(tmp_path: Path) -> None:
         with case.bus.bus.reading() as source:
             replies = tuple(source.replies((original.message.reference, follow_up.reference)))
         assert [reply.reference for reply in replies] == [response.reference]
+    finally:
+        case.close()
+
+
+@pytest.mark.parametrize('seed', (PublicationIntents, ExecutionRecord), ids=('intent', 'execution'))
+@pytest.mark.parametrize('published', (False, True), ids=('frozen-intent', 'published'))
+def test_selected_publication_keeps_original_receipts_and_append_dispatches(
+    tmp_path: Path, seed: type[TypedTable], published: bool,
+) -> None:
+    case = _ready(tmp_path)
+    try:
+        intent = prepare_fenced_response(
+            case.store, case.bus, case.fence, 'Original retained publication',
+            exact_target=case.reply_target, owner_witness=case.witness,
+        ).value
+        if published:
+            publish_fenced_response(
+                case.store, case.bus, case.fence,
+                exact_target=case.reply_target, owner_witness=case.witness,
+            )
+        snapshot = case.store.get(intent.execution_id)
+        with case.store.session.read():
+            dispatches = tuple(PublicationAppendDispatches.select(
+                case.store.session._connection, where='execution_id=?',
+                parameters=(intent.execution_id,),
+            ))
+        assert len(snapshot.publication_evidence) == int(published)
+        assert len(dispatches) == int(published)
+        source = case.store.session.path
+        before = CoordinationStore.digest(source)
+        bus_revision = case.bus.bus.revision()
+        destination = tmp_path / 'retained-publication' / 'coordination.sqlite3'
+        with CoordinationStore.retaining_rows(
+            source, destination, maximum_bytes=8 * 2**20,
+        ) as original:
+            original.retain_keys(seed, ({'execution_id': intent.execution_id},))
+        with closing(CoordinationStore.read_snapshot(destination)) as db:
+            assert tuple(PublicationIntents.select(db)) == snapshot.publication_intents
+            assert tuple(PublicationEvidence.select(db)) == snapshot.publication_evidence
+            assert tuple(PublicationAppendDispatches.select(db)) == dispatches
+        assert CoordinationStore.digest(source) == before
+        assert case.bus.bus.revision() == bus_revision
     finally:
         case.close()

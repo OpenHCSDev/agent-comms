@@ -282,6 +282,22 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
     )
 
 
+def test_owned_bus_input_keeps_its_original_recipient_birth() -> None:
+    from agent_comms.input_key import OwnedBusInputKey
+    from agent_comms.thread_identity import UnrecordedThreadIncarnation
+
+    row = ReservedInput(
+        OwnedBusInputKey(7, 10.0), 7, "owner", 4, "owner", "original input",
+    )
+    assert row.matches_owner(RecordedThreadIncarnation("owner", 10.0))
+    assert not row.matches_owner(RecordedThreadIncarnation("owner", 20.0))
+    assert not row.matches_owner(RecordedThreadIncarnation("other", 10.0))
+    assert not row.matches_owner(UnrecordedThreadIncarnation("owner"))
+    assert row.queued_text(RecordedThreadIncarnation("owner", 10.0), 4) == "original input"
+    with pytest.raises(RelationViolationError):
+        row.queued_text(RecordedThreadIncarnation("owner", 20.0), 4)
+
+
 def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_path):
     from dataclasses import fields
 

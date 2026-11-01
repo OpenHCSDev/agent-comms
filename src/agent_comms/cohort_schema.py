@@ -32,6 +32,7 @@ from .typed_table import (
     Index,
     InitialOneWayColumn,
     NoDelete,
+    RetainsChildren,
     SharedFileTables,
     SQLiteJournalMode,
     TextStorage,
@@ -60,6 +61,7 @@ class AwarenessTable(SharedFileTables, DurableTables):
 
 @dataclass(frozen=True, kw_only=True)
 class ClaimBatchAcknowledgements(
+    RetainsChildren,
     InitialOneWayColumn,
     GuardedColumns,
     NoDelete,

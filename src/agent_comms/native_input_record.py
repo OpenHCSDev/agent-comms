@@ -36,7 +36,7 @@ from .native_input_proof import NativeContextProof
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
-from .typed_table import SqlStorage, TextStorage
+from .typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
@@ -181,14 +181,25 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
 
     @classmethod
     @abstractmethod
-    def source_membership_sql(cls) -> str:
-        """Select the assignments included in this stage's input."""
+    def source_membership_sql(
+        cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> str:
+        """Select original membership from this query's actual table source."""
 
-    def source_assignment_ids(self, db: Connection, input_id: InputId) -> tuple[AssignmentId, ...]:
+    def source_assignment_ids(
+        self, db: Connection, input_id: InputId, *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> tuple[AssignmentId, ...]:
+        """Membership leads: a missing claim reaches the required-row decoder.
+
+        An inner join would silently erase a declared source whose claim was
+        absent, making corrupted membership look like a smaller valid group.
+        """
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
         originals = WakeAssignment.read(db.execute(
-            f"SELECT {columns} FROM {WakeAssignment.declared_name} c "
-            f"JOIN ({self.source_membership_sql()}) m ON m.assignment_id=c.assignment_id "
+            f"SELECT {columns} FROM ({self.source_membership_sql(table_source=table_source)}) m "
+            f"LEFT JOIN {table_source.qualified(WakeAssignment.declared_name)} c "
+            "ON m.assignment_id=c.assignment_id "
             "WHERE m.input_id=? ORDER BY m.ordinal", (input_id,),
         ))
         return tuple(original.assignment_id for original in originals)
@@ -228,11 +239,13 @@ class TriageNativeExecution(NativeInputExecution):
                 super().transcript_events(entry, projection, user)]
 
     @classmethod
-    def source_membership_sql(cls) -> str:
+    def source_membership_sql(
+        cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> str:
         from .triage_native_sources import TriageNativeSource
 
         return (f"SELECT s.input_id, s.assignment_id, s.ordinal "
-                f"FROM {TriageNativeSource.declared_name} s")
+                f"FROM {table_source.qualified(TriageNativeSource.declared_name)} s")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
@@ -272,12 +285,15 @@ class FullNativeExecution(NativeInputExecution):
     attempt_ordinal: int
 
     @classmethod
-    def source_membership_sql(cls) -> str:
+    def source_membership_sql(
+        cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> str:
         from .native_runtime_input import NativeRuntimeInput
 
         return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
-                f"FROM {NativeRuntimeInput.declared_name} n "
-                f"JOIN {ExecutionAssignmentLink.declared_name} c ON c.execution_id=n.execution_id "
+                f"FROM {table_source.qualified(NativeRuntimeInput.declared_name)} n "
+                f"JOIN {table_source.qualified(ExecutionAssignmentLink.declared_name)} c "
+                "ON c.execution_id=n.execution_id "
                 f"WHERE n.stage='{cls.declared_name}'")
 
     def record_sources(

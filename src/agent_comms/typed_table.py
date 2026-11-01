@@ -299,9 +299,17 @@ class Reference(ABC):
     @abstractmethod
     def reference_sql(self) -> str: ...
 
+    @abstractmethod
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        """References made by these source columns; every reference declares its answer."""
+        ...
+
 
 @dataclass(frozen=True)
 class NoReference(Reference):
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        return ()
+
     def reference_sql(self) -> str:
         return ""
 
@@ -310,6 +318,9 @@ class NoReference(Reference):
 class TableReference(Reference):
     target: type[TypedTable]
     target_columns: tuple[str, ...]
+
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(target=self.target, target_columns=self.target_columns, columns=columns),)
 
     def reference_sql(self) -> str:
         return (
@@ -470,6 +481,42 @@ class ForeignKey(TableReference):
             + self.reference_sql()
             + (f" ON DELETE {self.on_delete}" if self.on_delete else "")
             + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
+        )
+
+    def retain_parents(
+        self, owner: type[TypedTable], original: AttachedPracticeRebuild,
+    ) -> int:
+        """Original parents of selected rows, using SQLite's FK value comparison.
+
+        The parent column is on the left so its affinity/collation governs the
+        comparison, as it does for the actual constraint. A NULL source key
+        therefore contributes no parent; encoded SQL values are not decoded as
+        one domain type and re-encoded as a different target type.
+        """
+        referencing = _identifier(self.target.declared_name + "_referencing")
+        related = self._related_columns(owner, referencing, _identifier(self.target.declared_name))
+        return original.retain_rows(
+            self.target,
+            where=f"EXISTS (SELECT 1 FROM main.{_identifier(owner.declared_name)} "
+                  f"AS {referencing} WHERE {related})",
+        )
+
+    def _related_columns(self, owner: type[TypedTable], referencing: str, referenced: str) -> str:
+        """The parent side always supplies the declared FK comparison semantics."""
+        return " AND ".join(
+            f"{referenced}.{self.target._column_list((parent,))} = "
+            f"{referencing}.{owner._column_list((child,))}"
+            for child, parent in zip(self.columns, self.target_columns, strict=True)
+        )
+
+    def retain_children(self, owner: type[TypedTable], original: AttachedPracticeRebuild) -> int:
+        """Original children of selected parents, only when a parent requires that group."""
+        referenced = _identifier(owner.declared_name + "_referenced")
+        related = self._related_columns(owner, _identifier(owner.declared_name), referenced)
+        return original.retain_rows(
+            owner,
+            where=f"EXISTS (SELECT 1 FROM main.{_identifier(self.target.declared_name)} "
+                  f"AS {referenced} WHERE {related})",
         )
 
 
@@ -763,11 +810,61 @@ class SQLiteSchemaDifference:
         return f"{self.name}: stored {self.stored or 'nothing'}; declared {self.declared or 'nothing'}"
 
 
+class TableSource:
+    """A query's table location; the default retains SQLite's normal name search."""
+
+    __slots__ = ()
+
+    def qualified(self, name: str) -> str:
+        return _identifier(name)
+
+
+LOCAL_TABLE_SOURCE = TableSource()
+
+
 @dataclass(frozen=True)
-class SQLiteDatabase(TypedRow):
+class SQLiteDatabase(TypedRow, TableSource):
+    """An actual attached database owns qualification through its recorded name."""
+
     seq: int
     name: str
     file: str
+
+    @classmethod
+    def named(cls, db: sqlite3.Connection, name: str) -> Self:
+        database, = cls.read(db.execute(
+            "SELECT seq,name,file FROM pragma_database_list WHERE name=?", (name,),
+        ))
+        return database
+
+    def qualified(self, name: str) -> str:
+        return f"{_identifier(self.name)}.{_identifier(name)}"
+
+    def limit_bytes(self, db: sqlite3.Connection, maximum_bytes: int) -> None:
+        """Let SQLite refuse page growth before a selected database exceeds its allowance."""
+        size, = SQLitePageSize.read(db.execute(f"PRAGMA {_identifier(self.name)}.page_size"))
+        pages = maximum_bytes // size.page_size
+        if pages < 1:
+            raise RelationViolationError("Selected store has no room for a SQLite page")
+        limit, = SQLiteMaximumPageCount.read(db.execute(
+            f"PRAGMA {_identifier(self.name)}.max_page_count={pages}",
+        ))
+        if limit.max_page_count > pages:
+            raise RelationViolationError("Selected database already exceeds its byte allowance")
+
+
+@dataclass(frozen=True)
+class SQLitePageSize(TypedRow):
+    """The page size returned by SQLite, not a copied platform default."""
+
+    page_size: int
+
+
+@dataclass(frozen=True)
+class SQLiteMaximumPageCount(TypedRow):
+    """SQLite's actual accepted allocation limit; an existing file can force it higher."""
+
+    max_page_count: int
 
 
 @dataclass(frozen=True)
@@ -998,26 +1095,88 @@ class PracticeRebuild(SchemaRebuild):
     database: ClassVar[str] = __qualname__
 
     @contextmanager
-    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
-        with closing(SQLiteFile.read_snapshot(self.path)) as source:
-            db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
-                       (self.path.resolve().as_uri() + "?mode=ro",))
-            try:
-                yield AttachedPracticeRebuild(source)
-            finally:
-                db.execute(f'DETACH DATABASE "{self.database}"')
+    def attached(self, db: sqlite3.Connection) -> Iterator[AttachedPracticeRebuild]:
+        db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
+                   (self.path.resolve().as_uri() + "?mode=ro",))
+        try:
+            yield AttachedPracticeRebuild(SQLiteDatabase.named(db, self.database), db)
+        finally:
+            db.execute(f'DETACH DATABASE "{self.database}"')
 
 
 @dataclass(frozen=True)
 class AttachedPracticeRebuild(SchemaRebuild):
-    source: sqlite3.Connection
+    source: SQLiteDatabase
+    destination: sqlite3.Connection
+
+    def retain_rows(
+        self, row: type[TypedTable], *,
+        where: str = "1", parameters: tuple[object, ...] = (),
+    ) -> int:
+        """Copy original writable SQL values through this active source attachment.
+
+        This is a row primitive, not a complete-store preservation certificate.
+        The caller owns destination freshness, guard/loading lifetime, semantic
+        dependencies and producer metadata. No stored JSON is reconstructed.
+        """
+        return self._retain_selection(
+            row, f"FROM {self.source.qualified(row.declared_name)} AS {_identifier(row.declared_name)}",
+            where=where, parameters=parameters,
+        )
+
+    def retain_keys(
+        self, row: type[TypedTable], keys: Sequence[Mapping[str, object]],
+    ) -> int:
+        """The declared indexed-key query supplies raw selected rows, not re-encoded records."""
+        return sum(self._retain_selection(
+            row, requested.join, prefix=f"WITH {requested.values}",
+            parameters=requested.bindings,
+        ) for requested in row.requested_keys(
+            self.destination, keys, table_source=self.source,
+        ))
+
+    def require_schema(self, schema: type[TableSchema]) -> None:
+        """An unknown source column or trigger is not permission to silently discard it."""
+        stored = SQLiteSchemaObject.read(self.destination.execute(
+            f"SELECT name,sql FROM {self.source.qualified('sqlite_master')} "
+            "WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'",
+        ))
+        differences = SQLiteSchemaObject.differences(stored, schema.declared_schema())
+        if differences:
+            raise schema.schema_error("Retained source schema differs: " + " | ".join(
+                str(difference) for difference in differences))
+
+    def _retain_selection(
+        self, row: type[TypedTable], source: str, *, where: str = "1",
+        parameters: tuple[object, ...] = (), prefix: str = "",
+    ) -> int:
+        keys = tuple(item.name for item in row._columns if item.column.primary_key)
+        if not keys:
+            raise RelationViolationError(f"{row.declared_name} has no declared retention key")
+        fields = tuple(item.name for item in row._writable_fields())
+        retained_alias = _identifier(row.declared_name + "_retained")
+        retained = " AND ".join(
+            f"{retained_alias}.{row._column_list((key,))} IS {row.qualified(key)}" for key in keys
+        )
+        table = _identifier(row.declared_name)
+        before = self.destination.total_changes
+        self.destination.execute(
+            f"{prefix} INSERT INTO main.{table} ({row._column_list(fields)}) "
+            f"SELECT {row.qualified(*fields)} {source} "
+            f"WHERE ({row._sql(where)}) AND NOT EXISTS "
+            f"(SELECT 1 FROM main.{table} AS {retained_alias} WHERE {retained})",
+            parameters,
+        )
+        # Cursor.rowcount is -1 for WITH-prefixed INSERTs. The connection owns
+        # completed changes regardless of which selection grammar supplied them.
+        return self.destination.total_changes - before
 
     def rebuild(
         self, schema: type[DerivedTables], db: sqlite3.Connection,
         rows: tuple[type[TypedTable], ...],
     ) -> None:
         projections = tuple(row for row in schema.projection_rows() if row in rows)
-        if not ProjectionProducer.matches(self.source, projections):
+        if not ProjectionProducer.matches(db, projections, table_source=self.source):
             raise RelationViolationError("Practice projection producers differ from this runtime")
         through = max((row.practice_sequence(db, self.source)
                        for row in schema.projection_rows()), default=0)
@@ -1025,7 +1184,7 @@ class AttachedPracticeRebuild(SchemaRebuild):
         schema.create_tables(db, rows)
         for row in projections:
             db.execute(f'INSERT INTO "{row.declared_name}" '
-                       f'SELECT * FROM "{PracticeRebuild.database}"."{row.declared_name}"')
+                       f'SELECT * FROM {self.source.qualified(row.declared_name)}')
         schema.replay(db, rows, after=through)
 
 
@@ -1165,6 +1324,30 @@ class TableSchema(ABC):
         return tuple(TypedTable.members_with(cls))
 
     @classmethod
+    def retain_referenced_rows(
+        cls, original: AttachedPracticeRebuild,
+    ) -> int:
+        """One declared dependency expansion, including owners' required groups.
+
+        Undeclared natural-key, serialized and cross-store dependencies remain
+        open; a zero contribution is not a certificate that they do not exist.
+        """
+        rows = cls.schema_rows()
+        return sum(reference.retain_parents(row, original)
+                   for row in rows for reference in row.foreign_keys()) + sum(
+            row.retain_required_rows(original, cls) for row in rows
+        )
+
+    @classmethod
+    def retain_referencing_rows(
+        cls, original: AttachedPracticeRebuild, parent: type[TypedTable],
+    ) -> int:
+        """Inverse declared edges for an owner that requires its complete child group."""
+        return sum(reference.retain_children(row, original)
+                   for row in cls.schema_rows() for reference in row.foreign_keys()
+                   if reference.target is parent)
+
+    @classmethod
     def declares_schema(cls) -> bool:
         """Whether this class names a file's tables, not only a parent of such classes."""
         return True
@@ -1272,6 +1455,34 @@ class TableSchema(ABC):
             row.require_decodable_rows(db)
 
     @classmethod
+    def require_related_rows(cls, db: sqlite3.Connection) -> None:
+        """Reject stored references without changing their original rows."""
+        with closing(SQLiteForeignKeyViolation.iterate(
+            db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
+        )) as violations:
+            for violation in violations:
+                raise cls.schema_error(
+                    f"{cls.__name__} foreign-key violation: table={violation.table}, "
+                            f"parent={violation.parent}, fkid={violation.fkid}"
+                )
+
+    @classmethod
+    @contextmanager
+    def loading_rows(cls, db: sqlite3.Connection) -> Iterator[None]:
+        """Load a fresh declared schema in one transaction, preserving sealed values.
+
+        Every table exists before loading starts; guards are installed only after
+        all selected rows have loaded. Required children and producer metadata
+        remain the selector's obligation, not something FK validity proves.
+        """
+        with SQLiteForeignKeys.relations_suspended(db), SQLiteFile.write_transaction(db):
+            with ExitStack() as loading:
+                for row in cls.schema_rows():
+                    loading.enter_context(row.loading(db))
+                yield
+            cls.require_related_rows(db)
+
+    @classmethod
     def create_schema(cls, db: sqlite3.Connection) -> None:
         cls.create_tables(db, cls.schema_rows())
 
@@ -1311,14 +1522,7 @@ class TableSchema(ABC):
         with SQLiteForeignKeys.relations_suspended(db):
             with rebuild.attached(db) as attached, SQLiteFile.write_transaction(db):
                 cls.carry_schema(db, rebuild=attached)
-                with closing(SQLiteForeignKeyViolation.iterate(
-                    db.execute('SELECT "table", parent, fkid FROM pragma_foreign_key_check()'),
-                )) as violations:
-                    for violation in violations:
-                        raise cls.schema_error(
-                            f"{cls.__name__} foreign-key violation: table={violation.table}, "
-                            f"parent={violation.parent}, fkid={violation.fkid}"
-                        )
+                cls.require_related_rows(db)
         return True
 
     @classmethod
@@ -2230,8 +2434,20 @@ class TypedTable(
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
+        """Table-level constraints; column references remain on their fields."""
         # A method permits mutually referring row classes without string names.
         return ()
+
+    @classmethod
+    def foreign_keys(cls) -> tuple[ForeignKey, ...]:
+        """All declared SQL edges, including inherited and generated columns.
+
+        This describes referential integrity, not required dependent children or
+        references encoded inside a field's value. SQL generation keeps its
+        existing column/table placement; inspection never reparses that SQL.
+        """
+        return (*cls.references(), *(reference for item in cls._columns
+                 for reference in item.column.references.foreign_keys((item.name,))))
 
     @classmethod
     def _computed_columns(cls) -> frozenset[str]:
@@ -2317,6 +2533,25 @@ class TypedTable(
         db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """Additional groups this row's declaration requires beyond its FK parents."""
+        return 0
+
+    @classmethod
+    @contextmanager
+    def loading(cls, db: sqlite3.Connection) -> Iterator[None]:
+        """Create the table, load its rows, then install its declared guards.
+
+        The caller owns rollback. No retained row state is rewritten to pass
+        insertion guards that describe ordinary runtime writes.
+        """
+        db.execute(cls._table_sql())
+        yield
+        cls.create(db, if_not_exists=True)
+
+    @classmethod
     def rebuild(cls, db: sqlite3.Connection,
                 changed: Mapping[str, str] = types.MappingProxyType({})) -> None:
         """Copy writable fields into the declared schema, in the caller's transaction.
@@ -2336,10 +2571,9 @@ class TypedTable(
         db.execute(f"CREATE TEMP TABLE {temporary} AS SELECT {selected} FROM {table}")
         SQLiteCatalogObject.release_guards(db, cls)
         cls.drop(db)
-        db.execute(cls._table_sql())
-        columns = cls._column_list(tuple(item.name for item in fields))
-        db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
-        cls.create(db, if_not_exists=True)
+        with cls.loading(db):
+            columns = cls._column_list(tuple(item.name for item in fields))
+            db.execute(f"INSERT INTO {table} ({columns}) SELECT {columns} FROM {temporary}")
         db.execute(f"DROP TABLE {temporary}")
 
     @classmethod
@@ -2394,18 +2628,21 @@ class TypedTable(
 
     @classmethod
     def select_keys(cls, db: sqlite3.Connection,
-                    keys: Sequence[Mapping[str, object]]) -> list[Self]:
+                    keys: Sequence[Mapping[str, object]], *,
+                    table_source: TableSource = LOCAL_TABLE_SOURCE) -> list[Self]:
         """Rows equal to any of these named keys under the same null-safe IS equality select()
         uses: the requested keys drive an indexed join, one batch per the connection's own
         variable limit, each distinct key probed once."""
-        return [row for requested in cls.requested_keys(db, keys) for row in cls.iterate(db.execute(
+        return [row for requested in cls.requested_keys(db, keys, table_source=table_source)
+                for row in cls.iterate(db.execute(
             f"WITH {requested.values} "
             f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
             requested.bindings))]
 
     @classmethod
     def requested_keys(cls, db: sqlite3.Connection,
-                       keys: Sequence[Mapping[str, object]]) -> Iterator[RequestedKeys]:
+                       keys: Sequence[Mapping[str, object]], *,
+                       table_source: TableSource = LOCAL_TABLE_SOURCE) -> Iterator[RequestedKeys]:
         """The distinct named keys, encoded by their declared columns, in batches that fit the
         connection's own variable limit; each batch joins this table as ``FROM requested
         JOIN <table> ON ...`` under select()'s null-safe IS equality."""
@@ -2425,7 +2662,7 @@ class TypedTable(
         for chunk in batched(bound, batch):
             yield RequestedKeys(
                 f"requested({','.join(aliases)}) AS (VALUES {','.join(probe for _ in chunk)})",
-                f"FROM requested JOIN {table} ON {joined}",
+                f"FROM requested JOIN {table_source.qualified(cls.declared_name)} ON {joined}",
                 tuple(value for _, values in chunk for value in values))
 
     @classmethod
@@ -2433,11 +2670,12 @@ class TypedTable(
         cls, db: sqlite3.Connection, where: str, parameters: tuple,
         order_by: tuple[str, ...], descending: bool, key: dict[str, object],
         row_type: type[RelatedRow] | None, limit: int | None,
+        table_source: TableSource,
     ) -> Generator[Self | RelatedRow]:
         condition, parameters = cls._condition(where, parameters, key)
         direction, selected = " DESC" if descending else "", row_type or cls
         return selected.iterate(db.execute(
-            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
+            f"SELECT {selected._select_list(cls)} FROM {table_source.qualified(cls.declared_name)} "
             f"WHERE {condition}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else "") + (" LIMIT ?" if limit is not None else ""),
@@ -2449,7 +2687,7 @@ class TypedTable(
     def select(
         cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> list[RelatedRow]: ...
 
     @overload
@@ -2457,7 +2695,7 @@ class TypedTable(
     def select(
         cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> list[Self]: ...
 
     @classmethod
@@ -2470,16 +2708,17 @@ class TypedTable(
         order_by: tuple[str, ...] = (),
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
-        **key: object,
+        table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Sequence[Self | RelatedRow]:
-        return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit))
+        return list(cls._query(db, where, parameters, order_by, descending, key, row_type, limit,
+                               table_source))
 
     @overload
     @classmethod
     def stream(
         cls, db: sqlite3.Connection, *, row_type: type[RelatedRow], where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[RelatedRow]: ...
 
     @overload
@@ -2487,7 +2726,7 @@ class TypedTable(
     def stream(
         cls, db: sqlite3.Connection, *, row_type: None = None, where: str = "1",
         parameters: tuple = (), order_by: tuple[str, ...] = (), descending: bool = False,
-        limit: int | None = None, **key: object,
+        limit: int | None = None, table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[Self]: ...
 
     @classmethod
@@ -2500,10 +2739,11 @@ class TypedTable(
         order_by: tuple[str, ...] = (),
         descending: bool = False,
         row_type: type[RelatedRow] | None = None, limit: int | None = None,
-        **key: object,
+        table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object,
     ) -> Generator[Self | RelatedRow]:
         """Rows decoded as the caller consumes them; close it to release the query."""
-        return cls._query(db, where, parameters, order_by, descending, key, row_type, limit)
+        return cls._query(db, where, parameters, order_by, descending, key, row_type, limit,
+                          table_source)
 
     @classmethod
     def wire_record(cls, db: sqlite3.Connection, plan: FieldPlan) -> str:
@@ -2580,23 +2820,27 @@ class TypedTable(
         return [item for item in stored if item.name in declared or item.name not in claimed]
 
     @classmethod
-    def present(cls, db: sqlite3.Connection) -> bool:
+    def present(cls, db: sqlite3.Connection, *,
+                table_source: TableSource = LOCAL_TABLE_SOURCE) -> bool:
         return SqlValue.for_annotation(bool).read(db.execute(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?)",
+            f"SELECT EXISTS(SELECT 1 FROM {table_source.qualified('sqlite_master')} "
+            "WHERE type='table' AND name=?)",
             (cls.declared_name,)))[0]
 
     @classmethod
-    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> bool:
+    def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (),
+               table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> bool:
         condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {condition})",
+            f"SELECT EXISTS(SELECT 1 FROM {table_source.qualified(cls.declared_name)} WHERE {condition})",
             parameters))[0]
 
     @classmethod
-    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
+    def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (),
+              table_source: TableSource = LOCAL_TABLE_SOURCE, **key: object) -> int:
         condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(int).read(db.execute(
-            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
+            f"SELECT COUNT(*) FROM {table_source.qualified(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
     @cache
@@ -2705,7 +2949,7 @@ class ProducedTable(ProducedRow, TypedTable, ProjectionSource, declared_name=Non
                      if owner.shares_outputs_with(cls))
 
     @classmethod
-    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
+    def practice_sequence(cls, db: sqlite3.Connection, source: TableSource) -> int:
         """Only the identity-owning row contributes a verified history prefix."""
         return 0
 
@@ -2825,12 +3069,14 @@ class ProjectionProducer(TypedTable, ProjectionProducerTables):
         return tuple(cls(name, digest) for name, digest in digests.items())
 
     @classmethod
-    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...]) -> bool:
+    def matches(cls, db: sqlite3.Connection, rows: tuple[type[ProducedTable], ...], *,
+                table_source: TableSource = LOCAL_TABLE_SOURCE) -> bool:
         if not rows:
             return True
-        if not cls.present(db):
+        if not cls.present(db, table_source=table_source):
             return False
-        stored = {record.projection: record.producer_digest for record in cls.select(db)}
+        stored = {record.projection: record.producer_digest
+                  for record in cls.select(db, table_source=table_source)}
         digests = cls.digests_for(rows)
         return all(stored.get(name) == digest for name, digest in digests.items())
 
@@ -2891,6 +3137,46 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     @classmethod
     def schema_change(cls, path: Path) -> SchemaChange:
         return HeldBusFile(cls, path)
+
+    @classmethod
+    def configure_connection(cls, connection: sqlite3.Connection) -> None:
+        """Connection behavior needed by this file's declared loading guards."""
+
+    @classmethod
+    @contextmanager
+    def retaining_rows(
+        cls, source: Path, destination: Path, *, maximum_bytes: int,
+    ) -> Iterator[AttachedPracticeRebuild]:
+        """Publish a fresh selected store only after loading and declared closure succeed.
+
+        The caller supplies seeds and owns the wider cross-store cut. The source
+        attachment stays read-only in the loading transaction; no runtime writer,
+        producer regeneration, lifecycle reset or original coordinate is created.
+        """
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError(destination)
+        schema = cls.schema_at(source)
+        PrivateDirectoryRole.make_parents(destination.parent)
+        descriptor, staged = cls.stage_file(destination)
+        os.close(descriptor)
+        try:
+            with closing(cls.writer(staged, isolation_level=None)) as db:
+                cls.configure_connection(db)
+                SQLiteDatabase.named(db, "main").limit_bytes(db, maximum_bytes)
+                with PracticeRebuild(source).attached(db) as original:
+                    with schema.loading_rows(db):
+                        original.require_schema(schema)
+                        yield original
+                        while schema.retain_referenced_rows(original):
+                            pass
+            retained_bytes = sum(member.stat().st_size for member in cls.files(staged)
+                                 if member.is_file())
+            if retained_bytes > maximum_bytes:
+                raise RelationViolationError("Selected SQLite file group exceeds its byte allowance")
+            ExclusiveAtomicFile(destination).replace(staged)
+        finally:
+            for member in cls.files(staged):
+                member.unlink(missing_ok=True)
 
     @classmethod
     def practice_rebuild(cls, path: Path, practice_root: Path) -> SchemaRebuild:
@@ -3218,8 +3504,49 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         )
 
 
+class RetainsChildren(TypedTable, declared_name=None):
+    """A retained row requires its whole original child group through declared FK edges."""
+
+    __slots__ = ()
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        return super().retain_required_rows(original, schema) + schema.retain_referencing_rows(
+            original, cls,
+        )
+
+
 class RowidSequenced(TypedTable, declared_name=None):
     """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """AUTOINCREMENT's original high-water mark survives a selected row set."""
+        changed = super().retain_required_rows(original, schema)
+        # sqlite_sequence is SQLite-owned external metadata, absent when the
+        # source has no AUTOINCREMENT tables. Its presence is decoded here once.
+        if not SQLiteSchemaObject.read(original.destination.execute(
+            f"SELECT name,sql FROM {original.source.qualified('sqlite_master')} "
+            "WHERE name='sqlite_sequence'",
+        )):
+            return changed
+        source = original.source.qualified("sqlite_sequence")
+        changed += original.destination.execute(
+            "INSERT INTO main.sqlite_sequence(name,seq) "
+            f"SELECT name,seq FROM {source} AS original_sequence WHERE name=? "
+            "AND NOT EXISTS(SELECT 1 FROM main.sqlite_sequence AS retained_sequence "
+            "WHERE retained_sequence.name=original_sequence.name)", (cls.declared_name,),
+        ).rowcount
+        changed += original.destination.execute(
+            f"UPDATE main.sqlite_sequence SET seq=(SELECT seq FROM {source} WHERE name=?) "
+            f"WHERE name=? AND seq<(SELECT seq FROM {source} WHERE name=?)",
+            (cls.declared_name, cls.declared_name, cls.declared_name),
+        ).rowcount
+        return changed
 
     @classmethod
     def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:

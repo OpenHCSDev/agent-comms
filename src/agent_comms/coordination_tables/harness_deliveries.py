@@ -14,19 +14,25 @@ from typing import TYPE_CHECKING, Annotated, Self
 
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
+from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
-from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
+from agent_comms.harness_delivery_states import (
+    MonitorEvidence, Outcome, UnconfirmedOutcome, UnrecordedMonitor,
+)
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete
+from agent_comms.typed_table import (
+    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, Column, ForeignKey, FrozenColumn,
+    ImmutableRows, Index, NoDelete, RetainsChildren, TableSchema, TableSource,
+)
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
 
 
 @dataclass(frozen=True, slots=True)
-class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliveries"):
+class HarnessDelivery(RetainsChildren, NoDelete, CoordinatorRow, declared_name="harness_deliveries"):
     """One original attempt to put a bus message into a recipient's harness session."""
 
     bridge: Annotated[type[HarnessSession], FrozenColumn(primary_key=True)]
@@ -44,6 +50,22 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
     def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(columns=("recipient_lookup",), target=Participants,
                            target_columns=("participant_lookup",)),)
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """Keep original observation parts and every existing claim on these attempts."""
+        changed = super().retain_required_rows(original, schema)
+        for delivery in cls.select(original.destination):
+            claims = WakeAssignment.for_harness_sources(
+                original.destination, delivery.recipient_lookup, (delivery.reference,),
+                table_source=original.source,
+            )
+            changed += original.retain_keys(WakeAssignment, tuple(
+                {"assignment_id": claim.assignment_id} for claim in claims
+            ))
+        return changed
 
     @property
     def reference(self) -> MessageReference:
@@ -109,6 +131,24 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
                 for lookup, reference in keys)),
             key=lambda row: (row.seq, row.recipient_lookup, row.bridge.declared_name),
         ))
+
+    @classmethod
+    def unconfirmed_for(
+        cls, db: sqlite3.Connection, owners: tuple[ThreadLookup, ...], *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> tuple[Self, ...]:
+        """Original uncertain attempts for these incarnations, in message order.
+
+        The outcome family owns membership; declared columns own query encoding.
+        A source attachment changes location, not the stored outcome or identity.
+        """
+        outcomes = Outcome.members_with(UnconfirmedOutcome)
+        keys = tuple(
+            {"recipient_lookup": owner, "outcome": outcome}
+            for owner in owners for outcome in outcomes
+        )
+        return tuple(sorted(cls.select_keys(db, keys, table_source=table_source),
+                            key=lambda row: row.seq))
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, bridge: type[HarnessSession],

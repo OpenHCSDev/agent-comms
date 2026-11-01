@@ -102,14 +102,8 @@ class AssignmentStore:
         Every step runs in the caller's coordinator write, so the harness attempt
         and its claim consequence commit together or not at all.
         """
-        claims = WakeAssignment.select(
-            db,
-            where=f"recipient_lookup=? AND wire_seq IN ({','.join('?' * len(sources))})",
-            parameters=(recipient_lookup, *(source.seq for source in sources)),
-        )
+        claims = WakeAssignment.for_harness_sources(db, recipient_lookup, sources)
         for claim in claims:
-            if claim.source not in sources:
-                raise IdentityConflict("harness delivery names another message at this sequence")
             for disposition in steps(claim.lifecycle):
                 # The revision fence refuses a step if the native owner moved the claim meanwhile.
                 claim = self.transition_in(
