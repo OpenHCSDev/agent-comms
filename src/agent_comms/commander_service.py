@@ -38,8 +38,8 @@ class CommanderService:
         """Every name a commander or one of its forks publishes under: any commander's recorded
         action disposes of a line on the one shared board."""
         return frozenset(
-            name for commander in snapshot.commander_project.commanders(snapshot)
-            for actor in (commander, *cls.forks(snapshot, commander.name))
+            name for thread in snapshot.threads.values()
+            for actor in thread.role.executor(thread)
             for name in snapshot.names_for(actor.name))
 
     @classmethod
@@ -64,8 +64,8 @@ class CommanderService:
         keeps its parked orders and requests, and gets no heartbeat or vibe check for them."""
         snapshot = registry.snapshot()
         project = snapshot.commander_project
-        commanders = project.commanders(snapshot)
-        if not cls.live(commanders) or not any(
+        commanders = cls.live(project.commanders(snapshot))
+        if not any(
                 goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
                 for thread in commanders):
             return ()

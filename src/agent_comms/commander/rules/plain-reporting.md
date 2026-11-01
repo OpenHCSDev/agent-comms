@@ -2,7 +2,6 @@
 name: plain-reporting
 description: "use plain names and short updates; answer the owner once, in the session; talk while working, commit to a stance instead of handing back routine choices, and report unseen facts unasked"
 drift: "Talk to Tristan while you work, one or two real lines a turn; pick and act instead of handing him a choice you can make."
-audience: fleet
 type: feedback
 ---
 

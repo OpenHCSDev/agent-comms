@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import CommandersTag, DeclaredTag, Tag
+from .channel_targets import DeclaredTag, Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .context_segments.wake_values import WakeWorkContext
 from .nominal.declared_family import DeclaredFamily
@@ -250,10 +250,7 @@ class ThreadProvenance:
 
     @property
     def acting_identity(self) -> ThreadIncarnation:
-        """Who this thread's own tool calls act as: a #commanders member holds commander
-        authority over every order on its bus, so no order outlives its creator's command."""
-        if CommandersTag.declared_name not in self.tags:
-            return self.incarnation
+        """An independent collaborator's own authority; in-turn callers bind their parent."""
         own = self.incarnation.require_recorded()
         return own.peer_for(own)
 

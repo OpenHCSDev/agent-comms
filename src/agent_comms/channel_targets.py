@@ -704,10 +704,4 @@ class CommsTag(DeclaredTag):
 
 
 class CommandersTag(DeclaredTag):
-    """The commanders of this bus: a member acts under its own name, holds the commander role
-    in its hooks and receives the heartbeat board. A role, not an audience: a thread carries
-    it only when it was itself declared a commander, never because its parent was."""
-
-    @classmethod
-    def inherited(cls) -> bool:
-        return False
+    """A coordination channel identity, never a permission or execution role."""

@@ -23,10 +23,8 @@ class ReviewedMerge:
     """The CLI and resident hook share exact-head authorization, not a subprocess protocol."""
 
     def require_actor(self, snapshot: RegistrySnapshot, actor: RecordedThreadIncarnation) -> None:
-        if not snapshot.commander_project.by_role(
-                snapshot.born(actor.lookup), commander=True, commanded=False):
-            raise ToolRefusedError(
-                "Only a bound commander session may use a reviewed merge bypass.")
+        snapshot.born(actor.lookup)
+        snapshot.commander_project.require()
 
     def reviewed_merges(self, ctx: Comms, snapshot: RegistrySnapshot,
                         actor: RecordedThreadIncarnation,

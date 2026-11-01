@@ -26,15 +26,13 @@ from .transcript_events import (
 from .thread_text import NoThreadText, ThreadText
 from .thread_identity import OfferedTools
 from .turn_phase import IdlePhase, ModelWaitPhase, TurnPhase
-from .turn_item import NativeItemId, NativeTurnId, NoSourceTurn, TurnItem
+from .turn_item import NativeItemId, NativeTurnId, TurnItem
 
 if TYPE_CHECKING:
     from .agent_events import RuntimeInfoObservation
     from .cli_bridges.shared import TranscriptBridge
     from .importing import ImportBuffer
     from .comms import Comms
-    from .messaging import Messaging
-    from .thread_status import ThreadStatus
 
 
 @dataclass
@@ -244,92 +242,6 @@ class ThreadOutput(activity.ThreadOutput):
     @property
     def activity_thread(self) -> str:
         return self.transcript.incarnation.name
-
-
-@dataclass
-class ReplyingThreadOutput(ThreadOutput):
-    """The last finished assistant item replies only to deliveries that opened its turn."""
-
-    messaging: Messaging = field(kw_only=True)
-    pending: dict[TurnItem, FinishedItem] = field(default_factory=dict)
-    # Sent is sent: staging shares this one map, so a refused batch never sends a reply again.
-    sent: dict[tuple[TurnItem, str], tuple[MessageReference, ...]] = field(default_factory=dict)
-
-    def staged(self) -> Self:
-        return replace(super().staged(), pending=self.pending.copy())
-
-    def commit(self, staged: Self) -> None:
-        super().commit(staged)
-        self.pending = staged.pending
-        for sent in tuple(self.sent):
-            if sent[0] not in self.pending:
-                del self.sent[sent]
-
-    @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
-        """A commanded session's last item replies to the senders delivered in its turn; the
-        commander answers its owner in its own transcript and messages units only by tool."""
-        snapshot = comms.registry.snapshot()
-        return snapshot.commander_project.by_role(
-            snapshot.born(transcript.incarnation.require_recorded().lookup),
-            commander=ThreadOutput(transcript, comms.agents),
-            commanded=cls(transcript, comms.agents, messaging=comms.messaging),
-        )
-
-    def flush_before(self, key: TurnItem) -> None:
-        for previous in tuple(self.pending):
-            if previous != key:
-                super().publish_item(self.pending.pop(previous))
-
-    def publish_item(self, item: FinishedItem) -> None:
-        self.flush_before(item.key)
-        if item.assistant_text:
-            self.pending[item.key] = item
-            self.transcript.draft(turn_id=item.turn_id, item_id=item.item_id, events=item.events)
-        else:
-            super().publish_item(item)
-
-    def publish_draft(self, item: DraftItem) -> None:
-        self.flush_before(item.key)
-        super().publish_draft(item)
-
-    def end_turn(self, turn_id: NativeTurnId) -> None:
-        opening = self.messaging.bus.bus.messages_for_references(self.transcript.opening_for(turn_id))
-        replies: dict[str, list[MessageReference]] = {}
-        for message in opening:
-            for target in message.automatic_reply_targets():
-                replies.setdefault(target, []).append(message.reference)
-        recipients: dict[str, ThreadStatus] = {}
-        if replies:
-            registry = self.messaging.registry.snapshot()
-            recipients = {target: registry.status(target) for target in replies}
-        for key in tuple(self.pending):
-            if key.turn_id != turn_id:
-                continue
-            item = self.pending[key]
-            for target, references in sorted(replies.items()):
-                if (key, target) not in self.sent:
-                    self.sent[key, target] = recipients[target].reply(
-                        self.messaging, sender=self.activity_thread, target=target,
-                        body=item.assistant_text, answers=tuple(references),
-                        source_turn=NoSourceTurn(),
-                    )
-            published = tuple(publication for target in sorted(replies)
-                              for publication in self.sent[key, target])
-            super().publish_item(replace(item, events=tuple(
-                event.with_publications(published) for event in item.events
-            )))
-            del self.pending[key]
-        super().end_turn(turn_id)
-
-    def end_all_turns(self) -> None:
-        for turn_id in dict.fromkeys(key.turn_id for key in self.pending):
-            self.end_turn(turn_id)
-        super().end_all_turns()
-
-    def cancel_all_turns(self) -> None:
-        self.pending.clear()
-        super().cancel_all_turns()
 
 
 class ReadingPhase(ABC):

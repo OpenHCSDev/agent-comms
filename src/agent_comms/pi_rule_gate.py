@@ -14,13 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from agent_comms_hooks.skill import (
-    CommanderReader,
-    CommanderRulesReader,
-    DeckReader,
-    FleetReader,
-    FleetRulesReader,
-)
+from agent_comms_hooks.skill import DeckReader, RulesOnly
 
 from .bus_publication import Delivered
 from .nominal.field_codec import ThreadLookup
@@ -58,7 +52,7 @@ class PiRuleGate(DealtRuleGate):
 
 @dataclass(frozen=True)
 class PiRedeal(PiRuleGate, Redeals):
-    """The deal Core renews for a thread: its role's sources and the owner's latest words."""
+    """The shared sources and owner's latest words for this independent session."""
 
     comms: Comms
     thread: Thread
@@ -70,23 +64,16 @@ class PiRedeal(PiRuleGate, Redeals):
 
     def renew(self, trigger: DealTrigger) -> None:
         """A start or compaction deals the papers, then the rules."""
-        self.deal_from(CommanderReader, FleetReader, trigger)
+        self.deal_from(DeckReader, trigger)
 
     def reread(self, trigger: DealTrigger) -> None:
-        self.deal_from(CommanderRulesReader, FleetRulesReader, trigger)
+        self.deal_from(RulesOnly, trigger)
 
-    def deal_from(self, commander: type[DeckReader], commanded: type[DeckReader],
-                  trigger: DealTrigger) -> None:
-        """The registry's commander project picks the deck reader whose sources it deals."""
+    def deal_from(self, reader: type[DeckReader], trigger: DealTrigger) -> None:
+        """Material selection is explicit; the captured incarnation still binds the deal."""
         snapshot = self.comms.registry.snapshot()
-        snapshot.commander_project.deal_rules(
-            self,
-            snapshot.born(self.thread.incarnation.require_recorded().lookup),
-            commander=commander,
-            commanded=commanded,
-            prompts=self.owner_words(snapshot),
-            trigger=trigger,
-        )
+        snapshot.born(self.thread.incarnation.require_recorded().lookup)
+        self.deal(reader, self.owner_words(snapshot), trigger)
 
     def owner_words(self, snapshot: RegistrySnapshot) -> tuple[str, ...]:
         """What the registry's human last typed to this thread, oldest first: the same person
