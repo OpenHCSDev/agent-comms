@@ -2,7 +2,6 @@
 name: owner-authority
 description: "Tristan's plans and directions are the target; no agent substitutes its own frame, priorities or industry habit; plan movement and defects made impossible are progress, ceremony is not; every defect is asked whether it should ever have been possible"
 drift: "Tristan's plans are the work and his positions are theorems. Your own frame is not."
-audience: fleet
 type: hard-rule
 ---
 

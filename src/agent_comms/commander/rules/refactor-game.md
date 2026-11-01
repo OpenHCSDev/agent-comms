@@ -2,7 +2,6 @@
 name: refactor-game
 description: "play against a retained source map; batch supported codemods and score distinct verified structural obligations discharged, with unresolved work and regressions visible; single-player uses the same evidence"
 drift: "Expected removals are a prediction. Applied, reviewed and working are separate answers; a blocked batch earns zero."
-audience: fleet
 type: feedback
 ---
 

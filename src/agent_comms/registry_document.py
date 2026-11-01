@@ -82,7 +82,6 @@ if TYPE_CHECKING:
     from .activity import ObservedActivity
     from .agent_activity import AgentActivity
     from .bus_publication import Delivered
-    from .rule_deal import DealTrigger, DealtSources, RuleDeal
 
 
 @dataclass(frozen=True, slots=True)
@@ -600,13 +599,6 @@ class CommanderProject(DeclaredFamily, affix="CommanderProject"):
                         commander: Answer, commanded: Answer) -> Answer:
         """The resolved thread carries its nominal identity and declared role capabilities."""
         return commanded
-
-    def deal_rules(self, deal: RuleDeal, thread: Thread, *,
-                   commander: type[DealtSources], commanded: type[DealtSources],
-                   prompts: tuple[str, ...], trigger: DealTrigger) -> None:
-        """The fleet's rules are dealt by the role this project gives the thread."""
-        deal.deal(self.by_role(thread, commander=commander, commanded=commanded), prompts,
-                  trigger)
 
 
 class NoCommanderProject(CommanderProject):
