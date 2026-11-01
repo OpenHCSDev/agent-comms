@@ -69,7 +69,11 @@ receipt acknowledgments. Tristan should not have to decode compressed jargon.
   sheets and intermediate verification output in batches after checking actual
   active borrowers. Do not keep every recording, require every past reader's
   acknowledgement, or copy whole logs into status reports. Preserve user sessions,
-  auth, wire data, UNKNOWN inputs and scientific originals.
+  auth, wire data, UNKNOWN inputs and scientific originals that something live
+  still reads: Tristan, a running agent, an open diagnosis. State whose only
+  reader is gone (a dead session's open question, a retired agent's leftovers)
+  is deleted, not carried. Before building a backup, lock or migration for any
+  state, ask who would notice if it vanished; if nobody, delete it and say so.
   Build file wheels from the existing owned checkout and reuse unchanged wheels
   and dependencies instead of creating another VCS source clone for each stage.
 
