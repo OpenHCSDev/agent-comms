@@ -28,7 +28,7 @@ from .native_tool_call import (
     SelectedToolBusy,
     ToolOutcomeUnknown,
 )
-from .pi_payloads import PiContent
+from .pi_payloads import AssistantMessage
 from .private_path import PrivateDirectoryRole, PrivateSocketRole
 from .tool_denial import SelectedToolDenied
 
@@ -92,18 +92,19 @@ class NativeToolRound(Generic[Call]):
     """One decoded assistant message; call ids are unique only within this boundary."""
 
     number: int
+    assistant: AssistantMessage
     declared: tuple[Call, ...]
 
     @classmethod
     def decode(
         cls,
         number: int,
-        content: tuple[PiContent, ...],
+        assistant: AssistantMessage,
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
         declared: list[Call] = []
         seen: set[str] = set()
-        for item in content:
+        for item in assistant.parts:
             for tool_call in item.tool_calls():
                 call = decode_call(tool_call.id, tool_call.name, tool_call.arguments)
                 if call.call_id in seen:
@@ -114,7 +115,7 @@ class NativeToolRound(Generic[Call]):
                 raise SelectedToolDenied("Invalid native tool content")
         if not declared:
             raise SelectedToolDenied("Native tool round has no declared call")
-        return cls(number, tuple(declared))
+        return cls(number, assistant, tuple(declared))
 
 
 class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
@@ -129,10 +130,10 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
 
     def decode_round(
         self,
-        content: tuple[PiContent, ...],
+        assistant: AssistantMessage,
         decode_call: Callable[[object, object, object], Call],
     ) -> NativeToolRound[Call]:
-        round = NativeToolRound.decode(len(self.rounds), content, decode_call)
+        round = NativeToolRound.decode(len(self.rounds), assistant, decode_call)
         if self.rounds:
             for call in self.rounds[-1].declared:
                 call.progress.observation.require(Complete, ToolOutcomeUnknown())
@@ -150,7 +151,7 @@ class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
                 resolved.append(existing)
             else:
                 resolved.append(candidate)
-        announced = NativeToolRound(round.number, tuple(resolved))
+        announced = NativeToolRound(round.number, round.assistant, tuple(resolved))
         for call in announced.declared:
             call.announce()
         for identity, call in zip(identities, resolved, strict=True):
@@ -305,8 +306,8 @@ class ToolTransport(Generic[Call]):
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
 
-    def announce(self, content: tuple[PiContent, ...]) -> None:
-        round = self.calls.decode_round(content, self.decode_call)
+    def announce(self, assistant: AssistantMessage) -> None:
+        round = self.calls.decode_round(assistant, self.decode_call)
         self.validate_round(round)
         self.calls.announce(round)
 
