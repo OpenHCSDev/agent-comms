@@ -175,6 +175,8 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
     metadata, peer_segment, question_segment = frame.input_segments()
     following = MessageDelivery(original, assignments[question.seq], people[1]).segment()
     assert metadata is frame and frame.sources == sources
+    assert tuple(reference for source in metadata.provenance
+                 for reference in source.bus_references()) == ()
     assert type(question_segment) is UserInputSegment
     assert type(following) is UserInputSegment
     assert following.text() == question_segment.text() == question.body
