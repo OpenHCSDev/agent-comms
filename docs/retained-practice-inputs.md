@@ -34,6 +34,27 @@ existing placement, so this inspection API does not change a stored schema or
 require a carry. This is a prerequisite API, not a wired retention selector, and
 has no application acceptance yet.
 
+## Attached-source raw-row primitive — source only
+
+`AttachedPracticeRebuild.retain_rows` selects original writable SQL columns and
+inserts them unchanged into its bound destination connection. The existing
+`PracticeRebuild.attached` context supplies that connection with the active source;
+a mere path descriptor cannot select another attachment through a caller-supplied
+database. A declared primary key controls repeat selection; a missing key refuses.
+Other constraint conflicts are not hidden by `INSERT OR IGNORE`.
+
+`ForeignKey.retain_parents` puts the original parent columns on the left of the
+comparison, preserving SQLite parent affinity/collation and NULL-key behavior.
+Internal aliases derive from the target declaration and cannot shadow its outer
+table name. `TableSchema.retain_referenced_rows` expands one pass through declared
+edges, including column references. It is not a fixed-point or semantic closure.
+
+This new primitive is not yet consumed by CoordinationStore/PracticeCopy. Guard-safe
+loading, required children, source snapshot consistency, producer metadata,
+sequences, schema compatibility, materialized bounds and copy behavior remain
+unqualified. No original lifecycle is rewritten and no full-copy/backup behavior
+is changed. These methods are implementation prerequisites, not a runnable root.
+
 ## Required preservation that SQL foreign keys do not establish
 
 * **Uncertain inputs:** `InputDispositions.unresolved(entries)` joins original

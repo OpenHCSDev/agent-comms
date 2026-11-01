@@ -483,6 +483,27 @@ class ForeignKey(TableReference):
             + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
         )
 
+    def retain_parents(
+        self, owner: type[TypedTable], original: AttachedPracticeRebuild,
+    ) -> int:
+        """Original parents of selected rows, using SQLite's FK value comparison.
+
+        The parent column is on the left so its affinity/collation governs the
+        comparison, as it does for the actual constraint. A NULL source key
+        therefore contributes no parent; encoded SQL values are not decoded as
+        one domain type and re-encoded as a different target type.
+        """
+        referencing = _identifier(self.target.declared_name + "_referencing")
+        related = " AND ".join(
+            f"{self.target.qualified(parent)} = {referencing}.{owner._column_list((child,))}"
+            for child, parent in zip(self.columns, self.target_columns, strict=True)
+        )
+        return original.retain_rows(
+            self.target,
+            where=f"EXISTS (SELECT 1 FROM main.{_identifier(owner.declared_name)} "
+                  f"AS {referencing} WHERE {related})",
+        )
+
 
 class SqlProjection:
     """Scalar and record projections read SQLite's result columns at one boundary."""
@@ -1009,12 +1030,12 @@ class PracticeRebuild(SchemaRebuild):
     database: ClassVar[str] = __qualname__
 
     @contextmanager
-    def attached(self, db: sqlite3.Connection) -> Iterator[SchemaRebuild]:
+    def attached(self, db: sqlite3.Connection) -> Iterator[AttachedPracticeRebuild]:
         with closing(SQLiteFile.read_snapshot(self.path)) as source:
             db.execute(f'ATTACH DATABASE ? AS "{self.database}"',
                        (self.path.resolve().as_uri() + "?mode=ro",))
             try:
-                yield AttachedPracticeRebuild(source)
+                yield AttachedPracticeRebuild(source, db)
             finally:
                 db.execute(f'DETACH DATABASE "{self.database}"')
 
@@ -1022,6 +1043,35 @@ class PracticeRebuild(SchemaRebuild):
 @dataclass(frozen=True)
 class AttachedPracticeRebuild(SchemaRebuild):
     source: sqlite3.Connection
+    destination: sqlite3.Connection
+
+    def retain_rows(
+        self, row: type[TypedTable], *,
+        where: str = "1", parameters: tuple[object, ...] = (),
+    ) -> int:
+        """Copy original writable SQL values through this active source attachment.
+
+        This is a row primitive, not a complete-store preservation certificate.
+        The caller owns destination freshness, guard/loading lifetime, semantic
+        dependencies and producer metadata. No stored JSON is reconstructed.
+        """
+        keys = tuple(item.name for item in row._columns if item.column.primary_key)
+        if not keys:
+            raise RelationViolationError(f"{row.declared_name} has no declared retention key")
+        fields = tuple(item.name for item in row._writable_fields())
+        retained_alias = _identifier(row.declared_name + "_retained")
+        retained = " AND ".join(
+            f"{retained_alias}.{row._column_list((key,))} IS {row.qualified(key)}" for key in keys
+        )
+        table = _identifier(row.declared_name)
+        return self.destination.execute(
+            f"INSERT INTO main.{table} ({row._column_list(fields)}) "
+            f"SELECT {row.qualified(*fields)} "
+            f"FROM {_identifier(PracticeRebuild.database)}.{table} AS {table} "
+            f"WHERE ({row._sql(where)}) AND NOT EXISTS "
+            f"(SELECT 1 FROM main.{table} AS {retained_alias} WHERE {retained})",
+            parameters,
+        ).rowcount
 
     def rebuild(
         self, schema: type[DerivedTables], db: sqlite3.Connection,
@@ -1174,6 +1224,18 @@ class TableSchema(ABC):
     @classmethod
     def schema_rows(cls) -> tuple[type[TypedTable], ...]:
         return tuple(TypedTable.members_with(cls))
+
+    @classmethod
+    def retain_referenced_rows(
+        cls, original: AttachedPracticeRebuild,
+    ) -> int:
+        """One forward-FK expansion from selected rows; not semantic closure.
+
+        Required dependent children and references inside serialized values must
+        be supplied by their owning declarations, never inferred absent here.
+        """
+        return sum(reference.retain_parents(row, original)
+                   for row in cls.schema_rows() for reference in row.foreign_keys())
 
     @classmethod
     def declares_schema(cls) -> bool:
