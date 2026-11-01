@@ -2,7 +2,9 @@
 
 import asyncio
 from dataclasses import dataclass, field, replace
+from functools import partial
 import sqlite3
+import sys
 
 from acp.schema import SessionInfoUpdate
 from pydantic import BaseModel
@@ -21,6 +23,7 @@ from agent_comms.goal_presentation import StandbyExecution
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.locked_store import GoalWakeFile, RegistryFile
 from agent_comms.repo import Checkout
+from agent_comms.registry_document import RegistryDocument
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
@@ -115,7 +118,10 @@ async def test_registry_routing_uses_only_the_shared_document_and_published_goal
     document = comms.registry.store.read()
     original = scheduler.publication(session).snapshot
     reads = comms.registry.store.cache.read_counts().requests
-    await scheduler.observe_root(document, (session,), frozenset((RegistryFile.path_in(comms.root),)))
+    await asyncio.gather(*scheduler.observe_root(
+        document, (agent.inputs.state(session).owned(),),
+        frozenset((RegistryFile.path_in(comms.root),)),
+    ))
     assert comms.registry.store.cache.read_counts().requests == reads
     assert scheduler.publication(session).snapshot is original
     assert len(client.published) == 1
@@ -164,7 +170,10 @@ async def test_attempt_signal_refreshes_complete_projection_but_does_not_publish
     document = comms.registry.store.read()
     before = scheduler.publication(session).snapshot
     reads = comms.registry.store.cache.read_counts().requests
-    await scheduler.observe_root(document, (session,), frozenset(store.source_paths(store.path.parent)))
+    await asyncio.gather(*scheduler.observe_root(
+        document, (agent.inputs.state(session).owned(),),
+        frozenset(store.source_paths(store.path.parent)),
+    ))
     assert comms.registry.store.cache.read_counts().requests > reads
     assert scheduler.publication(session).snapshot is before
     assert len(client.published) == 1
@@ -183,9 +192,117 @@ async def test_failed_goal_read_keeps_cause_and_never_creates_input_diagnostic(p
         db.execute(f'DROP TABLE "{Generation.declared_name}"')
     with pytest.raises(StorageUncertainError):
         await scheduler.sync_goal_execution(session)
-    await scheduler.observe_root(document, (session,), frozenset(store.source_paths(path.parent)))
+    outcomes = await asyncio.gather(*scheduler.observe_root(
+        document, (agent.inputs.state(session).owned(),),
+        frozenset(store.source_paths(path.parent)),
+    ), return_exceptions=True)
+    assert len(outcomes) == 1 and isinstance(outcomes[0], StorageUncertainError)
     assert any(record.exc_info and isinstance(record.exc_info[1], StorageUncertainError)
                for record in caplog.records)
     assert scheduler.publication(session).snapshot is before
     assert len(client.published) == 1
     assert tuple((comms.root / "diagnostics").glob("drain-*.json")) == diagnostics
+
+
+async def test_idle_retirement_never_acquires_an_unloaded_session(publication):
+    _comms, agent, _session, _client = publication
+    missing = AcpSessionId("never-loaded")
+    before = dict(agent.inputs.drained)
+    await agent.turns.close_idle_backend(missing)
+    assert agent.inputs.drained == before
+    assert missing not in agent.turns.persistent_backends
+
+
+async def test_idle_retirement_uses_the_backend_contract_and_respects_a_held_turn(publication):
+    from agent_comms.native_child import PiChild
+    from agent_comms.pi_durable_backend import PiDurableBackend
+
+    comms, agent, session, _client = publication
+    backend = PiDurableBackend()
+    child = await PiChild.start_command(
+        (sys.executable, "-c", "import sys; sys.stdin.buffer.read()"), cwd=str(comms.root),
+    )
+    backend.child = child
+    agent.turns.persistent_backends[session] = backend
+    try:
+        async with agent.inputs.state(session).turn_lock:
+            await agent.turns.close_idle_backend(session)
+            assert backend.child is child
+            assert child.proc.alive()
+        await agent.turns.close_idle_backend(session)
+        assert backend.child is None
+        assert child.retired
+    finally:
+        await backend.close_idle()
+
+
+async def test_observation_joins_before_retirement_and_captured_sources_cannot_reopen(publication):
+    comms, agent, session, client = publication
+    owner = agent.inputs.state(session).owned()
+    document = comms.registry.store.read()
+    entered, release = (asyncio.Event(), asyncio.Event()), asyncio.Event()
+
+    async def observation(started):
+        started.set()
+        await release.wait()
+        assert agent.sessions.require(session) == session
+        assert agent.inputs.state(session) is owner
+
+    observing = tuple(asyncio.create_task(owner.observe_live(partial(observation, started)))
+                      for started in entered)
+    stopping = None
+    try:
+        await asyncio.wait_for(asyncio.gather(*(started.wait() for started in entered)), 3)
+        fenced = comms.owners.fence_stop(session)
+        request, = comms.owners.stop_requests(fenced)
+        stopping = asyncio.create_task(request.retire(agent.sessions, owner))
+        await asyncio.sleep(0)
+        assert not stopping.done()
+        release.set()
+        await asyncio.wait_for(asyncio.gather(*observing, stopping), 8)
+        assert owner.retired.done()
+        assert session not in agent.sessions.published
+        assert session not in agent.inputs.drained
+        before = len(client.published)
+        await owner.observe_live(lambda: agent.sessions.config.refresh_configuration(session))
+        for source in (document, RegistryDocument()):
+            await asyncio.gather(*agent.turns.goals.observe_root(
+                source, (owner,), frozenset((RegistryFile.path_in(comms.root),)),
+            ))
+        assert len(client.published) == before
+        assert session not in agent.inputs.drained
+        assert session not in agent.turns.persistent_backends
+    finally:
+        release.set()
+        await asyncio.gather(*(task for task in (*observing, stopping) if task is not None),
+                             return_exceptions=True)
+
+
+async def test_queued_initial_menu_obeys_the_original_owner_stop(publication):
+    _comms, agent, session, client = publication
+    owner = agent.inputs.state(session).owned()
+    menu = agent.sessions.config.start_menu(session, client)
+    owner.request_stop()
+    await asyncio.wait_for(menu, 3)
+    assert not agent.turns.persistent_backends
+
+
+async def test_cancelled_observation_releases_retirement_admission(publication):
+    _comms, agent, session, _client = publication
+    owner = agent.inputs.state(session).owned()
+    entered = asyncio.Event()
+
+    async def observation():
+        entered.set()
+        await asyncio.Future()
+
+    observing = asyncio.create_task(owner.observe_live(observation))
+    try:
+        await asyncio.wait_for(entered.wait(), 3)
+        observing.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await observing
+        await asyncio.wait_for(owner.join_observations(), 3)
+    finally:
+        observing.cancel()
+        await asyncio.gather(observing, return_exceptions=True)

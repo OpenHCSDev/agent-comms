@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from .runtime import RuntimeServer
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
+    from .input_drain import OwnerSession
     from .threads import Thread
 
 
@@ -49,7 +50,7 @@ class SessionConfigOptions:
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[AcpSessionId, ConfigOptionUpdate] = {}
-        self._publication_sessions: set[AcpSessionId] = set()
+        self._observed_owners: dict[AcpSessionId, OwnerSession] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self.observer = self.runtime.background(self._observe_configuration())
         # The stored settings each session's owner last saw, to notice a change.
@@ -114,7 +115,7 @@ class SessionConfigOptions:
             await self.effects.inputs.state(session_id).owned().configuration.catalog_for(member).change(self, thread, value)
         except (NativePiUnavailable, InvalidConfigChoice) as error:
             raise Refused.invalid_params({"reason": str(error)}) from error
-        await self.effects.turns.close_idle_backend(session_id, thread)
+        await self.effects.turns.close_idle_backend(session_id)
         await self.use_stored_settings(session_id, name)
         return SetSessionConfigOptionResponse(
             config_options=await self.publish_configuration(session_id),
@@ -167,8 +168,9 @@ class SessionConfigOptions:
 
     def start_menu(self, session_id: AcpSessionId, client: SessionUpdateSink) -> asyncio.Task[None]:
         """Retain initial publication until it finishes or its consumer retires."""
-        self._publication_sessions.add(session_id)
-        task = self.runtime.background(self.send_menu(client, session_id))
+        owner = self.effects.inputs.state(session_id).owned()
+        self._observed_owners[session_id] = owner
+        task = self.runtime.background(owner.observe_live(partial(self.send_menu, client, session_id)))
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
         return task
@@ -209,19 +211,23 @@ class SessionConfigOptions:
         )
 
     def stop_observing_configuration(self, session_id: AcpSessionId) -> None:
-        self._publication_sessions.discard(session_id)
+        self._observed_owners.pop(session_id, None)
         self.publications.pop(session_id, None)
 
     async def _observe_configuration(self) -> None:
         async with aclosing(Bus.watch_sources(FileSource(self.comms.registry.store.path))) as observations:
             async for _ in observations:
-                for session_id in tuple(self._publication_sessions):
-                    await self.sessions.sync_identity(session_id)
-                    await self.publish_configuration(session_id)
+                for owner in tuple(self._observed_owners.values()):
+                    await owner.observe_live(partial(self.refresh_configuration, owner.identifier))
+
+    async def refresh_configuration(self, session_id: AcpSessionId) -> None:
+        """Refresh within the original owner's admitted observation lifetime."""
+        await self.sessions.sync_identity(session_id)
+        await self.publish_configuration(session_id)
 
     async def close(self) -> None:
         await self.retire_observations((*self._tasks, self.observer))
-        self._publication_sessions.clear()
+        self._observed_owners.clear()
 
     async def publish_configuration(
         self, session_id: AcpSessionId,
