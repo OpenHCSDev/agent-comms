@@ -20,6 +20,7 @@ from agent_comms.typed_table import (
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
+    TableSchema,
 )
 
 
@@ -53,10 +54,12 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
     committed: bool
 
     @classmethod
-    def retain_required_rows(cls, original: AttachedPracticeRebuild) -> int:
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
         from agent_comms.participant_store import ParticipantStore
 
-        return super().retain_required_rows(original) + ParticipantStore.retain_owners(
+        return super().retain_required_rows(original, schema) + ParticipantStore.retain_owners(
             original, tuple(person.participant_lookup for person in cls.select(original.destination)),
         )
 

@@ -19,6 +19,7 @@ from agent_comms.coordination_tables.executions import (
     AcpOrigin, CurrentExecutions, ExecutionRecord, NoPointedAttempt, NoPointedExecution,
 )
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
+from agent_comms.coordination_tables.recovery import RecoveryAudit
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.message_reference import MessageReference
@@ -27,8 +28,10 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.participant_store import ParticipantStore
+from agent_comms.reason_codes import GivenReasonCode, NoDetail
+from agent_comms.recovery_states import ModelStalledRecovery
 from agent_comms.triage_native_sources import TriageNativeSource
-from agent_comms.typed_table import TypedTable
+from agent_comms.typed_table import TypedTable, UnallocatedRowId
 from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID, RECIPIENT_LOOKUP, prepare_native_comms,
@@ -233,9 +236,10 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     absent = ThreadLookup('8' * 32)
     source.store.participants.register(unrelated, committed=True)
     source.store.create('selected-current', AcpOrigin, RECIPIENT_LOOKUP, 1)
+    source.store.mark_pending('selected-current', expected_revision=1)
     source.store.start(AttemptStart(
         'selected-current', 1, RECIPIENT_LOOKUP, 2, prepare_fence_token(),
-        expected_execution_revision=1, expected_pointer_revision=0,
+        expected_execution_revision=2, expected_pointer_revision=0,
     ))
     expected = source.store.participants.get(RECIPIENT_LOOKUP)
     before = CoordinationStore.digest(source.path)
@@ -280,6 +284,56 @@ def test_incomplete_original_participant_refuses_selected_publication(
         with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
             ParticipantStore.retain_owners(original, (lookup,))
     assert not destination.exists()
+    assert CoordinationStore.digest(source.path) == before
+
+
+@pytest.mark.parametrize('keys,selected_count', (
+    (({'execution_id': 'sequence-selected'},), 1),
+    ((), 0),
+), ids=('lower-audit', 'empty-selection'))
+def test_selected_store_keeps_sqlite_high_water_without_rowid_mixin(
+    harness_source: HarnessSource, tmp_path: Path,
+    keys: tuple[dict[str, object], ...], selected_count: int,
+) -> None:
+    source = harness_source
+    other = ThreadLookup('6' * 32)
+    source.store.participants.register(other, committed=True)
+    for execution, owner in (('sequence-selected', RECIPIENT_LOOKUP), ('sequence-omitted', other)):
+        source.store.create(execution, AcpOrigin, owner, 1)
+        source.store.mark_pending(execution, expected_revision=1)
+        source.store.start(AttemptStart(
+            execution, 1, owner, 1, prepare_fence_token(),
+            expected_execution_revision=2, expected_pointer_revision=0,
+        ))
+        # Actual stored audit rows exercise allocation, not model-stall or native proof.
+        with source.store.session.writing() as db:
+            cursor = RecoveryAudit(
+                execution_id=execution, kind=ModelStalledRecovery,
+                reason_code=GivenReasonCode('sequence_control'), sanitized_detail=NoDetail(),
+                attempt=1, elapsed_ms=0, observed_at_ms=1000,
+            ).insert(db)
+            source_high_water = cursor.lastrowid
+    assert source_high_water is not None
+    with source.store.session.read():
+        audits = tuple(RecoveryAudit.select(source.store.session._connection, order_by=('audit_id',)))
+    before = CoordinationStore.digest(source.path)
+    destination = tmp_path / 'sequence-retained' / 'coordination.sqlite3'
+    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+        original.retain_keys(ExecutionRecord, keys)
+    with StandaloneCoordination(str(destination), clock_ms=lambda: 1000) as retained:
+        with retained.session.read():
+            assert tuple(RecoveryAudit.select(retained.session._connection, order_by=('audit_id',))) == audits[:selected_count]
+        fresh_owner = ThreadLookup('5' * 32)
+        retained.participants.register(fresh_owner, committed=True)
+        retained.create('sequence-new', AcpOrigin, fresh_owner, 1)
+        retained.mark_pending('sequence-new', expected_revision=1)
+        retained.start(AttemptStart(
+            'sequence-new', 1, fresh_owner, 1, prepare_fence_token(),
+            expected_execution_revision=2, expected_pointer_revision=0,
+        ))
+        with retained.session.writing() as db:
+            fresh = replace(audits[0], execution_id='sequence-new', audit_id=UnallocatedRowId())
+            assert fresh.insert(db).lastrowid == source_high_water + 1
     assert CoordinationStore.digest(source.path) == before
 
 

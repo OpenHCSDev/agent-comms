@@ -1135,6 +1135,37 @@ class AttachedPracticeRebuild(SchemaRebuild):
             self.destination, keys, table_source=self.source,
         ))
 
+    def retain_sequences(self) -> None:
+        """Copy SQLite's original high-water marks once, including empty selections.
+
+        Allocation belongs to SQLite metadata, not membership in a row-insertion
+        capability. Only tables present in the selected file's schema participate.
+        """
+        if not SQLiteSchemaObject.read(self.destination.execute(
+            f"SELECT original.name,original.sql FROM {self.source.qualified('sqlite_master')} original "
+            "JOIN main.sqlite_master retained ON retained.name=original.name "
+            "WHERE original.name='sqlite_sequence' "
+            "AND original.type='table' AND retained.type='table'",
+        )):
+            return
+        source = self.source.qualified("sqlite_sequence")
+        self.destination.execute(
+            "INSERT INTO main.sqlite_sequence(name,seq) "
+            f"SELECT original_sequence.name,original_sequence.seq FROM {source} original_sequence "
+            "JOIN main.sqlite_master retained_table ON retained_table.name=original_sequence.name "
+            "AND retained_table.type='table' "
+            "WHERE NOT EXISTS(SELECT 1 FROM main.sqlite_sequence retained_sequence "
+            "WHERE retained_sequence.name=original_sequence.name)",
+        )
+        self.destination.execute(
+            "UPDATE main.sqlite_sequence AS retained_sequence "
+            f"SET seq=(SELECT seq FROM {source} original_sequence "
+            "WHERE original_sequence.name=retained_sequence.name) "
+            f"WHERE EXISTS(SELECT 1 FROM {source} original_sequence "
+            "WHERE original_sequence.name=retained_sequence.name "
+            "AND retained_sequence.seq<original_sequence.seq)",
+        )
+
     def require_schema(self, schema: type[TableSchema]) -> None:
         """An unknown source column or trigger is not permission to silently discard it."""
         stored = SQLiteSchemaObject.read(self.destination.execute(
@@ -3187,6 +3218,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
                         yield original
                         while schema.retain_referenced_rows(original):
                             pass
+                        original.retain_sequences()
             retained_bytes = sum(member.stat().st_size for member in cls.files(staged)
                                  if member.is_file())
             if retained_bytes > maximum_bytes:
@@ -3538,33 +3570,6 @@ class RetainsChildren(TypedTable, declared_name=None):
 
 class RowidSequenced(TypedTable, declared_name=None):
     """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
-
-    @classmethod
-    def retain_required_rows(
-        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
-    ) -> int:
-        """AUTOINCREMENT's original high-water mark survives a selected row set."""
-        changed = super().retain_required_rows(original, schema)
-        # sqlite_sequence is SQLite-owned external metadata, absent when the
-        # source has no AUTOINCREMENT tables. Its presence is decoded here once.
-        if not SQLiteSchemaObject.read(original.destination.execute(
-            f"SELECT name,sql FROM {original.source.qualified('sqlite_master')} "
-            "WHERE name='sqlite_sequence'",
-        )):
-            return changed
-        source = original.source.qualified("sqlite_sequence")
-        changed += original.destination.execute(
-            "INSERT INTO main.sqlite_sequence(name,seq) "
-            f"SELECT name,seq FROM {source} AS original_sequence WHERE name=? "
-            "AND NOT EXISTS(SELECT 1 FROM main.sqlite_sequence AS retained_sequence "
-            "WHERE retained_sequence.name=original_sequence.name)", (cls.declared_name,),
-        ).rowcount
-        changed += original.destination.execute(
-            f"UPDATE main.sqlite_sequence SET seq=(SELECT seq FROM {source} WHERE name=?) "
-            f"WHERE name=? AND seq<(SELECT seq FROM {source} WHERE name=?)",
-            (cls.declared_name, cls.declared_name, cls.declared_name),
-        ).rowcount
-        return changed
 
     @classmethod
     def insert_sequence(cls, db: sqlite3.Connection, **values: object) -> int:

@@ -40,8 +40,9 @@ entry references and earlier request IDs. Missing originals and foreign-thread
 predecessors refuse. Whole retained predecessor records receive their own closure,
 not an incomplete predecessor that only one selected segment can read. The original
 ContextStoreInfo is required when requests are selected; entry-only selection does
-not invent one. `RowidSequenced` retains SQLite's original sequence high-water mark
-so an omitted original ID cannot become the next newly allocated ID.
+not invent one. The attached file-copy owner retains SQLite's original sequence
+high-water marks, so an omitted original ID cannot become the next newly allocated ID.
+The allocation metadata is not restricted to RowidSequenced's insertion capability.
 
 The earlier entry-only API's owner-path run retained 6,274 entries in 13,877,248
 materialized bytes with matching source-before/retained/source-after row digests.
@@ -242,7 +243,8 @@ They use the existing native-root/message/claim producers, compare the ordinary
 source and retained projections and original attempt rows, and check the source
 coordinator bytes and bus revision. Together with the eighteen previous cases,
 that checkpoint's **twenty-one added scenarios remained unrun**. The participant
-checkpoint below adds three more, for **twenty-four added scenarios UNRUN**.
+checkpoint below adds three more; the subsequent sequence controls add two,
+for **twenty-six added scenarios UNRUN**.
 These do not cover every disposition, native association or rollback/resource failure.
 
 Runtime class creation/MRO/registration, attached SQL, cross-store capture and
@@ -283,6 +285,40 @@ seed cases also require the retained aggregate. Source mapping covers 65 modules
 537 original class declarations, 519 canonical projections, no parse omissions;
 18 function-local test declarations remain unprojected OPEN. That is source
 coverage, not executed class/MRO/SQL behavior or complete closure.
+
+## Hook correction and SQLite allocation metadata — source only
+
+Source follow-through caught an error in the participant checkpoint: its new
+`Participants.retain_required_rows` omitted the `schema` argument that the base
+and actual `TableSchema.retain_referenced_rows` caller supply. It now accepts and
+passes that argument cooperatively. The whole declared hook family is checked at
+source; this is not runtime dispatch/MRO qualification. The active-pointer case
+also now calls the real `mark_pending` transition and expects revision 2 before
+`start`; QueuedExecution does not admit direct start. No product fallback was added
+to satisfy a faulty fixture.
+
+A separate preservation gap remained in the earlier rowid hook: `RecoveryAudit`,
+`SpanAnnotationsRow` and `AnnotationRequestsRow` declare AUTOINCREMENT columns but
+do not inherit `RowidSequenced`. Their SQLite high-water metadata could disappear.
+Two sources with identical selected lower rows but different original high-water
+marks require different next IDs; the selected rows alone cannot recover that.
+
+`AttachedPracticeRebuild.retain_sequences` now copies SQLite's own allocation
+metadata once after dependency closure, inside the existing load transaction and
+before guards/publication. The actual source/destination catalogs supply sequence
+presence and table membership; there is no row-family/table/field roster. Existing
+larger destination values are not lowered. Empty selection still preserves the
+original allocation metadata. The competing per-RowidSequenced hook is deleted;
+ordinary row insertion and complete copy/backup behavior are unchanged.
+
+Two additional cases are authored **UNRUN** using ordinary coordinator execution/
+Pending/start producers and typed audit-row insertion: retaining a lower audit, and
+retaining no rows at all. Both ask the normal destination writer to allocate a
+fresh audit ID after the omitted original high-water mark, and check source bytes.
+These are SQL allocation controls, not a real model-stall/native or recovery proof.
+The existing context-request/version allocation case remains part of the necessary
+combined selection. **Twenty-six added scenarios remain unrun.** SQLite execution,
+rollback, metadata/schema/guard behavior and peak resource bounds are unqualified.
 
 ## Copy and backup are different contracts
 
