@@ -10,7 +10,8 @@ from agent_comms import activity
 from agent_comms.activity import ActivityState, ObservedActivity
 from agent_comms.registry_document import DEFAULT_ROSTER
 from agent_comms.registry_provenance import DeletedThread
-from agent_comms.thread_presentation import NoThreadPresentation, ThreadRetired
+from agent_comms.thread_presentation import ThreadRetired
+from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.notification_reads import LiveNotificationRead
 from agent_comms.ui_model.observation import (
     ObservationProcess, ObserveThreads, ObserveViews, ReadNotifications,

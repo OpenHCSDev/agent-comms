@@ -14,7 +14,8 @@ import agent_comms.turn_failure as failures
 from agent_comms.nominal.field_codec import FieldCodec, InputId, MalformedRecord
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_tool_call import OwnerToolConnection
-from agent_comms.pi_payloads import AnonymousRequest, ReportedText, RequestId
+from agent_comms.pi_wire import AnonymousRequest, RequestId
+from agent_comms.pi_payloads import ReportedText
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.turn_item import PiRequestKey
 from agent_comms.turn_phase import (
@@ -237,7 +238,7 @@ def test_strict_native_decoding_cannot_check_malformed_rows(row):
 
 def test_private_evidence_refuses_duplicate_keys():
     from agent_comms.native_failures import NativePiUnavailable
-    from agent_comms.native_pi import PrivateEvidenceRead
+    from agent_comms.native_evidence_read import PrivateEvidenceRead
 
     with pytest.raises(NativePiUnavailable):
         PrivateEvidenceRead._decode_row(b'{"type":"session","type":"message"}\n')

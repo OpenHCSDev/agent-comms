@@ -19,8 +19,16 @@ from .turn_context import (
     UnobservedDispatchRequest,
 )
 
+from agent_comms.agent_events import AgentEvent
 if TYPE_CHECKING:
     from .context_store import CapturedContext
+
+
+@dataclass(frozen=True)
+class ContextObserved(AgentEvent):
+    """Text-free SDK input observation; no transcript or status publication."""
+
+    context: NativeContextManifestData
 
 
 @dataclass(frozen=True)

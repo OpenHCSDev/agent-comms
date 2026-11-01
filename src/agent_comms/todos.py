@@ -26,6 +26,7 @@ from functools import cached_property, partial
 from itertools import islice
 from math import ceil
 from pathlib import Path
+from subprocess import TimeoutExpired
 from statistics import median
 from types import MappingProxyType, get_original_bases
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self, cast, get_args, get_origin
@@ -38,21 +39,7 @@ from agent_comms.build_identity import (
     UnrecordedBuildIdentity,
 )
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms.change_report import (
-    CitedRevisions,
-    CommitRevision,
-    Declaration,
-    FileLine,
-    MainRevision,
-    NoSourceReference,
-    OrderRoots,
-    PullRequestHeadRevision,
-    SourceReference,
-    SourceRevision,
-    SourceRoots,
-    SourceText,
-    WorkingTree,
-)
+from agent_comms.change_report import CitedRevisions, CommitRevision, Declaration, FileLine, MainRevision, NoSourceReference, SourceReference, SourceRevision, SourceRoots, SourceText, WorkingTree
 from agent_comms.channel_targets import (
     CommandTarget,
     CommsTag,
@@ -140,7 +127,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout, GitCommandError, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.slop import DeclarationDerivation, Slop
-from agent_comms.storage_rules import EditWorkplaces, StorageRule, UnitStorage
+from agent_comms.storage_rules import CheckoutAllocation, StorageRule, UnitStorage
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     RecordedThreadIncarnation,
@@ -179,7 +166,11 @@ from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
+from agent_comms.change_report import FetchedRevision
+from agent_comms.registry_document import CommanderProject
+
 if TYPE_CHECKING:
+    from agent_comms.held_orders import LiveHold
     from agent_comms.bus import BusReader
     from agent_comms.commander.order import (
         Commander,
@@ -191,7 +182,49 @@ if TYPE_CHECKING:
     from agent_comms.comms import Comms
     from agent_comms.goal_management import Goals
     from agent_comms.registration import Registration
-    from agent_comms.registry_document import CommanderProject, RegistrySnapshot
+    from agent_comms.registry_document import RegistrySnapshot
+
+
+@dataclass(frozen=True)
+class PullRequestHeadRevision(FetchedRevision):
+    link: PullRequestLink
+
+    @property
+    def reference(self) -> str:
+        return f'refs/agent-comms/cited/{self.link.number}'
+
+    @property
+    def fetch_refspec(self) -> str:
+        return f'+pull/{self.link.number}/head:{self.reference}'
+
+
+@dataclass(frozen=True)
+class OrderRoots(SourceRoots):
+    """Citations from one checkout, an order's check directory or a unit's worktree:
+    unqualified ones are read there."""
+
+    checkout: Path
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        return self.checkout
+
+
+@dataclass(frozen=True)
+class RegisteredRoots(SourceRoots):
+    """Citations with no order behind them: unqualified ones need exactly one registered
+    repository to name."""
+
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        repositories = self.project.require().repos
+        if len(repositories) != 1:
+            raise ValueError("An unqualified FILE:LINE names no repository when several are "
+                             "registered; cite it as owner/name:FILE:LINE.")
+        return repositories[0].checkout
 
 
 @dataclass(frozen=True)
@@ -6594,6 +6627,205 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 assigner, expected.expected_revision, _thread(owner), generation, review_at,
                 order, request, traced, group))
             for expected in problems))
+
+
+@dataclass(frozen=True)
+class EditWorkplaces:
+    """Allocation edit ownership plus retained edit-review evidence, captured for one operation.
+
+    Review-only check/PR sources preserve original calls; they never grant source writes.
+    Zero or multiple review candidates never select a held order. Records stay put.
+    """
+
+    rule: StorageRule
+    owners: Mapping[ThreadIncarnation, Thread]
+    allocated: Mapping[Path, frozenset[str]]
+    orders: Mapping[str, Todo] = field(default_factory=dict, kw_only=True)
+    review_sources: Mapping[Path, frozenset[str]] = field(default_factory=dict, kw_only=True)
+
+    @staticmethod
+    def owner_threads(snapshot: RegistrySnapshot) -> dict[ThreadIncarnation, Thread]:
+        return {thread.incarnation: thread for thread in snapshot.threads.values()}
+
+    @classmethod
+    def for_assignment(cls, root: Path, snapshot: RegistrySnapshot, held: tuple[Todo, ...],
+                       proposed: tuple[Todo, ...]) -> Self:
+        """Capture declared physical boundaries without forge reads or a Todo write lock."""
+        rule = StorageRule.load(root)
+        orders = {todo.id: todo for todo in (*held, *proposed)}
+        allocated: dict[Path, set[str]] = {}
+        for todo in orders.values():
+            companions = todo.order.source_repositories()
+            for assignment in todo.current_holder.current_assignments():
+                for owner in assignment.holder_in(snapshot):
+                    for path in rule.edit_boundaries(owner, todo.id, todo.repo, companions,
+                                                     assignment.generation):
+                        allocated.setdefault(path, set()).add(todo.id)
+        return cls(rule, cls.owner_threads(snapshot),
+                   {path: frozenset(problems) for path, problems in allocated.items()},
+                   orders=orders)
+
+    def roots_for(self, problem: str) -> frozenset[Path]:
+        return frozenset(path for path, problems in self.allocated.items() if problem in problems)
+
+    def require_owner(self, todo: Todo, snapshot: RegistrySnapshot) -> None:
+        assignment = todo.held()
+        before = frozenset((thread.incarnation, self.rule.roots_of(thread))
+                           for thread in self.owners.values()
+                           if thread.incarnation == assignment.owner_identity)
+        after = frozenset((thread.incarnation, self.rule.roots_of(thread))
+                          for thread in assignment.holder_in(snapshot))
+        if not before or before != after:
+            raise TodoConflict(todo)
+
+    def require_current(self, todo: Todo, snapshot: RegistrySnapshot) -> None:
+        if todo.id not in self.orders:
+            raise TodoConflict(todo)
+        todo.require_result(self.orders[todo.id])
+        if self.roots_for(todo.id):
+            self.require_owner(todo, snapshot)
+
+    @classmethod
+    def capture(cls, comms: Comms, snapshot: RegistrySnapshot, holds: Iterable[LiveHold],
+                pulls: ProgressRead
+                ) -> dict[ThreadIncarnation, EditWorkplaces]:
+        """Acquire source/forge facts once, then match edits without Git or network calls."""
+        holds = tuple(holds)
+        if not holds:
+            return {}
+        prepared = cls.for_assignment(comms.root, snapshot, tuple(hold.todo for hold in holds), ())
+        repositories = snapshot.commander_project.require().repos
+        registered = frozenset(repo.github for repo in repositories)
+        rule = prepared.rule
+        declared = {todo.id: todo.order.source_repositories() for todo in prepared.orders.values()}
+        trees: dict[RepositoryName, dict[str, tuple[str, ...]]] = {}
+        for repo in repositories:
+            branches = trees.setdefault(repo.github, {})
+            for branch, worktrees in pulls.worktrees(repo).items():
+                branches[branch] = (*branches.get(branch, ()), *worktrees)
+        listed = {Path(path) for branches in trees.values()
+                  for worktrees in branches.values() for path in worktrees}
+        explicit = {order.check.directory for hold in holds
+                    for order in hold.todo.order.declarations}
+        links = tuple(dict.fromkeys(link for hold in holds
+                                    for order in hold.todo.order.declarations
+                                    for link in order.pull_requests))
+        requests = {link: row
+                    for repo in repositories
+                    for row in pulls.rows(repo.github, tuple(
+                        link.number for link in links if link.repo == repo.github))
+                    for link in links if link.repo == repo.github and link.number == row.number}
+        progress = pulls.progress(tuple(hold.todo for hold in holds), comms.registry)
+        source_orders: dict[Path, dict[str, Todo]] = {}
+        for hold in holds:
+            todo = hold.todo
+            paths = {order.check.directory for order in todo.order.declarations}
+            paths.update(prepared.roots_for(todo.id))
+            paths.update(Path(path) for order in todo.order.declarations
+                         for link in order.pull_requests if link in requests
+                         for path in trees[link.repo].get(requests[link].branch, ()))
+            for path in paths:
+                source_orders.setdefault(path, {})[todo.id] = todo
+        # Qualify only captured Git roots, never nearest parents of individual events.
+        # An alias cannot manufacture another problem allocation around the same source.
+        present = Checkout.git_roots(*listed, *source_orders)
+        actual: dict[Path, Repo] = {}
+        for path in present:
+            affected = source_orders.get(path, {})
+            readable: tuple[Path, ...] = (path,) if affected else ()
+            for todo in affected.values():
+                readable = progress[todo.id].readable_paths(readable)
+            for source in readable:
+                if source.is_absolute() and Checkout(source).resolved().path == source:
+                    try:
+                        repository = pulls.repository(source)
+                        if repository.github in registered:
+                            # A declared source can be a separate clone. Qualify its own
+                            # worktree facts within the same per-source failure boundary.
+                            extra = (pulls.worktrees(repository)
+                                     if source in explicit - listed else {})
+                            actual[source] = repository
+                            branches = trees[repository.github]
+                            for branch, worktrees in extra.items():
+                                if str(source) in worktrees:
+                                    branches[branch] = (*branches.get(branch, ()), str(source))
+                    except (OSError, GitCommandError, WorkBranchError, TimeoutExpired) as error:
+                        pulls.unread(affected.values(), error)
+        owners = prepared.owners
+        # The allocation cut is the only problem ownership map. Qualify its source
+        # identity once; absent Git never enables a generic check-root fallback.
+        allocated = {
+            path: frozenset(
+                problem for problem in problems if path in actual
+                for assignment in prepared.orders[problem].current_holder.current_assignments()
+                for owner in assignment.holder_in(snapshot)
+                for allocation in CheckoutAllocation.for_path(rule, owner, path)
+                if actual[path].github in allocation.source_repositories(
+                    prepared.orders[problem].repo, declared[problem])
+                and allocation.owns_declared(rule, owner, path, actual[path].github, pulls))
+            for path, problems in prepared.allocated.items()
+        }
+        workplaces: dict[ThreadIncarnation, EditWorkplaces] = {}
+        for holder in dict.fromkeys(hold.holder.incarnation for hold in holds):
+            sources: dict[Path, set[str]] = {}
+            for hold in holds:
+                if hold.holder.incarnation != holder:
+                    continue
+                todo = hold.todo
+                linked = tuple(link for order in todo.order.declarations
+                               for link in order.pull_requests)
+                for order in todo.order.declarations:
+                    path = order.check.directory
+                    # Explicit pre-PR source is valid only for its primary actual repository,
+                    # and ceases being a generic workplace once that source has a PR link.
+                    if (path in actual and actual[path].github == todo.repo
+                            and not any(link.repo == todo.repo for link in linked)):
+                        sources.setdefault(path, set()).add(todo.id)
+                for link in linked:
+                    if link not in requests:
+                        continue  # Unregistered repositories cannot qualify a source boundary.
+                    for worktree_path in trees[link.repo].get(requests[link].branch, ()):
+                        root = Path(worktree_path)
+                        if root in actual and actual[root].github == link.repo:
+                            sources.setdefault(root, set()).add(todo.id)
+            workplaces[holder] = cls(rule, owners, allocated, review_sources={
+                path: frozenset(problems) for path, problems in sources.items()})
+        return workplaces
+
+    @cached_property
+    def owners_by_allocation(self) -> Mapping[str, tuple[Thread, ...]]:
+        """The captured owners under each checkout allocation name, derived once per capture:
+        a boundary names its allocation, so no edit walks every registered thread."""
+        owners: dict[str, list[Thread]] = {}
+        for thread in self.owners.values():
+            owners.setdefault(self.rule.roots_of(thread).allocation_name, []).append(thread)
+        return {name: tuple(threads) for name, threads in owners.items()}
+
+    def allocating(self, boundary: Path) -> Iterator[Thread]:
+        """Owners whose order-checkout prefix ``<allocation>--`` starts the boundary's name."""
+        for name in self.rule.allocation_names(boundary):
+            yield from self.owners_by_allocation.get(name, ())
+
+    def problems_for(self, path: str) -> frozenset[str]:
+        original = Path(path)
+        if not original.is_absolute():
+            return frozenset()
+        # Resolve the edited path once, not its missing leaf with Git. Lexical membership
+        # rejects aliases into a checkout; resolved membership rejects symlink escapes.
+        resolved = original.resolve()
+        parts = (original.relative_to(self.rule.checkout_base).parts
+                 if original.is_relative_to(self.rule.checkout_base) else ())
+        boundary = self.rule.checkout_base.joinpath(*parts[:1])
+        reserved = boundary in self.allocated or any(allocation.reserves_boundary()
+                       for thread in self.allocating(boundary)
+                       for allocation in CheckoutAllocation.for_path(self.rule, thread, boundary))
+        # Even a missing/released/unknown allocation reserves its lexical boundary. Only
+        # captured actual Git identity may supply an owner; absence never enables spill.
+        candidates = ({boundary: self.allocated.get(boundary, frozenset())}
+                      if reserved else self.review_sources)
+        return frozenset(problem for root, problems in candidates.items()
+                         if original.is_relative_to(root) and resolved.is_relative_to(root)
+                         for problem in problems)
 
 
 @dataclass(frozen=True, slots=True)

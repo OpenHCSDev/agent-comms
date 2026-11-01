@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import secrets
 import select
 import socket
 import sys
@@ -13,23 +12,20 @@ import traceback
 from abc import abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AsyncExitStack, asynccontextmanager, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from types import get_original_bases
 from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, NoReturn, Self, get_args, get_origin
 
+from agent_comms_hooks.watch import SessionFailure
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import CoordinationError
-from agent_comms.harness_delivery_states import Outcome
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.installer.runtime_wire import CrossesRuntimes
-from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord, MessageId, PathText
+from agent_comms.nominal.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
-from agent_comms.messages import Message
-from agent_comms.thread_status import ConnectedThreadStatus, PausedBridgeThreadStatus
 from agent_comms_hooks.board import SessionBoard, SessionWire
-from agent_comms_hooks.watch import SessionFailure
 
 from .session_watch import (
     HeldClaim,
@@ -42,7 +38,8 @@ from .session_watch import (
 
 
 if TYPE_CHECKING:
-    from .shared import LineMonitorBridge, MonitorProbe, Serve
+    from .shared import MonitorService
+    from .shared import Serve
 
 
 class BridgeExit:
@@ -144,107 +141,6 @@ class MonitorPeer:
     async def close(self) -> None:
         self.writer.close()
         await self.writer.wait_closed()
-
-
-class ReaderState:
-    async def prepare_delivery(self, bridge: LineMonitorBridge) -> AttachedReader:
-        async with bridge.reader_changed:
-            await bridge.reader_changed.wait_for(lambda: bridge.reader is not self)
-        return await bridge.reader.prepare_delivery(bridge)
-
-    async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:
-        reader = await self.prepare_delivery(bridge)
-        return await reader.deliver(bridge, message)
-
-    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
-        """Only an unproven attachment consumes a probe."""
-
-    async def part_observed(self, message_id: MessageId, number: int) -> None:
-        """Only an attached reader has a flow-control window."""
-
-    async def attach(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        return SessionRefused(error="This session already has a Monitor reader")
-
-
-class NoReader(ReaderState):
-    async def attach(self, service: MonitorService, peer: MonitorPeer) -> SessionReply:
-        bridge = service.bridge
-        attachment = bridge.new_attachment(peer, secrets.token_hex(24))
-        async with bridge.reader_changed:
-            bridge.reader = UnreadyReader(attachment)
-        try:
-            await SessionReady().publish(peer)
-            await peer.write(attachment.probe.model_dump_json())
-            await peer.reader.read()
-            # Only a reader leaving a bridge that keeps serving is declared. A stopping bridge
-            # skips this registry write: its install pause is acknowledged only once teardown
-            # ends, and a successor declares its own reader state when it starts serving.
-            async with bridge.reader_changed:
-                bridge.reader = NoReader()
-                await bridge.declare_reader(PausedBridgeThreadStatus())
-            return PeerGone()
-        finally:
-            async with bridge.reader_changed:
-                bridge.reader = NoReader()
-                bridge.reader_changed.notify_all()
-            async with attachment.window_changed:
-                attachment.window_changed.notify_all()
-            bridge.log(f"Monitor detached; exception={sys.exception()!r} "
-                       "(None means reader EOF); delivery paused.")
-
-
-@dataclass
-class MonitorAttachment:
-    peer: MonitorPeer
-    probe: MonitorProbe
-    pending_parts: dict[tuple[MessageId, int], int] = field(default_factory=dict)
-    window_changed: asyncio.Condition = field(default_factory=asyncio.Condition)
-
-    async def emit(self, message_id: MessageId, number: int, line: str, window_bytes: int) -> None:
-        size = len((line + "\n").encode("utf-16-le"))
-        async with self.window_changed:
-            await self.window_changed.wait_for(
-                lambda: self.peer.writer.is_closing()
-                or not self.pending_parts
-                or sum(self.pending_parts.values()) + size <= window_bytes
-            )
-            self.pending_parts[message_id, number] = size
-            await self.peer.write(line)
-
-    async def observed(self, message_id: MessageId, number: int) -> None:
-        async with self.window_changed:
-            self.pending_parts.pop((message_id, number), None)
-            self.window_changed.notify_all()
-
-
-@dataclass
-class UnreadyReader(ReaderState):
-    attachment: MonitorAttachment
-
-    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
-        if probe == self.attachment.probe:
-            async with bridge.reader_changed:
-                if bridge.reader is not self:
-                    return
-                await bridge.declare_reader(ConnectedThreadStatus())
-                bridge.reader = AttachedReader(self.attachment)
-                bridge.reader_changed.notify_all()
-            bridge.log("Fresh Monitor probe observed; delivery enabled.")
-
-
-@dataclass
-class AttachedReader(UnreadyReader):
-    async def prepare_delivery(self, bridge: LineMonitorBridge) -> AttachedReader:
-        return self
-
-    async def confirm_probe(self, bridge: LineMonitorBridge, probe: MonitorProbe) -> None:
-        """Overlapping observations cannot prove a different attachment."""
-
-    async def part_observed(self, message_id: MessageId, number: int) -> None:
-        await self.attachment.observed(message_id, number)
-
-    async def deliver(self, bridge: LineMonitorBridge, message: Message) -> type[Outcome]:
-        return await bridge.deliver_to(self.attachment, message)
 
 
 @dataclass(frozen=True)
@@ -481,60 +377,6 @@ class EndSession(VerifySession, declared_name='end'):
 BRIDGE_FAILURES: tuple[type[Exception], ...] = (OSError, ValueError, CoordinationError)
 """What the bus, its files and its wire can raise into a bridge: the failures a bridge reports.
 Anything else is a defect in the bridge's own code and crashes it loudly."""
-
-
-@dataclass
-class MonitorService:
-    bridge: LineMonitorBridge
-    owner: ProcessIdentity
-    stop: Callable[[], None]
-
-    async def accept(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
-        peer = MonitorPeer(reader, writer)
-        try:
-            try:
-                reply: SessionReply
-                try:
-                    request = await asyncio.to_thread(SessionRequest.from_wire_line, await peer.read())
-                    reply = await request.handle(self, peer)
-                except (MalformedRecord, TimeoutError, SessionFailure) as error:
-                    reply = SessionRefused(error=str(error))
-                except BRIDGE_FAILURES as error:
-                    # Refuse this request without cancelling every client in the TaskGroup.
-                    reply = RequestFailure(error).reply(self.bridge.log)
-                await reply.publish(peer)
-            finally:
-                await peer.close()
-        except (BrokenPipeError, ConnectionResetError) as error:
-            await self.bridge.report_failure(f"Monitor connection ended: {error}")
-
-    async def run(self) -> None:
-        await self.bridge.declare_reader(PausedBridgeThreadStatus())
-        path = WatchClaim(self.bridge.binding.thread).socket_path
-        path.unlink(missing_ok=True)
-        try:
-            server = await asyncio.start_unix_server(
-                lambda reader, writer: clients.create_task(self.accept(reader, writer)),
-                str(path), start_serving=False,
-            )
-            async with server:
-                try:
-                    async with asyncio.TaskGroup() as clients:
-                        await server.start_serving()
-                        self.bridge.log(f"Session bridge ready for Claude PID {self.owner.pid}.")
-                        try:
-                            await self.owner.wait_exited()
-                        finally:
-                            # The listener stops before the clients retire, so no new
-                            # connection reaches a group that is shutting down.
-                            server.close()
-                            self.stop()
-                finally:
-                    # A connection accepted in the same loop step as close has no client
-                    # task; closing it keeps Server.wait_closed from waiting forever.
-                    server.close_clients()
-        finally:
-            path.unlink(missing_ok=True)
 
 
 async def relaunched(claim: WatchClaim, relaunch: Callable[[], None]) -> bool:

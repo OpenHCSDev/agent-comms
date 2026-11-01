@@ -1,6 +1,7 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 
 
+from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.repo import Checkout
 from conftest import publish_initial
 from agent_comms.session_file import RegistrySessionLocation
@@ -25,8 +26,8 @@ sys.path.insert(0, str(args.toad_tests))
 from runtime_fixture import ToadApp, wait_channel_roster
 from agent_comms.comms import wire
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.presentation import MessageNotification
-from agent_comms.notification_evidence import NotificationWindow
+from agent_comms.message_notification import MessageNotification
+from agent_comms.message_notification import NotificationWindow
 from agent_comms.registry_document import RosterVisibility
 from agent_comms.threads import Thread
 from toad.widgets.comms_sidebar import ChannelGroup
@@ -61,7 +62,7 @@ async def main():
     original = comms.views.message_notifications_for_references(AllOutcomes(), (message.reference,))
     assert original.outcomes[message.seq, message.message_id]
     assert comms.views.message_notifications_for_references(AllOutcomes(),
-        (message.reference,) * (NotificationWindow.window_limit + 1)).outcomes == original.outcomes
+        (message.reference,) * (NotificationSelection.window_limit + 1)).outcomes == original.outcomes
     page = comms.views.channel_display_page('#team', viewer=NamedViewer(comms.messaging.user_identity(Checkout(root)).name))
     comms.views.mark_page_read(page, worktree=Checkout(root))
     assert comms.views.viewer_snapshot(Checkout(root)).channel_unread['#team'].count == 0

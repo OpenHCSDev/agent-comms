@@ -49,7 +49,8 @@ from .nominal.field_codec import AcpSessionId, FieldCodec, MalformedRecord, boun
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
 from .pi_rule_gate import PiRedeal
 from .registry_document import RegistryEntry
-from .runtime import RuntimeProxy, RuntimeServer
+from .runtime_server import RuntimeServer
+from .runtime import RuntimeProxy
 from .runtime_requests import FreshSubscribeRuntimeRequest, SubscribeRuntimeRequest
 from .session_effects import SessionEffects
 from .session_load import ExistingSessionLoadPlan, FailedSessionLoadPlan, SessionLoadPlan

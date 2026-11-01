@@ -7,7 +7,7 @@ from agent_comms.coordination_errors import Refused
 from agent_comms.errors import GoalAttemptError, StaleAttemptError, UnresolvedAttemptError
 from agent_comms.goal_attempts import MissingGoalGenerationError, ReservationConflictError, StorageUncertainError
 from agent_comms.nominal.field_codec import GoalId
-from agent_comms.runtime import ClientPermissionResponse
+from agent_comms.runtime_server import ClientPermissionResponse
 
 from agent_comms.owner_protocol import (
     ClientLine,

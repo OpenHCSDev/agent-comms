@@ -10,7 +10,8 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.repo import Checkout
 from agent_comms.shell_effects import StorageDenied, WriteStorageEffect
-from agent_comms.storage_rules import StorageProjection, StorageRule
+from agent_comms.storage_rules import StorageRule
+from agent_comms.storage_projection import StorageProjection
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread

@@ -12,14 +12,13 @@ from .coordination_errors import StaleFence
 from .coordinator import Coordination
 from .errors import RelationViolationError, UnregisteredThreadError
 from .owner_connection import (
-    AttachedResultRuntimeRequest,
-    AttachedRuntimeRequestContext,
     OwnerConnection,
     OwnerIdentityChangedError,
     OwnerReading,
     OwnerReplyConnection,
 )
 from .private_path import FileRevision, ObservedPath
+from .runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequestContext
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryCut

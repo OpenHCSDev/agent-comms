@@ -9,25 +9,13 @@ from typing import TYPE_CHECKING
 
 from .activity import ObservedActivity
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import NoNotificationWindow, NotificationWindow
+from agent_comms.message_notification import NoNotificationWindow, NotificationWindow
 from .registry_provenance import DeletedThread
 from .revision_views import ActivityView, NotificationEvidenceView
 
+from .presentation import WireRevision
 if TYPE_CHECKING:
     from .comms import Comms
-    from .presentation import WireRevision
-
-
-@dataclass(frozen=True)
-class CapturedNotificationWindow(NotificationWindow):
-    def changed(self, comms: Comms, revision: WireRevision, earlier: WireRevision) -> bool:
-        if not revision.changed_since(NotificationEvidenceView(), earlier):
-            return False
-        return bool(
-            (self.read_marks and comms.bus.reads.changed_notifications(
-                self.read_marks, comms.registry.snapshot(),
-            )) or NotificationAssignment.changed(self.reads, comms.root)
-        )
 
 
 @dataclass(frozen=True)

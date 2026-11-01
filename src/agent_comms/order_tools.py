@@ -55,7 +55,7 @@ from .input_attempt import UNOBSERVED_DELIVERY_SCOPE
 from .input_disposition import DeliveryOverview
 from .order_story import FleetStory, OrderStory
 from .order_work import OrderWork
-from .owner_connection import AttachedRuntimeRequestContext
+from agent_comms.runtime_server import AttachedRuntimeRequestContext
 from .plan_phases import OrderPhase
 from .problem_number import ProblemNumber
 from .progress_claims import ProgressClaim

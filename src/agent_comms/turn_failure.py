@@ -17,7 +17,7 @@ from .native_failures import NativePiUnavailable
 if TYPE_CHECKING:
     from .backend import NativeSession
     from .goal_attempts import GoalAttemptStore, LaunchPermit
-    from .goal_failure_observation import FailedTurnObservation
+    from .goal_attempts import FailedTurnObservation
     from .turn_output import TurnOutput
     from .turn_inputs import InputForwarding
 

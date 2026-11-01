@@ -1,5 +1,6 @@
 """Real SQLite appends drive bounded wake scans and dependency reply reads."""
 
+from agent_comms.notification_assignment import NotificationSelection
 from agent_comms.repo import Checkout
 from dataclasses import replace
 
@@ -13,7 +14,8 @@ from agent_comms.input_drain import NoPrivateObservation, PrivateObservation
 from agent_comms.locked_store import RegistryFile
 from agent_comms.messages import InfoKind, Message, NoticeRole
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.notification_evidence import AnsweredResponse, NotificationAssignmentRead
+from agent_comms.notification_progress import AnsweredResponse
+from agent_comms.notification_assignment import NotificationAssignmentRead
 from agent_comms.read_basis import ChannelDisplayScope, ConversationCursor
 from agent_comms.notification_evidence import AllOutcomes
 from agent_comms.read_ledger import ReadLedger
@@ -127,7 +129,7 @@ def test_read_prefix_preserves_unpainted_holes_and_compacts_exact_reads(bus):
 
 def test_notification_answers_require_frozen_delivery_not_a_public_answer_reference(bus, owner, peer):
     original = append_reply(bus, peer, owner)
-    read = NotificationAssignmentRead(AllOutcomes().selection((original,)), ())
+    read = NotificationAssignmentRead(NotificationSelection.of(AllOutcomes(), (original,)), ())
     key = (owner.lookup, original.reference)
     bus.append(lambda seq, db: PublicRecord.from_message(Message(
         owner.name, peer.name, "public answer is not frozen delivery evidence", InfoKind,

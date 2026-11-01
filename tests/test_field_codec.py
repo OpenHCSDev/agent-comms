@@ -34,7 +34,9 @@ from agent_comms.nominal.field_codec import (
     TimestampText,
     ToolCallId,
     TurnId,
+    UnsupportedFieldType,
     ValueDecoder,
+    compile_decoder,
     WireAbsentNone,
     WireContext,
     WireInline,
@@ -1192,6 +1194,83 @@ def test_an_annotation_lambda_sees_the_module_that_declared_it():
     )
     hint = FieldCodec._types(module.Declared)["sep"]
     assert hint.__metadata__[0]() == __import__("os").sep
+
+
+def test_every_declared_field_type_resolves() -> None:
+    """Resolve compared records through their codec; live-resource refusals define its domain."""
+    import importlib
+    import pkgutil
+    from dataclasses import fields, is_dataclass
+
+    import agent_comms
+
+    declarations: set[type] = set()
+    pending: list[object] = []
+    import_failures: list[str] = []
+    for module_info in pkgutil.walk_packages(agent_comms.__path__, agent_comms.__name__ + "."):
+        try:
+            module = importlib.import_module(module_info.name)
+        except ImportError as error:
+            import_failures.append(f"{module_info.name}: {error}")
+        else:
+            pending.extend(vars(module).values())
+    while pending:
+        value = pending.pop()
+        if not isinstance(value, type) or value in declarations:
+            continue
+        if not value.__module__.startswith(agent_comms.__name__ + "."):
+            continue
+        declarations.add(value)
+        pending.extend(vars(value).values())
+    records = {declaration for declaration in declarations if is_dataclass(declaration)}
+    assert records, "No codec records were discovered"
+    failures = import_failures
+    for record in sorted(records, key=lambda item: (item.__module__, item.__qualname__)):
+        for item in fields(record):
+            if not item.compare:
+                continue
+            try:
+                annotation = FieldCodec.field_annotation(record, item.name)
+                compile_decoder(annotation).compile_comparison(set())
+            except UnsupportedFieldType:
+                # Only this unsupported field is outside the codec's domain.
+                continue
+            except (NameError, TypeError, ImportError) as error:
+                failures.append(f"{record.__module__}.{record.__qualname__}.{item.name}: {error}")
+    assert not failures, "Unresolved compared field annotations:\n" + "\n".join(failures)
+
+
+def test_represented_record_comparison_reuses_declared_annotations():
+    """The represented path must retain the compiled record, not only its wire plan."""
+    import sys
+    import types
+
+    module = types.ModuleType("represented_annotation_counter")
+    sys.modules[module.__name__] = module
+    try:
+        exec(
+            "from __future__ import annotations\n"
+            "from dataclasses import dataclass\n"
+            "from agent_comms.nominal.field_codec import RecordMember\n"
+            "evaluations = 0\n"
+            "def counted():\n"
+            "    global evaluations\n"
+            "    evaluations += 1\n"
+            "    return int\n"
+            "@dataclass(frozen=True)\n"
+            "class Counted(RecordMember):\n"
+            "    value: counted()\n",
+            module.__dict__,
+        )
+        value = module.Counted(3)
+        compared = FieldCodec.comparison_digest(value)
+        warmed = module.evaluations
+        assert warmed > 0
+        assert FieldCodec.comparison_digest(value) == compared
+        assert FieldCodec.comparison_digest(module.Counted(4)) != compared
+        assert module.evaluations == warmed
+    finally:
+        del sys.modules[module.__name__]
 
 
 def test_a_declaration_evaluates_its_annotations_once():

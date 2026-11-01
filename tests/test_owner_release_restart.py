@@ -1,5 +1,6 @@
 """Real release-before-exit: retirement keeps checking the exact owner fence."""
 
+from agent_comms.owner_release import NoRelease
 from agent_comms.repo import Checkout
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.restart_scope import OwnersNamed
@@ -101,7 +102,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         InputDispositions(native.root).replace(original_document)
         async def attach_current():
             current = comms.registry.require(name)
-            from agent_comms.runtime import socket_path
+            from agent_comms.owner_connection import socket_path
             await asyncio.to_thread(wait_for, socket_path(native.root, current.require_process().pid))
             agent = canonical_agent(comms, auto_wake=False)
             try:
@@ -144,7 +145,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         assert native.provider.posts == 0
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.owner_lifecycle import NoRelease, OwnerRestartSelection
+from agent_comms.owner_lifecycle import OwnerRestartSelection
 from agent_comms.owner_restart import FencedOwnerBatch, StoppedOwnerFailure
 from agent_comms.store_files import ExclusiveLock, StoreLockContention, _store_lock
 from agent_comms.threads import Thread

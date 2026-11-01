@@ -35,6 +35,7 @@ from .command import Command
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
+from .goal_records import GoalRecords
 from .goal_scope import AllGoals, OneGoal
 from .goal_states import (
     ActiveGoal,
@@ -55,12 +56,12 @@ from .repository_name import RepositoryName
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
+from .registry_store import RegistryEdit
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
 
 if TYPE_CHECKING:
     from .goal_management import Goals
     from .registry_document import CommanderProject
-    from .registry_store import RegistryEdit
     from .goal_presentation import GoalSnapshot
 
 
@@ -108,7 +109,7 @@ class GoalPrecondition:
 
 @dataclass(frozen=True)
 class GoalActionContext:
-    goals: Goals
+    goals: GoalRecords
     thread: Thread
     actor: type = RuntimeInvocable
 

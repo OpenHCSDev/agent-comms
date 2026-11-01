@@ -24,11 +24,12 @@ from .message_reference import MessageReference
 from .private_registry_guard import RegistryPrivacy
 from .order_work import OrderWork
 from .problem_number import ProblemNumber
-from .storage_rules import EditWorkplaces
 from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .threads import Thread
-from .todos import NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore
+from .todos import (
+    EditWorkplaces, NoCommitProgress, OrderProgress, ProgressRead, Todo, TodoStore,
+)
 from .tool_declaration import EditCall
 from .tool_result import ToolResult
 from .service_passes import ServiceReading

@@ -18,7 +18,7 @@ from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.heartbeat_subjects import CommanderHistory
 from agent_comms.message_bus import PreparedWatchPass
 from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.phase_evidence import PlanReadings, RetainedPlanReadings
+from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.service_passes import CommanderPass, ServicePassStore
 from agent_comms.standing_rules import ServicePassFailing, StandingRule
 from agent_comms.threads import Thread

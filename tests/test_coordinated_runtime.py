@@ -137,7 +137,7 @@ def test_channel_wake_frame_carries_declared_goal_state(tmp_path: Path) -> None:
 
 
 def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> None:
-    from agent_comms.presentation import MessageNotification
+    from agent_comms.message_notification import MessageNotification
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     with Coordination(str(root / "coordination.sqlite3")) as store:

@@ -11,15 +11,15 @@ from .class_fact import ClassFact
 from .nominal.declared_family import DeclaredFamily
 from .errors import HumanSendRefusedError, RelationViolationError, UnregisteredThreadError
 from .nominal.field_codec import NullMember, SingleFieldValue, SubclassUnion
-from .history_result import DmHistoryPageResult, HistoryPageResult
 from .projection_source import ProducedRow, ProjectionSource
 from .repo import Checkout
 from .response_policy import DirectPolicy, MentionedPolicy
 from .thread_identity import ThreadIncarnation
 from .typed_table import sql_literal
-from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
+from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, WakePolicy
 
 if TYPE_CHECKING:
+    from .history_result import HistoryPageResult
     from .audience_manifest import AudiencedMessage
     from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
@@ -39,12 +39,10 @@ if TYPE_CHECKING:
         DMDisplayScope,
         MessageDisplayScope,
     )
-    from .registry_document import RegistrySnapshot
+    from .registry_document import RegistrySnapshot, ResolvedChannel, ResolvedThread
     from .registry_provenance import RegistryProvenance
     from .response_policy import ResponsePolicy
-    from .thread_status import ThreadStatus
     from .threads import Thread
-    from .wake_policy import WakePolicy
 
 
 class ChannelSelection(ABC):
@@ -102,18 +100,6 @@ class PerTargetChannels(ChannelSelection):
         raise ValueError('This action does not accept per-target channels')
 
 
-@dataclass(frozen=True)
-class ResolvedThread:
-    thread: Thread
-    status: ThreadStatus
-
-
-@dataclass(frozen=True)
-class ResolvedChannel:
-    channel: Channel
-    members: tuple[ResolvedThread, ...]
-
-
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
@@ -121,8 +107,29 @@ def exact_stored_target(name: str) -> bool:
             if name in BuiltinChannelView.addresses() else True)
 
 
+class ResolvedTarget(ABC):
+    """An acquired value owns its binding operation, not a second type dispatcher."""
+
+    @abstractmethod
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]: ...
+
+
+@dataclass(frozen=True)
+class ResolvedProject(ResolvedTarget):
+    project: Checkout
+
+    def bindings[C: CliCommand](
+        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
+    ) -> tuple[C, ...]:
+        return declaration.project_bindings(comms, self.project)
+
+
 class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
-    """A command destination owns its binding and catalog participation."""
+    """A command destination owns resolution and catalog participation."""
 
     @ClassFact
     def writes(cls) -> tuple[type[ProducedRow], ...]:
@@ -161,19 +168,16 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         return True
 
     @abstractmethod
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]): ...
-
-    @abstractmethod
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]: ...
+    def resolve(
+        self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel],
+    ) -> ResolvedTarget: ...
 
     def history_view(self, viewer: DisplayViewer, require_channel: Callable[[str], Channel],
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         raise ValueError("History requires a #channel or DM peer.")
 
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
+    def history_result(self, require_channel: Callable[[str], Channel],
+                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
         raise ValueError("History requires a #channel or DM peer.")
 
@@ -363,7 +367,6 @@ class ThreadTarget(NamedTarget):
 
     sigil = "@"
     route: ClassVar[ReplyRoute] = SenderReply()
-    history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
 
@@ -389,9 +392,10 @@ class ThreadTarget(NamedTarget):
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         return viewer.direct_history(direct, self)
 
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
+    def history_result(self, require_channel: Callable[[str], Channel],
+                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
-        return self.history_result_type.for_target(self.name, messages, has_older)
+        return direct.for_target(self.name, messages, has_older)
 
     def contexts(
         self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
@@ -408,14 +412,7 @@ class ThreadTarget(NamedTarget):
         return counts.get(snapshot.require(self.selected_name(snapshot)).name, 0)
 
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedThread:
-        thread = snapshot.require(self.selected_name(snapshot))
-        return ResolvedThread(thread, snapshot.status(thread.name))
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedThread,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
+        return snapshot.resolve_thread(self.selected_name(snapshot))
 
     def validate(self, message: Message) -> None:
         if message.sender == self.name and message.type.conversation_message:
@@ -542,7 +539,8 @@ class ChannelTarget(NamedTarget):
                      channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         return channel(require_channel(self.name).history_scope())
 
-    def history_result(self, require_channel: Callable[[str], Channel], messages: tuple[Message, ...],
+    def history_result(self, require_channel: Callable[[str], Channel],
+                       direct: type[HistoryPageResult], messages: tuple[Message, ...],
                        has_older: bool) -> HistoryPageResult:
         result_type = require_channel(self.name).history_result_type
         return result_type.for_target(self.name, messages, has_older)
@@ -554,17 +552,7 @@ class ChannelTarget(NamedTarget):
         return require_channel(self.name).pending_count(counts)
 
     def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedChannel:
-        channel = require_channel(self.name)
-        members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
-                        for thread in snapshot.channel_audience()
-                        if channel.matches(thread.tags))
-        return ResolvedChannel(channel, members)
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved: ResolvedChannel,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.channel_bindings(comms, resolved, project=project, snapshot=snapshot, catalog=catalog)
+        return snapshot.resolve_channel(require_channel(self.name))
 
     def validate(self, sender: Message | None = None):
         from .channels import BuiltinChannelView
@@ -649,14 +637,8 @@ class ProjectTarget(CommandTarget):
     def destination_names(self) -> tuple[str, ...]:
         return ()
 
-    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]):
-        return self.project
-
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel, resolved,
-        *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
-        return declaration.project_bindings(comms, resolved)
+    def resolve(self, snapshot: RegistrySnapshot, require_channel: Callable[[str], Channel]) -> ResolvedProject:
+        return ResolvedProject(self.project)
 
 
 _TAG_CHARS = set("abcdefghijklmnopqrstuvwxyz0123456789-_")

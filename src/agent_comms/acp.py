@@ -86,13 +86,9 @@ from .launch_root import LaunchRoot
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
 from .queued_input import DeliveredInput
-from .runtime import (
-    RuntimeProxy,
-    RuntimeServer,
-    socket_path,
-)
-from .schedule_rules import SelectedWakeCheck
-from .selected_write_authority import AcpSelectedWriteAuthority
+from .runtime_server import RuntimeServer
+from .owner_connection import socket_path
+from .runtime import RuntimeProxy
 from .selected_write_plan import SelectedWritePlans
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
@@ -103,12 +99,93 @@ from .working_memory_policy import AnnotationPolicy
 from .working_memory_worker import AnnotationWorker
 
 
+from dataclasses import dataclass
+from .drain_failures import drain_failures
+from .activity import FailedWakeDiagnostic
+from agent_comms.input_drain import SchedulesWake, WakeDue, WakeHeld, WakeOutcome
+from .thread_identity import OwnerIdentity
+
+from agent_comms.selected_write_authority import BoundSelectedWriteAuthority
 if TYPE_CHECKING:
     from .selected_tool_broker import SelectedToolIntent
-    from .selected_write_authority import AcpSelectedWriteAuthority
+    from .coordination_tables.assignments import WakeAssignment
 
 from .native_arguments import ConfiguredBinary, InheritedArguments, LaunchArguments, LaunchBinary
 from .turn_runner import RELAY_PREFIX
+
+
+@dataclass
+class AcpSelectedWriteAuthority(BoundSelectedWriteAuthority):
+    agent: CommsAgent
+    session_id: str
+    plans: SelectedWritePlans
+
+    def select(self, assignment, owner, generation, action):
+        plan = self.plans.load(assignment, owner, generation)
+        if plan is None:
+            return action
+        self.require_current(assignment, owner, plan.operation_id)
+        return action.with_plan(self, plan, assignment, owner)
+
+    def require_current(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> None:
+        bound = self.agent._selected_write_controllers.get((owner.name, assignment.wire_seq))
+        if bound is None or bound[0] != operation_id:
+            raise IdentityConflict("Selected write original controller is no longer bound")
+        controller = bound[1]
+        controller.require_current(self, self.session_id)
+
+    @contextmanager
+    def writing(
+        self, assignment: WakeAssignment, owner: Thread, operation_id: ClaimId
+    ) -> Iterator[None]:
+        self.require_current(assignment, owner, operation_id)
+        try:
+            yield
+            self.plans.applied(assignment, owner, operation_id)
+        finally:
+            # An accepted intent is never retried, so a failed write ends its binding too.
+            del self.agent._selected_write_controllers[(owner.name, assignment.wire_seq)]
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedWakeCheck(SchedulesWake):
+    """A selected turn runs beside the owner's observation, which hands it later messages."""
+
+    execution: SelectedExecution
+    thread: str
+    owner: OwnerIdentity
+
+    async def run(self) -> WakeOutcome:
+        inputs, session_id = self.inputs, self.session_id
+        effects = inputs.effects
+        root_id = inputs.comms.owners.require_private_launch().wire_root_id
+        # Selection may have been scheduled just before maintenance began.
+        # A deferred selection is not a successful drain or diagnostic recovery.
+        hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+        if hold.turn_pending:
+            return WakeHeld(hold)
+        async with drain_failures(inputs.comms, self.thread, self.owner, FailedWakeDiagnostic):
+            before = await inputs._observe_private_revision(session_id, root_id)
+            result = await effects.turns.run_selected(session_id, self.execution)
+            if result is not None:
+                # A disconnected client must not turn a settled claim into an
+                # apparent model failure. Reconnect reads the same durable row.
+                await effects.cursors.publish(
+                    session_id, self.thread, selected_status=result.cursor_status
+                )
+            else:
+                # N (or absent-audience) rows prove coverage, not an injected
+                # input. Extend only an existing current generation or an all-N prefix;
+                # old-generation Pi evidence cannot initialize this cursor on reconnect.
+                await effects.cursors.publish(session_id, self.thread, advance=True)
+                if before == await inputs._observe_private_revision(session_id, root_id):
+                    inputs.state(session_id).idle_revision = before
+            if result is not None:
+                # Messages this turn could not take are still pending.
+                await inputs.drain_inbox(session_id)
+        return WakeDue()
 
 
 class SdkSessionConnection(AgentSideConnection, Controller, SessionUpdateSink):

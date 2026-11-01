@@ -27,12 +27,8 @@ from .nominal.field_codec import (
 from agent_comms.typed_table import StoreRows, Column, DerivedStore, TypedTable
 from .thread_identity import OwnerIdentity
 from .thread_owned_state import ThreadOwnedState
-from .thread_presentation import (
-    IdleThreadPresentationStatus,
-    ThreadPresentation,
-    ThreadPresentationStatus,
-    WorkingThreadPresentationStatus,
-)
+from .thread_presentation import IdleThreadPresentationStatus, ThreadPresentationStatus, WorkingThreadPresentationStatus
+from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity

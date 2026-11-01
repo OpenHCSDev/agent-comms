@@ -12,12 +12,12 @@ from agent_comms.errors import RelationViolationError, RouteChangedError, Unregi
 from .nominal.declared_family import DeclaredFamily
 from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
-from .notification_evidence import NotificationWindow
+
+from .message_reference import MessageReference
 
 if TYPE_CHECKING:
-    from .message_reference import MessageReference
     from .presentation import MessageNotification
-    from .transcripts import TranscriptReadIdentity
+    from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
     from agent_comms.transcripts import Transcripts
 
@@ -196,7 +196,6 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return self != original
 
 
-
 @dataclass(frozen=True, slots=True)
 class ThreadStatusDisplay:
     """The displayed status, independent of acquired notification history."""
@@ -222,8 +221,13 @@ class ThreadStatusDisplay:
 class ThreadPresentation(ThreadStatusDisplay):
     """What a viewer shows for a thread, or its declared absence: no acquired evidence."""
 
-    notifications: tuple[MessageNotification, ...] = ()
-    read_identity: TranscriptReadIdentity | None = None
+    @property
+    def notifications(self) -> tuple[MessageNotification, ...]:
+        return ()
+
+    @property
+    def read_identity(self) -> TranscriptReadIdentity | None:
+        return None
 
     def published(self) -> ThreadPresentation:
         """The value a viewer may receive: this presentation itself."""
@@ -262,57 +266,12 @@ class ThreadPresentation(ThreadStatusDisplay):
         return captured.presentation(self)
 
     def same_observation(self, other: ThreadPresentation) -> bool:
-        """Equal view and turn evidence, not merely equal global store revisions.
-
-        Keep the exact registered thread and binding used for turn settlement.
-        The transcript owner decides whether its page changed; unrelated bus,
-        read-mark and coordinator writes do not create another page publication.
-        """
-        if replace(self, read_identity=other.read_identity) != other:
-            return False
-        original, current = self.read_identity, other.read_identity
-        if original is None or current is None:
-            return original is current
-        return original.thread == current.thread and original.same_snapshot(current)
+        """Without acquired evidence, the same observation is the same presentation."""
+        return self == other
 
     @property
     def label(self) -> str:
         return f"{self.marker} {self.title}".strip()
-
-
-@dataclass(frozen=True, slots=True)
-class AcquiredThreadPresentation(ThreadPresentation):
-    """A presentation together with the notification evidence it was acquired from.
-
-    The evidence stays with the reader that acquired it, for its change checks and sent
-    summaries; a viewer receives only the published ThreadPresentation."""
-
-    incoming_references: tuple[MessageReference, ...] = field(kw_only=True)
-    sent_references: tuple[MessageReference, ...] = field(kw_only=True)
-    notification_window: NotificationWindow = field(kw_only=True)
-
-    def published(self) -> ThreadPresentation:
-        return ThreadPresentation(**{declared.name: getattr(self, declared.name)
-                                     for declared in fields(ThreadPresentation)})
-
-    def sent_notifications(
-        self,
-    ) -> tuple[tuple[MessageReference, tuple[MessageNotification, ...]], ...]:
-        """Each recent sent source with its outcomes from this presentation's captured window."""
-        return tuple(
-            (reference,
-             self.notification_window.outcomes.get((reference.seq, reference.message_id), ()))
-            for reference in self.sent_references
-        )
-
-    def collect_revision_input(self, name: str,
-                               readable: dict[str, AcquiredThreadPresentation]) -> None:
-        readable[name] = self
-
-    def __reduce_ex__(self, protocol: object) -> NoReturn:
-        raise TypeError(
-            "AcquiredThreadPresentation keeps private delivery evidence with its reader; "
-            "send its published() ThreadPresentation")
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,7 +12,8 @@ from .lifecycle_capability import Active, Complete, Terminal
 
 if TYPE_CHECKING:
     from .goal_actions import GoalActionContext, ProblemOrderGoalAction
-    from .goal_presentation import GoalExecution, GoalExecutionSource
+    from agent_comms.goal_management import GoalExecutionSource
+    from .goal_presentation import GoalExecution
     from .goals import Goal
 
 

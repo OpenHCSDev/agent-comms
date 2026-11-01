@@ -19,7 +19,7 @@ from agent_comms.child_process import ProcessIdentity, SpawnedProcess
 from agent_comms.comms import Comms
 from agent_comms.private_path import PrivateSocketRole
 from agent_comms.repo import Checkout
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.thread_execution import NativeThreadExecution, ThreadExecution
 from agent_comms.threads import Thread
 

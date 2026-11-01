@@ -61,8 +61,7 @@ from .queued_input import DeliveredInput, InputHandoffRefused, QueuedInput
 from .registry_document import RegistryDocument, RegistryEntry
 from .registry_store import RegistryEntryRevision
 from .routing import ScheduledTurn
-from .runtime import RuntimeServer
-from .schedule_rules import ProjectResumeCheck, WakeOutcome, WakeScheduleCheck
+from .runtime_server import RuntimeServer
 from .owner_launch import OwnerRetiredReply, StopOwnerRuntimeRequest
 from .session_lifecycle import SessionLifecycle
 from .thread_identity import ClaimedIdentity, OwnerIdentity
@@ -72,11 +71,151 @@ from .turn_input_source import AcceptedFollowingInput, OriginalTurnInput
 from .turn_terminal import OwnerStop
 from .watched import ChangeSignal, FileLifetimeSource, FileSource
 
+from .nominal.declared_family import DeclaredFamily
+from .maintenance_barrier import MaintenanceStatus
+from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
+from .turn_outcome import TurnOutcome
+from .turn_input_source import NoTurnAcceptance
 if TYPE_CHECKING:
+    from .goals import GoalDeclaration
     from agent_comms.following_inputs import OwnerFollowingInputs
 
 
 AGENT_PREFIX = "!agent "
+
+
+class WakeOutcome(DeclaredFamily, TurnOutcome):
+    """A completed wake owns whether observation should run again."""
+
+    @abstractmethod
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None: ...
+
+
+@dataclass(frozen=True)
+class WakeHeld(WakeOutcome):
+    hold: MaintenanceStatus
+
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
+        """Maintenance reopening supplies the next wake."""
+
+
+class WakeDue(WakeOutcome):
+    def settle(self, observer: Callable[[AcpSessionId], None], session_id: AcpSessionId) -> None:
+        observer(session_id)
+
+
+class BackgroundWake(RuleCheck):
+    """A check that starts work in the background, so configuration can disable it."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SessionScheduleCheck(RuleCheck):
+    session_id: AcpSessionId
+    inputs: InputDrain
+
+
+class SchedulesWake(SessionScheduleCheck, ABC):
+    """A check that schedules a wake, so it waits for the previous wake to finish."""
+
+    def schedule(self) -> None:
+        try:
+            self.require_valid()
+        except ReservationViolationError:
+            return  # The wake already running drains again when it ends.
+        self.inputs.register_wake(
+            self.session_id, self.inputs.runtime.background(self.run())
+        )
+
+    @abstractmethod
+    async def run(self) -> WakeOutcome: ...
+
+
+class WakeScheduleCheck(SchedulesWake, BackgroundWake):
+    """Check wake permission and execute it under the existing turn lock.
+
+    A queued wake never carries a stale owner grant across a lock wait. The
+    current owner and active goal are read only after acquiring the turn lock.
+    """
+
+    async def run(self) -> WakeOutcome:
+        inputs, session_id = self.inputs, self.session_id
+        while inputs.state(session_id).pending_turns:
+            if ClosingScheduleRule().violated(self):
+                return WakeDue()
+            async with inputs.state(session_id).turn_lock:
+                # The bus may accept a channel post while an operator drains the
+                # fleet. Keep its existing queued origin; do not start a native
+                # turn or consume it until this root's typed phase is READY.
+                hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
+                if hold.turn_pending:
+                    return WakeHeld(hold)
+                snapshot = await Coordination.run_worker(inputs.comms.registry.snapshot)
+                owner = snapshot.require(inputs.sessions.require(session_id))
+                try:
+                    snapshot.status(owner.name).require_running()
+                except RelationViolationError:
+                    inputs.state(session_id).pending_turns = []
+                    continue
+                state = inputs.state(session_id)
+                pending, state.pending_turns = state.pending_turns, []
+                goal = owner.goal.active()
+                self._retain_goal_turns(pending, goal)
+                if not pending:
+                    continue
+                pending, remaining = ScheduledTurn.take_batch(pending)
+                if remaining:
+                    state.pending_turns = remaining
+                async with inputs.state(session_id).own_turn_task():
+                    await inputs.effects.turns.run_agent_turn(
+                        session_id,
+                        inputs.sessions.require(session_id),
+                        "\n\n".join(turn.prompt for turn in pending),
+                        acceptance=NoTurnAcceptance(),
+                        origins=tuple(origin for turn in pending for origin in turn.origin.messages()),
+                        autonomous_goal=len(pending) == 1 and pending[0].autonomous_goal,
+                    )
+        return WakeDue()
+
+    @staticmethod
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: GoalDeclaration) -> None:
+        """Discard stale goal work without dropping independent incoming turns."""
+        active_ids = frozenset(current.id for current in goal)
+        pending[:] = [
+            turn for turn in pending
+            if not turn.autonomous_goal or turn.goal_id.retained_by(active_ids)
+        ]
+
+
+class ClosingScheduleRule(ReservationRule):
+    check_type = SessionScheduleCheck
+    explanation = "Input draining is closing."
+
+    def violated(self, check):
+        return check.inputs.closing
+
+
+class PendingWakeScheduleRule(ReservationRule):
+    check_type = SchedulesWake
+    explanation = "A previously scheduled wake has not finished."
+
+    def violated(self, check):
+        return check.inputs.state(check.session_id).wake_pending()
+
+
+class DisabledWakeScheduleRule(ReservationRule):
+    check_type = BackgroundWake
+    explanation = "Background waking is disabled by the input/runtime configuration."
+
+    def violated(self, check):
+        return check.inputs.background_wakes_disabled
+
+
+class EmptyWakeScheduleRule(ReservationRule):
+    check_type = WakeScheduleCheck
+    explanation = "No queued turn requires a background wake."
+
+    def violated(self, check):
+        return not check.inputs.state(check.session_id).pending_turns
 
 
 class PrivateObservationState(ABC):
@@ -328,9 +467,7 @@ class InputObservation(ABC):
                     await Coordination.run_worker(partial(
                         self.comms.goals.recover_closed_goal_wait, session_id,
                     ))
-                await ProjectResumeCheck(
-                    session_id=session_id, inputs=self, turns=self.effects.turns,
-                ).schedule()
+                await self.effects.turns.project_resume_check(session_id, self).schedule()
                 await self.effects.turns.goals.schedule_goal(attachment)
                 current = await Coordination.run_worker(partial(self.comms.registry.require, thread))
                 if (current.turn_record.items_with(Executing, current) or self.turn_live(session_id)

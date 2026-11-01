@@ -19,20 +19,16 @@ from .nominal.field_codec import AcpSessionId, InputId, TurnId
 from .input_attempt import InputAlreadyCleared, MissingInput
 from .input_key import InputKey
 from .messages import Message
-from .ordinary_turn_rules import (
-    AcceptedInputCheck,
-    MissingAcceptedInputCheck,
-    OrdinaryOwnerCheck,
-    RunningOrdinaryOwnerCheck,
-    UnboundOrdinaryInputRule,
-    UnconsumedDependencyRule,
-)
+from .ordinary_turn_rules import UnboundOrdinaryInputRule, UnconsumedDependencyRule
 from .reservation_rules import ReservationViolationError
 from .routing import NoTurnRouting, TurnRouting
 from .send_outcome import DeferredSend, GrantedSend, RefusedSend, SendOutcome
 from .started_input import StartedInput
 from .transcript_routes import DisplayText, NoDisplayText, SentInputText
 
+from .reservation_rules import ReservationRule, RuleCheck
+from .registry_document import RegistrySnapshot
+from .threads import Thread
 if TYPE_CHECKING:
     from .acp_extension import QueueScope
     from .comms import Comms
@@ -42,9 +38,78 @@ if TYPE_CHECKING:
     from .input_disposition import InputDispositions
     from .input_drain import DrainedSession, InputDrain
     from .owned_send import OwnedSend
-    from .runtime import RuntimeServer
+    from .runtime_server import RuntimeServer
     from .thread_identity import RecordedThreadIncarnation
-    from .threads import Thread
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrdinaryOwnerCheck(RuleCheck):
+    expected: Thread
+    current: Thread
+    registry: RegistrySnapshot
+    canonical: str
+    claim_generation: int
+    turn: TurnId
+
+    def worktree_matches(self) -> bool:
+        return self.current.worktree == self.expected.worktree
+
+
+class RunningOrdinaryOwnerCheck(OrdinaryOwnerCheck):
+    """The running turn retains its project; a selection is for the next turn."""
+
+    def worktree_matches(self) -> bool:
+        return self.current.continues_running_project(self.expected)
+
+
+class OrdinaryIncarnationRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The captured ordinary thread incarnation changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.expected.incarnation.current(check.registry)
+
+
+class OrdinaryRunningRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner is no longer running."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.registry.status(check.canonical).running
+
+
+class OrdinaryClaimRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner claim_scope generation changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return check.registry.claim_generation(check.canonical) != check.claim_generation
+
+
+class OrdinaryProcessRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary turn belongs to another process incarnation."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return check.current.process_identity != check.expected.process_identity
+
+
+class OrdinaryWorktreeRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The ordinary owner's worktree changed."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return not check.worktree_matches()
+
+
+class OrdinaryTurnRule(ReservationRule):
+    check_type = OrdinaryOwnerCheck
+    explanation = "The captured ordinary turn is no longer the active turn."
+
+    def violated(self, check: OrdinaryOwnerCheck) -> bool:
+        return (
+            not check.current.turn_record.read().matches(check.turn)
+        )
 
 
 class TurnAcceptance(ABC):
@@ -97,47 +162,6 @@ class NoTurnAcceptance(TurnAcceptance):
 
     def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
         return
-
-
-@dataclass(frozen=True)
-class AcceptedTurn(TurnAcceptance):
-    input_id: InputId
-
-    def controller(self, state: DrainedSession, runtime: RuntimeServer) -> Controller | None:
-        return state.queued[self.input_id].controller
-
-    def require_current(
-        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
-        current: Thread, claim_generation: int,
-    ) -> None:
-        try:
-            accepted = inputs.state(session_id).queued[self.input_id]
-        except KeyError:
-            for row in inputs.dispositions.read(source.keys).rows.values():
-                row.require_not_cleared()
-            MissingAcceptedInputCheck().require_valid()
-            raise
-        AcceptedInputCheck(
-            acknowledgement=accepted, current=current, claim_generation=claim_generation,
-            input_id=self.input_id, keys=source.keys, inputs=inputs, session_id=session_id,
-        ).require_valid()
-
-    async def accepted_start(
-        self, update: InputStartedUpdate, inputs: InputDrain, session_id: AcpSessionId,
-    ) -> InputStartedUpdate:
-        queued = inputs.state(session_id).queued
-        if self.input_id in queued:
-            update = replace(update, text=await queued[self.input_id].started(inputs))
-        return update.identified(self.input_id)
-
-    def require_following_source(
-        self, inputs: InputDrain, session_id: AcpSessionId, source: TurnInputSource,
-    ) -> None:
-        if inputs.state(session_id).following.get(self.input_id) is not source:
-            raise RelationViolationError("Following context outlived its actual accepted input")
-
-    def release(self, inputs: InputDrain, session_id: AcpSessionId) -> None:
-        inputs.state(session_id).queued.pop(self.input_id, None)
 
 
 @dataclass(frozen=True, kw_only=True)

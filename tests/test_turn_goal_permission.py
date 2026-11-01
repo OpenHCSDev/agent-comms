@@ -2,6 +2,7 @@
 from dataclasses import replace
 
 
+from agent_comms.channel_coding_tools import OrdinaryGoalRule
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_states import BlockedGoal, PausedGoal
 from agent_comms.goals import Goal, NoGoal, ProblemGoalOrder
@@ -16,7 +17,7 @@ def test_goal_publication_is_exact_and_coding_output_cannot_author_it():
     another_goal_id = GoalId.mint()
     original = NoGoal()
     goal = Goal('the actual publication', own_goal_id, published_seq=0)
-    permission = TurnGoalPermission(OwnerGoalPermission(original))
+    permission = TurnGoalPermission(OwnerGoalPermission(original.authority))
     result = ProvidedToolResult.from_wire({'content': [], 'details':
         FieldCodec.encode(GoalSet(goal, 'continue in this turn'))})
     # Neither decoding a saved result nor coding output grants authority.
@@ -33,9 +34,15 @@ def test_order_revision_keeps_the_granted_authority():
     """An assigned or replaced problem order revises the goal; the running turn keeps working."""
     unit_goal_id = GoalId.mint()
     granted = Goal(ProblemGoalOrder.text, unit_goal_id, published_seq=0, order=ProblemGoalOrder())
-    permission = TurnGoalPermission(OwnerGoalPermission(granted))
+    permission = TurnGoalPermission(OwnerGoalPermission(granted.authority))
     ordered = replace(granted, revision=granted.revision + 1, progress="")
-    permission.require_current(ordered)
+    OrdinaryGoalRule.require(permission, ordered)
+    assert FieldCodec.comparison_digest(OwnerGoalPermission(ordered.authority)) == (
+        FieldCodec.comparison_digest(permission.captured)
+    )
+    assert FieldCodec.comparison_digest(OwnerGoalPermission(NoGoal().authority)) != (
+        FieldCodec.comparison_digest(permission.captured)
+    )
     assert not permission.allows(replace(ordered, state=BlockedGoal("stopped by its owner")))
     assert not permission.allows(replace(ordered, state=PausedGoal()))
     assert not permission.allows(NoGoal())

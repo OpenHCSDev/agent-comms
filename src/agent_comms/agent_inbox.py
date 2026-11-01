@@ -18,10 +18,10 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.harness_deliveries import HarnessDelivery
 from .nominal.field_codec import RecordMember
 from .message_reference import AfterMessageStart, InboxStart, MessageReference, StreamBeginning
+from .private_registry_guard import RegistryPrivacy
 from .read_basis import ReadCursor
 
 if TYPE_CHECKING:
-    from .private_registry_guard import RegistryPrivacy
     from .read_ledger import ReadDocument, ReadLedger
     from .registry_document import RegistrySnapshot
 

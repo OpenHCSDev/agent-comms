@@ -32,7 +32,8 @@ from .pi_commands import (
     SetModel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
-from .pi_payloads import PiOmitted, PiResponseData
+from agent_comms.pi_wire import PiOmitted
+from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 

@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, replace
-from pathlib import Path
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from agent_comms.installer.probes.report import InstallReportProbe
@@ -11,7 +10,6 @@ from agent_comms.installer.refusals import InterpreterWorkerDied
 
 if TYPE_CHECKING:
     from agent_comms.installer.interpreter_operation import PhaseTiming
-    from agent_comms.installer.upgrade import LiveRun, RehearsedUpgrade, Stack
 
 
 class InstallOutcome(ABC):
@@ -28,28 +26,6 @@ class UnfinishedInstall(InstallOutcome):
 
     def live_lines(self) -> tuple[str, ...]:
         return ()
-
-
-@dataclass(frozen=True)
-class ObservedInstall(UnfinishedInstall):
-    """A live result returned before harness registration or cleanup can fail."""
-
-    live: LiveRun
-
-    def live_lines(self) -> tuple[str, ...]:
-        return self.live.lines()
-
-
-@dataclass(frozen=True)
-class FinishedInstall(InstallOutcome):
-    result: RehearsedUpgrade
-
-    def lines(self, inherited: tuple[PhaseTiming, ...] = ()) -> tuple[str, ...]:
-        result = replace(self.result, phases=[*inherited, *self.result.phases])
-        return (result.finished, *result.lines())
-
-    def live_lines(self) -> tuple[str, ...]:
-        return self.result.live_lines()
 
 
 @dataclass(frozen=True)
@@ -118,10 +94,3 @@ class UnpostedWriter(RootWriter):
         pass
 
 
-@dataclass(frozen=True)
-class RuntimeWriter(RootWriter):
-    root: Path
-    stack: Stack
-
-    def post(self, lines: tuple[str, ...]) -> None:
-        self.stack.probe(InstallReportProbe(self.root, "\n".join(lines)))

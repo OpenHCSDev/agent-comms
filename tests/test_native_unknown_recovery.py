@@ -22,7 +22,7 @@ from agent_comms.cli import main as cli_main
 from agent_comms.cli_protocol import CoreError, WATCH_LINE
 from agent_comms.native_arguments import GivenBinary
 from agent_comms.launch_root import LaunchRoot
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.session_file import RegistrySessionLocation
 from functools import partial

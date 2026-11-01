@@ -19,7 +19,7 @@ from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.nominal.field_codec import AcpSessionId, MalformedRecord
 from agent_comms.owner_protocol import OwnerAnnouncement
 from agent_comms.private_path import PrivateSocketRole
-from agent_comms.runtime import socket_path
+from agent_comms.owner_connection import socket_path
 from agent_comms.threads import Thread
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")

@@ -1,9 +1,8 @@
 """Authored archived deliveries use recorded owners, not live availability."""
 
 
-from agent_comms.notification_evidence import AssignmentResponse, AnsweredResponse, UnansweredResponse
+from agent_comms.notification_progress import AssignmentResponse, AnsweredResponse, UnansweredResponse
 from agent_comms.notification_evidence import AllOutcomes
-from agent_comms.presentation import MessageNotification
 from agent_comms.repo import Checkout
 from agent_comms.bus import Bus
 from bus_record_fixture import prepare_native_comms
@@ -33,7 +32,8 @@ from agent_comms.notification_progress import HarnessConsumedProgress
 from agent_comms.coordination_errors import DMScopeChanged, SchemaVersionError
 from agent_comms.nominal.field_codec import InputId, MessageId, TurnId
 from transcript_record_fixture import transcript_record
-from agent_comms.read_basis import HistoricalDisplay, ReadCursor
+from agent_comms.historical_views import HistoricalDisplay
+from agent_comms.read_basis import ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.wake_policy import FullWake

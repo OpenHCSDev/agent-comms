@@ -19,7 +19,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from agent_comms.native_session_files import ForkedSession, NativeSessionFiles, NativeSessionLocks
-from agent_comms.pi_payloads import PiOmitted, PiResponseData
+from agent_comms.pi_wire import PiOmitted
+from agent_comms.pi_payloads import PiResponseData
 
 from .agent_backend import CompactionOutcome, FailedCompaction, Forks, Interrupts, NewThreadBackend, NothingToCompaction, PlacedCompaction, RuntimeLocation
 from .turn_inbox import InputContent

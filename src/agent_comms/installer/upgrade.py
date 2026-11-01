@@ -129,11 +129,7 @@ from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import (
     InstallRolledBack, OwnersNotRestarted, UpgradeRefused,
 )
-from agent_comms.installer.reporting import (
-    RootWriter,
-    RuntimeWriter,
-    UnpostedWriter,
-)
+from agent_comms.installer.reporting import RootWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
 from agent_comms.installer.runtime_stack import Extendable, RuntimeStack, TargetRuntime
 from agent_comms.installer.runtime_wire import CrossesRuntimes
@@ -155,8 +151,41 @@ from agent_comms.root_runtime import RootRuntime, RootRuntimeStore
 from agent_comms.runtime_processes import RuntimeProcesses
 from agent_comms.storage_rules import StorageRule
 
+from agent_comms.installer.probes.report import InstallReportProbe
+from agent_comms.installer.reporting import InstallOutcome, UnfinishedInstall
 if TYPE_CHECKING:
     from agent_comms.installer.launch import InstallReport
+
+
+@dataclass(frozen=True)
+class ObservedInstall(UnfinishedInstall):
+    """A live result returned before harness registration or cleanup can fail."""
+
+    live: LiveRun
+
+    def live_lines(self) -> tuple[str, ...]:
+        return self.live.lines()
+
+
+@dataclass(frozen=True)
+class FinishedInstall(InstallOutcome):
+    result: RehearsedUpgrade
+
+    def lines(self, inherited: tuple[PhaseTiming, ...] = ()) -> tuple[str, ...]:
+        result = replace(self.result, phases=[*inherited, *self.result.phases])
+        return (result.finished, *result.lines())
+
+    def live_lines(self) -> tuple[str, ...]:
+        return self.result.live_lines()
+
+
+@dataclass(frozen=True)
+class RuntimeWriter(RootWriter):
+    root: Path
+    stack: Stack
+
+    def post(self, lines: tuple[str, ...]) -> None:
+        self.stack.probe(InstallReportProbe(self.root, "\n".join(lines)))
 
 
 @dataclass(frozen=True, kw_only=True)

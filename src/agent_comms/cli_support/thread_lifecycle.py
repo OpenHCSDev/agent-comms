@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from agent_comms.channel_targets import ResolvedChannel
-from agent_comms.channel_targets import ResolvedThread
+from agent_comms.registry_document import ResolvedChannel, ResolvedThread
 from agent_comms.cli_command import MultipleTargets
 from agent_comms.cli_support.named_thread import NamedThreadCliCommand
 from dataclasses import dataclass

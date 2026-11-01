@@ -51,20 +51,20 @@ from .pi_payloads import NativeContextData, StateData
 from .queued_input import InitialInput
 from .pi_rule_gate import PiRedeal
 from .routing import NoTurnRouting, Routing
-from .runtime import (
-    RuntimeServer,
-    SubscriberClosed,
-)
+from .runtime_server import RuntimeServer, SubscriberClosed
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_context import SegmentManifest
 from .turn_effects import TurnEffects
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_input_source import InputDependency, NoInputDependency, TurnAcceptance
-from .turn_outcome import TurnOutcome
 from .turn_phase import CancellingPhase, TurnPhase
 from .goal_scope import OneGoal
 
+from dataclasses import dataclass
+from .reservation_rules import ReservationRule, ReservationViolationError
+from .routing import ScheduledTurn
+from agent_comms.input_drain import BackgroundWake, SessionScheduleCheck, WakeScheduleCheck
 if TYPE_CHECKING:
     from . import pi_events as pi
     from .comms import Comms
@@ -76,6 +76,58 @@ if TYPE_CHECKING:
 
 AGENT_PREFIX = "!agent "
 RELAY_PREFIX = "!relay "
+
+@dataclass(frozen=True, kw_only=True)
+class OwnerTurnScheduleCheck(SessionScheduleCheck):
+    turns: TurnRunner
+
+
+class ProjectResumeCheck(BackgroundWake, OwnerTurnScheduleCheck):
+    """Start the turn the registry records as due after a project change.
+
+    The registry entry is the only record, so an owner started later reads
+    the same state and starts that turn too.
+    """
+
+    async def schedule(self) -> None:
+        inputs, session_id = self.inputs, self.session_id
+        try:
+            self.require_valid()
+            entry = (await inputs._own_entry(session_id)).entry
+            self.require_valid()
+        except ReservationViolationError:
+            return
+        if entry.status.running and entry.thread.owes_project_resume:
+            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            pending = inputs.state(session_id).pending_turns
+            if resume not in pending:
+                pending.append(resume)
+            WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
+
+
+class OccupiedOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "The session still owns a running turn."
+
+    def violated(self, check):
+        return check.turns.inputs.state(check.session_id).turn_task.busy
+
+
+class NativeInboxOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "A live native inbox still owns pending input."
+
+    def violated(self, check):
+        return check.inputs.state(check.session_id).turn_open()
+
+
+class PendingTurnOwnerTurnRule(ReservationRule):
+    check_type = OwnerTurnScheduleCheck
+    explanation = "Already queued turns have priority over a turn the owner starts itself."
+
+    def violated(self, check):
+        return bool(check.inputs.state(check.session_id).pending_turns)
+
 
 class CompactionObservation(MroDispatch):
     """All selected/native compaction callers update the existing turn owner."""
@@ -117,6 +169,16 @@ class TurnRunner:
         self.sessions = sessions
         self.inputs = inputs
         self.goals.bind(sessions, inputs)
+
+    def owner_schedule_check(
+        self, session_id: AcpSessionId, inputs: InputDrain,
+    ) -> OwnerTurnScheduleCheck:
+        return OwnerTurnScheduleCheck(session_id=session_id, inputs=inputs, turns=self)
+
+    def project_resume_check(
+        self, session_id: AcpSessionId, inputs: InputDrain,
+    ) -> ProjectResumeCheck:
+        return ProjectResumeCheck(session_id=session_id, inputs=inputs, turns=self)
 
     def session_busy(self, session_id: AcpSessionId) -> bool:
         return self.inputs.state(session_id).turn_task.busy or self.turn_state(session_id).active.phase.busy

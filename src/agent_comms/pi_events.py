@@ -29,31 +29,11 @@ from .native_input_proof import NativeContextRecord, NativeInputCommit, NativeIn
 from .native_output import NativeOutputLocation, NativeRecordLocation
 from .native_pi import NativePiOperationFailed
 from .native_session_reopen import PiSessionId
-from .native_turn_context import NativeContextManifestData
+from .native_turn_context import ContextObserved, NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
-from .pi_payloads import (
-    AbsentMessage,
-    AnonymousRequest,
-    CompactionData,
-    MissingData,
-    MissingToolResult,
-    NoDelta,
-    Opaque,
-    OpenPayload,
-    PiDelta,
-    PiMessage,
-    PiOmitted,
-    PiRequestId,
-    PiResponseData,
-    PiToolResult,
-    PiUsage,
-    ProviderRetryOutcome,
-    ReportedCompaction,
-    ReportedFlag,
-    ReportedText,
-    UnknownPayload,
-    UnreportedUsage,
-)
+from agent_comms.pi_wire import AnonymousRequest, OpenPayload, PiOmitted, PiRequestId, PiUsage
+from agent_comms.pi_wire import Opaque, UnknownPayload
+from .pi_payloads import AbsentMessage, CompactionData, MissingData, MissingToolResult, NoDelta, PiDelta, PiMessage, PiResponseData, PiToolResult, ProviderRetryOutcome, ReportedCompaction, ReportedFlag, ReportedText, UnreportedUsage
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
 from .tool_declaration import ToolDeclaration
@@ -462,7 +442,7 @@ class TurnContextObserved(NativePiEvent):
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for segment in self.context.segments:
             segment.remember_received(session.native)
-        yield events.ContextObserved(self.context)
+        yield ContextObserved(self.context)
 
 
 class ExtensionUiChoice(ABC):

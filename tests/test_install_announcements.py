@@ -25,7 +25,8 @@ from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTiming
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
-from agent_comms.installer.reporting import FinishedInstall, RuntimeWriter, UnconfirmedPublication, UnpostedWriter, UnattemptedPublication
+from agent_comms.installer.reporting import UnconfirmedPublication, UnpostedWriter, UnattemptedPublication
+from agent_comms.installer.upgrade import FinishedInstall, RuntimeWriter
 from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
 from agent_comms.installer.refusals import InstallRolledBack
 from agent_comms.installer.target_tree import TargetTree

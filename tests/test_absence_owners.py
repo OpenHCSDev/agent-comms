@@ -16,7 +16,7 @@ from agent_comms.native_child import NoInputForwarder
 from agent_comms.native_session_reopen import SessionRetention
 from agent_comms.native_startup import MeasuredSessionLoad, SessionLoad, UnmeasuredSessionLoad
 from agent_comms.pi_commands import GetState
-from agent_comms.pi_payloads import AnonymousRequest, RequestId
+from agent_comms.pi_wire import AnonymousRequest, RequestId
 from agent_comms.turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from agent_comms.turn_input_source import SelectedOriginalInput
 from agent_comms.turn_item import PiRequestKey

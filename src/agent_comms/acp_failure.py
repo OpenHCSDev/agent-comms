@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, Annotated
 
 
 if TYPE_CHECKING:
+    from agent_comms.pi_payloads import NativeMessageFailureSource
     from acp import RequestError
 
     from .controller import SessionUpdateSink
@@ -30,6 +31,7 @@ from .nominal.field_codec import (
     WireName, WireOmitDefault, boundary_decoder,
 )
 from .input_attempt import InputAttempt
+from .pi_wire import PiDiagnostic
 
 
 class FailureSource(DeclaredFamily, affix="FailureSource"):
@@ -55,26 +57,6 @@ class UnrecordedFailureSource(FailureSource):
     @property
     def retained_in_history(self) -> bool:
         return False
-
-
-@dataclass(frozen=True)
-class NativeMessageFailureSource(FailureSource):
-    message: AssistantMessage
-
-    def require_native(self) -> NativeMessageFailureSource:
-        return self
-
-    @property
-    def retained_in_history(self) -> bool:
-        return True
-
-    def for_publication(self, text: str, sensitive: bool) -> FailureSource:
-        if not sensitive:
-            return self
-        # Retain native provenance without exporting private response content.
-        return replace(
-            self, message=replace(self.message, content=ReportedParts(()), diagnostics=(), error_message=text)
-        )
 
 
 class DeliveryFailure(DeliveryPresentation, DeclaredFamily, affix="Failure"):
@@ -612,9 +594,3 @@ class PublishedErrorValue(ErrorValue):
 
     def to_wire(self):
         return self.reported_failure.error_data()
-
-
-# Payload conversions import Core observations, which refer to these failure
-# declarations. Both sides are eager; complete the declarations before binding
-# the payload types used by their annotations and conversion methods.
-from .pi_payloads import AssistantMessage, PiDiagnostic, ReportedParts  # noqa: E402

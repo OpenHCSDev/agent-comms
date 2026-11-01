@@ -24,6 +24,7 @@ from agent_comms_hooks.skill import DeckReader, RulesOnly
 from .coordinator import Coordination
 from .bus_publication import Delivered
 from .channel_targets import ThreadTarget
+from .comms import Comms
 from .nominal.field_codec import ThreadLookup
 from .rule_deal import (
     Asked, DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Speaking, Voice,
@@ -31,12 +32,11 @@ from .rule_deal import (
 from .session_receipts import SessionReceipts
 from .task_attachments.owner_notices import MeantNotice
 from .tool_denial import SelectedToolDenied
+from .threads import Thread
 
 if TYPE_CHECKING:
     from .native_tool_call import NativeToolCall
-    from .comms import Comms
     from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .transcript_sources import TranscriptSource
 
 

@@ -37,11 +37,10 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.upgrade import FinishedInstall, ObservedInstall
 from agent_comms.installer.reporting import (
     FailedInstall,
-    FinishedInstall,
     InstallOutcome,
-    ObservedInstall,
     ReportPublication,
     RootWriter,
     UnfinishedInstall,

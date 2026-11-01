@@ -15,7 +15,8 @@ from agent_comms.nominal.field_codec import TurnId, GoalId
 from agent_comms.turn_failure import BackendFailed, FinalStopMissing
 from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore
 from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.goal_failure_observation import FailedTurnObservation, NoFailedTurnEvidence
+from agent_comms.goal_attempts import FailedTurnObservation
+from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity

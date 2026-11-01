@@ -17,7 +17,7 @@ from agent_comms.audience_manifest import freeze_audience
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.bus import Bus, BusReader, BusSnapshot, ClaimRecord, PrivateRecord, RecordBuilder
 from agent_comms.bus_publication import InitialOrigin
-from agent_comms.change_report import OrderRoots
+from agent_comms.todos import OrderRoots
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
 )
@@ -44,11 +44,11 @@ from .errors import (
 from .mentions import ThreadMention
 from .private_path import FileRevision
 from .registry_document import DEFAULT_ROSTER, RegistrySnapshot
+from .registration import Registration
 from .wake import OrdinaryControl, resolve_wake_cohort
 
 if TYPE_CHECKING:
     from .coordination_session import NativeCapture
-    from .registration import Registration
     from .threads import Thread
 
 from .catalog_document import CatalogDocument

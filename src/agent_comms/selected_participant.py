@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.notification_assignment import NotificationSelection
 from collections.abc import Awaitable, Callable, Generator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -13,7 +14,8 @@ from metaclass_registry.mro_dispatch import (
     handles,
 )
 
-from .agent_events import CompactionEvent, NativePhaseChanged
+from agent_comms.turn_phase import NativePhaseChanged
+from .agent_events import CompactionEvent
 from .cohort_schema import CohortTable
 from .comms import Comms
 from agent_comms.native_runtime_input import NativeRuntimeTable
@@ -34,11 +36,12 @@ from .native_arguments import SelectedModel
 from .native_attestation import ObservedAttestation
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment
-from .notification_evidence import NotificationAssignmentRead, NotificationWindow
+from agent_comms.message_notification import NotificationWindow
+from agent_comms.notification_assignment import NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
 from .notification_evidence import OwnerOutcomes
-from .presentation import MessageNotification, SentMessageOutcome
+from .message_notification import MessageNotification, SentMessageOutcome
 from .publisher import ParticipantPublisher
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .turn_phase import PreparingPhase, TurnPhase
@@ -64,7 +67,7 @@ class SelectedParticipant(MroDispatch):
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     def __post_init__(self) -> None:
-        self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal))
+        self.goal_permission = TurnGoalPermission(OwnerGoalPermission(self.owner.thread.goal.authority))
 
     @handles(CompactionEvent)
     async def publish_compaction(self, event: CompactionEvent) -> None:
@@ -234,7 +237,7 @@ class SelectedParticipant(MroDispatch):
         lookup = thread.incarnation.lookup
         sent_owner, sent_sources = MessageNotification.sent_sources(
             comms.root, comms.registry, comms.bus.bus, name,
-            limit=NotificationWindow.window_limit,
+            limit=NotificationSelection.window_limit,
         )
         LiveResponseOwner(
             thread=thread, claimed_generation=generation
@@ -251,7 +254,7 @@ class SelectedParticipant(MroDispatch):
             )
             sent_read = NotificationAssignment.capture(
                 store.session._connection,
-                OwnerOutcomes.of(sent_owner.incarnation).selection(sent_sources),
+                NotificationSelection.of(OwnerOutcomes.of(sent_owner.incarnation), sent_sources),
                 privacy,
             )
         sent_read = NotificationAssignment.capture_detached(comms.root, sent_read)

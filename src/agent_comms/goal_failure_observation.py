@@ -9,7 +9,7 @@ from __future__ import annotations
 import math
 import sqlite3
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated
 
 from .turn_failure import TurnFailure
@@ -26,11 +26,10 @@ from .thread_identity import (
 from .typed_table import Column, DurableTables, ForeignKey, TextStorage, TypedTable
 
 if TYPE_CHECKING:
+    from agent_comms.goal_attempts import FailedTurnObservation
     from .goal_attempts import Reservation
     from .goal_presentation import GoalExecution
-    from .goals import Goal
     from .threads import Thread
-    from .turn_lease import TurnLeaseFence
 
 
 class GoalLedgerTable(DurableTables):
@@ -111,46 +110,6 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
         from .goal_attempts import AttemptRecord
 
         return (ForeignKey(columns=("attempt_id",), target=AttemptRecord, target_columns=("attempt_id",)),)
-
-
-@dataclass(frozen=True)
-class FailedTurnObservation:
-    reservation: Reservation = field(repr=False)
-    evidence: FailedTurnEvidence
-
-    @classmethod
-    def from_terminal(
-        cls,
-        reservation: Reservation,
-        *,
-        owner: Thread,
-        goal: Goal,
-        lease: TurnLeaseFence,
-        turn_id: TurnId,
-        claim_scope: int,
-        current_owner: Thread | None,
-        current_claim: int | None,
-        failure: type[TurnFailure],
-    ) -> FailedTurnObservation | None:
-        # Observation is passive: a changed owner, goal or lease yields no
-        # observation. The evidence is built from already-trusted values, so a
-        # construction error is a defect and raises.
-        evidence = FailedTurnEvidence(
-            reservation.attempt_id, reservation.goal_id, reservation.generation,
-            owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
-            lease.identity.generation, goal.revision, turn_id, failure,
-        )
-        if owner.goal != goal or reservation.goal_id != goal.id:
-            return None
-        if lease != evidence.turn:
-            return None
-        if current_owner is None:
-            return None
-        if current_owner.process_identity != owner.process_identity:
-            return None
-        if not evidence.matches_owner(current_owner, current_claim):
-            return None
-        return cls(reservation, evidence)
 
 
 def record_observation(

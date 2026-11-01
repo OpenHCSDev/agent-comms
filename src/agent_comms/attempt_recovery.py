@@ -43,6 +43,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeTa
 from agent_comms.recovery_states import DeferredRecovery, FailedRecovery
 
 from .coordination_database import CoordinationStore
+from .coordination_session import NativeCapture
 from .native_input_record import FullNativeExecution, TriageNativeExecution
 from .native_prompt_binding import (
     expected_prompt_bindings,
@@ -62,9 +63,10 @@ from .locked_store import RegistryFile
 from .registration import Registration
 from .threads import Thread
 
+from .owner_release import OwnerRelease, OwnerReleaseEvidence
+
 if TYPE_CHECKING:
-    from agent_comms.coordination_session import NativeCapture
-    from agent_comms.owner_lifecycle import OwnerLifecycle, OwnerRelease, OwnerReleaseEvidence
+    from agent_comms.owner_lifecycle import OwnerLifecycle
 
 _OWNER_LOSS_ISSUER = object()
 

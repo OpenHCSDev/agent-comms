@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .controller import SessionUpdateSink
     from .pi_commands import SettingCommand
-    from .runtime import RuntimeServer
+    from .runtime_server import RuntimeServer
     from .session_effects import SessionEffects
     from .session_lifecycle import SessionLifecycle
     from .input_drain import OwnerSession

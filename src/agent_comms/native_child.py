@@ -23,6 +23,7 @@ from .pi_rpc import PiRpcChannel
 from .private_path import PrivateSocketRole
 from .publication_measurements import PublicationMeasurements
 from .session_revision import SessionRevision
+from .turn_context import Provenance
 
 if TYPE_CHECKING:
     from typing import Self
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
     from .pi_native_backend import PiNativeBackend
     from .pi_payloads import PiResponseData, StateData
     from .threads import Thread
-    from .turn_context import Provenance, TurnContext
+    from .turn_context import TurnContext
 
 
 class RetirementState(DeclaredFamily):

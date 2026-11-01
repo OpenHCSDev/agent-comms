@@ -40,7 +40,7 @@ from metaclass_registry.mro_dispatch import (
 )
 
 from agent_comms.participant_identity import ParticipantIdentity
-from agent_comms.pi_payloads import RequestId
+from agent_comms.pi_wire import RequestId
 
 from . import agent_events as events
 from . import pi_commands as commands
@@ -76,7 +76,7 @@ from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
 from .turn_item import PiRequestKey
 from .turn_output import TurnOutput
-from .turn_phase import SettlingStatsPhase, TurnPhase
+from .turn_phase import NativePhaseChanged, SettlingStatsPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
 from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
@@ -323,10 +323,10 @@ class NativeSession(MroDispatch, ABC):
         await self.stats.request(self)
         return ()
 
-    def native_phase_changes(self, previous: TurnPhase) -> Iterator[events.NativePhaseChanged]:
+    def native_phase_changes(self, previous: TurnPhase) -> Iterator[NativePhaseChanged]:
         """Publish the actual observer phase without storing another phase copy."""
         if self.watchdog.phase != previous:
-            yield events.NativePhaseChanged(self.watchdog.phase, self.native.proc.identity)
+            yield NativePhaseChanged(self.watchdog.phase, self.native.proc.identity)
 
     @property
     def started_input(self):

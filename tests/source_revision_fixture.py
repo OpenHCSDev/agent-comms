@@ -13,7 +13,8 @@ from agent_comms.registry_document import RegisteredCommanderProject
 from agent_comms.repo import Repo
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.repository_name import RepositoryName
-from agent_comms.change_report import FileLine, OrderRoots
+from agent_comms.todos import OrderRoots
+from agent_comms.change_report import FileLine
 from agent_comms.todos import FixScope, FixShape, PullRequestLink
 from fixture_git import IDENTITY
 

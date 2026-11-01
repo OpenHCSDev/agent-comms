@@ -21,7 +21,8 @@ from .nominal.field_codec import (
 from . import package_stamp
 
 if TYPE_CHECKING:
-    from .runtime import RuntimeProxy, SocketClient
+    from .runtime_server import SocketClient
+    from .runtime import RuntimeProxy
 
 @dataclass(frozen=True, kw_only=True)
 class SocketLine(DeclaredFamily, affix=""):

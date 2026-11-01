@@ -9,13 +9,27 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
 from .message_reference import MessageReference
+from .thread_identity import ThreadIncarnation
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from .messages import Message
-    from .transcript_sources import AssignedSourceIdentity
+
+
+@dataclass(frozen=True)
+class AssignedSourceIdentity:
+    root: str
+    recipient: ThreadIncarnation
+
+    @property
+    def publication_key(self) -> tuple[str, float]:
+        """Published authorship survives a rename, not a new birth or wire."""
+        return self.root, self.recipient.require_recorded().created_at
+
+    def same_publication_source(self, other: AssignedSourceIdentity) -> bool:
+        return self.root == other.root and self.recipient == other.recipient
 
 
 @dataclass(frozen=True, eq=False)

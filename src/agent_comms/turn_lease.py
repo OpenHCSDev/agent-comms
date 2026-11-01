@@ -44,7 +44,8 @@ from .thread_identity import (
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
-    from .goal_presentation import GoalExecution, GoalExecutionSource
+    from agent_comms.goal_management import GoalExecutionSource
+    from .goal_presentation import GoalExecution
     from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .registry_store import RegistryStore

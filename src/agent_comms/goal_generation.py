@@ -32,7 +32,8 @@ if TYPE_CHECKING:
     from .goal_attempts import Generation, GoalAttemptStore
     from .goal_failure_observation import GoalFailureEvidence
     from .goal_management import Goals
-    from .goal_presentation import GoalExecution, GoalExecutionSource
+    from agent_comms.goal_management import GoalExecutionSource
+    from .goal_presentation import GoalExecution
     from .goals import Goal
     from .threads import Thread
 
