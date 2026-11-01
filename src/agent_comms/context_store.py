@@ -25,6 +25,7 @@ from .turn_context import (
     PreviouslyRecordedSegment,
     RecordedContextIdentity,
     RecordedContextManifest,
+    RecordedContextTurn,
     RecordedSegmentManifest,
     SegmentManifest,
     SegmentRecording,
@@ -32,7 +33,7 @@ from .turn_context import (
 )
 
 from .typed_table import StoreRows, Column, DurableStore, Generated, Index, RowidSequenced, SingletonRow, TypedTable
-from .turn_item import NativeItemId
+from .turn_item import NativeItemId, PiRequestKey
 from .native_session_reopen import PiSessionId
 
 
@@ -488,6 +489,22 @@ class ContextStore(DurableStore):
         """Read the thread's previous request from a snapshot, outside any write lock."""
         with self.snapshot() as db:
             return ContextStoreInfo.source_in(db).latest(self, db, owner)
+
+    def require_current_request(
+        self, owner: ThreadIncarnation, turn: RecordedContextTurn, request_id: PiRequestKey,
+    ) -> ContextManifest:
+        """A current-round borrower must name this owner's exact producing request.
+
+        The indexed head is only a candidate. A missing, replaced or differently
+        named request refuses; no previous request or preview is substituted.
+        """
+        with self.snapshot() as db:
+            rows = ContextRequest.newest(db, owner)
+            if len(rows) != 1:
+                raise ValueError("Producing context has not been recorded")
+            source = ContextStoreInfo.require(db, singleton=1).source
+            manifest = self.resolve(db, source, rows[0]).value
+            return ContextManifest.for_request((manifest,), turn, request_id)
 
     def record_after(self, prior: ContextPrior, manifest: ContextManifest) -> CapturedContext:
         """Append ``manifest`` after ``prior``; the result is the next request's prior,

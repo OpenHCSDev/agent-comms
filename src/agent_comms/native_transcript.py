@@ -18,7 +18,6 @@ from .native_input_proof import NativeContextJournal, NativeContextProof, Native
 
 if TYPE_CHECKING:
     from .native_output import NativeRecordLocation
-    from .pi_payloads import PiMessage
     from .rule_deal import Speaking, Voice
     from .read_ledger import ReadLedger
     from .thread_identity import RecordedThreadIncarnation
@@ -482,29 +481,8 @@ class NativeTranscript(TranscriptSource):
     window can hold no turn's end."""
 
     def voice(self, deal: Speaking) -> Voice:
-        """A Pi session file records the session's own words, so its deal asks in the owner's
-        voice and hears the answer here."""
+        """A native thread can receive the question; its admitted round proves the answer."""
         return deal
-
-    def words_end(self) -> int:
-        return self.path.stat().st_size
-
-    def messages_after(self, offset: int) -> tuple[PiMessage, ...]:
-        """The complete messages recorded after `offset`, oldest first; one still being
-        appended waits."""
-        with closing(self.forward(offset, self.words_end())) as records:
-            return tuple(message for record in records if record.complete
-                         for message in record.project(lambda original: original.entry.messages))
-
-    def said_since(self, offset: int) -> tuple[str, ...]:
-        return tuple(words for message in self.messages_after(offset) for words in message.said())
-
-    def said_after(self, line: str, offset: int) -> tuple[str, ...]:
-        """Words before the line arrives are no answer to it and no dodge of it."""
-        messages = self.messages_after(offset)
-        arrival = next((index for index, message in enumerate(messages)
-                        if message.user and line in message.text), len(messages))
-        return tuple(words for message in messages[arrival + 1:] for words in message.said())
 
     def receipts(self) -> SessionReceipts:
         """The session file's recent past, folded oldest first."""
