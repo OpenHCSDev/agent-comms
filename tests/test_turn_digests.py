@@ -208,8 +208,11 @@ def recorded_claude_transcript(tmp_path):
             dict(type='assistant', uuid=transcript_record(f'final-record-{index}'), timestamp=times[3],
                  message=dict(content=[dict(type='text', text='done')])),
         ))
+        final = rows[-1]
+        rows.append(dict(type='system', subtype='turn_duration',
+                         uuid=transcript_record(f'end-record-{index}'), timestamp=times[3]))
     path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
-    return path, rows[-1]
+    return path, final
 
 
 @pytest.mark.parametrize('empty_index', (152, 52))
@@ -273,7 +276,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     assert sizes == [100, 100, 52]
     print(f'Claude transcript via bridge and CommsTurnsTool: pages={sizes}, unique={len(set(seen))}, empty-edge={edge + 1}')
     turn = pages[-1]['turns'][0]
-    assert turn['turn_id'] == 'prompt-51'
+    assert turn['turn_id'] == transcript_record('prompt-record-51')
     assert [event['kind'] for event in turn['events']] == ['user', 'tool_start', 'tool_end', 'assistant']
     assert turn['events'][1]['raw_input'] == dict(path='x.py')
     assert turn['events'][2]['text'] == 'contents'
