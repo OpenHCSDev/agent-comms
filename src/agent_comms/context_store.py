@@ -8,7 +8,7 @@ import json
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
@@ -483,6 +483,33 @@ class ContextStore(DurableStore):
                     for row in ContextEntry.select(db, session_id=identity.session_id,
                                                    session_file=identity.session_file,
                                                    entry_id=entry_id)}
+
+    def retain_entries(
+        self,
+        destination: ContextStore,
+        identities: Iterable[NativeSessionIdentity],
+    ) -> int:
+        """Retain original journal-entry manifests in a fresh context store.
+
+        Session identity is data here: neither its path nor its entry keys are
+        relocated. Request/predecessor state and producer identity do not travel
+        with these complete entry manifests. The primary-key prefix selects only
+        the requested journals; streaming never decodes unrelated context history.
+        """
+        if destination.path.exists() or destination.path.is_symlink():
+            raise FileExistsError(destination.path)
+        count = 0
+        with self.snapshot() as source, destination.writing() as retained:
+            for identity in dict.fromkeys(identities):
+                with closing(ContextEntry.stream(
+                    source,
+                    session_id=identity.session_id,
+                    session_file=identity.session_file,
+                )) as entries:
+                    for entry in entries:
+                        entry.insert(retained)
+                        count += 1
+        return count
 
     def prior(self, owner: ThreadIncarnation) -> RecordedContextState:
         """Read the thread's previous request from a snapshot, outside any write lock."""
