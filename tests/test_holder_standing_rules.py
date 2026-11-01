@@ -1077,8 +1077,8 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
     worker = held_bus.registry.require("worker")
     todos = held_bus.goals.todos
     for todo in todos.for_goal(worker.incarnation, worker.goal.require().id):
-        released = todos.apply(todo.id, ReleaseTodo(todo.revision, lead, todo.held(), StrikeReason(
-            "The commander moved this assigned repair elsewhere while the unit was held.")))
+        released = todos.apply(todo.id, ReleaseTodo(todo.revision, todo.held().owner_identity, todo.held(), StrikeReason(
+            "The holder explicitly releases its exact assignment before the repair moves elsewhere.")))
         todos.apply(todo.id, WithdrawTodo(
             released.revision, lead, released.holder_state.previous_assignment(),
             "The requested repair already merged into main through another problem."))

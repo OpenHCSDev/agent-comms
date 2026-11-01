@@ -39,8 +39,8 @@ def test_an_unheld_order_does_not_count(recorded_problem, source_repository):
     comms = recorded_problem
     current = held_order(comms, 1, 50)
     released = comms.goals.todos.apply(current.id, ReleaseTodo(current.revision,
-        comms.registry.require("lead").incarnation, current.held(),
-        StrikeReason("The commander releases this order so another worker can repair the owner.")))
+        current.held().owner_identity, current.held(),
+        StrikeReason("The holder releases this order so another worker can repair the owner.")))
     reading = PlanReading((released,), MainTree.of(source_repository, NominalCensus()))
     assert not BusWriterPhase.ordered(reading)
 

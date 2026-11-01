@@ -505,19 +505,17 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     recent: ClassVar[int] = 10 * 60
 
     @classmethod
-    def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
+    def read_idle(cls, comms: Comms) -> list[Thread]:
         """A fresh read and an already captured frame share the same idle selection."""
-        actor = comms.registry.require_lookup(commander.require_recorded().lookup)
-        return cls.idle(comms, actor.name, HeldOrders.read(comms))
+        return cls.idle(comms, HeldOrders.read(comms))
 
     @classmethod
-    def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:
-        """Units whose registered status is running, parked threads aside."""
+    def idle(cls, comms: Comms, scan: HeldOrders) -> list[Thread]:
+        """Available independent executors, regardless of who issued the request."""
         held = {todo.holder for todo in scan.todos}
-        excluded = held | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((candidate for thread in comms.registry.active_threads().values()
-                       if thread.name not in excluded
+                       if thread.name not in held
                        for candidate in thread.execution.order_candidates(thread)
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
                       key=lambda thread: thread.name)
@@ -546,7 +544,6 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     @classmethod
     def scan_orders(cls, comms: Comms, commander: str,
                     scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
-        actor = comms.registry.require(commander).incarnation
         return cls.paired(comms, commander, comms.goals.todos.board(), scan, pulls)
 
     @classmethod
@@ -565,7 +562,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         owners = {rule.previous.owner_identity for rule in retained}
         unowned = tuple(todo for todo in rows if todo.id not in protected)
         # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
-        idle = [unit for unit in cls.idle(comms, commander, scan)
+        idle = [unit for unit in cls.idle(comms, scan)
                 if unit.incarnation not in owners] if unowned else []
         found = []
         for todo in unowned:

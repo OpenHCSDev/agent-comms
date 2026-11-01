@@ -675,7 +675,7 @@ class CommanderUnitRead(
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
-                return card.detail(comms, self.commander, self.orders)
+                return card.detail(comms, self.orders)
         raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
 
 

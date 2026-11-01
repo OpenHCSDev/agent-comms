@@ -66,7 +66,7 @@ from agent_comms.todos import (
     DraftListedPullRequest,
     MergedListedPullRequest,
     MergedProgress,
-    NotOrderCommander,
+    NotWorkMaintainer,
     OperationDelivery,
     PendingProblemOrder,
     ProgressRead,
@@ -199,7 +199,7 @@ def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, sou
     assert TodoStore(tmp_path).list(RepositoryName.from_wire("openhcsdev/agent-comms")) == (original,)
     newer = other_birth("lead", tmp_path, 2.0)
     assert store.get(original.id).request == request
-    with pytest.raises(NotOrderCommander):
+    with pytest.raises(NotWorkMaintainer):
         store.apply("P1", ChangeTodoState(1, DoneTodoState, newer.incarnation, None))
     assert store.get("P1") == original
 
@@ -244,7 +244,7 @@ def test_withdraw_retires_a_released_problem(tmp_path, source_repository):
         creator=lead, assigner=lead.incarnation, owner=worker, generation=first_goal_id,
             request=request,
         review_at=RecordedEventTime(1000), order=order(source_repository))
-    released = store.apply(todo.id, ReleaseTodo(todo.revision, lead.incarnation, todo.held(),
+    released = store.apply(todo.id, ReleaseTodo(todo.revision, todo.held().owner_identity, todo.held(),
         StrikeReason("The previous worker stopped before completing this assigned repair on main.")))
     previous = released.holder_state.previous_assignment()
     assert previous == todo.held()
@@ -310,7 +310,7 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_reposit
     delivered = store.apply(todo.id, DeliverTodo(todo.revision, lead.incarnation,
         OperationDelivery(at=RecordedEventTime(20)), todo.order.id))
     if released:
-        delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, lead.incarnation,
+        delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, todo.held().owner_identity,
             todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
     with pytest.raises(ValueError):
         store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
@@ -572,7 +572,7 @@ def released_published_orders(pr_commander, github_cli):
             row.revision, owner.incarnation, PullRequestLink(source.github, number), row.held().generation))
         originals[problem] = row
         c.goals.todos.apply(row.id, ReleaseTodo(
-            row.revision, CoreWatcherIncarnation.watcher(), row.held(),
+            row.revision, row.held().owner_identity, row.held(),
             StrikeReason('The watcher released this active unit while its published work remains open.')))
     return ctx, originals
 
@@ -650,7 +650,7 @@ def test_order_is_merged_only_when_every_linked_request_merged(pr_commander, git
         # The checks read this snapshot; the lead holds one order at a time, so its hold goes
         # before the next linked problem is ordered to it.
         ctx.comms.goals.todos.apply(todo.id, ReleaseTodo(
-            todo.revision, CoreWatcherIncarnation.watcher(), todo.held(),
+            todo.revision, todo.held().owner_identity, todo.held(),
             StrikeReason('The fixture moves the lead to the next linked problem it checks.')))
         return todo
 
@@ -725,7 +725,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_commander, monkeypatch)
                    for rule in OwedAnswer.opened(c, ctx.commander))
         released = pr_order(ctx, "P3", goal_id=pr_work_goal_id)
         c.goals.todos.apply(released.id, ReleaseTodo(
-            released.revision, CoreWatcherIncarnation.watcher(), released.held(),
+            released.revision, released.held().owner_identity, released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
         rule = c.registry.storage_rule
         checkout = rule.order_checkout(rule.initial_roots(lead.name), released.id)

@@ -174,7 +174,7 @@ class ReadIdle:
 
     @classmethod
     def read(cls, comms: Comms, binding: Binding) -> Self:
-        return cls(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms, binding.owner)))
+        return cls(tuple(unit.name for unit in UnownedWheelSpin.read_idle(comms)))
 
     def reasons(self, deferred: tuple[str, ...]) -> Iterator[str]:
         if self.units:

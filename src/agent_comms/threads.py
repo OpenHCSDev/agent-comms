@@ -250,9 +250,8 @@ class ThreadProvenance:
 
     @property
     def acting_identity(self) -> ThreadIncarnation:
-        """An independent collaborator's own authority; in-turn callers bind their parent."""
-        own = self.incarnation.require_recorded()
-        return own.peer_for(own)
+        """Provenance alone grants no work authority or parent representation."""
+        return self.incarnation
 
 
 class ThreadCatalogFile(DurableFile, PatternFile):
@@ -265,6 +264,12 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
+
+    @property
+    def acting_identity(self) -> ThreadIncarnation:
+        """Only independent executors maintain shared work; children bind at tool entry."""
+        return next((peer.incarnation.require_recorded().as_colleague()
+                     for peer in self.role.independent_threads(self)), self.incarnation)
 
     def answering_thread(self, reader: Thread) -> Thread:
         """A live declaration answers what it owes in its own transcript, whoever reads the debt."""

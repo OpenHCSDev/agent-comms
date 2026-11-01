@@ -199,8 +199,8 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
                        StrikeReason(ROAST).text, RecordedEventTime(time.time()),
                        evidence=(current.order.owner,)).record(comms.goals, current.id)
     current = comms.goals.todos.get(original.id)
-    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
-        "The commander explicitly releases this order after reviewing its work")).record(comms.goals, current.id)
+    ReleaseTodo(current.revision, current.held().owner_identity, current.held(), StrikeReason(
+        "The holder explicitly releases this order after reviewing its work")).record(comms.goals, current.id)
     released = comms.goals.todos.get(original.id)
     assert released.current_holder.current_assignments() == ()
     assert released.order.holds_head(request)
@@ -209,7 +209,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
-    ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(
+    ReleaseTodo(other.revision, other.held().owner_identity, other.held(), StrikeReason(
         "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
@@ -222,7 +222,7 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
     assert comms.registry.require("worker").goal.require() == goal
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
-    reassigned = accepted.assigned(proposed, accepted.order.owner)
+    reassigned = accepted.assigned(proposed, accepted.order.owner, previous.owner_identity)
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 
@@ -235,8 +235,8 @@ def test_released_merged_work_refuses_late_review_but_can_be_delivered(
     RecordPullRequest(todo.revision, todo.creator_identity,
                       PullRequestLink(todo.repo, 42), previous.generation).record(ctx.comms.goals, todo.id)
     current = store.get(todo.id)
-    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
-        "The commander explicitly releases this order after reviewing its work")).record(ctx.comms.goals, todo.id)
+    ReleaseTodo(current.revision, current.held().owner_identity, current.held(), StrikeReason(
+        "The holder explicitly releases this order after reviewing its work")).record(ctx.comms.goals, todo.id)
     _, first, _ = merge_two_commit_fix(cited_source, tmp_path / "bin", 42)
     current = store.get(todo.id)
     request = ctx.comms.goals.todos.resolve_order(ctx.incarnation, previous.owner, todo.id)

@@ -650,8 +650,7 @@ class RegisteredCommanderProject(CommanderProject):
         """Execution owns independence; storage lead, tags and fork provenance grant none."""
         return tuple(dict.fromkeys(
             peer for thread in threads
-            for executor in thread.role.executor(thread)
-            for peer in executor.execution.independent_threads(executor)))
+            for peer in thread.role.independent_threads(thread)))
 
     def lead(self, snapshot: RegistrySnapshot) -> Thread:
         """The one registered commander a fork is declared under."""

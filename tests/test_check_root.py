@@ -174,7 +174,7 @@ def test_acting_for_a_commander_answers_what_that_commander_received(source):
     people = source.registry.snapshot()
     retired = people.require("A").incarnation.require_recorded()
     peer = people.require("B").incarnation.require_recorded()
-    peer_authority = peer.peer_for(peer)
+    peer_authority = peer.as_colleague()
     fork = people.require("unselected").incarnation.require_recorded().acting_for(peer_authority)
     for actor in (peer_authority, fork):
         reply = source.messaging.send(

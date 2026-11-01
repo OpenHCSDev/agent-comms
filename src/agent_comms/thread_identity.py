@@ -235,16 +235,19 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         return self
 
     def commands(self, creator: ThreadIncarnation) -> bool:
-        """Whether this actor may act for ``creator``: change its orders, complete its owner
-        requests and answer what it received. Its own only, unless an authority says more."""
+        """Shared work maintenance; this does not authorize taking its holder's work."""
         return creator == self.commanding_identity
+
+    def represents(self, owner: ThreadIncarnation) -> bool:
+        """Only its own incarnation, unless a real in-turn caller binds a parent."""
+        return self == owner
 
     def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
         """Whose receipts this actor may answer: a birthless member received nothing."""
         return ()
 
     def require_may_change(self, todo: Todo) -> None:
-        todo.require_commander(self)
+        todo.require_maintainer(self)
 
     def selects_lookup(self, lookup: ThreadLookup) -> bool:
         return False
@@ -317,8 +320,8 @@ class RecordedThreadIncarnation(ThreadIncarnation, ParticipantIdentity):
     def acting_for(self, authority: ThreadIncarnation) -> CommanderForkIdentity:
         return CommanderForkIdentity(self.name, self.created_at, authority)
 
-    def peer_for(self, authority: ThreadIncarnation) -> CommanderPeerIdentity:
-        return CommanderPeerIdentity(self.name, self.created_at, authority)
+    def as_colleague(self) -> CommanderPeerIdentity:
+        return CommanderPeerIdentity(self.name, self.created_at)
 
     def renamed(self, name: str) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(name, self.created_at)
@@ -347,15 +350,18 @@ class CommanderForkIdentity(RecordedThreadIncarnation):
 
     @property
     def commanding_identity(self) -> ThreadIncarnation:
-        return self.authority
+        return self.authority.commanding_identity
 
     def commands(self, creator: ThreadIncarnation) -> bool:
         """A fork acts with its parent's authority, a commander peer's included."""
         return self.authority.commands(creator)
 
+    def represents(self, owner: ThreadIncarnation) -> bool:
+        return super().represents(owner) or self.authority.represents(owner)
+
 
 @dataclass(frozen=True, eq=False)
-class CommanderPeerIdentity(CommanderForkIdentity):
+class CommanderPeerIdentity(RecordedThreadIncarnation):
     """An independent collaborator can maintain shared orders under its own identity.
 
     Channel tags confer no privilege, and a retired creator does not orphan shared work.
@@ -417,14 +423,17 @@ class UnrecordedThreadIncarnation(BirthlessIncarnation):
 
 @dataclass(frozen=True)
 class CoreWatcherIncarnation(BirthlessIncarnation):
-    """Core's own watcher: it records failed order checks, releases struck-out orders and hands
-    them to idle units, and is never a thread. No clock makes it strike or release anything."""
+    """Core records objective check failures and reissues unheld work under its own identity.
+
+    It is not a thread and cannot represent a holder or answer its inputs.
+    """
 
     WIRE_BIRTH: ClassVar[float] = -2.0
     hands_out_released_work: ClassVar[bool] = True
 
-    def require_may_change(self, todo: Todo) -> None:
-        """The Core watcher may advance released orders without a commander turn."""
+    def commands(self, creator: ThreadIncarnation) -> bool:
+        """Core maintains shared work, but owns no colleague's assignment or receipts."""
+        return True
 
     @classmethod
     def watcher(cls) -> CoreWatcherIncarnation:
@@ -615,6 +624,12 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
 
 
     origin_label: ClassVar[str]
+
+    @classmethod
+    def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
+        """Derive work actors from this role's executors and their declared independence."""
+        return tuple(peer for executor in cls.executor(thread)
+                     for peer in executor.execution.independent_threads(executor))
 
     @classmethod
     def allows_automatic_reply(cls) -> bool:

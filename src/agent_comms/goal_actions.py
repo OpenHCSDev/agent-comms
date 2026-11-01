@@ -52,7 +52,7 @@ from .owner_requests import OwnerRequestId
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .repository_name import RepositoryName
-from .thread_identity import ThreadIncarnation
+from .thread_identity import CoreWatcherIncarnation, ThreadIncarnation
 from .threads import Thread
 from .reported_turn import ReportedTurnState
 from .attempt_resolution import ComplianceDecision, OrderDecision, RetryDecision
@@ -583,8 +583,8 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def require_ready(self, ctx: GoalActionContext) -> None:
         """Recheck local request facts before goal reservation or allocating a child."""
         self.require_sendable(ctx.goals.registry.snapshot().commander_project)
-        commander = ctx.goals.registry.require(self.commander)
-        ctx.goals.todos.owner_request(self.request).require_open(commander.acting_identity)
+        ctx.goals.registry.require(self.commander)
+        ctx.goals.todos.owner_request(self.request).require_open(self.assigner)
         self.review_at.require_recorded("A review time")
 
     def require_sendable(self, project: CommanderProject) -> None:
@@ -634,15 +634,14 @@ class ReissuedOrderGoalAction(OrderGoalAction):
 
     @classmethod
     def for_todo(cls, todo: Todo, commander: str) -> Self:
-        """The order the Todo already accepted, handed again with a fresh review window, by the
-        actor that assigned it."""
+        """Core reissues accepted unheld work, recording itself rather than an invented actor."""
         now = time.time()
         order = todo.order.reissued(now)
         return cls(
             problem=todo.id, expected_revision=todo.revision,
             order=order, request=todo.request.require(),
             review_at=todo.reissued_review(now), commander=commander,
-            assigner=todo.acting_assigner,
+            assigner=CoreWatcherIncarnation.watcher(),
             traced=order.owner)
 
     def require_sendable(self, project: CommanderProject) -> None:

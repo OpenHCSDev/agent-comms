@@ -225,10 +225,10 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
         original.id,
         ReleaseTodo(
             original.revision,
-            parent.incarnation,
+            original.held().owner_identity,
             original.held(),
             StrikeReason(
-                "The original worker stopped and the parent has explicitly released its assignment."
+                "The original holder explicitly releases its exact assignment before the new order."
             ),
         ),
     )
@@ -243,12 +243,14 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert saved.latest_message.actor == fork.incarnation
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
-    # Core's reissue acts as the fork that assigned the unit, under the fork's commander.
-    reissuer = saved.acting_assigner
-    assert reissuer == fork.incarnation and reissuer.commanding_identity == parent.incarnation
+    # A reissue records Core itself, never reconstructs a departed assigner's authority.
+    from agent_comms.goal_actions import ReissuedOrderGoalAction
+    from agent_comms.thread_identity import CoreWatcherIncarnation
+    reissuer = ReissuedOrderGoalAction.for_todo(saved, parent.name).assigner
+    assert reissuer == CoreWatcherIncarnation.watcher()
     reissuer.require_may_change(saved)
     with store.snapshot() as db:
-        reissued(saved, reissuer).require_free(
+        incoming_for(saved).require_free(
             db, saved.held().owner_identity, comms.registry.snapshot())
     print(f"Core send actor: {saved.held().parent}; problem commander: {saved.creator}")
     ctx = CommanderContext.read_root(comms.root).model_copy(
@@ -270,7 +272,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
     assert "unjudged edits" in str(load.load)
     refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
-    assert refused.returncode != 0 and "worker is assigned by fork-one" in refused.stderr
+    assert refused.returncode != 0 and "cannot release or replace that assignment" in refused.stderr
     assert store.get("P40") == saved
     interim = tmp_path / "interim.txt"
     interim.write_text("The first review is complete; another check remains.")
@@ -284,15 +286,15 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert retired.returncode == 0, retired.stderr
     assert not comms.registry.status("fork-one").receiving
     assert store.get("P40") == saved
-    # The ended fork's open order is the commander's to replace; nobody else's.
+    # Ending an issuer changes neither unit occupancy nor holder consent.
     with store.snapshot() as db:
-        reissued(saved, parent.incarnation).require_free(
+        incoming_for(saved).require_free(
             db, saved.held().owner_identity, comms.registry.snapshot())
 
 
-def reissued(todo, assigner):
-    """The incoming work of a resend of ``todo``'s own order by ``assigner``."""
-    return IncomingWork(assigner, frozenset({todo.id}), frozenset({todo.order.checked().id}))
+def incoming_for(todo):
+    """Occupancy depends on the incoming work group, not the previous issuer."""
+    return IncomingWork(frozenset({todo.id}), frozenset({todo.order.checked().id}))
 
 
 def record_edits(comms, source, count):
@@ -487,7 +489,7 @@ def test_canonical_primary_companion_and_released_roots_take_precedence(edit_sou
     released_path = rule.order_checkout(roots, released.id)
     source.git(source.checkout, "worktree", "add", "-q", "-b", "released-P41", str(released_path))
     store.apply(released.id, ReleaseTodo(
-        released.revision, comms.registry.require("lead").incarnation, released.held(),
+        released.revision, released.held().owner_identity, released.held(),
         StrikeReason("The independent order is released; its checkout must not spill.")))
     current = store.get("P40")
     save_edit_order(comms, replace(current, order=replace(
@@ -617,19 +619,17 @@ def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
     owner = comms.registry.require("retained").incarnation
     assert store.holds_pending(owner)
     assert store.for_goal(owner, todo.held().generation) == (todo,)
-    assert store.held_by(comms.registry.require("lead").incarnation, owner) == (todo,)
+    assert store.held_by(owner) == (todo,)
     other_birth = RecordedThreadIncarnation(owner.name, owner.wire_birth + 1)
     assert not store.holds_pending(other_birth)
     assert store.for_goal(other_birth, todo.held().generation) == ()
     snapshot = comms.registry.snapshot()
-    sibling = reissued(todo, comms.registry.require("other").incarnation)
+    incoming = incoming_for(todo)
     with store.snapshot() as db:
-        reissued(todo, todo.held().parent_identity).require_free(db, owner, snapshot)
-        sibling.require_free(db, other_birth, snapshot)
+        incoming.require_free(db, other_birth, snapshot)
         queries = []
         db.set_trace_callback(queries.append)
-        with pytest.raises(TodoError, match="retained is assigned by lead"):
-            sibling.require_free(db, owner, snapshot)
+        incoming.require_free(db, owner, snapshot)
         db.set_trace_callback(None)
         plan = db.execute("EXPLAIN QUERY PLAN " + queries[0]).fetchall()
         print("Shared open-unit query plan:", [tuple(row) for row in plan])
@@ -641,14 +641,14 @@ def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
     store = comms.goals.todos
     todo = store.get("P40")
     owner = todo.held().owner_identity
-    sibling = reissued(todo, comms.registry.require("other").incarnation)
-    with store.snapshot() as db, pytest.raises(TodoError, match="finish or release"):
-        sibling.require_free(db, owner, comms.registry.snapshot())
+    incoming = IncomingWork(frozenset({"P41"}), frozenset({OrderId.mint()}))
+    with store.snapshot() as db, pytest.raises(TodoError, match="already holds orders"):
+        incoming.require_free(db, owner, comms.registry.snapshot())
     with store.writing() as db:
         replace(todo, order=todo.order.merged("0" * 40), revision=todo.revision + 1).upsert(db)
     assert not store.get("P40").order.occupies_holder()
     with store.snapshot() as db:
-        sibling.require_free(db, owner, comms.registry.snapshot())
+        incoming.require_free(db, owner, comms.registry.snapshot())
 
 
 def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
@@ -738,8 +738,8 @@ def open_problem(comms, source, order, pid, owner):
 def released(comms, todo):
     """The problem with no holder, as Core's release leaves it."""
     return comms.goals.todos.apply(todo.id, ReleaseTodo(
-        todo.revision, comms.registry.require("lead").incarnation, todo.held(),
-        StrikeReason("The fixture frees this problem so one order can name it.")))
+        todo.revision, todo.held().owner_identity, todo.held(),
+        StrikeReason("The holder releases this problem so another order can name it.")))
 
 
 def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_path):
@@ -765,9 +765,14 @@ def test_one_order_takes_a_new_problem_and_one_the_unit_holds_in_either_order(
     held = open_problem(comms, source, order, "P41", "worker")
     group = (held.id, fresh.id) if held_first else (fresh.id, held.id)
     sent = replace(order, id=OrderId.mint())
-    result = command(comms, "order", "send", "worker",
-                     document(tmp_path / "group.json", sent, group))
-    assert result.returncode == 0, result.stderr
+    worker = comms.registry.require("worker")
+    revisions = {todo.id: todo.revision for todo in (held, fresh)}
+    comms.goals.update_goal(worker.name, OrderGoalAction(
+        problem=group[0], expected_revision=revisions[group[0]],
+        together=(ExpectedProblem(group[1], revisions[group[1]]),),
+        assigner=worker.acting_identity, commander="lead",
+        request=held.request.require(), review_at=RecordedEventTime(time.time() + 600),
+        order=sent))
     for pid in group:
         todo = store.get(pid)
         assert todo.holder == "worker" and todo.order.checked().id == sent.id
@@ -791,8 +796,8 @@ def test_unrelated_held_work_refuses_the_same_assigner(fork_bus, tmp_path):
     assert comms.registry.require("worker").goal == goal
 
 
-def test_a_sibling_forks_hold_refuses_the_whole_group(fork_bus, tmp_path):
-    """The group is one write: a sibling's hold on one member writes none of the others."""
+def test_an_unapproved_holder_change_refuses_the_whole_group(fork_bus, tmp_path):
+    """A maintainer is not the holder: its refusal writes none of the group."""
     comms, source, order = fork_bus
     store = comms.goals.todos
     first = released(comms, store.get("P40"))
@@ -806,8 +811,7 @@ def test_a_sibling_forks_hold_refuses_the_whole_group(fork_bus, tmp_path):
                       document(tmp_path / "group.json", replace(order, id=OrderId.mint()),
                                (other.id, held.id)), "--fork", "fork-two")
     assert refused.returncode != 0
-    assert (f"worker is assigned by fork-one on open order {held.order.checked().id} "
-            f"({held.id})") in refused.stderr
+    assert "cannot release or replace that assignment" in refused.stderr
     assert (store.get(held.id), store.get(other.id)) == (held, other)
 
 

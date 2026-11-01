@@ -473,8 +473,7 @@ class CommanderContext(BaseModel):
         return HeldOrders.read(self.comms).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_by(
-            self.incarnation, self.comms.registry.require(unit).incarnation)
+        return self.comms.goals.todos.held_by(self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
         """The current registry names of every unit this commander ordered."""
@@ -1516,7 +1515,7 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        for unit in UnownedWheelSpin.read_idle(ctx.comms, ctx.project.commander):
+        for unit in UnownedWheelSpin.read_idle(ctx.comms):
             print(unit.name)
 
 

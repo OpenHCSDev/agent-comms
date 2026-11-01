@@ -205,8 +205,8 @@ class CommanderPeerCaller(ThreadCaller):
 
 
 @dataclass(frozen=True)
-class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
-    """A peer bound to the registered commander whose orders it judges and directs."""
+class CommanderPeerAuthority(CommanderPeerCaller):
+    """Explicit record selection, never representation of the selected storage owner."""
 
     authority: str
 
@@ -217,8 +217,7 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
         return comms.registry.require(self.authority)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        own = comms.registry.require(self.name).incarnation.require_recorded()
-        return own.peer_for(self.commander(comms).incarnation)
+        return comms.registry.require(self.name).acting_identity
 
 
 @dataclass(frozen=True)
