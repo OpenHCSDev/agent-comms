@@ -102,9 +102,8 @@ async function run(label, adapter, selectedModel, config = {}) {
     const result = await stream.result();
     const emitted = [];
     await observation.emit({type:'message_end',message:result}, event=>emitted.push(event));
-    assert.equal(emitted[0].message.agentCommsRequestId, observation.requestId);
-    assert.notEqual(emitted[0].message, result);
-    assert.equal(result.agentCommsRequestId, undefined);
+    // The observer measures publication without cloning or rewriting the SDK message.
+    assert.strictEqual(emitted[0].message, result);
     const selected = points.filter(p=>['dispatch','headers','first_event','stream_end'].includes(p.stage));
     const record = {label,stopReason:result.stopReason,points:selected,nativeEvents,
         posts:requests.length-start,callbackMs:points.at(-1)?.callbackMs,

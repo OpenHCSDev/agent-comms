@@ -1,4 +1,4 @@
-/** The producing request owns its identity. Timing remains diagnostic only. */
+/** One model request owns its progress and callback observations. */
 import { randomUUID } from "node:crypto";
 
 export function observeRequest(options, record, iterator) {
@@ -69,12 +69,7 @@ export class NativeRequest {
     }
 
     async emit(event, publish) {
-        // Bind at the request's lexical emitter, never from observer order or
-        // a provider call id (which providers may reuse in another round).
-        const emitted = event.message?.role === "assistant"
-            ? { ...event, message: { ...event.message, agentCommsRequestId: this.requestId } }
-            : event;
-        return this.callback(event.type, () => publish(emitted), event.type !== "message_update");
+        return this.callback(event.type, () => publish(event), event.type !== "message_update");
     }
 }
 

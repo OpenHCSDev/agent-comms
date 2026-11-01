@@ -907,9 +907,6 @@ class AbsentMessage(ExternalNullMember, PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PublicInstructionAnnotations, PiMessage):
-    producing_request: Annotated[PiField[PiRequestId], WireName("agentCommsRequestId")] = field(
-        default_factory=AnonymousRequest
-    )
     # Pi's assistant record always carries an array, including failed terminals.
     content: Annotated[ReportedParts, WireRequired()] = ReportedParts(())
     # Original Pi completion metadata. These are observations, not registry

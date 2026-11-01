@@ -7,14 +7,13 @@ outside its checkouts, so the audit it owes is a file its Write tool may create.
 tool denial: Pi shows its text to the model as the tool's error.
 
 Tristan asks a Pi thread "did you mean it?" the way he asks a Claude session: a line in his own
-voice, which the thread reads as a user follow-up. Only the admitted native round's assistant
-can answer after its producing context proves that original question was included.
+voice, which the thread reads as a user follow-up. Its own audit carries the explanatory
+answer to that exact question, through the same owner and policy as every other backend.
 """
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Iterator
-from contextlib import asynccontextmanager
+from collections.abc import Iterator
 from functools import partial
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,17 +21,7 @@ from typing import TYPE_CHECKING, Self
 
 from agent_comms_hooks.skill import DeckReader, RulesOnly
 
-from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .errors import RelationViolationError, StoredHistoryUnreadable
-from .input_disposition import InputDispositions
-from .native_failures import NativePiUnavailable
-from .native_input_proof import NativeContextJournal
-from .native_runtime_input import NativeRuntimeInput
-from .nominal.field_codec import FieldCodec, MalformedRecord
-from .transcripts import TranscriptRead
-from .turn_context import RecordedContextTurn
-from .turn_item import FreshNativeId
 from .bus_publication import Delivered
 from .channel_targets import ThreadTarget
 from .nominal.field_codec import ThreadLookup
@@ -42,13 +31,7 @@ from .task_attachments.owner_notices import MeantNotice
 from .tool_denial import SelectedToolDenied
 
 if TYPE_CHECKING:
-    from .backend import TurnSession
-    from .native_entries import NativeEvidenceScope
     from .native_tool_call import NativeToolCall
-    from .native_input_proof import NativeContextProof, NativeContextRecord
-    from .native_session_files import NativeSessionFiles
-    from .messages import MessageInput
-    from .native_tool_transport import NativeToolRound, ToolTransport
     from .comms import Comms
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -79,24 +62,16 @@ class PiRuleGate(DealtRuleGate):
     def refuse(self, reason: str) -> None:
         raise RulesUnread(reason)
 
-    @asynccontextmanager
-    async def round_gate[Call: NativeToolCall](
-        self, round: NativeToolRound[Call], transport: ToolTransport[Call],
-    ) -> AsyncIterator[PiRuleGate]:
-        yield self
-
-    async def judge_round[Call: NativeToolCall](
-        self, call: Call, round: NativeToolRound[Call], transport: ToolTransport[Call],
-    ) -> None:
-        async with self.round_gate(round, transport) as gate:
-            await Coordination.run_worker(partial(call.judge_under, gate))
+    async def judge_call[Call: NativeToolCall](self, call: Call) -> None:
+        """Blocking gate/store work stays with the existing coordination worker."""
+        await Coordination.run_worker(partial(call.judge_under, self))
 
 
 @dataclass(frozen=True)
 class PiThreadGate(PiRuleGate, Speaking):
     """A thread's deal seated on its bus: publish the owner's question and format receipts.
 
-    Only the round-bound subclass can prove an answer; display history cannot settle it.
+    Successful audit edits settle answers through the shared RuleDeal owner.
     """
 
     comms: Comms = field(compare=False, repr=False)
@@ -117,100 +92,10 @@ class PiThreadGate(PiRuleGate, Speaking):
     def say(self, line: str, deal: RuleDeal) -> Asked:
         """His line goes to the thread under his own thread, as every owner notice does."""
         message = MeantNotice().publish(self.comms.messaging, ThreadTarget(self.thread.name), line)
-        return Asked(message.message_id, 0)
+        return Asked(message.message_id)
 
     def receipts(self) -> SessionReceipts:
         return self.session().receipts()
-
-    @asynccontextmanager
-    async def round_gate[Call: NativeToolCall](
-        self, round: NativeToolRound[Call], transport: ToolTransport[Call],
-    ) -> AsyncIterator[PiRuleGate]:
-        turn = transport.turn
-        async with turn.cursor_delivery.reading() as source_reads:
-            yield PiRoundGate(
-                self.scratch, self.worktree, self.comms, self.thread, round, turn, source_reads,
-            )
-
-    def said_after(self, asked: Asked) -> tuple[str, ...]:
-        # A historical or out-of-round caller cannot identify a producer.
-        return ()
-
-
-@dataclass(frozen=True)
-class PiRoundGate[Call: NativeToolCall](PiThreadGate):
-    """Question settlement borrows only this admitted round's producing request."""
-
-    round: NativeToolRound[Call] = field(compare=False, repr=False)
-    turn: TurnSession = field(compare=False, repr=False)
-    source_reads: NativeEvidenceScope = field(compare=False, repr=False)
-
-    def said_after(self, asked: Asked) -> tuple[str, ...]:
-        try:
-            self.require_question(asked)
-        except (ValueError, MalformedRecord, RelationViolationError, IdentityConflict,
-                NativePiUnavailable, StoredHistoryUnreadable) as error:
-            raise RulesUnread(f"Original question arrival is unproved: {error}") from error
-        return self.round.assistant.said()
-
-    def require_question(self, asked: Asked) -> None:
-        lease = self.thread.require_turn_lease()
-        manifest = self.comms.contexts.require_current_request(
-            self.thread.incarnation, RecordedContextTurn(lease.turn_id, lease.identity),
-            self.round.assistant.producing_request.require(),
-        )
-        identity = self.turn.native.attestation.require_identity()
-        context = manifest.committed_context(identity)
-        files = self.turn.launch.session.files(self.comms.root)
-        message = self.comms.bus.bus.lookup_message(asked.message_id)
-        delivery = self.comms.bus.bus.delivery(message.seq)
-        lookup = self.thread.incarnation.require_recorded().lookup
-        if not any(recipient.lookup == lookup for recipient in delivery.recipients):
-            raise ValueError("Original question belongs to another recipient incarnation")
-        entries = manifest.user_entries(message.reference)
-        if not entries:
-            raise ValueError("Original question is absent or transformed in this request")
-        for entry in entries:
-            with NativeContextJournal.open_evidence(files.input_proof) as db:
-                rows = NativeContextJournal.select(
-                    db, request_generation=context.request_generation,
-                    session_id=identity.session_id,
-                    session_entry_id=FieldCodec.decode(FreshNativeId, entry),
-                )
-            for row in rows:
-                if row.llm_context_digest != context.context_digest:
-                    raise ValueError("Producing context and native journal disagree")
-                for original in self.original_contexts(row, files, message, lookup):
-                    if original.input_id != row.input_id:
-                        continue
-                    observed = row.at(files.session, session_entry_start=original.session_entry_start)
-                    original.require_continuation(observed)
-                    evidence = self.source_reads.for_source(files.session)
-                    if not evidence.corroborates_context(observed, input_id=row.input_id, files=files):
-                        raise ValueError("Original question lacks matching native byte evidence")
-                    return
-        raise ValueError("Original question has no acknowledged input in this request")
-
-    def original_contexts(
-        self, row: NativeContextRecord, files: NativeSessionFiles,
-        message: MessageInput, lookup: ThreadLookup,
-    ) -> tuple[NativeContextProof, ...]:
-        root_id = self.comms.registry.store.privacy().namespace
-        inputs = InputDispositions(self.comms.root)
-        original = inputs.lookup(inputs.bus_key(message, self.thread))
-        contexts = original.model_contexts_for(root_id, message.reference)
-        if any(context.input_id == row.input_id for context in contexts):
-            return contexts
-        with TranscriptRead.publication_source(self.comms.root) as db:
-            if db is None:
-                raise ValueError("Original selected input store is unavailable")
-            return tuple(context for selected in NativeRuntimeInput.select(
-                db, input_id=row.input_id, session_id=row.session_id,
-                session_file=str(files.session), owner_lookup=lookup,
-            ) for context in selected.model_contexts_for(
-                db, self.comms.bus.bus, lookup, message.reference,
-            ))
-
 
 @dataclass(frozen=True)
 class PiRedeal(PiThreadGate, Redeals):

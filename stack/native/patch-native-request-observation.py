@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Carry the producing request through the existing native loop and observers."""
+"""Observe model-request progress and callbacks through the existing native loop."""
 from pathlib import Path
 import sys
 

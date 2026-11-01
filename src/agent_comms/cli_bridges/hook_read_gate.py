@@ -125,35 +125,11 @@ class EditTool(WriteTool, declared_name="Edit"):
 
 
 class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
-    """The session's transcript owns its words and the position where a question was asked."""
-
-    def words_end(self) -> int:
-        return self.stem.stat().st_size
-
-    def complete_lines(self, offset: int) -> list[tuple[int, bytes]]:
-        """Read complete lines after the retained position; a partial last line waits."""
-        with self.stem.open("rb") as stream:
-            stream.seek(offset)
-            raw = stream.read()
-        lines, position = [], offset
-        for line in raw.splitlines(keepends=True):
-            if line.endswith(b"\n"):
-                lines.append((position, line))
-            position += len(line)
-        return lines
+    """The session's transcript supplies bounded display receipts, never audit answers."""
 
     def receipts(self) -> SessionReceipts:
         """The transcript's recent past: a gate hook runs often, so it never reads more of it."""
         return ClaudeJsonLines().receipts(self.tail())
-
-    def said_after(self, asked: Asked) -> tuple[str, ...]:
-        """The words after the line that actually delivered this question to the session."""
-        lines = self.complete_lines(asked.offset)
-        arrival = next((index for index, (_, line) in enumerate(lines)
-                        if asked.message_id.encode() in line), len(lines))
-        decoder = ClaudeJsonLines()
-        return tuple(words for position, line in lines[arrival + 1:]
-                     for words in decoder.decode_line(line, position).said())
 
 
 @dataclass(frozen=True)
@@ -201,10 +177,9 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
         return self
 
     def say(self, line: str, deal: RuleDeal) -> Asked:
-        offset = deal.words_end()
         owner = self.binding.owner.require_recorded()
         message = MeantNotice().publish(self.comms.messaging, ThreadTarget(owner.name), line)
-        return Asked(message.message_id, offset)
+        return Asked(message.message_id)
 
 
 @dataclass(frozen=True)
