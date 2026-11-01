@@ -18,6 +18,8 @@ from agent_comms.child_process import ChildOutcome, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, GoalId
 from agent_comms.goal_actions import (
+    ActiveGoalAction,
+    GoalAction,
     PausedGoalAction,
     RetryGoalAction,
     SetGoalAction,
@@ -26,13 +28,19 @@ from agent_comms.goal_failure_observation import FailedTurnEvidence
 from agent_comms.goal_history import RecordedGoalHistory
 from agent_comms.goal_presentation import (
     AttemptFailedExecution,
+    AttemptUnresolvedExecution,
+    CompletedExecution,
     GoalExecution,
     GoalSnapshot,
+    IdleGoalExecution,
+    PausedExecution,
+    RetryableBlockExecution,
     RunnableExecution,
     RunningExecution,
+    StandbyExecution,
 )
 from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_states import ActiveGoal
+from agent_comms.goal_states import ActiveGoal, ModelPause
 from agent_comms.maintenance_barrier import MaintenanceOperator
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.threads import Thread
@@ -66,6 +74,32 @@ def test_execution_identity_survives_wire_and_change_detection(execution_bus, ex
     current = GoalSnapshot(goal, RunnableExecution(goal.id))
     assert current.execution.runnable()
     assert current.changed_by(GoalSnapshot(goal, execution)) == (current.execution != execution)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("execution, expected_actions", (
+    (IdleGoalExecution(), ()),
+    (CompletedExecution(GoalId.mint()), ()),
+    (AttemptUnresolvedExecution(GoalId.mint()), ()),
+    (RunnableExecution(GoalId.mint()), (PausedGoalAction,)),
+    (RunningExecution(GoalId.mint()), (PausedGoalAction,)),
+    (StandbyExecution(GoalId.mint(), (), ()), (PausedGoalAction,)),
+    (PausedExecution(GoalId.mint(), ModelPause()), (ActiveGoalAction,)),
+    (RetryableBlockExecution(GoalId.mint(), "source fixture"), (RetryGoalAction,)),
+))
+async def test_execution_owns_toggle_dispatch_and_unavailability(
+    execution: GoalExecution, expected_actions: tuple[type[GoalAction], ...],
+) -> None:
+    actions: list[type[GoalAction]] = []
+    unavailable: list[None] = []
+
+    async def change(action: type[GoalAction]) -> None:
+        actions.append(action)
+
+    await execution.apply_toggle(change, lambda: unavailable.append(None))
+    assert tuple(actions) == expected_actions
+    assert execution.can_toggle() == bool(expected_actions)
+    assert len(unavailable) == int(not expected_actions)
 
 
 @asynccontextmanager
