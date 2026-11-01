@@ -282,19 +282,44 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     assert path in rule.checkouts_of(thread, RepositoryReads())
 
 
-def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(checkout_comms: Comms):
-    """unit-fieldplan is registered at $HOME: its audit path, which the rule gate requires, sat
-    inside its project and was refused as source it does not hold, so nothing could run."""
+@pytest.mark.parametrize('enclosing_source', (False, True))
+def test_a_thread_registered_above_its_scratch_may_write_its_scratch_and_only_that(
+        checkout_comms: Comms, enclosing_source: bool):
+    """An enclosing project or Git tree cannot take the registry's scratch allocation."""
     comms = checkout_comms
     rule = comms.registry.storage_rule
     above = rule.scratch_base.parent
+    if enclosing_source:
+        Repo.git(above, 'init', '-q')
     thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
     projection = StorageProjection(rule, thread, comms)
-    projection.require_write(rule.roots_of(thread).scratch / 'compaction-deal.audit.json')
+    scratch = rule.roots_of(thread).scratch
+    projection.require_write(scratch / 'compaction-deal.audit.json')
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         projection.require_write(above / 'notes.txt')
     with pytest.raises(StorageDenied, match='foreign scratch'):
         projection.require_write(rule.scratch_base / 'worker' / 'notes.txt')
+    with pytest.raises(StorageDenied, match='artifacts'):
+        projection.require_write(scratch / '.artifacts' / 'output')
+    scratch.mkdir(parents=True)
+    (scratch / 'project-link').symlink_to(above, target_is_directory=True)
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(scratch / 'project-link' / 'notes.txt')
+
+
+@pytest.mark.parametrize('source_path', (Path(), Path('nested-source')))
+def test_git_source_inside_scratch_still_requires_an_edit_allocation(
+        checkout_comms: Comms, source_path: Path):
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    above = rule.scratch_base.parent
+    thread = comms.registry.declare(Thread('homed', frozenset(), Checkout(above)))
+    scratch = rule.roots_of(thread).scratch
+    source = scratch / source_path
+    source.mkdir(parents=True)
+    Repo.git(source, 'init', '-q')
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        StorageProjection(rule, thread, comms).require_write(source / 'implementation.py')
 
 
 def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
