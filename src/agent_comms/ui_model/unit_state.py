@@ -309,7 +309,7 @@ class UnitState(UndatedStandingRule, FamilyScan, declared_name=None):
             reading
             for reading in readings
             if reading.thread.name != commander
-            for _ in reading.thread.execution.commanded_units(reading.thread)
+            for _ in reading.thread.execution.independent_threads(reading.thread)
         )
         eligible = set(held)
         eligible.update(

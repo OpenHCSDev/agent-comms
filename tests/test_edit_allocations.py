@@ -105,7 +105,7 @@ def test_prepared_cut_refuses_a_replaced_assignment_generation(allocation_bus):
     with prepared.writing() as db:
         with pytest.raises(TodoConflict):
             other_generation.require_available_in(
-                db, original.id, IncomingWork(actor, frozenset({original.id}),
+                db, original.id, IncomingWork(frozenset({original.id}),
                                               frozenset({original.order.id})),
                 comms.registry.snapshot(), prepared.prepared_edits())
     assert store.get(original.id) == original
@@ -127,7 +127,7 @@ def test_same_owner_incoming_group_can_share_its_own_physical_allocation(allocat
     prepared = comms.goals.todos.preparing_edits((proposed,))
     with prepared.writing() as db:
         proposed.held().require_available_in(
-            db, second.id, IncomingWork(actor, frozenset({first.id, second.id}),
+            db, second.id, IncomingWork(frozenset({first.id, second.id}),
                                        frozenset({first.order.id, second.order.id})),
             comms.registry.snapshot(), prepared.prepared_edits())
 
@@ -148,7 +148,7 @@ def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
     with prepared.writing() as db:
         with pytest.raises(TodoConflict):
             proposed.held().require_available_in(
-                db, current.id, IncomingWork(actor, frozenset({current.id}),
+                db, current.id, IncomingWork(frozenset({current.id}),
                                             frozenset({current.order.id})),
                 comms.registry.snapshot(), prepared.prepared_edits())
     assert comms.goals.todos.get(current.id) == current

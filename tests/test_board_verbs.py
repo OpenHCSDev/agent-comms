@@ -1,6 +1,5 @@
 """Board review commands and judge preconditions share real orders and retained releases."""
 
-import re
 import shlex
 import time
 from contextlib import chdir
@@ -10,16 +9,16 @@ from inspect import isabstract
 import pytest
 
 from agent_comms.commander import judge, order
-from agent_comms.channel_targets import CommandersTag
 from agent_comms.errors import TodoError
-from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.thread_execution import CommanderForkExecution, ExternalThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.commander.standing import DeliveryAwaitingJudgement
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goal_actions import SetGoalAction
 from commander_heartbeat_fixture import capture_frame
-from agent_comms.head_review import HeadReviewOrder
+from agent_comms.head_review import HeadReviewOrder, PullRequestHead
+from agent_comms.tool_caller import CommanderForkCaller, ThreadCaller
+from agent_comms_hooks import ToolRefusedError
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.standing_rules import HeadReviewTimerUp, LinkedUnreviewedHead, OrderlessUnreviewedHead, ReviewTimerUp, StandingRule
 from agent_comms.task_attachments.commander_pings import RulePing
@@ -66,29 +65,24 @@ def board_review(head_bus):
     return comms, request, claim, link
 
 
-def author_arguments(command, todo):
-    """The board supplies identities; the reviewer still has to author the review."""
-    arguments = shlex.split(command)
-    verb = arguments[1]
-    evidence = f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}"
-    authored = {
-        "ok": ["--why", REASON.text, "--serves", QUOTE],
-        "back": ["--why", REASON.text, "--roast", ROAST, "--fix", FIX, "--at", evidence],
-        "reviewing": [],
-        "superseded": ["--why", REASON.text, "--by", todo.id],
-    }
-    return arguments[1:] + authored[verb]
-
-
 def assert_review_preconditions(rule, comms, request):
     ctx = order.Commander.read_root(comms.root)
-    todo = comms.goals.todos.get("P2")
-    commands = re.findall(r"`([^`]+)`", rule.line())
+    observed = rule.command_values()
+    todo = comms.goals.todos.get(observed.get("problem", "P2"))
+    # Supply review prose once by declared argument, not a second roster of verb requirements.
+    values = {name: shlex.quote(value) for name, value in {
+        **observed, "why": REASON.text, "serves": QUOTE, "roast": ROAST, "fix": FIX,
+        "at": f"{todo.order.check.directory / todo.order.owner.file}:{todo.order.owner.line}",
+        "by": todo.id,
+    }.items()}
     judged = []
+    allowed = rule.clearing_actions()
+    commands = (command for action in judge.HeadVerdictVerb.members_with(judge.HeadVerdictVerb)
+                if action in allowed
+                for command in action.commands({entry.key: values[entry.key]
+                    for entry in FieldCodec.argument_fields(action) if entry.key in values}))
     for command in commands:
-        if not command.startswith("judge "):
-            continue
-        verb = judge.JudgeVerb.parse(author_arguments(command, todo))
+        verb = judge.JudgeVerb.parse(shlex.split(command)[1:])
         assert not verb.argument_problems()
         scope = OrderHeadReview.for_request(ctx.todos(), request, verb.order_link, verb.problem)
         scope.require_reviewer(comms.goals, request, ctx.actor_identity)
@@ -111,6 +105,7 @@ def test_held_board_commands_take_the_same_verdicts_as_the_order(board_review, c
     rules = LinkedUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
     rule, = rules
     assert rule.todo == todo
+    assert judge.PromoteVerb not in rule.clearing_actions()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     frame = capture_frame(comms, "lead", ProgressRead(()))
     # The timer's own condition remains real: age the observed review timer in this read.
@@ -187,6 +182,7 @@ def test_shared_head_keeps_each_order_on_its_own_board_and_timer_line(board_revi
 def test_orderless_board_commands_do_not_invent_a_problem(board_review):
     comms, request, _, _ = board_review
     rule, = OrderlessUnreviewedHead.scan_reviews(comms.goals, "lead", ProgressRead(()))
+    assert judge.PromoteVerb not in rule.clearing_actions()
     assert "problem" not in rule.command_values()
     assert "--problem" not in rule.clearing_commands()
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
@@ -203,8 +199,8 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
                        StrikeReason(ROAST).text, RecordedEventTime(time.time()),
                        evidence=(current.order.owner,)).record(comms.goals, current.id)
     current = comms.goals.todos.get(original.id)
-    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
-        "The commander explicitly releases this order after reviewing its work")).record(comms.goals, current.id)
+    ReleaseTodo(current.revision, current.held().owner_identity, current.held(), StrikeReason(
+        "The holder explicitly releases this order after reviewing its work")).record(comms.goals, current.id)
     released = comms.goals.todos.get(original.id)
     assert released.current_holder.current_assignments() == ()
     assert released.order.holds_head(request)
@@ -213,25 +209,24 @@ def test_claim_link_survives_sendbacks_and_explicit_release_without_editing_goal
     assert UnderReviewHeadVerdict in assert_review_preconditions(rule, comms, request)
     # A former holder can already be doing different work. A head review must not edit that goal.
     other = comms.goals.todos.get("P1")
-    ReleaseTodo(other.revision, other.creator_identity, other.held(), StrikeReason(
+    ReleaseTodo(other.revision, other.held().owner_identity, other.held(), StrikeReason(
         "The worker stopped this independent fixture order before starting different assigned work")).record(comms.goals, other.id)
     comms.goals.update_goal("worker", SetGoalAction(text="Different work"))
     goal = comms.registry.require("worker").goal.require()
-    # One printed command offers every verb that takes the same arguments: `judge ok|back ARGS`.
-    tool, verbs, arguments = next(command.split(" ", 2) for command in re.findall(r"`([^`]+)`", rule.line())
-                                  if command.startswith("judge ") and "ok" in command.split(" ")[1].split("|"))
-    command = f"{tool} ok {arguments}"
-    judge.main(author_arguments(command, released), order.Commander.read_root(comms.root))
+    assert judge.OkVerb in rule.clearing_actions()
+    command, = judge.OkVerb.commands({**rule.command_values(),
+        "why": shlex.quote(REASON.text), "serves": shlex.quote(QUOTE)})
+    judge.main(shlex.split(command)[1:], order.Commander.read_root(comms.root))
     accepted = comms.goals.todos.get(original.id)
     assert accepted.order.holds_head(request)
     assert StoredHeadReview.head_reviews(comms.goals.todos, request)[0].order.problem == original.id
     assert comms.registry.require("worker").goal.require() == goal
     proposed = Assignment.of(previous.owner_identity, previous.parent_identity, GoalId.mint())
-    reassigned = accepted.assigned(proposed, accepted.order.owner)
+    reassigned = accepted.assigned(proposed, accepted.order.owner, previous.owner_identity)
     assert reassigned.order.pull_requests == accepted.order.pull_requests
 
 
-def test_released_work_can_be_judged_and_delivered_without_a_holder(
+def test_released_merged_work_refuses_late_review_but_can_be_delivered(
         held_commander, cited_source, tmp_path):
     ctx = held_commander
     store = ctx.comms.goals.todos
@@ -240,8 +235,8 @@ def test_released_work_can_be_judged_and_delivered_without_a_holder(
     RecordPullRequest(todo.revision, todo.creator_identity,
                       PullRequestLink(todo.repo, 42), previous.generation).record(ctx.comms.goals, todo.id)
     current = store.get(todo.id)
-    ReleaseTodo(current.revision, current.creator_identity, current.held(), StrikeReason(
-        "The commander explicitly releases this order after reviewing its work")).record(ctx.comms.goals, todo.id)
+    ReleaseTodo(current.revision, current.held().owner_identity, current.held(), StrikeReason(
+        "The holder explicitly releases this order after reviewing its work")).record(ctx.comms.goals, todo.id)
     _, first, _ = merge_two_commit_fix(cited_source, tmp_path / "bin", 42)
     current = store.get(todo.id)
     request = ctx.comms.goals.todos.resolve_order(ctx.incarnation, previous.owner, todo.id)
@@ -249,8 +244,11 @@ def test_released_work_can_be_judged_and_delivered_without_a_holder(
     head = cited_source.git(cited_source.checkout, "rev-parse", "refs/heads/fix/42").strip()
     quote = " ".join(current.order.instructions(current).split()[:4])
     with chdir(cited_source.checkout):
-        judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
-                    "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        # The fixture already merged this PR. A late source review cannot reopen it.
+        with pytest.raises(TodoError):
+            judge.main(["ok", "--repo", todo.repo.to_wire(), "--problem", todo.id,
+                        "--pr", "42", "--head", head, "--why", REASON.text, "--serves", quote], ctx)
+        assert not StoredHeadReview.head_reviews(store, PullRequestHead(todo.repo, 42, head))
         order.main(["done", previous.owner, todo.id], ctx)
     delivered = store.get(todo.id)
     assert type(delivered.order) is DeliveredProblemOrder
@@ -273,18 +271,36 @@ def test_a_verdict_on_exactly_the_delivered_head_answers_the_delivery(board_revi
     assert DeliveryAwaitingJudgement.opened(comms, "lead") == ()
 
 
-def test_every_commander_of_the_project_may_review_its_heads(board_review):
-    """Review authority is the project's commanders, not its registered lead alone: a #commanders
-    peer judges the same heads, and a commanded unit still may not."""
+@pytest.mark.parametrize("reviewer", ("lead", "peer", "worker"))
+def test_independent_colleagues_may_review_without_rank_tags(board_review, reviewer):
+    """Native and external colleagues share scope; a storage lead has no extra permission."""
     comms, request, _, _ = board_review
-    comms.registry.declare(Thread("peer", frozenset({"comms", CommandersTag.declared_name}),
+    comms.registry.declare(Thread("peer", frozenset({"comms"}),
                                   comms.registry.require("lead").worktree,
-                                  model=DeclaredModel("anthropic/claude-opus-4-6"),
                                   execution=ExternalThreadExecution))
-    NoHeadOrder().require_reviewer(comms.goals, request, comms.registry.require("peer").incarnation)
-    with pytest.raises(TodoError, match="Only a commander of this project"):
-        NoHeadOrder().require_reviewer(comms.goals, request,
-                                       comms.registry.require("worker").incarnation)
+    NoHeadOrder().require_reviewer(comms.goals, request,
+                                   comms.registry.require(reviewer).incarnation)
+
+
+def test_in_turn_review_uses_the_actual_bound_parent_not_a_second_independent_actor(board_review):
+    comms, request, _, _ = board_review
+    child = comms.registry.register_child("review-child", "worker", CommanderForkExecution,
+                                          comms.goals)
+    with pytest.raises(ToolRefusedError):
+        ThreadCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
+    actor = CommanderForkCaller(child.name).head_review_actor(comms, request, NoHeadOrder())
+    assert actor == child.incarnation
+    assert actor.commanding_identity == comms.registry.require("worker").incarnation
+
+
+def test_review_scope_requires_the_actual_registered_birth(board_review):
+    comms, request, _, _ = board_review
+    snapshot = comms.registry.snapshot()
+    original = comms.registry.require("worker").incarnation.require_recorded()
+    with pytest.raises(ToolRefusedError):
+        snapshot.commander_project.require_scope(
+            snapshot, replace(original, created_at=time.time() + 1000), request.repo)
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
 
 
 def test_unreviewed_head_line_names_each_verb_once_and_every_argument() -> None:

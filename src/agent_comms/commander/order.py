@@ -461,7 +461,7 @@ class CommanderContext(BaseModel):
         return self.actor.as_thread(self.commander).invoke(tool, self.comms)
 
     def todos(self):
-        return self.comms.goals.todos.for_commander(self.incarnation)
+        return self.comms.goals.todos.board()
 
     def read_check(self, line: str) -> OrderCheck:
         if not (request := CheckRequest.parse(line)):
@@ -470,16 +470,15 @@ class CommanderContext(BaseModel):
 
     def held_orders(self) -> tuple[Todo, ...]:
         """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
-        return HeldOrders.read(self.comms, self.commander).todos
+        return HeldOrders.read(self.comms).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        return self.comms.goals.todos.held_by(
-            self.incarnation, self.comms.registry.require(unit).incarnation)
+        return self.comms.goals.todos.held_by(self.comms.registry.require(unit).incarnation)
 
     def units(self) -> frozenset[str]:
         """The current registry names of every unit this commander ordered."""
         snapshot = self.comms.registry.snapshot()
-        return frozenset(thread.name for unit in self.comms.goals.todos.units(self.incarnation)
+        return frozenset(thread.name for unit in self.comms.goals.todos.board_units()
                          for thread in snapshot.threads_for(unit.require_recorded()))
 
     def progress(self) -> dict[str, OrderProgress]:
@@ -1499,7 +1498,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
-                                      HeldOrders.read(ctx.comms, ctx.commander).todos):
+                                      HeldOrders.read(ctx.comms).todos):
             print(path)
 
 
@@ -1516,7 +1515,7 @@ class IdleVerb(OrderVerb):
     help = "print the units Core counts idle: a recent turn and no order"
 
     def run(self, ctx: Commander) -> None:
-        for unit in UnownedWheelSpin.read_idle(ctx.comms, ctx.project.commander):
+        for unit in UnownedWheelSpin.read_idle(ctx.comms):
             print(unit.name)
 
 

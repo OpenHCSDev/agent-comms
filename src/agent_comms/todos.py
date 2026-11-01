@@ -66,7 +66,7 @@ from agent_comms.child_process import (
     OrderCheckFailedError,
 )
 from agent_comms.command import Command
-from agent_comms.commander.rule_file import RuleAudience, RuleFile
+from agent_comms.commander.rule_file import RuleFile
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import (
@@ -290,7 +290,7 @@ class OrderCompletion(DeclaredFamily, affix="Delivery"):
 
     def operation(self, todo: Todo, actor: ThreadIncarnation, comms: Comms,
                   order_id: OrderId, claims: tuple[ProgressClaim, ...]) -> DeliverTodo:
-        todo.require_commander(actor)
+        todo.require_maintainer(actor)
         todo.state.require_open(todo)
         order = todo.order.checked()
         order.require_delivery(order_id)
@@ -2863,8 +2863,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 *self.deletes.instructions(), *self.run.instructions(),
                 *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
                 "Banned: " + "; ".join(self.banned), "Report: " + self.report,
-                *(audience.order_line(", ".join(rule.name for rule in rules))
-                  for audience, rules in RuleAudience.grouped(RuleFile.packaged())))
+                RuleFile.order_line())
 
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(),
@@ -3037,7 +3036,7 @@ class PendingProblemOrder(Pending, DeliverableProblemOrder):
         """The document's selected problems and phase must agree. Whether the unit is free
         for them is IncomingWork's decision, made in the assignment's own Todo transaction."""
         reading = context.plan_reading(
-            context.comms.goals.todos.history_for_commander(context.incarnation))
+            context.comms.goals.todos.board_history())
         problems = list(self.phase.order_refusals(reading, document.unplanned_reason))
         if not group or any(not ProblemNumber.accepts(pid) for pid in group):
             problems.append('problems: fix: supply an array of P<n> IDs, or use order problem')
@@ -3450,8 +3449,8 @@ class Hunt(DeclaredFamily, affix="Hunt"):
             raise TodoError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
-    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        """The commander boundary validates source references before recording a hunt."""
+    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        """Validate source references before recording shared inspection evidence."""
 
 
 @dataclass(frozen=True)
@@ -3463,11 +3462,11 @@ class CleanHunt(Hunt):
 class OrderedHunt(Hunt):
     sent: str
 
-    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
-        super().require_commander(store, commander)
+    def require_maintainer(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        super().require_maintainer(store, commander)
         if not any(todo.id == self.sent
-                   for todo in store.held_for_commander(commander)):
-            raise TodoError("The hunt must name this commander's current order.")
+                   for todo in store.held_orders()):
+            raise TodoError("The hunt must name a current shared order.")
 
 
 class TodoStoreRows(StoreRows):
@@ -3520,6 +3519,12 @@ class ForeignRequest(TodoRefusal):  # noqa: N818 - domain refusal
     reason: ClassVar[str] = "the order serves another commander's request"
 
 
+class HolderConsentRequired(TodoRefusal):
+    """Maintenance authority cannot replace an exact holder's consent."""
+
+    reason: ClassVar[str] = "the current holder has not approved this work change"
+
+
 class TodoStoreUnwritable(TodoError):  # noqa: N818 - domain-specific storage failure
     """The todo store could not complete its write; its original cause is preserved."""
 
@@ -3538,15 +3543,15 @@ class ClaimPublicationUnavailable(TodoError):  # noqa: N818 - domain-specific re
             "publishes the claim once, or returns the original if it is already on the bus.")
 
 
-class NotOrderCommander(TodoError):  # noqa: N818 - domain-specific refusal outcome
-    """The caller is not the commander who created this order."""
+class NotWorkMaintainer(TodoError):
+    """The caller has neither shared maintenance nor this holder's representation."""
 
     def __init__(self, current: Todo, actor: ThreadIncarnation) -> None:
         self.current = current
         self.actor = actor
         super().__init__(
-            f"{current.id} belongs to commander {current.creator_identity.name}; "
-            f"{actor.name} is not its commander."
+            f"{actor.name} cannot maintain {current.id}; "
+            "use an independent colleague or the current holder's bound caller."
         )
 
 
@@ -3568,6 +3573,12 @@ class TodoHolder(ABC):
 
     def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return False
+
+    def represented_by(self, actor: ThreadIncarnation) -> bool:
+        return False
+
+    def require_release(self, actor: ThreadIncarnation, current: Todo) -> None:
+        """Unheld work has no current holder whose consent could be bypassed."""
 
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return proposed
@@ -3612,7 +3623,6 @@ class IncomingWork:
     order, so work inside it joins or replaces that order and anything else is other work.
     Only the command carries the group; no record stores it."""
 
-    assigner: ThreadIncarnation
     problems: frozenset[str]
     orders: frozenset[OrderId]
 
@@ -3624,12 +3634,10 @@ class IncomingWork:
                      snapshot: RegistrySnapshot) -> None:
         """The one busy-unit decision, under this transaction and its registry cut.
 
-        An open order that still occupies the unit refuses other work for every assigner,
-        the same one included. Inside this work, its commander outranks the fork that
-        assigned it, so an order a fork left open, even one whose fork has ended, is the
-        commander's to replace; sibling forks stay refused, since a fork never created a
-        problem itself. An order whose work waits only on install holds no unit, as
-        ProblemOrder.occupies_holder answers."""
+        An open order that occupies the unit refuses unrelated work for every actor.
+        Assignment owns consent for changing the work already inside this group.
+        Creator and previous assigner confer no rank. Work waiting only on install
+        holds no unit, as ProblemOrder.occupies_holder answers."""
         held = TransactionTodoHistory(db).attach(TodoStore.held_in(db, '1', (), unit=unit))
         if other := tuple(todo for todo in held
                           if todo.order.occupies_holder() and not self.covers(todo)):
@@ -3637,24 +3645,12 @@ class IncomingWork:
                 f"{unit.name} already holds orders "
                 + ", ".join(f"{todo.id} (assigned by {todo.held().parent})" for todo in other)
                 + f"; running units holding no order: {self.idle(db, snapshot) or 'none'}")
-        for todo in TransactionTodoHistory(db).attach(TodoStore.held_in(db,
-                f'NOT (({Assignment.sql_field("parent")}=? '
-                f'AND {Assignment.sql_field("parent_created")}=?) '
-                'OR (creator=? AND creator_created=?))',
-                (self.assigner.name, self.assigner.wire_birth) * 2, unit=unit)):
-            if todo.order.occupies_holder():
-                raise UnitOccupied(
-                    f"{unit.name} is assigned by {todo.held().parent} on open order "
-                    f"{todo.order.checked().id} ({todo.id}); "
-                    "finish or release that order before assigning it again.")
 
     def idle(self, db: sqlite3.Connection, snapshot: RegistrySnapshot) -> str:
-        """Running order candidates holding no occupying order, read from this transaction
-        and its registry cut; the assigner's commander takes no order and is never listed."""
+        """Running candidates with no occupying order, including the requesting colleague."""
         occupied = {thread.name for todo in TodoStore._open(db, "assignment IS NOT NULL", ())
                     if todo.order.occupies_holder()
                     for thread in todo.held().holder_in(snapshot)}
-        occupied.add(self.assigner.commanding_identity.name)
         return ", ".join(sorted(
             candidate.name
             for thread in snapshot.active_threads(snapshot.active_candidates())
@@ -3705,6 +3701,12 @@ class Assignment(TodoHolder):
         """A retained assignment follows its live incarnation, never a reused name."""
         return tuple(owner for owner in self.holder_in(snapshot) if owner.process_alive)
 
+    def require_receiving_work(self, actor: ThreadIncarnation, snapshot: RegistrySnapshot) -> None:
+        """The fresh receiver supplies both work availability and goal consent."""
+        owner = snapshot.born(self.owner_identity.require_recorded().lookup)
+        owner.work_state.require_assignment()
+        owner.goal.require_work(actor, owner)
+
     def require_available_in(self, db: sqlite3.Connection, problem: str, incoming: IncomingWork,
                              snapshot: RegistrySnapshot, workplaces: EditWorkplaces) -> None:
         """Compare prepared physical edit ownership; launch/check paths confer no occupancy."""
@@ -3747,6 +3749,16 @@ class Assignment(TodoHolder):
 
     def owned_by(self, actor: ThreadIncarnation, generation: GoalId) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
+
+    def represented_by(self, actor: ThreadIncarnation) -> bool:
+        return actor.represents(self.owner_identity)
+
+    def require_release(self, actor: ThreadIncarnation, current: Todo) -> None:
+        current.require_assignment(self)
+        if not self.represented_by(actor):
+            raise HolderConsentRequired(
+                f"{current.id} is held by {self.owner} under goal {self.generation}; "
+                f"{actor.name} cannot release or replace that assignment without its holder.")
 
     def require_trace(self, owner: str, traced: SourceReference) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
@@ -3795,7 +3807,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference) -> Todo:
+    def assign(cls, current: Todo, proposed: Assignment, traced: SourceReference,
+               actor: ThreadIncarnation) -> Todo:
         raise TodoConflict(current)
 
     @classmethod
@@ -3814,8 +3827,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed, traced):
-        return current.assigned(proposed, traced)
+    def assign(cls, current, proposed, traced, actor):
+        return current.assigned(proposed, traced, actor)
 
 
 class BlockedTodoState(TodoState):
@@ -3839,7 +3852,7 @@ class DoneTodoState(TodoState):
 
     @classmethod
     def decide(cls, current, command):
-        current.require_commander(command.actor)
+        current.require_maintainer(command.actor)
         return cls.closed(current, current.order)
 
     @classmethod
@@ -3983,14 +3996,34 @@ class AssignTodo(TodoOperation):
         return replace(self, actor=actor, proposed=replace(self.proposed,
                        parent=actor.name, parent_created=actor.wire_birth))
 
+    def changes_work(self, current: Todo, proposed: Assignment) -> bool:
+        return (current.assignment, current.order) != (proposed, self.order)
+
+    def require_holder_consent(self, current: Todo, proposed: Assignment) -> None:
+        if self.changes_work(current, proposed):
+            current.current_holder.require_release(self.actor, current)
+
+    def require_receiving_work(
+        self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
+    ) -> None:
+        if self.changes_work(current, proposed):
+            proposed.require_receiving_work(self.actor, snapshot)
+
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
-        return (replace(store.get(problem), assignment=self.proposed, order=self.order),)
+        current = store.get(problem)
+        proposed = current.proposed_assignment(self.proposed)
+        self.require_holder_consent(current, proposed)
+        self.require_receiving_work(current, proposed, RegistryStore.at(store.root).snapshot())
+        return (replace(current, assignment=proposed, order=self.order),)
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        self.proposed.require_available_in(
+        snapshot = RegistryStore.at(store.root).snapshot()
+        proposed = current.proposed_assignment(self.proposed)
+        self.require_receiving_work(current, proposed, snapshot)
+        proposed.require_available_in(
             db, current.id, IncomingWork(
-                self.actor, self.group | {current.id}, frozenset({self.order.id})),
-            RegistryStore.at(store.root).snapshot(), store.prepared_edits())
+                self.group | {current.id}, frozenset({self.order.id})),
+            snapshot, store.prepared_edits())
         OwnerRequest.require(db, id=self.request).require_open(self.actor)
 
     def apply(self, current: Todo) -> Todo:
@@ -4003,11 +4036,12 @@ class AssignTodo(TodoOperation):
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
+        self.require_holder_consent(current, self.proposed)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
         assigned = (current if current.assignment == self.proposed
-                    else current.state.assign(current, self.proposed, self.traced))
+                    else current.state.assign(current, self.proposed, self.traced, self.actor))
         return replace(assigned, review_at=self.review_at,
                        order=self.order,
                        request=self.request,
@@ -4214,7 +4248,7 @@ class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
         return f"{super().story_text()}; tool call {self.tool_call_id}"
 
     def require_current(self, current: Todo) -> None:
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         if self.tool_call_id in current.judged_calls:
             raise TodoError(f"Tool call {self.tool_call_id} already has a verdict on {current.id}.")
         super().require_current(current)
@@ -4539,22 +4573,11 @@ class HeadOrderLink(HeadReviewRelation, declared_name=None):
 
 @dataclass(frozen=True)
 class NoHeadOrder(HeadReviewOrder, HeadOrderLink):
-    def root_sources(self, record: HeadReviewRecord,
-                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
-        return ((record.request,) if record.actor.commanding_identity == commander
-                and record.verdict.allows_integration() else ())
+    def accepted_orderless_sources(self, record: HeadReviewRecord) -> tuple[PullRequestHead, ...]:
+        return (record.request,) if record.verdict.allows_integration() else ()
 
     def rejected(self, goals: Goals, record: HeadReviewRecord) -> None:
         """There is no holder to strike or wake."""
-
-    def require_reviewer(self, goals: Goals, request: PullRequestHead,
-                         actor: ThreadIncarnation) -> None:
-        snapshot = goals.registry.snapshot()
-        project = snapshot.commander_project.require()
-        commanders = {thread.incarnation for thread in project.commanders(snapshot)}
-        if (actor.commanding_identity not in commanders or
-                request.repo not in project.repository_names()):
-            raise TodoError("Only a commander of this project or the director may review its heads.")
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
@@ -4588,8 +4611,7 @@ class OrderLink(ProblemLink, declared_name=None):
     def require_quote(self, text: str) -> None:
         """A reading or rejection carries no quoted clause; OrderQuote supplies acceptance's."""
 
-    def require_current(self, current: Todo, actor: ThreadIncarnation) -> None:
-        current.require_commander(actor)
+    def require_current(self, current: Todo) -> None:
         current.require_previous_assignment(self.previous)
         if current.id != self.problem or current.order.checked().id != self.order_id:
             raise TodoConflict(current)
@@ -4650,10 +4672,8 @@ class OrderHeadReview(HeadReviewOrder):
 
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        self.link.require_current(goals.todos.get(self.link.problem), actor)
-
-    def director_identity(self, goals: Goals, actor: ThreadIncarnation) -> ThreadIncarnation:
-        return actor.require_recorded().acting_for(goals.todos.get(self.link.problem).creator_identity)
+        super().require_reviewer(goals, request, actor)
+        self.link.require_current(goals.todos.get(self.link.problem))
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> OrderHeadReviewRecord:
@@ -4666,24 +4686,20 @@ class OrderHeadReview(HeadReviewOrder):
 
 @dataclass(frozen=True)
 class RefusedHeadOrder(HeadReviewOrder, declared_name=None):
-    """A failed CLI selection contributes its failures beside the head's other requirements.
+    """A failed CLI selection refuses admission with its collected local diagnostics.
 
     It is not a wire member, cannot authenticate and can never become a stored review.
     """
 
     problems: dict[str, str]
 
-    def prepared(self, goals: Goals, problems: dict[str, str]) -> tuple[HeadReviewOrder, ...]:
-        problems.update(self.problems)
-        return ()
-
     def require_reviewer(self, goals: Goals, request: PullRequestHead,
                          actor: ThreadIncarnation) -> None:
-        raise RecordProblems(self.problems)
+        raise TodoProblems(self.problems)
 
     def record_review(self, goals: Goals, request: PullRequestHead, verdict: HeadVerdict,
                       actor: ThreadIncarnation) -> HeadReviewRecord:
-        raise RecordProblems(self.problems)
+        raise TodoProblems(self.problems)
 
 
 @dataclass(frozen=True)
@@ -4830,13 +4846,13 @@ class StoredHeadReview(TodoStoreRows, TypedTable):
             return cls.head_reviews_among(db, (request,))[request]
 
     @classmethod
-    def root_sources(cls, store: TodoStore, requests: Iterable[PullRequestHead],
-                     commander: ThreadIncarnation) -> tuple[PullRequestHead, ...]:
+    def accepted_orderless_sources(cls, store: TodoStore,
+                                   requests: Iterable[PullRequestHead]) -> tuple[PullRequestHead, ...]:
         """One exact-head snapshot; the saved relationship owns orderless source authority."""
         with store.snapshot() as db:
             reviewed = cls.head_reviews_among(db, requests)
             return tuple(source for records in reviewed.values() for record in records
-                         for source in record.order.root_sources(record, commander))
+                         for source in record.order.accepted_orderless_sources(record))
 
     @classmethod
     def current_verdict(cls, store: TodoStore, request: PullRequestHead) -> type[HeadVerdict]:
@@ -4869,7 +4885,7 @@ class RecordOrderHeadVerdict(TodoCommand):
     review: OrderHeadReviewRecord
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
-        self.review.order.require_current(current, self.review.actor)
+        self.review.order.require_current(current)
         if not current.order.checked().holds_head(self.review.request):
             raise TodoError("The reviewed pull request is not linked to this order.")
         allowed = current.order.checked().review_verdicts()
@@ -4880,7 +4896,7 @@ class RecordOrderHeadVerdict(TodoCommand):
         return self
 
     def changed(self, current: Todo) -> Todo:
-        self.review.order.require_current(current, self.review.actor)
+        self.review.order.require_current(current)
         judged = self.review.verdict.judge_order(current, self.review)
         return replace(judged, revision=current.revision + 1)
 
@@ -4921,8 +4937,7 @@ class SupersededVerdict(ToolCallVerdict):
         return f"{super().story_text()} by {self.replacement}: {self.reason}"
 
     def prepare(self, goals, current):
-        replacing = [todo for todo in goals.todos.held_for_commander(
-                         self.actor.commanding_identity) if todo.id == self.replacement]
+        replacing = [todo for todo in goals.todos.held_orders() if todo.id == self.replacement]
         if not replacing:
             raise TodoError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
@@ -5091,7 +5106,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
         return (self.strike,)
 
     def changed(self, current: Todo) -> Todo:
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         if self.strike not in current.live_strikes():
             raise TodoConflict(current)
         _text(self.reason, "Void reason", 2000)
@@ -5128,8 +5143,8 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
     def changed(self, current: Todo) -> Todo:
-        self.actor.require_may_change(current)
         current.require_assignment(self.previous)
+        current.current_holder.require_release(self.actor, current)
         return replace(current, assignment=None, revision=current.revision + 1)
 
     def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
@@ -5154,7 +5169,7 @@ class RestoreHolderTodo(TodoCommand):
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
         self.previous.require_available_in(db, current.id, IncomingWork(
-            self.actor, frozenset({current.id}),
+            frozenset({current.id}),
             frozenset(declared.id for declared in current.order.declarations)), snapshot,
             store.prepared_edits())
 
@@ -5182,7 +5197,7 @@ class CorrectOrderTodo(TodoOperation, declared_name=None):
         return self
 
     def changed(self, current: Todo) -> Todo:
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         current.state.require_open(current)
         _text(self.reason, "Correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
@@ -5295,7 +5310,7 @@ class OrderMessage(TodoOperation, StoryEvent):
         return f"{self.actor.name} sent order message {self.message_id}"
 
     def changed(self, current: Todo) -> Todo:
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         return replace(current, revision=current.revision + 1)
 
 
@@ -5329,7 +5344,7 @@ class ServeTodo(TodoOperation):
     serves: type[OrderPhase]
 
     def changed(self, current: Todo) -> Todo:
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         return replace(current, order=current.order.for_phase(self.serves),
                        revision=current.revision + 1)
 
@@ -5429,7 +5444,7 @@ class DeliverTodo(TodoOperation, declared_name=None):
 
     def require_current(self, current: Todo) -> None:
         super().require_current(current)
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
 
@@ -5458,7 +5473,7 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
 
     def require_current(self, current: Todo) -> None:
         super().require_current(current)
-        current.require_commander(self.actor)
+        current.require_maintainer(self.actor)
 
     def changed(self, current):
         return DoneTodoState.closed(current, self.closed(current))
@@ -5488,6 +5503,7 @@ class WithdrawTodo(CloseOrderTodo):
     superseded_by: Successor = NoSuccessor()
 
     def closed(self, current: Todo) -> ProblemOrder:
+        current.current_holder.require_release(self.actor, current)
         order = current.order.withdrawn(self.previous, self.why, self.superseded_by)
         current.require_previous_assignment(self.previous)
         _text(self.why, "Withdrawal reason", 2000)
@@ -5532,12 +5548,12 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     def new(cls, commander: ThreadIncarnation, text: str) -> Self:
         return cls(OwnerRequestId.new(), commander.require_recorded(), text)
 
-    def require_commander(self, commander: ThreadIncarnation) -> None:
+    def require_maintainer(self, commander: ThreadIncarnation) -> None:
         if not commander.commands(self.commander):
-            raise ForeignRequest(f"Request {self.id.value} belongs to another commander.")
+            raise ForeignRequest(f"Request {self.id.value} is outside this actor's work scope.")
 
     def require_open(self, commander: ThreadIncarnation) -> OpenRequestState:
-        self.require_commander(commander)
+        self.require_maintainer(commander)
         return self.state.require_open(self.id)
 
     def at_revision(self, directives: tuple[RequestDirective, ...]) -> RequestAtRevision:
@@ -5755,7 +5771,9 @@ class Todo(TodoStoreRows, TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         return self.holder_state.proposed_assignment(proposed)
 
-    def assigned(self, proposed: Assignment, traced: SourceReference) -> Todo:
+    def assigned(self, proposed: Assignment, traced: SourceReference,
+                 actor: ThreadIncarnation) -> Todo:
+        self.current_holder.require_release(actor, self)
         self.order.require_reassignment(self, proposed)
         holder = self.holder_state
         holder.require_trace(proposed.owner, traced)
@@ -5778,16 +5796,10 @@ class Todo(TodoStoreRows, TypedTable):
             raise TodoError("Say why they are the same problem in 8+ words.")
         self.order.folded(target.id, why)
 
-    @property
-    def acting_assigner(self) -> ThreadIncarnation:
-        """Who assigned this order last, acting under its commander: a reissue acts as them,
-        so a sibling fork's competing order on the unit is still refused."""
-        return self.holder_state.previous_assignment().parent_identity.acting_for(
-            self.creator_identity)
-
-    def require_commander(self, actor: ThreadIncarnation) -> None:
-        if not actor.commands(self.creator_identity):
-            raise NotOrderCommander(self, actor)
+    def require_maintainer(self, actor: ThreadIncarnation) -> None:
+        if not (actor.commands(self.creator_identity)
+                or self.current_holder.represented_by(actor)):
+            raise NotWorkMaintainer(self, actor)
 
     def require_actor(self, actor: ThreadIncarnation, generation: GoalId | None) -> None:
         if not actor.commands(self.creator_identity):
@@ -6228,7 +6240,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         if not proposed:
             return self
         snapshot = RegistryStore.at(self.root).snapshot()
-        held = self.held_orders()
+        held = self.held_orders(state=OpenTodoState)
         workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
         return PreparedTodoStore(self.root, workplaces)
 
@@ -6240,7 +6252,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             return str(ProblemAllocation.allocate(db))
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
-        hunt.require_commander(self, commander)
+        hunt.require_maintainer(self, commander)
         recorded = HuntRecord(HuntId.mint(), commander, hunt)
         with self.writing() as db:
             recorded.upsert(db)
@@ -6251,12 +6263,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, problem: str) -> Todo:
-        authority = commander.commanding_identity
-        found = self._select('id=? AND creator=? AND creator_created=?',
-                             (problem, authority.name, authority.wire_birth), reader=self._open)
+        found = self._select('id=?', (problem,), reader=self._open)
         if (len(found) != 1
                 or found[0].holder_state.previous_assignment().owner != unit):
             raise TodoError(f'{unit} holds no order on {problem}')
+        commander.require_may_change(found[0])
         return found[0]
 
     def drop(self, commander: ThreadIncarnation, unit: str, problem: str, by: str) -> Todo:
@@ -6268,6 +6279,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             current = self._current(db, old.id)
             current.require_result(old)
             self._current(db, newer.id).require_result(newer)
+            current.current_holder.require_release(commander, current)
             result = replace(
                 current,
                 order=current.order.copy_as(
@@ -6287,9 +6299,11 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
         with self.writing() as db:
             source, target = self._current(db, problem), self._current(db, into)
-            source.require_commander(commander)
-            target.require_commander(commander)
+            source.require_maintainer(commander)
+            target.require_maintainer(commander)
             source.require_fold(target, why)
+            source.current_holder.require_release(commander, source)
+            target.current_holder.require_release(commander, target)
             replace(target, text=f'{target.text} [+{source.id}: {source.text}]',
                     revision=target.revision + 1).upsert(db)
             replace(source, state=DoneTodoState, order=source.order.folded(into, why),
@@ -6302,7 +6316,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             source, target = self._current(db, sent.id), self._current(db, problem)
             source.require_result(sent)
-            target.require_commander(commander)
+            source.current_holder.require_release(commander, source)
+            target.current_holder.require_release(commander, target)
+            target.require_maintainer(commander)
             target.state.require_open(target)
             if target.holder not in (None, unit):
                 raise TodoError(f'{problem} is already held by {target.holder}')
@@ -6378,11 +6394,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                             reader=partial(self.held_in, unit=owner))
 
     def require_input_sources(self, inputs: IntegrationInput) -> None:
-        """Current Todo links or an exact saved root orderless decision own each source."""
-        todos = self.open_orders()
-        commander = RegistryStore.at(self.root).snapshot().commander_project.require().commander
-        approved = set(StoredHeadReview.root_sources(
-            self, (head for source in inputs.sources for head in source.heads), commander))
+        """Current Todo links or an exact saved accepted orderless decision own each source."""
+        todos = self.board()
+        approved = set(StoredHeadReview.accepted_orderless_sources(
+            self, (head for source in inputs.sources for head in source.heads)))
         for source in inputs.sources:
             linked = PullRequests.linked_among(todos, source.repository)
             for head in source.heads:
@@ -6390,16 +6405,12 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                 if len(owners) > 1 or not (owners or head in approved):
                     raise TodoError(
                         f"{head.repo.to_wire()}#{head.pr} has neither unique Todo"
-                        " nor saved root source authority")
+                        " nor saved accepted orderless source")
 
-    def open_orders(self) -> tuple[Todo, ...]:
-        """Every open order, whichever commander created it: their links say which requests
-        any commander's board already owns."""
-        return self._select("1", (), reader=self._open)
-
-    def held_orders(self) -> tuple[Todo, ...]:
+    def held_orders(self, *, state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        """Held work across the shared board, optionally within a declared state family."""
         return self._select("assignment IS NOT NULL", (),
-                            reader=partial(self._open, state=OpenTodoState))
+                            reader=partial(self._open, state=state))
 
     def reassignable(self) -> tuple[Todo, ...]:
         """Work Core released after its objective strikes; never a commander's released backlog.
@@ -6423,9 +6434,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return any(todo.pending for todo in self._select(
             '1', (), reader=partial(self.held_in, unit=owner)))
 
-    def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?",
-                            (commander.name, commander.wire_birth), reader=self._open)
+    def board(self) -> tuple[Todo, ...]:
+        """Every open order on the bus: one board, whichever commander wrote the order."""
+        return self._select("1", (), reader=self._open)
 
     @staticmethod
     def timers_up_in(held: Sequence[Todo], now: float,
@@ -6434,13 +6445,9 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(todo, progress))
 
-    def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=? AND assignment IS NOT NULL",
-            (commander.name, commander.wire_birth), reader=self._open)
-
-    def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select('creator=? AND creator_created=?',
-            (commander.name, commander.wire_birth), reader=partial(self.held_in, unit=unit))
+    def held_by(self, unit: ThreadIncarnation) -> tuple[Todo, ...]:
+        """One holder's shared work, independently of historical creators."""
+        return self._select('1', (), reader=partial(self.held_in, unit=unit))
 
     def require_recurrence_declaration(
         self, order: CheckedProblemOrder, where: FileLine, root: Path,
@@ -6462,15 +6469,14 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             'and the declaration that replaces the copies.',
             DeclarationDerivation.requirement(declarations[1]), *rejected)))
 
-    def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+    def board_history(self) -> tuple[Todo, ...]:
+        return self._select("1", ())
 
 
-    def units(self, commander: ThreadIncarnation) -> frozenset[ThreadIncarnation]:
-        """The threads this commander gives orders to: everyone who holds or held one of its
-        problems, by birth, so a renamed holder stays one unit."""
+    def board_units(self) -> frozenset[ThreadIncarnation]:
+        """Everyone who holds or held an order, by birth, so a renamed holder stays one unit."""
         return frozenset(
-            assignment.owner_identity for todo in self.history_for_commander(commander)
+            assignment.owner_identity for todo in self.board_history()
             for assignment in (*todo.current_holder.current_assignments(),
                                *todo.history.facts_for(todo.id).previous_holders))
 
@@ -6490,17 +6496,20 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     ) -> Todo:
         number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
+        assignment = Assignment.of(assignee, assigner, generation)
+        assignment.require_receiving_work(assigner, RegistryStore.at(self.root).snapshot())
         DirectiveText.require(text)
         order.require_wording()
         order.require_writable()
         proposed = Todo.ordered(
-            todo_id, repo, text, identity, Assignment.of(assignee, assigner, generation),
-            review_at, order, request)
+            todo_id, repo, text, identity, assignment, review_at, order, request)
         prepared = self.preparing_edits((proposed,))
         with prepared.writing() as db:
+            snapshot = RegistryStore.at(self.root).snapshot()
+            proposed.held().require_receiving_work(assigner, snapshot)
             proposed.held().require_available_in(
-                db, todo_id, IncomingWork(assigner, frozenset({todo_id}), frozenset({order.id})),
-                RegistryStore.at(self.root).snapshot(), prepared.prepared_edits())
+                db, todo_id, IncomingWork(frozenset({todo_id}), frozenset({order.id})),
+                snapshot, prepared.prepared_edits())
             OwnerRequest.require(db, id=request).require_open(creator.acting_identity)
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
@@ -6563,13 +6572,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     def fire(
         self, unit: ThreadIncarnation, actor: ThreadIncarnation, reason: StrikeReason,
     ) -> tuple[Todo, ...]:
-        """Release every open problem the unit holds from this commander in one write; each
-        records the same reason, and its order and strikes stay."""
+        """Release this holder's shared work with its consent in one transaction."""
         with self.writing() as db:
-            commander = actor.commanding_identity
-            held = tuple((todo, todo.held()) for todo in TransactionTodoHistory(db).attach(self.held_in(
-                db, 'creator=? AND creator_created=?',
-                (commander.name, commander.wire_birth), unit=unit)))
+            held = tuple((todo, todo.held()) for todo in TransactionTodoHistory(db).attach(
+                self.held_in(db, '1', (), unit=unit)))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
             released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).write(db, todo, self)

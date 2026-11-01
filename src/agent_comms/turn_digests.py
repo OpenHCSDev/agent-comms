@@ -305,8 +305,8 @@ class OrderEditRead[Result](OrderRead[Result]):
     @classmethod
     def for_commander(cls, comms: Comms, commander: str) -> Iterator[Self]:
         snapshot = comms.registry.snapshot()
-        held = HeldOrders.of(comms.goals.todos, snapshot, commander)
-        history = comms.goals.todos.history_for_commander(snapshot.require(commander).incarnation)
+        held = HeldOrders.of(comms.goals.todos, snapshot)
+        history = comms.goals.todos.board_history()
         pulls = ProgressRead(history)
         workplaces = EditWorkplaces.capture(comms, snapshot, held.live, pulls)
         yield from cls.judgeable(

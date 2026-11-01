@@ -231,12 +231,9 @@ class RecordedWatch(WatchState):
         return (self.record,)
 
     def commands(self) -> bool:
-        """A saved enrollment may predate registration; only a registered recipient has a role."""
+        """Enrollment may predate registration; tags never decide a bound peer's authority."""
         snapshot = RegistryStore.at(Path(self.record.root)).snapshot()
-        if not snapshot.taken(self.record.bus):
-            return False
-        return snapshot.commander_project.by_role(
-            snapshot.require(self.record.bus), commander=True, commanded=False)
+        return snapshot.taken(self.record.bus)
 
     def connect(self, serve: Callable[[], agent_comms.cli_bridges.shared.Serve],
                 request: Callable[[agent_comms.cli_bridges.shared.Serve], agent_comms.cli_bridges.monitor.SessionRequest]) -> None:

@@ -266,15 +266,9 @@ class ReplyingThreadOutput(ThreadOutput):
                 del self.sent[sent]
 
     @classmethod
-    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> ThreadOutput:
-        """A commanded session's last item replies to the senders delivered in its turn; the
-        commander answers its owner in its own transcript and messages units only by tool."""
-        snapshot = comms.registry.snapshot()
-        return snapshot.commander_project.by_role(
-            snapshot.born(transcript.incarnation.require_recorded().lookup),
-            commander=ThreadOutput(transcript, comms.agents),
-            commanded=cls(transcript, comms.agents, messaging=comms.messaging),
-        )
+    def for_comms(cls, transcript: ExternalTranscript, comms: Comms) -> Self:
+        """Every live external endpoint follows the delivered message's reply policy."""
+        return cls(transcript, comms.agents, messaging=comms.messaging)
 
     def flush_before(self, key: TurnItem) -> None:
         for previous in tuple(self.pending):

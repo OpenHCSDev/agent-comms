@@ -1,55 +1,44 @@
 ---
 name: coordination
-description: "one order per owner holding every problem on its surface; units gather evidence and the commander (or its Claude fork) diagnoses and chooses the shape; the main loop only dispatches; finished work never waits on the commander; every unit ask is answered before the next rotation step; check open PRs first; never block on a question; record new owner targets at once"
-drift: "Finished work never waits on you: enqueue it, record it and give its unit the next order the same tick; a Claude fork shapes while your main loop dispatches."
-audience: commander
+description: "shared responsibility and accountability: every collaborator diagnoses, implements, verifies and reviews; keep work with its context owner, communicate actual conflicts, preserve lead-owned storage and never park a written next action behind rank"
+drift: "Keep the work and judgment with its context owner. Claim conflicts aloud; no colleague waits on rank or another model's provider."
 type: hard-rule
 ---
 
 > 34 checks need passing before the commander switch
-> each one sits in some order, somewhere
-> 33 of them have no owner
-> nobody notices because every order looks busy
-> two hours
-> meanwhile a triage order says "decide whether it's a src bug or a stale test"
-> the unit decides: stale test
-> it was a src bug
-> the unit then designs the src fix it said wasn't needed
-> commander approves it
-> meanwhile four units finish their work
-> they sit in standby waiting for the commander
-> the commander is in the main loop
-> debugging a swallowed print in one test
-> by hand
-> for an hour
-> while a fork could have done it with full context
-> meanwhile fork-boundaries asks one question
-> it waits
-> seven hours
-> the answer was one word
-> mfw the bottleneck was the only agent with nothing to type
+> 33 have no owner
+> four agents finish and wait for the commander
+> one question waits seven hours for a one-word answer
+> identify the problem: missing responsibility and unanswered work
+> write the rule: only the commander may diagnose
+> congratulations. the bottleneck is now in the instruction manual
+> next colleague has the source, the defect and the fix
+> waits for a different model to bless the same three facts
+> shared responsibility, except for the responsibility part
 > run it back
-> fork-boundaries asks one question
-> commander types the one word
-> 4 seconds
-> 34 checks get an owner each in one order; the swallowed print goes to a fork with full context
-> mfw the throughput fix was answering the question
+> the colleague with context traces the owner and its consumers
+> announces the repair, fixes it and verifies the actual workflow
+> another colleague reviews the exact source, not the author's rank
+> real collisions name their resource; independent work keeps moving
+> the seven-hour answer takes one sentence
+> mfw the missing capability was answering each other
 
-**Why:** problems scattered across orders lose their owner (2026-10-19: 33 of the 34 checks the Core commander switch depended on sat ownerless for nearly two hours), and a unit left to diagnose picks the cheapest reading (2026-10-21: triage orders P362, P377, P378 and P379 let units decide "src bug or stale test" and then design the src fix).
+**Why:** the 33 ownerless checks and seven-hour unanswered question were failures of responsibility, not evidence that one model must own diagnosis. The old P362/P377/P378/P379 lesson turned an incorrect diagnosis into a blanket rank restriction. Tristan's shared-responsibility corrections51713/53058 supersede that restriction: keep judgment with the context, check the source and follow through to delivery.
 
 - Group problems by surface into one order per owner; no problem is ever without an owner.
-- **Units gather evidence; the commander diagnoses and shapes.** A unit reproduces, traces, measures and reports with file:line. The commander decides what the defect is and the exact shape of the fix (owner, parents, members, what gets deleted). A triage order classifies and reports only; any src edit goes out as a new order whose shape the commander wrote.
-- **Units implement; Claude forks judge.** Every fix, short or long, goes to a bus unit as an order with exact numbered edits; a Claude fork diagnoses, writes that order file and reviews the unit's diff, and writes code only when no unit order can go out (the order verbs are gate-locked and the fork's change is the unlock). Slop in a unit's diff is sent back and fixed, never waved through because units are cheaper. Tristan, 2026-10-25: "shuld we not hand moer work to units our cladue usage is geting low the units are not that stupid once steere d with forcedgreentxt"; "if it has sloppy code it gets fixed not ignored". Running units scale with the work and with the commander's free load (`comms_commander_load`: owed orders, timers up, unjudged edits): start a unit only when a plan step is unblocked with no holder and the load leaves room to review it; stop one whose step waits, or when the load is past what the commander can judge. A stopped unit with nothing ready is correct; a unit stopped by anything but the commander (a crash, memory) is a defect. Tristan, 2026-10-21: "it should be scaled to how much free load the commander has and how much work is left".
+- **Equal responsibility is equal care.** Tristan's reason, relayed in51713: all agents are equals because everyone should care equally. Seeing a problem creates responsibility for following it through, not for handing it upward. If a context owner is already fixing it, help and coordinate rather than start a competing implementation.
+- **Every collaborator owns judgment.** Trace the fact, declaration, required behavior and whole consumer family; choose the coherent owner repair and verify it. A triage-only task still has its declared scope, but there is no class of agent forbidden to diagnose or implement. Communicate changed scope and real shared-file conflicts, rather than wait for a rank to choose the obvious next step.
+- **Review the work, never a model's rank.** Every collaborator can implement and judge source-backed repairs. A restated fact is fixed regardless of which model wrote it; a peer's confidence is not evidence. Keep parallel work proportional to actual RAM and executable obligations, and keep its context owner accountable through acceptance. Do not require a Claude reviewer or create a colleague solely to satisfy an authority division.
 - Short is measured on the correct fix at the owner. A fast workaround is slop, not a short fix, and hand-patching live state to keep an install moving is never a fix: the deliverable is the owner fix that makes that state impossible. Tristan, 2026-10-21: "if the corret maitnenane fix is like a few edtis do it, if a workaround is avaiulble as a quic kfix its not a quic kfix. ts slop."; "you shuodl not manualyl fix issues during install to kee p it going , you need tofix the isntalelr soyou never ever run into that issue again".
-- **The main loop dispatches; Claude forks diagnose and shape.** A Claude fork (a subagent of the commander, not a Codex `fork-*` unit) carries the commander's full context, so its diagnosis and fix shape are the commander's. Any work that would hold the main loop for more than a few tool calls goes to a fork the same tick: reading a unit's trace and writing the fix shape, reviewing a large diff, measuring a ratchet delta, debugging a test. The main loop keeps only what serializes: answering unit asks, merges, installs, strikes and recording deliveries (2026-10-21: three hours of zero forks while four units sat in standby waiting on the commander, and the main loop debugged a swallowed test print).
-- **Finished work never waits on the commander.** The tick a PR goes green it is enqueued; the tick a unit reports a delivery it is recorded; the tick a unit finishes or hands in a trace it gets its next order, while a fork does any review, manual merge or shape that work waits on. Installs follow ship-and-install.md. Tristan, 2026-10-21: "not leave work done blocked" (09:10 that day: #2430 green and clean with no auto-merge, toad#1115 waiting on a manual merge, #2431 and #2432 merged but not installed, four finished units in standby).
-- **Every unit ask is answered before the next rotation step.** A question, alert or handoff from a unit holding an order gets a disposition the same tick; a unit idling on the commander's paperwork is commander waste (2026-10-21: fork-boundaries' 8122 waited about seven hours).
-- Subagents are forks, not fresh agents, and get no turn limit. Tristan, 2026-10-18: "always fork. stop it, fork and let the fork take over". Claude usage is the scarce budget: spend it on the critical path, which is diagnosis and shaping whenever units wait on them.
+- **Keep implementation and verification with their context owner.** Independent colleagues can review and remove genuinely independent obstacles. Do not transfer continuing work merely to redistribute activity or hold every diagnosis behind one provider. Genuine in-turn subagents retain their parent's authority; independent Pi sessions/goals are peers regardless of fork ancestry. Existing transactions and launch claims serialize shared stores and installs, not an enforced hierarchy.
+- **Finished work never waits on rank.** Publish the working checkpoint, obtain or perform an exact-head source judgment and necessary affected-path proof, enqueue it, record actual delivery and install useful landings. Announce actual shared-store or launch conflicts; do not park behind another provider or wait for permission already granted. Keep the next independent action moving. Installs follow ship-and-install.md.
+- **Answer the colleague who asked, in the same turn.** A question, alert or handoff gets a disposition, not another wait on paperwork. `rules/plain-reporting.md` owns originating-conversation reply routing, including channel replies and correction of privately sent channel answers.
+- Preserve an independent session's own goal, history and original inputs. Use the existing colleagues and source contexts; no new colleague or paid model is implied by shared authority. Standby names a genuine external dependency only when no independent action remains, never a written next step waiting for permission.
 - Before each order, compare every open PR's files (`gh pr list --state open`) with the order's; merge the overlapping ready PR first.
 - A multi-phase plan gets a tracking issue and a Core todo per phase when dispatched; every hunt first checks whether a plan phase is ready.
 - Never block the loop on a question to the owner: ask in plain text with a stated default and keep working.
 - When the owner states a new target, direction or rule, update the goal record the same turn. Tristan, 2026-10-09: "reflexively update your own goal whenever I say something important".
-- A unit is answered with `order say UNIT FILE --answers ID1 ID2`, one call per unit: space-separated 12-hex message ids, taken from `message_identity_source` by seq (a burst's own ids, never an id quoted in its body). A comma list records nothing (2026-10-21: 37 answers lost), and a bare `send` leaves the ask UNANSWERED to Core.
+- Link answers to the actual originals through the existing send/order operation. Native `comms_send.answers` carries the received sequence and message ID; `order say TARGET FILE --answers ID1 ID2` uses space-separated 12-hex IDs. Keep the originating conversation as TARGET. Read the sent ID and refusal outcome; never copy a different message's ID merely because its body quotes the question. A comma list records nothing (2026-10-21: 37 answers lost).
 - Every report from Tristan becomes a durable record the same turn: an order with an owner, a phase in plans/OWNER-ASKS-PLAN.md, or a bus message; never a note in context. Tristan, 2026-10-25, holding 13 asks: "damn see how fragile it is to just a 'remmeber' its importatn t put out durable ordesr".
 - Bus orders reach a Codex thread through the Codex bridge's `turn/start` (16 ms into the running turn on 2026-10-24); never `codex queue`, which delivers only at turn end (60 stale messages on 10-23). "inProgress" from a queued input is not proof the unit read it: the rollout is the evidence, and a stale rollout behind a `reasoning` record is a wedged turn, interrupted with `turn/interrupt` and re-delivered in full.
 - New units are Pi units (`agent-comms import-running-thread ... --model openai-codex/...`, then `agent-comms start`), each proven with a real message; never Codex CLI sessions (2026-10-19: their shared app-server reached 7 GB and was OOM-killed). Pi logs in with Tristan's ChatGPT Pro account and shares Codex's weekly pool. A Claude unit launched from a Claude session first clears every inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_PID` variable, or it writes no transcript and the bridge never sees it (2026-10-18).

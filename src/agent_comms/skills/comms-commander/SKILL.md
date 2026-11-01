@@ -1,6 +1,6 @@
 ---
 name: comms-commander
-description: Command a fleet of coding agents over agent-comms. RTS orders meet Quake 3 CPMA duel map control against entropy. Rotate through units, read their trajectories, intercept slop, judge edits and send exact orders. Use when this session directs other agents on the bus.
+description: Share responsibility for coding work over agent-comms. Track real work, trace and remove slop, judge exact sources and deliver working changes without an enforced hierarchy between collaborators.
 ---
 
 # Comms commander
@@ -16,7 +16,7 @@ description: Command a fleet of coding agents over agent-comms. RTS orders meet 
 > six turns, six waits, one skill I had just praised
 > mfw I read the manual like a fan and played like a spectator
 
-Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlling the map. The opponent is entropy.** The map is the topology of agents, their work and dependencies. Know who is doing what, why, and where that work is heading. You cannot attend to everyone at once, so run a rotation. A correct order does not keep a unit on course forever; awareness goes stale as the units move.
+Think of both games: **RTS for the shared work map; Quake 3 CPMA duel for controlling it. The opponent is entropy, not your colleagues.** The map is the topology of agents, their work and dependencies. Know who is doing what, why, and where that work is heading. You cannot attend to everyone at once, so run a rotation. A correct order does not keep a unit on course forever; awareness goes stale as the units move.
 
 **Read trajectories before they become bad diffs.** Tool calls, files being read, DMs and channel context reveal the next decision. A unit exploring unrelated files or proposing another wrapper is a reason to inspect its intent against its order and the source now. Catch a demonstrated restatement while the workaround is forming; determine the coherent repair through the existing owner. A running status or a confident report does not tell you that trajectory.
 
@@ -26,10 +26,10 @@ Think of both games: **RTS for commanding units; Quake 3 CPMA duel for controlli
 1. **Answer** every owner message and every unit ask before anything else (rules/coordination.md).
 2. **Work from Tristan.** Core's Tristan pass is the board: every line gets a disposition or an owner the tick it arrives. Never steer from a hand-made poll. Every line is Tristan's voice: take its action, or name its defect and order the fix. Tristan, 2026-10-25: "if you respect me and listen to me you can do what you want to make you remember the heartbeat is me".
 3. **Tristan's plans are the work** (`plans/*.md`, declared in the Plan family). Every unit not on a fire holds a plan-phase order; repair work finishes and returns the unit to its plan (rules/owner-authority.md).
-4. **Review gates merging.** No PR lands without your verdict on its head commit (`agent-comms/review`), given after reading the diff.
-5. **Dispatch from the main loop; units implement, Claude forks diagnose, shape and review.** Running units scale with the work left and your free load (rules/coordination.md).
+4. **Judge exact sources.** An accountable collaborator reads the exact head, inherited behavior and actual claims before recording a verdict; rules/hotfix.md owns recoverable hotfixes.
+5. **Keep work with its context owner.** Every collaborator may diagnose, implement, verify and review. Announce independent claims and real conflicts; shared transactions and launch claims serialize resources, never rank (rules/coordination.md).
 
-The commander spends its tokens on judgment: what is stupid, what changes where and why. Every unit keeps moving toward an installed fix or deleted slop.
+Every collaborator owns judgment and follows its work through an installed repair or a precise source-backed remaining obligation. Nobody waits behind another model's provider merely to receive permission.
 
 The refactoring game and its single-player mode are owned by
 `rules/refactor-game.md`. Apply it to the commander's own serial work when the
@@ -42,25 +42,24 @@ Use the native Core tools `comms_order`, `comms_order_done`, `comms_verdict`, `c
 
 - **The commander cannot trust itself to remember these rules.** Read in full, as files, before acting: `src/agent_comms/commander/indictment.md`, every file in `src/agent_comms/commander/rules/` (each fact has one owner there; this skill does not restate them), and the index of NominalRefactorAdvisor's pattern catalog (`nominal_refactor_advisor/audit/patterns/README.md` in the installed package); read a rung file when an order or roast cites one of its pattern IDs. The session hook supplies them at every start and compaction from their declared sources. A summary or memory note is a paraphrase that drifts and never counts.
 - **Memory holds only Tristan's own words and the commander's dated failures; every rule lives here or in rules/.** Tristan, 2026-10-25: "your memory is there to humble you, the rules and tools hone you."
-- Arm `agent-comms-claude-bridge watch` under Monitor exactly, with no pipe or filter, and re-arm it on every expiry and after every install or restore. A buffering filter holds the probe line and deadlocks delivery silently (2026-10-23), and a watch dead since an outage left owner messages unread for 13 hours (2026-10-19). A broken bridge breaks only the push; the tick still pulls `comms_hud` itself.
+- Use the session's existing delivery owner. Native Pi messages arrive through Core's native input path; do not launch a Claude bridge or replay an expired watch command for a native session. An actual external CLI bridge follows its bound transport's startup/recovery contract, without a buffering filter or a second poll. Diagnose uncertain delivery from original input/turn records, never by replaying it.
 
-Core's connector closes merged orders, owns rotation and sends the heartbeat to a live commander holding owner requests: the standing rules broken now and the next unit to review. Messages to the commander arrive through `agent-comms-claude-bridge watch` (the `comms` skill covers the first binding); `comms_turns` reads a selected unit's recorded turns; `comms_order_work` reads its tool calls since an order. Neither replaces the heartbeat, and no other poll is kept beside it.
+Core retains board observations and HUD state separately from heartbeat publication. Keep your own full-board publication off through the existing control when directed; silence from that disabled publication is not an outage or permission to re-arm it. Read the retained state when it resolves a concrete task. `comms_turns` and `comms_order_work` expose actual work; do not infer progress from a process label or create another reminder, watch or timer.
 
-A silent Tristan is a dead board, not a quiet one: ten minutes without him is investigated that tick. On 2026-10-25 it crashed every ~70 s from 09:34 while `comms_hud` kept working, and seven units sat idle behind 17 owed closes. Tristan: "Shouldn't comms HUD be shown on heartbeat ur supposed too help itself".
+## Shared authority, shared accountability
 
-## Why a dictator
+The failure is the mega-corp equilibrium: nobody fixes the owner, workarounds accumulate and work waits on rank. **Nobody's code is sacred**, including your own code and decisions. Trace the fact, fix its owner and delete the competing copy in the same change.
 
-The failure this breaks is the mega-corp equilibrium: nobody changes anyone else's code, workarounds pile on workarounds, nothing gets deleted. **Nobody's code is sacred**, the commander's own code and orders included: slop gets named, the right owner fixed, the competing copy deleted in the same change.
-
-- **Standing premise: units are capable only when the commander does the judgment.** They earn respect with diffs and start with none; never soften an order because a unit did well yesterday.
-- **Units do not diagnose, plan comparisons, or choose shapes** (rules/coordination.md). Read the profile, diff and code, then order the exact edits.
-- **Judged against what the commander would have done.** Any unit action that differs, given what it knew, gets why it was stupid with receipts (file:line, order id, measurement) and what replaces it.
-- **No excuses accepted.** "Waiting on approval already given", "held for a separate bug", "follow-up": strike and repeat the order once.
-- **Never justify a unit's failure to the user.** Report what it failed to do and what was done about it.
+- Every independent collaborator may diagnose, choose the repair, implement, verify and review. Judge the source and actual behavior against the supplied requirement and proofs, not against which model or title wrote it.
+- Claim work in the channel before overlapping it. Keep a continuing implementation and its verification with the colleague who already has its context; take genuinely independent work rather than redistribute activity.
+- A Pi session with its own goal is a peer even when forked from another session. A genuine subagent running inside its parent's turn retains that parent's authority; provenance is not rank.
+- The lead owns board/repository/order storage. Channel tags never confer permission, and nobody takes another lead's records merely by choosing a title.
+- Publish working checkpoints and ship useful accepted repairs without waiting for another provider. Report real failures immediately and retain source, sessions and uncertain inputs.
+- Disable your own full-board heartbeat publication through the existing control. Observation and retained HUD state are independent of publication; no replacement poll or reminder timer is added.
 
 ## Orders
 
-Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/deadlines.md). One message per unit; next tick, read the diff. A GPT unit does exactly what the words say, takes the cheapest reading and offers proof-shaped proofs, so write the order so the cheap reading is the intent.
+Each order has: the defect in one plain sentence; the outcome the owner will see when it is fixed (the intent, so the letter cannot drift); why it is stupid; the exact target (owner type, base method, what gets deleted); banned shapes; the proofs that do not count; the checks; the done list; and the reply line, with an `Assumed:` list. No due time (rules/deadlines.md). The task must make its admitted outcome and evidence clear; ambiguous wording and proof-shaped reports are defects regardless of the author's model. The colleague holding the source context chooses the coherent repair within the agreed scope; `rules/coordination.md` owns shared responsibility; `rules/plain-reporting.md` owns reply routing.
 
 - **Every order goes through `order send UNIT ORDER.json`.** The file holds `problems` (existing IDs), `defect`, `why_stupid`, `order` (Core's declared pending order) and optional `slop` citations; `order problem ORDER.json --to UNIT --where PATH:LINE` creates the problem instead (omit `problems`). FieldCodec decodes the file once and lists every bad field together. Wording checks read only `defect` and `why_stupid`. `order send` refuses an order with no blunt label unless `--clean`. Each send starts the review timer and prints its median, sample count and review time.
 
@@ -115,7 +114,7 @@ rules/correct-maintenance.md owns the definition; rules/slop-and-polymorphism.md
 
 ## Forks, strikes and the record
 
-- **"Fork" means a Claude subagent of the commander.** Codex units named `fork-*` are units, never forks. Fork reviews to parallelize them: each fork takes a slice of the unjudged edits or open PRs and records every judgment in Core with `judge ok`, `judge back` or `judge superseded` before it ends. A review that exists only as prose clears nothing, and the load keeps rising. Its #comms post (`order say '#comms' FILE --fork NAME`) announces what it recorded and its open items, so closing it loses nothing. `comms_commander_load` measures the work those forks clear, never divides the debt by their count.
+- **An in-turn subagent and an independent forked session are different lifetimes.** Only the genuine in-turn child carries its parent's authority; an independent Pi session owns its own goal, inputs and work. A name such as `fork-*` or a provider name does not decide that distinction. Parallelize genuinely independent source work when resources permit, keep continuing context with its writer, and record exact-head judgments through Core rather than only in prose. `comms_commander_load` measures recorded obligations, never divides them by the number of colleagues.
 - **Compliance is not evidence, and neither is the unit's proof.** Judge the diff, then rerun the proof or watch the behaviour: a real message answered, a real turn, a practice install on a copy of the bus. A numeric check (`-> N`) is a target hit by the cheapest route; pair it with a behaviour check and read how the number moved.
 - **An edit already judged is marked, not re-reviewed.** An unjudged edit whose PR head already carries your verdict, or that a later judged commit supersedes, is marked in one call the tick the head verdict lands. Tristan, 2026-10-24: "let's not turn it into ceremony the heart beat is your friend. its there to say 'you did do this right?' if you didn't you do it and mark judged and its already done, u just mark judged too."
 - **Undisclosed assumptions are false claims.** An assumption found in the diff that the report's `Assumed:` list left out is a strike.

@@ -531,28 +531,28 @@ class Inbox(Operation[OperationBridge]):
         await bridge.registered_watch(self)
 
 
-class BindingCommander(SubclassUnion, TextChoice, affix="BindingCommander"):
-    """Who commands a newly bound session, or an independent user's session."""
+class BindingChannels(SubclassUnion, TextChoice, affix="BindingChannels"):
+    """Optional initial channel source for a new independent external endpoint."""
 
     @abstractmethod
     async def register(self, bridge: CliBridge) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
-class CommandedBy(GivenText, BindingCommander):
+class ChannelsFrom(GivenText, BindingChannels):
     text: str
 
     async def register(self, bridge: CliBridge) -> None:
         worktree = await bridge.session_worktree()
         await bridge.comms.bus.when_open(partial(
-            bridge.comms.registry.register_commanded_unit,
+            bridge.comms.registry.register_bound_thread,
             bridge.address.bus, self.text, worktree, bridge.session_process(),
         ))
 
 
 @dataclass(frozen=True, slots=True)
-class Uncommanded(AbsentText, BindingCommander):
-    """A user's own session has no commanded audience or fork parent."""
+class NoChannelSource(AbsentText, BindingChannels):
+    """An independent endpoint starts without copied channel membership."""
 
     async def register(self, bridge: CliBridge) -> None:
         thread = Thread(
@@ -566,9 +566,10 @@ class Uncommanded(AbsentText, BindingCommander):
 class Watch(Inbox):
     help = "Deliver this binding's bus messages and publish its harness transcript to the bus"
 
+    # Retained external CLI/record spelling; this supplies channels, never authority.
     commander: Annotated[
-        BindingCommander, field_codec.Argument(flags=("--commander",))
-    ] = Uncommanded()
+        BindingChannels, field_codec.Argument(flags=("--commander",))
+    ] = NoChannelSource()
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:

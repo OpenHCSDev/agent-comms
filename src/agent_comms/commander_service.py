@@ -35,12 +35,13 @@ class CommanderService:
 
     @classmethod
     def actors(cls, snapshot: RegistrySnapshot) -> frozenset[str]:
-        """Every name a commander or one of its forks publishes under: any commander's recorded
-        action disposes of a line on the one shared board."""
+        """Current and retained names of executable collaborators, from the namespace owner.
+
+        Walk its declared members once instead of rescanning aliases for every peer.
+        """
         return frozenset(
-            name for commander in snapshot.commander_project.commanders(snapshot)
-            for actor in (commander, *cls.forks(snapshot, commander.name))
-            for name in snapshot.names_for(actor.name))
+            name for name, thread in snapshot.named_members()
+            for _ in thread.role.executor(thread))
 
     @classmethod
     def recipients(cls, snapshot: RegistrySnapshot, lead: Thread) -> tuple[Thread, ...]:
@@ -64,8 +65,8 @@ class CommanderService:
         keeps its parked orders and requests, and gets no heartbeat or vibe check for them."""
         snapshot = registry.snapshot()
         project = snapshot.commander_project
-        commanders = project.commanders(snapshot)
-        if not cls.live(commanders) or not any(
+        commanders = cls.live(project.commanders(snapshot))
+        if not any(
                 goals.todos.open_requests(thread.acting_identity, limit=1, descending=False)
                 for thread in commanders):
             return ()

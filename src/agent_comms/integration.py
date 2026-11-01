@@ -730,13 +730,13 @@ class IntegrationRun:
         self.failure.require_qualification()
         if not problems or len(set(problems)) != len(problems):
             raise IntegrationFailed("Qualification requires unique actual problem selectors")
-        if context.actor_identity.commanding_identity != context.incarnation:
-            raise IntegrationFailed(
-                "Qualification requires this root's existing commander authority"
-            )
+        snapshot = context.comms.registry.snapshot()
+        actor = context.actor_identity
+        project = snapshot.commander_project
+        project.require_scope(snapshot, actor, carrier.repo)
         todos = tuple(context.comms.goals.todos.get(problem) for problem in problems)
         for todo in todos:
-            todo.require_commander(context.incarnation)
+            project.require_scope(snapshot, actor, todo.repo)
         core = Repo.of(self.checkout.path)
         registered_core = Repo.selected(context.repos, core.github.to_wire())
         base = IntegrationSource.main_head(registered_core)
@@ -776,6 +776,7 @@ class IntegrationRun:
         pulls = PullRequests(todos)
         heads: dict[RepositoryName, tuple[PullRequestHead, ...]] = {}
         for repo in repositories.values():
+            project.require_scope(snapshot, actor, repo.github)
             repo.acquire(mains[repo.github])
             linked = PullRequests.linked_among(todos, repo.github)
             selected = []
@@ -799,8 +800,8 @@ class IntegrationRun:
                 for row in pulls.open(repo.github)
                 if row.base == WorkBranches.main
             )
-            approved = StoredHeadReview.root_sources(
-                context.comms.goals.todos, candidates, context.incarnation
+            approved = StoredHeadReview.accepted_orderless_sources(
+                context.comms.goals.todos, candidates
             )
             for head in approved:
                 for container in carriers:
@@ -864,8 +865,12 @@ class IntegrationRun:
             for head in source.heads:
                 head.current()
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
+        current_snapshot = context.comms.registry.snapshot()
         for todo in current_todos:
-            todo.require_commander(context.incarnation)
+            current_snapshot.commander_project.require_scope(current_snapshot, actor, todo.repo)
+        for source in inputs.sources:
+            current_snapshot.commander_project.require_scope(
+                current_snapshot, actor, source.repository)
         context.comms.goals.todos.require_input_sources(inputs)
         if (
             Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip()

@@ -220,12 +220,9 @@ class HeadVerdictTool:
     order: Annotated[HeadReviewOrder, *tool_field("Optional held-order link")] = NoHeadOrder()
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> HeadReviewed:
+        actor = caller.head_review_actor(comms, self.request, self.order)
         problems: dict[str, str] = {}
         orders = self.order.prepared(comms.goals, problems)
-        actors = []
-        for order in orders:
-            with RecordProblems.collecting(problems, '--problem', 'select the current held order'):
-                actors.append(caller.head_review_actor(comms, self.request, order))
         heads = []
         with RecordProblems.collecting(problems, '--head', 'supply the current PR head SHA with --head'):
             heads.append(self.operation.current_head(self.request))
@@ -237,7 +234,6 @@ class HeadVerdictTool:
         if problems:
             raise TodoProblems(problems)
         order, = orders
-        actor, = actors
         prepared, = preparations
         return self.operation.reviewed(comms.goals, self.request, prepared, actor, order)
 
@@ -324,7 +320,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
-        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
+        orders = [todo.id for todo in comms.goals.todos.board()
                   if todo.holder == self.unit]
         if not orders:
             raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
@@ -347,7 +343,7 @@ class CommsTodoListTool(BoardReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         snapshot = comms.registry.snapshot()
         actor = snapshot.require(caller.subject(self.thread)).incarnation
-        listed = tuple(comms.goals.todos.for_commander(actor))
+        listed = tuple(comms.goals.todos.board())
         pulls = ProgressRead(listed)
         # An orphaned hold has no unit checkout to read; HolderGone reports it.
         held = HeldOrders.split(tuple(todo for todo in listed if todo.holder), snapshot)
@@ -679,7 +675,7 @@ class CommanderUnitRead(
         hud.require_current()
         for card in hud.units:
             if card.unit == self.unit:
-                return card.detail(comms, self.commander, self.orders)
+                return card.detail(comms, self.orders)
         raise ToolRefusedError("The selected unit is no longer in this commander's published frame")
 
 
@@ -698,13 +694,13 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFleetStoryTool(BoardReadTool):
+class CommsFleetStoryTool(ReadTool, ToolRequest):
     label = "Fleet story"
-    description = ("Read what each order this commander holds out is doing now, one line per "
-                   "order; orders held by units no longer registered collapse into one line.")
+    description = ("Read what each held order on the shared board is doing now, one line per "
+                   "order; orders held by unregistered participants collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        return FleetStory.collect(HeldOrders.read(comms, caller.subject(self.thread)))
+        return FleetStory.collect(HeldOrders.read(comms))
 
 
 @dataclass(frozen=True, kw_only=True)

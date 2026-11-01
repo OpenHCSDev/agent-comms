@@ -9,7 +9,6 @@ from agent_comms_hooks import ToolRefusedError
 from agent_comms.cli_bridges.session_watch import WatchClaim
 
 from .bus_publication import AgentOrigin
-from .channel_targets import CommandersTag
 from .cli_result import ThreadToolCatalogResult, ToolCatalogResult
 from .nominal.field_codec import WireForm
 from .launch_root import LaunchRoot
@@ -196,22 +195,18 @@ class ActsForCommander(ThreadCaller):
 
 @dataclass(frozen=True)
 class CommanderPeerCaller(ThreadCaller):
-    """Another commander acting under its own name: membership in the commanders channel is
-    the declaration, so its verdicts and orders record its own incarnation, never the
-    registered commander's."""
+    """A collaborator acts under its own incarnation, independently of channel tags.
 
-    def commanding(self, comms: Comms) -> None:
-        if CommandersTag.declared_name not in comms.registry.require(self.name).tags:
-            raise ToolRefusedError(
-                f"{self.name} is not in {CommandersTag.channel()}; join it to act as a commander.")
+    Binding to another lead's records remains explicit through as_thread.
+    """
 
     def as_thread(self, commander: str) -> ThreadCaller:
         return CommanderPeerAuthority(self.name, commander)
 
 
 @dataclass(frozen=True)
-class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
-    """A peer bound to the registered commander whose orders it judges and directs."""
+class CommanderPeerAuthority(CommanderPeerCaller):
+    """Explicit record selection, never representation of the selected storage owner."""
 
     authority: str
 
@@ -222,8 +217,7 @@ class CommanderPeerAuthority(ActsForCommander, CommanderPeerCaller):
         return comms.registry.require(self.authority)
 
     def identity(self, comms: Comms) -> ThreadIncarnation:
-        own = comms.registry.require(self.name).incarnation.require_recorded()
-        return own.peer_for(self.commander(comms).incarnation)
+        return comms.registry.require(self.name).acting_identity
 
 
 @dataclass(frozen=True)

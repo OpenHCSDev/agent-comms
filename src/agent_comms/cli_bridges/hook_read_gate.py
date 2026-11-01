@@ -6,7 +6,7 @@ unread or unanswered, or the audit does not answer the deal. PostToolUse, which 
 only after a tool completes, records a Read that covered a whole dealt file; a failed or partial
 Read leaves the gate closed.
 A subagent is gated as its own session: its deal, reads and audit sit beside its own transcript,
-it may not write the main agent's audit, and it reports its tool activity through its seat.
+it may not write the main agent's audit, and its actual SDK id owns its tool activity.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms.channel_targets import ThreadTarget
 from agent_comms.task_attachments.owner_notices import MeantNotice
 from .claude_transcript import ClaudeJsonLines
-from .hook_forks import SeatedSubagent
+from .hook_forks import SubagentActivity
 
 
 @dataclass(frozen=True)
@@ -213,7 +213,7 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
 
 
 @dataclass(frozen=True)
-class SubagentCall(GatedCall, SeatedSubagent):
+class SubagentCall(GatedCall, SubagentActivity):
     """A subagent shares its session's id and transcript path, but its deal is its own: it
     lives beside the subagent's own transcript, so its reads, its audit and its calls never
     touch the main agent's, and it reports its own tool activity."""

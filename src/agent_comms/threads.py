@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .agent_backend import AgentBackend, NewThreadBackend, RuntimeLocation
-from .channel_targets import CommandersTag, DeclaredTag, Tag
+from .channel_targets import Tag
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .context_segments.wake_values import WakeWorkContext
 from .nominal.declared_family import DeclaredFamily
@@ -250,12 +250,8 @@ class ThreadProvenance:
 
     @property
     def acting_identity(self) -> ThreadIncarnation:
-        """Who this thread's own tool calls act as: a #commanders member holds commander
-        authority over every order on its bus, so no order outlives its creator's command."""
-        if CommandersTag.declared_name not in self.tags:
-            return self.incarnation
-        own = self.incarnation.require_recorded()
-        return own.peer_for(own)
+        """Provenance alone grants no work authority or parent representation."""
+        return self.incarnation
 
 
 class ThreadCatalogFile(DurableFile, PatternFile):
@@ -268,6 +264,12 @@ class ThreadCatalogFile(DurableFile, PatternFile):
 @dataclass(frozen=True, slots=True)
 class Thread(ThreadProvenance, CatalogSelection):
     """Declares one agent thread's identity and provenance."""
+
+    @property
+    def acting_identity(self) -> ThreadIncarnation:
+        """Only independent executors maintain shared work; children bind at tool entry."""
+        return next((peer.incarnation.require_recorded().as_colleague()
+                     for peer in self.role.independent_threads(self)), self.incarnation)
 
     def answering_thread(self, reader: Thread) -> Thread:
         """A live declaration answers what it owes in its own transcript, whoever reads the debt."""
@@ -346,11 +348,6 @@ class Thread(ThreadProvenance, CatalogSelection):
         """A new owner incarnation starts unobserved over the last real record."""
         return replace(self, offered=UnobservedTools(),
                        offered_before_restart=self.offered.restarted_over(self.offered_before_restart))
-
-    def commanded_child(self, child: Thread) -> Thread:
-        """A commanded declaration inherits its initial audience from its commander, never its
-        commander's role."""
-        return replace(child, tags=DeclaredTag.for_child(self.tags))
 
     def inherited_history(self, registry, visited):
         if self.name in visited:

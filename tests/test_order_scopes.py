@@ -86,7 +86,7 @@ def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
         Thread('triager', frozenset(), Checkout(private_comms.root / 'triager')))
     requested(private_comms, TriageScope(), source_repository, 'P2',
               ('Classify the failing source',), owner='triager')
-    held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot(), 'lead')
+    held = HeldOrders.of(TodoStore(private_comms.root), private_comms.registry.snapshot())
     assert sorted(hold.recalled() for hold in held.live) == [
         'triager P2 triage: Classify the failing source',
         'worker P1 fix: Then stop and report; no src edit before it',

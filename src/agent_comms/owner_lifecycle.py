@@ -26,7 +26,6 @@ from .nominal.declared_family import DeclaredFamily
 from .owner_connection import OwnerConnection
 from .owner_launch import RetainedOwnerLaunch, StartOwnerRuntimeRequest, StopOwnerRuntimeRequest
 from .root_runtime import RootRuntimeStore
-from .commander_service import CommanderService
 from .channel_targets import ThreadTarget
 from .task_attachments.owner_notices import RestartNotice
 from .diagnostics import OwnerProcessOutput
@@ -417,8 +416,7 @@ class OwnerLifecycle:
         if previous.process_identity.offline():
             orders = tuple(
                 todo
-                for commander in CommanderService.boards(self.registry, self.goals)
-                for todo in self.goals.todos.held_by(commander.incarnation, owned.incarnation)
+                for todo in self.goals.todos.held_by(owned.incarnation)
                 if todo.pending and todo.held().owner_identity == owned.incarnation
             )
             if orders:

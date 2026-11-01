@@ -1129,16 +1129,15 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
     await confirm_and_finish_reply(bridge, message, (message.sender,), reply_end)
 
 
-def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
-    """The commander answers its owner in its own transcript: a unit that messaged it
-    mid-turn never receives that turn's answer as a direct message."""
+def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
+    """Storage lead and peer follow the same original-message reply policy."""
     from agent_comms.registry_document import RegisteredCommanderProject
     from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
     from agent_comms.transcript_events import AssistantTranscript
     from agent_comms.turn_item import NativeItemId, NativeTurnId
 
     lead, unit = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(Path("/tmp")), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
     comms.registry.set_commander_project(RegisteredCommanderProject(lead.incarnation, ()))
     for speaker, sender in ((lead, unit), (unit, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
@@ -1151,7 +1150,7 @@ def test_only_commanded_sessions_reply_to_their_delivered_senders(comms):
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
                     if message.body in {"lead answers", "unit answers"})
-    assert replies == (("lead", "unit answers"),)
+    assert replies == (("unit", "lead answers"), ("lead", "unit answers"))
 
 
 @pytest.mark.parametrize(('rows', 'parts'), (

@@ -124,7 +124,7 @@ class QueueBypass(ABC):
     @abstractmethod
     def target(self) -> MergeTarget: ...
 
-    def owes_verdict(self, target: MergeTarget) -> tuple[MergeTarget, ...]:
+    def owes_verdict[T](self, target: T) -> tuple[T, ...]:
         """The pinned heads that need Core's recorded ok before this bypass runs."""
         return (target,)
 
@@ -166,7 +166,7 @@ class AdminMerge(QueueBypass):
         return MergeTarget(repository=self.options.one(self.repo_flag),
                            number=int(self.selectors[0]), head=self.options.one(self.head_flag))
 
-    def owes_verdict(self, target: MergeTarget) -> tuple[MergeTarget, ...]:
+    def owes_verdict[T](self, target: T) -> tuple[T, ...]:
         """None: --admin is the review. Tristan, 2026-10-30: "--admin needs no review --admin
         implies someone reviewed". The head stays pinned, since merging a head nobody named is
         a real failure; the recorded-verdict demand made the hotfix door slower than the queue

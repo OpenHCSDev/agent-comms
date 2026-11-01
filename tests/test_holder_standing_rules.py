@@ -82,7 +82,9 @@ from agent_comms.todos import (
     CorrectMergedLinkTodo,
     MergedLink,
     PullRequestLink,
+    ReleaseTodo,
     ResumeClaimOrder,
+    StrikeReason,
     ExpectedProblem,
     OrderClaim,
     OrderMessage,
@@ -137,7 +139,7 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
     for problem in ("P1", "P2"):
         comms.goals.update_goal("worker", CreateProblemGoalAction(
             problem=problem, commander="lead", request=request,
-            assigner=comms.registry.require('lead').incarnation,
+            assigner=comms.registry.require('worker').acting_identity,
             repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
             review_at=RecordedEventTime(now + 3600), order=order,
         ))
@@ -406,7 +408,7 @@ def test_failed_holder_is_reported_without_reissuing_orders_or_replaying_unknown
     assert state_cards(held_bus, Blocked) == (violation,)
 
 
-def test_an_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus):
+def test_an_owner_approved_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus):
     blocked_holder(held_bus)
     before = held_bus.registry.require("worker").goal.require()
     todo = held_bus.goals.todos.get("P1")
@@ -414,6 +416,7 @@ def test_an_order_to_a_blocked_goal_activates_it_and_keeps_its_group(held_bus):
     # P2 shares P1's order, so the reissue carries it: a unit holds one order at a time.
     held_bus.goals.update_goal("worker", replace(
         ReissuedOrderGoalAction.for_todo(todo, "lead"),
+        assigner=held_bus.registry.require("worker").acting_identity,
         together=(ExpectedProblem(other.id, other.revision),)))
     current = held_bus.registry.require("worker").goal.require()
     assert current.id == before.id and isinstance(current.state, ActiveGoal)
@@ -458,7 +461,8 @@ def test_goal_generation_cannot_transfer_to_a_different_owner(held_bus):
     with pytest.raises(TodoConflict):
         held_bus.goals.todos.assign(
             (ExpectedProblem(todo.id, todo.revision),),
-            owner=held_bus.registry.require("outsider"), assigner=CoreWatcherIncarnation.watcher(),
+            owner=held_bus.registry.require("outsider"),
+            assigner=held_bus.registry.require("worker").acting_identity,
             generation=todo.held().generation, request=todo.request.require(), review_at=todo.review_at,
             order=todo.order.checked().reissued(time.time()),
         )
@@ -505,7 +509,11 @@ def test_merge_through_a_prerequisite_link_is_taken_back_and_the_order_changes_o
     held_bus.goals.update_goal("outsider", SetGoalAction(text="Absorb the checker audit work."))
     goals = {name: held_bus.registry.require(name).goal for name in ("worker", "outsider")}
     outsider = held_bus.registry.require("outsider")
-    store.assign((ExpectedProblem("P1", corrected.revision),), owner=outsider, assigner=lead,
+    corrected = store.apply("P1", ReleaseTodo(
+        corrected.revision, held_bus.registry.require("worker").acting_identity,
+        corrected.held(), StrikeReason("The holder releases the corrected repair for its next owner.")))
+    store.assign((ExpectedProblem("P1", corrected.revision),), owner=outsider,
+                 assigner=outsider.acting_identity,
                  generation=goals["outsider"].require().id, request=corrected.request.require(),
                  review_at=corrected.review_at, order=corrected.order)
     assigned = store.get("P1")
@@ -806,7 +814,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredUnitAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
-            HeldOrders.read(held_bus, 'lead').holders, time.time(),
+            HeldOrders.read(held_bus).holders, time.time(),
         )
     assert not any(questions.values())
 
@@ -1077,8 +1085,8 @@ def test_a_compliant_answer_resumes_a_held_unit_whose_problems_closed_during_the
     worker = held_bus.registry.require("worker")
     todos = held_bus.goals.todos
     for todo in todos.for_goal(worker.incarnation, worker.goal.require().id):
-        released = todos.apply(todo.id, ReleaseTodo(todo.revision, lead, todo.held(), StrikeReason(
-            "The commander moved this assigned repair elsewhere while the unit was held.")))
+        released = todos.apply(todo.id, ReleaseTodo(todo.revision, todo.held().owner_identity, todo.held(), StrikeReason(
+            "The holder explicitly releases its exact assignment before the repair moves elsewhere.")))
         todos.apply(todo.id, WithdrawTodo(
             released.revision, lead, released.holder_state.previous_assignment(),
             "The requested repair already merged into main through another problem."))
