@@ -14,7 +14,7 @@ from agent_comms.rule_deal import (
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
-from agent_comms_hooks.skill import FleetReader
+from agent_comms_hooks.skill import DeckReader
 from conftest import answer_deal
 
 
@@ -39,7 +39,7 @@ def test_answers_and_reads_outlive_everything_but_lost_context(commander_bus):
     read = deal.current().read_by(deal)
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
-    deal.deal(FleetReader, (), StartedDeal())
+    deal.deal(DeckReader, (), StartedDeal())
     assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
 
 
