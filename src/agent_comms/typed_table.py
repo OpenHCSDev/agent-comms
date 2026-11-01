@@ -299,9 +299,17 @@ class Reference(ABC):
     @abstractmethod
     def reference_sql(self) -> str: ...
 
+    @abstractmethod
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        """References made by these source columns; every reference declares its answer."""
+        ...
+
 
 @dataclass(frozen=True)
 class NoReference(Reference):
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        return ()
+
     def reference_sql(self) -> str:
         return ""
 
@@ -310,6 +318,9 @@ class NoReference(Reference):
 class TableReference(Reference):
     target: type[TypedTable]
     target_columns: tuple[str, ...]
+
+    def foreign_keys(self, columns: tuple[str, ...]) -> tuple[ForeignKey, ...]:
+        return (ForeignKey(target=self.target, target_columns=self.target_columns, columns=columns),)
 
     def reference_sql(self) -> str:
         return (
@@ -2230,8 +2241,20 @@ class TypedTable(
 
     @classmethod
     def references(cls) -> tuple[ForeignKey, ...]:
+        """Table-level constraints; column references remain on their fields."""
         # A method permits mutually referring row classes without string names.
         return ()
+
+    @classmethod
+    def foreign_keys(cls) -> tuple[ForeignKey, ...]:
+        """All declared SQL edges, including inherited and generated columns.
+
+        This describes referential integrity, not required dependent children or
+        references encoded inside a field's value. SQL generation keeps its
+        existing column/table placement; inspection never reparses that SQL.
+        """
+        return (*cls.references(), *(reference for item in cls._columns
+                 for reference in item.column.references.foreign_keys((item.name,))))
 
     @classmethod
     def _computed_columns(cls) -> frozenset[str]:
