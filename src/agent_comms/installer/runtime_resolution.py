@@ -31,10 +31,14 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.probes.interpreter import (
+    InterpreterBuild,
+    InterpreterBuildProbe,
+    RecordedInterpreterBuild,
+)
 from agent_comms.installer.probes.packages import (
     DistributionVersionsProbe,
     GitPin,
-    InstalledPackagesProbe,
     PackagePin,
     PackageRecord,
     PreparePackageProbe,
@@ -860,6 +864,16 @@ class UnbuiltRuntime:
 class RuntimeResolution(BaseModel):
     core_commit: str
     packages: dict[str, PackageRecord]
+    interpreter: RecordedInterpreterBuild | InterpreterBuild = Field(
+        default_factory=InterpreterBuild
+    )
+
+    def require_runtime(self, actual: RuntimeResolution) -> None:
+        """Admit observed inputs, never turn an old missing observation into proof."""
+        self.interpreter.require_recorded()
+        actual.interpreter.require_recorded()
+        if self != actual:
+            raise UpgradeRefused("Observed runtime differs from its recorded build inputs")
 
     @classmethod
     def record_path(cls) -> Path:
@@ -890,8 +904,17 @@ class RuntimeResolution(BaseModel):
 
     @classmethod
     def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:
-        packages = stack.probe(InstalledPackagesProbe(core))
-        return cls(core_commit=core, packages=packages)
+        from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
+
+        return stack.probe(RuntimeResolutionProbe(core, stack.wheel_inputs()))
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """Only content-qualified archive records request another wheel observation."""
+        return tuple(
+            wheel
+            for package in self.packages.values()
+            for wheel in package.source.wheel_inputs()
+        )
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name
@@ -910,6 +933,9 @@ class RuntimeResolution(BaseModel):
         return result
 
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
+        recorded_interpreter = self.interpreter.require_recorded()
+        if recorded_interpreter != stack.probe(InterpreterBuildProbe()):
+            return False
         resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its

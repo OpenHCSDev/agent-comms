@@ -1,13 +1,19 @@
+import hashlib
+import json
 import os
 import tomllib
+from dataclasses import dataclass
+from importlib.metadata import PathDistribution
 from pathlib import Path
+from zipfile import ZipFile
 
 import pytest
 
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.probes.packages import InstalledPackagesProbe
+from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
+from agent_comms.installer.probes.packages import ArchiveRecord, InstalledPackagesProbe
 from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimeResolution
 from agent_comms.launch_runtime import LaunchRuntime
 
@@ -20,6 +26,102 @@ def test_package_probe_entry_uses_one_declaration_before_refusing_build_identity
             InstalledPackagesProbe("not-a-built-wheel"), runtime.interpreter,
             env=runtime.environment(os.environ),
         )
+
+
+@dataclass(frozen=True)
+class InstalledWheel:
+    runtime: LaunchRuntime
+    wheel: Path
+    distribution: PathDistribution
+    source: ArchiveRecord
+
+@pytest.fixture
+def installed_wheel(tmp_path: Path) -> InstalledWheel:
+    prefix = tmp_path / "runtime"
+    purelib = LaunchRuntime.at_prefix(prefix).purelib
+    metadata = "sample-1.0.dist-info"
+    contents = {
+        "sample/__init__.py": b"value = 1\n",
+        f"{metadata}/METADATA": b"Metadata-Version: 2.4\nName: sample\nVersion: 1.0\n",
+        f"{metadata}/WHEEL": b"Wheel-Version: 1.0\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        f"{metadata}/RECORD": b"installer replaces this record\n",
+    }
+    wheel = tmp_path / "sample-1.0-py3-none-any.whl"
+    with ZipFile(wheel, "w") as archive:
+        for name, data in contents.items():
+            archive.writestr(name, data)
+            target = purelib / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(data)
+    source = ArchiveRecord(url=wheel.as_uri())
+    (purelib / metadata / "direct_url.json").write_text(json.dumps({
+        "url": source.url, "archive_info": {},
+    }))
+    return InstalledWheel(LaunchRuntime.at_prefix(prefix), wheel,
+                          PathDistribution(purelib / metadata), source)
+
+
+def test_verified_archive_preserves_content_without_inventing_git(installed_wheel: InstalledWheel):
+    original = installed_wheel.distribution.read_text("direct_url.json")
+    verified = installed_wheel.source.verified_wheel(
+        installed_wheel.wheel, installed_wheel.distribution, installed_wheel.runtime
+    )
+    assert verified.archive_info.hashes == {
+        "sha256": hashlib.sha256(installed_wheel.wheel.read_bytes()).hexdigest()
+    }
+    assert verified.wheel_inputs() == (installed_wheel.wheel,)
+    assert installed_wheel.distribution.read_text("direct_url.json") == original
+    with pytest.raises(ValueError, match="Git revision"):
+        verified.revision()
+    record = RuntimeResolution.model_validate({
+        "core_commit": "unqualified-fixture",
+        "packages": {"sample": {"version": "1.0", "source": verified.model_dump()}},
+    })
+    assert RuntimeResolution.model_validate_json(record.model_dump_json()) == record
+
+
+def test_changed_installed_member_refuses_archive_proof(installed_wheel: InstalledWheel):
+    installed_wheel.distribution.locate_file("sample/__init__.py").write_bytes(b"value = 2\n")
+    with pytest.raises(ValueError, match="Installed bytes differ"):
+        installed_wheel.source.verified_wheel(
+            installed_wheel.wheel, installed_wheel.distribution, installed_wheel.runtime
+        )
+
+
+def test_root_wheel_domain_does_not_silently_skip_data_members(installed_wheel: InstalledWheel):
+    with ZipFile(installed_wheel.wheel, "a") as archive:
+        archive.writestr("sample-1.0.data/scripts/other", b"unverified\n")
+    with pytest.raises(ValueError, match="root-layout"):
+        installed_wheel.source.verified_wheel(
+            installed_wheel.wheel, installed_wheel.distribution, installed_wheel.runtime
+        )
+
+
+def test_archive_proof_binds_both_origin_and_runtime(installed_wheel: InstalledWheel, tmp_path: Path):
+    wrong_origin = ArchiveRecord(url=(tmp_path / "different.whl").as_uri())
+    with pytest.raises(ValueError, match="origin differs"):
+        wrong_origin.verified_wheel(installed_wheel.wheel, installed_wheel.distribution,
+                                    installed_wheel.runtime)
+    with pytest.raises(ValueError, match="escapes its runtime"):
+        installed_wheel.source.verified_wheel(
+            installed_wheel.wheel, installed_wheel.distribution,
+            LaunchRuntime.at_prefix(tmp_path / "unrelated"),
+        )
+
+
+def test_runtime_identity_refuses_missing_and_changed_interpreter():
+    with pytest.raises(ValueError, match="no recorded interpreter"):
+        manifest().require_runtime(manifest())
+    observed = InterpreterBuildProbe().run()
+    first = manifest().model_copy(update={"interpreter": observed})
+    assert RuntimeResolution.model_validate_json(first.model_dump_json()) == first
+    first.require_runtime(first)
+    changed_image = observed.artifacts[0].model_copy(update={"sha256": "0" * 64})
+    second = first.model_copy(update={"interpreter": observed.model_copy(update={
+        "artifacts": (changed_image, *observed.artifacts[1:]),
+    })})
+    with pytest.raises(UpgradeRefused, match="recorded build inputs"):
+        first.require_runtime(second)
 
 
 TOAD_COMMIT = "a" * 40
