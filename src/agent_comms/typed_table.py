@@ -3504,6 +3504,20 @@ class DerivedStore(TypedStore, DerivedTables, RuntimeWriter):
         )
 
 
+class RetainsChildren(TypedTable, declared_name=None):
+    """A retained row requires its whole original child group through declared FK edges."""
+
+    __slots__ = ()
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        return super().retain_required_rows(original, schema) + schema.retain_referencing_rows(
+            original, cls,
+        )
+
+
 class RowidSequenced(TypedTable, declared_name=None):
     """The table's rows are numbered by SQLite's rowid, and an insert answers its number."""
 

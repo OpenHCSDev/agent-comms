@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sqlite3
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment
 from agent_comms.frozen_recipient import FrozenRecipient
@@ -25,6 +27,7 @@ from agent_comms.envelope_claim_transitions import AssignmentBinding
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, SnapshotExclude, ThreadLookup, WireName, projected
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
+    LOCAL_TABLE_SOURCE,
     Column,
     FirstValueState,
     ForeignKey,
@@ -40,6 +43,7 @@ from agent_comms.typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredColumn,
+    TableSource,
     WriteOnceColumns,
 )
 from agent_comms.wake_policy import (
@@ -125,6 +129,26 @@ class WakeAssignment(
     @property
     def source(self) -> MessageReference:
         return MessageReference(self.wire_seq, self.message_id)
+
+    @classmethod
+    def for_harness_sources(
+        cls, db: sqlite3.Connection, recipient_lookup: ThreadLookup,
+        sources: Sequence[MessageReference], *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> Iterator[Self]:
+        """Existing claims for these original messages, including settled claims.
+
+        Sequence finds candidates through the declared unique key; the complete
+        reference must still agree. A conflicting message refuses rather than
+        disappearing from selection. An attempt need not already have a claim.
+        """
+        claims = cls.select_keys(db, tuple(
+            {"recipient_lookup": recipient_lookup, "wire_seq": source.seq} for source in sources
+        ), table_source=table_source)
+        for claim in claims:
+            if claim.source not in sources:
+                raise IdentityConflict("harness delivery names another message at this sequence")
+            yield claim
 
     def require_engaged_binding(self) -> AssignmentBinding:
         engagement = self.lifecycle.require_engagement()
