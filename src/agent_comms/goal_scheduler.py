@@ -6,7 +6,7 @@ and checks the declared start rules before recovering any unused READY grant.
 
 from __future__ import annotations
 
-from .errors import GoalAttemptError
+from .errors import GoalAttemptError, GoalRefused
 import asyncio
 import os
 from collections.abc import Iterable
@@ -223,7 +223,7 @@ class GoalScheduler:
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         if self.pending_goal_origins.get(name) == goal_id:
-            raise ValueError("Wait for the goal origin turn to finish.")
+            raise GoalRefused("Wait for the goal origin turn to finish.")
         resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
             name,
             RetryGoalAction(

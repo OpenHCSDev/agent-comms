@@ -123,12 +123,16 @@ class GoalAttemptError(RuntimeError):
         return self.diagnostic_text
 
 
-class UnresolvedAttemptError(GoalAttemptError):
+class GoalAttemptRefused(GoalRefused, GoalAttemptError):
+    """An expected attempt refusal keeps its ledger identity and RPC refusal contract."""
+
+
+class UnresolvedAttemptError(GoalAttemptRefused):
     """A blocked or in-flight attempt needs an explicit resolution."""
 
     diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
 
 
-class StaleAttemptError(GoalAttemptError):
+class StaleAttemptError(GoalAttemptRefused):
     """A late outcome cannot modify the current goal generation."""
 

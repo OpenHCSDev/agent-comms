@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from agent_comms.goal_turn_permit import GoalTurnPermit, NoLaunchPermit
 
 from .nominal.declared_family import DeclaredFamily
-from .errors import UnresolvedAttemptError
+from .errors import GoalRefused, UnresolvedAttemptError
 from .nominal.field_codec import AttemptId, NoAttemptId
 from .goal_attempt_phase import (
     FailedAttempt,
@@ -43,7 +43,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
 
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         if not self.allows_resume(ctx.thread.executing):
-            raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
+            raise GoalRefused("The goal attempt is unresolved; inspect it before Retry.")
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return source.turn.execution(source)
@@ -144,7 +144,7 @@ class ReservedGeneration(GenerationState):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
-        raise ValueError(
+        raise GoalRefused(
             f"The goal generation is reserved for attempt {generation.attempt_identity.attempt_id}; "
             "Retry cannot replace it. Inspect that attempt before deciding on new work."
         )
@@ -167,7 +167,7 @@ class ReservedGeneration(GenerationState):
 class BlockedGeneration(Failed, GenerationState):
     def resume_status(self, generation: Generation, goal: Goal, ctx: GoalActionContext) -> None:
         """A status-only Resume cannot authorize an uncertain attempt."""
-        raise ValueError(
+        raise GoalRefused(
             "The interrupted goal attempt is unresolved. Inspect it, then use "
             "Retry to authorize a new attempt. Your messages can still be sent."
         )
@@ -209,7 +209,7 @@ class CompletedGeneration(Complete, Terminal, GenerationState):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
-        raise ValueError("The goal generation is completed; Retry cannot restart completed work.")
+        raise GoalRefused("The goal generation is completed; Retry cannot restart completed work.")
 
     def execution(self, source: GoalExecutionSource) -> GoalExecution:
         return CompletedExecution(source.goal.id)
@@ -220,7 +220,7 @@ class CancelledGeneration(Terminal, GenerationState):
     def authorize_retry(
         self, store: GoalAttemptStore, generation: Generation, decision: WorkDecision
     ) -> None:
-        raise ValueError("The goal generation is cancelled; Retry cannot restart cancelled work.")
+        raise GoalRefused("The goal generation is cancelled; Retry cannot restart cancelled work.")
 
     def validate_attempt(self, attempt_id: AttemptId | NoAttemptId) -> None:
         """Retirement preserves either the recorded attempt or its declared absence."""

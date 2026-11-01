@@ -104,11 +104,11 @@ class StorageUncertainError(errors.GoalAttemptError):
     """A write or durability/readback check failed; never launch from it."""
 
 
-class ReservationConflictError(errors.GoalAttemptError):
+class ReservationConflictError(errors.GoalAttemptRefused):
     """This goal/generation is already reserved or is not ready."""
 
 
-class MissingGoalGenerationError(errors.GoalAttemptError, ValueError):
+class MissingGoalGenerationError(errors.GoalAttemptRefused):
     """Historical goal has no launch record; Retry must not invent authority."""
 
     def __init__(self, goal_id: GoalId):
