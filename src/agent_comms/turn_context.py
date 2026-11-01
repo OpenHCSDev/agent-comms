@@ -350,12 +350,8 @@ class SegmentManifest:
         return ContextSources(self.provenance)
 
     def wire_sources(self) -> tuple[MessageReference, ...]:
-        """Original bus messages in first-seen order, not one copy per annotation.
-
-        Selected metadata and its rendered original can name the same message.
-        That is one incoming message, not two deliveries.
-        """
-        return tuple(dict.fromkeys(self.kind.wire_sources(self)))
+        """Original bus messages declared by this segment, in contribution order."""
+        return self.kind.wire_sources(self)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
