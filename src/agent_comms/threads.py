@@ -317,7 +317,7 @@ class Thread(ThreadProvenance, CatalogSelection):
     project_resume_due: Annotated[
         bool, RegistrationPolicy(InheritPrevious), WireOmitDefault()
     ] = False
-    role: Annotated[type[ThreadRole], RegistrationPolicy(InheritPrevious)] = (
+    role: Annotated[type[ThreadRole], RegistrationPolicy(ThreadRole)] = (
         AgentThreadRole
     )
     execution: Annotated[type[ThreadExecution], WireOmitDefault()] = field(

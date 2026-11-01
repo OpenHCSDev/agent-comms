@@ -127,7 +127,7 @@ from agent_comms.installer.probes.owners import OwnerActionsProbe, RunningOwners
 from agent_comms.installer.probes.publication import PublicationProbe, SelectedRouteProbe
 from agent_comms.installer.probes.services import ServingProbe
 from agent_comms.installer.refusals import (
-    InstallRolledBack, InterpreterWorkerDied, OwnersNotRestarted, UpgradeRefused,
+    InstallRolledBack, OwnersNotRestarted, UpgradeRefused,
 )
 from agent_comms.installer.reporting import RootWriter, UnpostedWriter
 from agent_comms.installer.runtime_resolution import RuntimeResolution
@@ -818,8 +818,8 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused("The prepared install must run in its built target runtime")
         staged.complete()
         with StartingReportPublicationPhase().running(commands.clock):
-            driver = member.driver(mode, report, root, installed, staged, target)
-        with mode.owners_stopped(member, root, driver, staged, bridges) as report.owners:
+            report.starting(mode.destination(member.initial_writer(root, installed)), target)
+        with mode.owners_stopped(member, root, installed, staged, bridges) as report.owners:
             with PracticePhase().running(commands.clock):
                 install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
                                                       installed, staged, tree, installer,
@@ -845,27 +845,6 @@ class Install[Rehearsed: Rehearsal](ABC):
     tree: TargetTree
     installer: InstallerChoice
     spill_dir: Path
-
-    @classmethod
-    def driver(cls, mode: RunMode, report: InstallReport, root: Path, installed: Stack,
-               staged: TargetStack, target: str) -> Stack:
-        """The runtime that posts the starting report and stops the owners. The outgoing
-        one, unless its own bus write dies in its worker: install is the repair path for
-        that runtime, so the staged target drives instead (core-00ce84d3f, 2026-10-26: every
-        bus write raised AttributeError and no install could replace it). The worker is the
-        outgoing runtime's process, the one boundary this install does not control."""
-        try:
-            report.starting(mode.destination(cls.initial_writer(root, installed)), target)
-            return installed
-        except InterpreterWorkerDied as died:
-            print(f"install: {installed.runtime.prefix.name} cannot write its bus "
-                  f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install",
-                  file=sys.stderr)
-            # The root refuses every runtime but its recorded owner, so the driver owns it;
-            # a rolled-back install publishes the outgoing runtime again.
-            RootRuntime.publish(root, staged.runtime)
-            report.starting(mode.destination(cls.initial_writer(root, staged)), target)
-            return staged
 
     @staticmethod
     def initial_writer(root: Path, installed: Stack) -> RootWriter:

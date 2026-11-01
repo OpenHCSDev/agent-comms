@@ -37,11 +37,20 @@ from agent_comms.installer.interpreter_operation import (
 )
 from agent_comms.installer.probes.harnesses import HarnessesProbe, InstallResult
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.upgrade import FinishedInstall, ObservedInstall
-from agent_comms.installer.reporting import FailedInstall, InstallOutcome, RootWriter, UnfinishedInstall, UnpostedWriter
+from agent_comms.installer.reporting import (
+    FailedInstall,
+    InstallOutcome,
+    ReportPublication,
+    RootWriter,
+    UnfinishedInstall,
+    UnattemptedPublication,
+    UnpostedWriter,
+)
 from agent_comms.installer.runtime_resolution import CorePackage
 from agent_comms.installer.upgrade import (
+    FinishedInstall,
     LiveRun,
+    ObservedInstall,
     OwnersStopped,
     RehearsedUpgrade,
     Stack,
@@ -62,6 +71,7 @@ class InstallReport(MroDispatch):
     """The operation owns one terminal report, after its resources have closed."""
 
     writer: RootWriter = field(default_factory=UnpostedWriter)
+    announcement: ReportPublication = field(default_factory=UnattemptedPublication, init=False)
     outcome: InstallOutcome = field(default_factory=UnfinishedInstall, init=False)
     bridges: SessionBridgeResumes = field(default_factory=SessionBridgeResumes, init=False)
     owners: OwnersStopped = field(default_factory=OwnersStopped, init=False)
@@ -78,7 +88,9 @@ class InstallReport(MroDispatch):
 
     def starting(self, writer: RootWriter, target: str) -> None:
         self.writer = writer
-        self.writer.post(("Install starting", f"Target: {target[:12]}"))
+        self.announcement = writer.starting(("Install starting", f"Target: {target[:12]}"))
+        for line in self.announcement.lines():
+            print(f"install: {line}", file=sys.stderr)
 
     @handles(UpgradeRefused)
     def refused(self, error: UpgradeRefused) -> tuple[str, ...]:
@@ -113,13 +125,13 @@ class InstallReport(MroDispatch):
             finally:
                 with TreeClosePhase().running(clock):
                     tree.__exit__(*sys.exc_info())
-            lines = self.outcome.lines()
+            lines = (*self.outcome.lines(), *self.announcement.lines())
         except BaseException as error:
             self.outcome = FailedInstall(self.outcome, next(self.handlers_for(error))(error))
             try:
                 with FailureReportPublicationPhase().running(clock):
-                    self.writer.post((*self.outcome.lines(), *self.owners.lines(),
-                                      *self.bridges.lines()))
+                    self.writer.post((*self.outcome.lines(), *self.announcement.lines(),
+                                      *self.owners.lines(), *self.bridges.lines()))
             except BaseException as publication_error:
                 error.add_note(f"Install failure report also failed: {publication_error}")
                 print(f"install: failure report also failed: {publication_error}", file=sys.stderr)
