@@ -58,8 +58,12 @@ class CheckRoot:
     max_bytes: ClassVar[int] = 1024 * 1024
     max_records: ClassVar[int] = 200
 
-    @contextmanager
-    def open(self) -> Iterator[Comms]:
+    def create(self) -> Comms:
+        """Create selected stopped history; its caller owns retention and retirement.
+
+        Physical acceptance retains failed/UNKNOWN evidence. Disposable command
+        checks use ``open`` below; both acquire history through this same owner.
+        """
         root = self.into.expanduser().absolute()
         if not self.threads:
             raise ValueError("A check root needs at least one named thread")
@@ -75,6 +79,15 @@ class CheckRoot:
         try:
             copied = wire(root)
             self._populate(copied)
+        except BaseException:
+            RecoveryMonitorCapability.retire_check_root(root)
+            raise
+        return copied
+
+    @contextmanager
+    def open(self) -> Iterator[Comms]:
+        copied = self.create()
+        try:
             try:
                 yield copied
             finally:
@@ -83,7 +96,7 @@ class CheckRoot:
                 ):
                     copied.owners.stop(thread.name)
         finally:
-            RecoveryMonitorCapability.retire_check_root(root)
+            RecoveryMonitorCapability.retire_check_root(copied.root)
 
     def _populate(self, copied: Comms) -> None:
         snapshot = self.source.registry.snapshot()
