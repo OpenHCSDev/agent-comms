@@ -9,7 +9,6 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.runtime_resolution import StackSources
 from agent_comms.installer.runtime_stack import WheelRuntime
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.nominal.field_codec import Argument, FieldCodec, Normalize, PathText
@@ -50,7 +49,6 @@ class PrepareRuntimeCliCommand(CliCommand, declared_name="prepare-runtime"):
                 interpreter=LaunchRuntime.from_interpreter(self.interpreter.expanduser().absolute()),
                 source_runtime=LaunchRuntime.at_prefix(self.source_runtime.expanduser().resolve()),
                 wheels=tuple(path.expanduser().resolve(strict=True) for path in self.wheels),
-                uv_program=StackSources.frontend(),
             )
             target.prepare()
         return PreparedRuntimeResult(prefix)
