@@ -28,7 +28,7 @@ from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tools import CodingTool
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
-from agent_comms.pi_payloads import ReportedFlag, ReportedText, ToolCallContent
+from agent_comms.pi_payloads import AssistantMessage, ReportedFlag, ReportedParts, ReportedText, ToolCallContent
 from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.threads import Thread
 
@@ -230,7 +230,9 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(
     socket = CodingToolSocket(
         tool_listener(tmp_path, secrets.token_hex(32)), owner, undealt_gate, pid=os.getpid())
     socket.turn = SimpleNamespace(launch=SimpleNamespace(root=tmp_path))
-    socket.announce((ToolCallContent(id="late", name="read", arguments={"path": "a"}),))
+    socket.announce(AssistantMessage(content=ReportedParts((
+        ToolCallContent(id="late", name="read", arguments={"path": "a"}),
+    ))))
     socket.tool_started(ToolExecutionStart(
         tool_call_id=ReportedText("late"), tool_name=ReportedText("read"), args={"path": "a"}
     ))
@@ -273,7 +275,9 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(
     await socket.start()
     try:
         call = ("slow", "read", {"path": "a"})
-        socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+        socket.announce(AssistantMessage(content=ReportedParts((
+            ToolCallContent(id=call[0], name=call[1], arguments=call[2]),
+        ))))
         reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
         writer.write(_request(socket, *call))
         await writer.drain()
@@ -314,7 +318,9 @@ async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(
         tool_listener(tmp_path, secrets.token_hex(32)), Owner(), undealt_gate, pid=os.getpid())
     socket.turn = object()
     call = ("never", "read", {"path": "a"})
-    socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
+    socket.announce(AssistantMessage(content=ReportedParts((
+        ToolCallContent(id=call[0], name=call[1], arguments=call[2]),
+    ))))
     await socket.start()
     reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
     try:
