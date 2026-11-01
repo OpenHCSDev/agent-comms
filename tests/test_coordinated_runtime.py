@@ -79,16 +79,18 @@ def _root(
 def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -> None:
     root, _root_id, comms, initial, people = _root(tmp_path, mentioned=True)
     with Coordination(str(root / "coordination.sqlite3")) as store:
-        alpha_lookup = people[1].incarnation.lookup
+        excluded_lookup = people[0].incarnation.lookup
         beta_lookup = people[2].incarnation.lookup
-        assert sealed_cohort_assignments(store, alpha_lookup) == ()
+        # Channel observers may hold bounded triage; the sender is outside this cohort.
+        assert all(recipient.recipient_lookup != excluded_lookup for recipient in initial.recipients)
+        assert sealed_cohort_assignments(store, excluded_lookup) == ()
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict):
         TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2], comms.goals),)).text
-    forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
+    forged = replace(selected, recipient=people[0].name, recipient_lookup=excluded_lookup)
     with pytest.raises(IdentityConflict):
-        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1], comms.goals),)).text
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[0], comms.goals),)).text
     assert len(read_history(comms, "#team")) == 1  # Framing never publishes a row.
 
 
