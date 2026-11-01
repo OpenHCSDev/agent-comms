@@ -19,6 +19,7 @@ from .nominal.field_codec import AssignmentId, MessageId, RootId, SubclassUnion,
 from .thread_text import AbsentText, GivenText, TextChoice
 from .response_acknowledgement import _canonical
 from .typed_table import (
+    AttachedPracticeRebuild,
     Column,
     ColumnGuard,
     ComposedSchemas,
@@ -35,6 +36,7 @@ from .typed_table import (
     SharedFileTables,
     SQLiteJournalMode,
     TextStorage,
+    TableSchema,
     TypedTable,
     WithoutRowid,
 )
@@ -117,6 +119,13 @@ class ClaimBatchAcknowledgements(
     policy_version: Annotated[str, FrozenColumn(check="length(policy_version) BETWEEN 1 AND 256")]
     accepted_at_ms: Annotated[int, FrozenColumn(check="accepted_at_ms >= 0")]
     sealed: bool = False
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """Retain all original children: sealed counts describe the complete group."""
+        return schema.retain_referencing_rows(original, cls)
 
     @classmethod
     def decision_hash(cls, delivery: Delivered) -> str:
