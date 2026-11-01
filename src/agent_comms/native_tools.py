@@ -114,6 +114,13 @@ class CoordinationCall(GlobalCommsExtension, NativeExecutableTool, declared_name
         return json.dumps(self.arguments)
 
 
+class CommunicationCall(CoordinationCall, declared_name=None):
+    """Ordinary communication stays open during a read deal; execution still checks its owner."""
+
+    def judge_under(self, gate: PiRuleGate) -> None:
+        return
+
+
 class ArgumentTool:
     """One declared execution record supplies validation and native serialization."""
 
