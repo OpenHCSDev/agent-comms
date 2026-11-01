@@ -33,7 +33,7 @@ from agent_comms.typed_table import (
     ProducedTable, SharedFileTables, TableReference, TypedRow, TypedTable,
 )
 
-from .change_report import FileLine, NoChangeReport, ReportEvidence, SourceRoots
+from .change_report import NoChangeReport, ReportEvidence, SourceRoots
 from .channel_targets import CommandTarget, ThreadTarget
 from .coordination_errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
@@ -624,24 +624,7 @@ class AckKind(SendableMessageKind):
 
 
 class HandoffKind(NeedsAnswerKind):
-    """A handoff declares its evidence; completion claims carry references."""
-
-    CLAIMS = ("fixed", "single owner", "no other callers")
-    # Evidence command: a command literal inside backticks, not a bare word.
-    COMMANDS = re.compile(r"`[^`]*\b(grep|rg|git|sed|awk|find|python|ast)\b[^`]*`")
-
-    @classmethod
-    def require_publishable(cls, message: Message, roots: SourceRoots) -> None:
-        claims = [
-            claim for claim in cls.CLAIMS
-            if re.search(rf"\b{re.escape(claim)}\b", message.body, re.IGNORECASE)
-        ]
-        if not claims or FileLine.cites(message.body) or cls.COMMANDS.search(message.body):
-            return
-        raise ValueError(
-            "Handoff message claims " + ", ".join(claims)
-            + " without a file:line reference or a command in backticks as evidence."
-        )
+    """Ask the recipient to act; typed goal and order actions own completion."""
 
 
 class AlertKind(NeedsAnswerKind):
