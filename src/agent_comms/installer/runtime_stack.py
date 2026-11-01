@@ -26,8 +26,11 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
+from agent_comms.installer.probes.packages import InstalledPackagesProbe
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.runtime_resolution import ResolvedLock, RuntimePackage, RuntimeResolution
+from agent_comms.installer.runtime_resolution import (
+    ConsoleScriptPackage, ProjectMetadata, ResolvedLock, RuntimePackage, RuntimeResolution,
+)
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.native_build_inputs import NativeBuildInputs
 from agent_comms.native_package import NativePackageStore, pinned_package_for
@@ -208,3 +211,64 @@ class TargetRuntime(RuntimeStack):
     """A runtime built from the target tree: its worker declares the tree's carry steps."""
 
     program: TargetProgram = field(kw_only=True)
+
+
+@dataclass(frozen=True, kw_only=True)
+class WheelRuntime(RuntimeStack):
+    """A fresh functional target: explicit Python, retained dependencies, exact wheels.
+
+    This never enters the production Core/lock reuse cache. Completion, native
+    preparation, package capture, imports and worker retirement stay on RuntimeStack.
+    Local-wheel origins remain archive origins, not invented repository revisions.
+    """
+
+    interpreter: LaunchRuntime
+    source_runtime: LaunchRuntime
+    wheels: tuple[Path, ...]
+    uv_program: Path
+
+    @property
+    def uv(self) -> Path:
+        return self.uv_program
+
+    def sync(self) -> None:
+        named_prefix = self.runtime.interpreter.parent.parent
+        if named_prefix.exists() or named_prefix.is_symlink():
+            raise UpgradeRefused(f"Preserve existing candidate: {named_prefix}")
+        prefix = self.runtime.prefix
+        self.interpreter.require_available()
+        self.source_runtime.require_available()
+        metadata = tuple(ProjectMetadata.from_wheel(wheel) for wheel in self.wheels)
+        selected = {project.name for project in metadata}
+        registered = {member.distribution for member in RuntimePackage.members_with(RuntimePackage)}
+        required = {member.distribution for member in RuntimePackage.members_with(ConsoleScriptPackage)}
+        if len(selected) != len(metadata) or not required <= selected <= registered:
+            raise UpgradeRefused("Provide one exact wheel for each console-script package; "
+                                 "only declared runtime packages may be replaced")
+        declared = DeclaredUv.of(self.checkout / "pyproject.toml", self.uv)
+        if not declared.accepts(self.commands.run(self.uv, "--version")):
+            raise UpgradeRefused("Candidate preparation requires Core's existing declared uv")
+        source = RuntimeResolution.at(self.source_runtime.prefix)
+        donor = RuntimeStack(self.checkout, self.commands, self.home, runtime=self.source_runtime)
+        actual = donor.probe(InstalledPackagesProbe(source.core_commit))
+        if actual != source.packages:
+            raise UpgradeRefused("Dependency source differs from its recorded packages")
+        self.commands.run(self.uv, "--offline", "venv", "--python",
+                          self.interpreter.interpreter, prefix)
+        if self.runtime.interpreter.resolve() != self.interpreter.interpreter.resolve():
+            raise UpgradeRefused("Prepared target did not select the requested interpreter")
+        shutil.copytree(self.source_runtime.purelib, self.runtime.purelib,
+                        dirs_exist_ok=True, symlinks=True)
+        # Prefix data is copied intact; package preparation validates its native assets.
+        shutil.copytree(self.source_runtime.prefix / "share", prefix / "share", symlinks=True)
+        self.commands.run(self.uv, "--offline", "pip", "install", "--no-deps", "--reinstall",
+                          "--python", self.python, *self.wheels, env=self.environment())
+        self.commands.run(self.uv, "--offline", "pip", "check", "--python", self.python,
+                          env=self.environment())
+
+    def prepare(self) -> RuntimeResolution:
+        """Prepare once; a retained path is never silently rebound or reused."""
+        with BuildPhase().running(self.commands.clock):
+            self.sync()
+            self.complete()
+            return RuntimeResolution.at(self.runtime.prefix)
