@@ -1,13 +1,22 @@
 """Declared names link where they stand alone, longest first, with an optional @."""
 
-from types import SimpleNamespace
+import pickle
 
-from agent_comms.display_references import DisplayReferences
+from agent_comms.comms import Comms
+from agent_comms.display_references import CurrentDisplayReferences, DisplayReferences
+from agent_comms.historical_views import HistorySource
+from agent_comms.messages import InfoKind, Message, PublicRecord
+from agent_comms.repo import Checkout
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
 
 
 def spans(text: str) -> list[str]:
-    targets = {name: name for name in ("nra", "nra-fork", "code")}
-    return [text[match.start:match.end] for match in DisplayReferences("/root", targets).find(text)]
+    references = CurrentDisplayReferences("/root", {
+        name: RecordedThreadIncarnation(name, float(index))
+        for index, name in enumerate(("nra", "nra-fork", "code"), start=1)
+    })
+    return [text[match.start:match.end] for match in references.find(text)]
 
 
 def test_a_longer_name_wins_and_at_is_part_of_the_link():
@@ -22,26 +31,47 @@ def test_no_targets_finds_nothing():
     assert DisplayReferences("/root", {}).find("nra") == ()
 
 
-class RecordedNames:
-    """Counts how often a source's names are walked; history bodies share one source."""
+def test_source_projection_reuses_real_captures_without_merging_revisions(comms: Comms) -> None:
+    comms.channels.create_tag("team")
+    original = comms.registry.declare(Thread(
+        name="reference", tags=frozenset(), worktree=Checkout(comms.root.parent),
+    ))
+    references = CurrentDisplayReferences.from_registry(
+        str(comms.root), comms.registry.snapshot(), ("#team",))
+    earlier = HistorySource.capture_original(comms.root)
+    recorded = references.for_source(earlier)
+    assert references.for_source(None) is references
+    assert references.for_source(HistorySource.capture_original(comms.root)) is recorded
+    assert recorded.targets["#team"] == references.targets["#team"]
+    assert recorded.find(f"@{original.name}")[0].reference.incarnation == original.incarnation
 
-    def __init__(self, *names):
-        self.names, self.walks = names, 0
+    comms.registry.rename(original.name, "renamed-reference")
+    later = HistorySource.capture_original(comms.root)
+    assert later.key == earlier.key
+    assert later.snapshot_bus_revision == earlier.snapshot_bus_revision
+    assert later.snapshot_registry_revision != earlier.snapshot_registry_revision
+    renamed = references.for_source(later)
+    assert renamed is not recorded
+    assert references.for_source(later) is renamed
+    assert recorded.find("@renamed-reference") == ()
+    assert renamed.find("@renamed-reference")[0].reference.name == "renamed-reference"
+    assert renamed.targets["#team"] == recorded.targets["#team"]
+    assert references.for_source(earlier) is recorded
 
-    def named_members(self):
-        self.walks += 1
-        return tuple((name, SimpleNamespace(incarnation=SimpleNamespace(name=name))) for name in self.names)
+    comms.bus.bus.append(lambda seq, db: PublicRecord.from_message(
+        Message("renamed-reference", "#team", "another bus revision", InfoKind, seq=seq)))
+    appended = HistorySource.capture_original(comms.root)
+    assert appended.key == later.key
+    assert appended.snapshot_registry_revision == later.snapshot_registry_revision
+    assert appended.snapshot_bus_revision != later.snapshot_bus_revision
+    after_append = references.for_source(appended)
+    assert after_append is not renamed
+    assert after_append == renamed
+    assert references.for_source(appended) is after_append
 
-
-def source(key, revision, names):
-    return SimpleNamespace(key=key, snapshot_identity=(key, revision), provenance=names)
-
-
-def test_each_snapshot_is_resolved_once_and_snapshots_stay_distinct():
-    earlier, later = RecordedNames("old-name"), RecordedNames("new-name")
-    references = DisplayReferences("/root", {})
-    from_earlier = references.for_source(source("root", 1, earlier))
-    assert references.for_source(source("root", 1, earlier)) is from_earlier
-    assert earlier.walks == 1
-    from_later = references.for_source(source("root", 2, later))
-    assert set(from_earlier.targets) == {"old-name"} and set(from_later.targets) == {"new-name"}
+    restored = pickle.loads(pickle.dumps(references, protocol=5))
+    assert restored == references
+    restored_recorded = restored.for_source(earlier)
+    assert restored_recorded == recorded
+    assert restored_recorded is not recorded
+    assert restored.for_source(earlier) is restored_recorded
