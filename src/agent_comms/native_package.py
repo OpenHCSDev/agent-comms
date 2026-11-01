@@ -58,7 +58,7 @@ def _resource_root() -> Path:
 
 
 MANIFEST = _resource_root() / "pi-native.sha256"
-OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
+OWNER_INSTRUCTIONS = _resource_root() / "AGENTS.md"
 # Derived from OWNER_INSTRUCTIONS and the commander's packaged sources at preparation.
 UNIT_INSTRUCTIONS = _resource_root() / "UNIT_SYSTEM.md"
 

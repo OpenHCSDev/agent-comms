@@ -91,13 +91,13 @@ packages = ["src/agent_comms", "src/agent_comms_hooks"]
 allow-direct-references = true
 
 [tool.hatch.build.targets.wheel.force-include]
-".pi/APPEND_SYSTEM.md" = "agent_comms/_native/APPEND_SYSTEM.md"
+"AGENTS.md" = "agent_comms/_native/AGENTS.md"
 "stack/pi-native.sha256" = "agent_comms/_native/pi-native.sha256"
 
 [tool.hatch.build.targets.sdist]
 include = [
     "src", "tests", "extensions", "README.md", "LICENSE", "hatch_build.py",
-    ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
+    "AGENTS.md", "stack/AGENTS.md",
     "stack/pi-native.sha256",
 ]
 
