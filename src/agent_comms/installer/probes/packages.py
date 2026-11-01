@@ -210,8 +210,10 @@ class InstalledPackagesProbe(DistributionProbe, RuntimeProbe[dict[str, PackageRe
     core: str
 
     def wheel_inputs(self) -> tuple[Path, ...]:
-        """The deployed donor probe retains its existing core-only wire contract."""
-        return ()
+        """A built donor re-observes its own inputs without changing the request wire."""
+        from agent_comms.installer.runtime_resolution import RuntimeResolution
+
+        return RuntimeResolution.at(LaunchRuntime.running().prefix).wheel_inputs()
 
     def run(self) -> dict[str, PackageRecord]:
         if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
@@ -253,7 +255,7 @@ class InstalledPackagesProbe(DistributionProbe, RuntimeProbe[dict[str, PackageRe
 
 @dataclass(frozen=True)
 class WheelPackagesProbe(InstalledPackagesProbe):
-    """New targets verify explicit inputs; older donor workers keep their own probe."""
+    """Unrecorded targets supply inputs before their first resolution can be saved."""
 
     wheels: tuple[Path, ...]
 
