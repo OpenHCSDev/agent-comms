@@ -19,7 +19,7 @@ from .owner_connection import (
     OwnerReading,
     OwnerReplyConnection,
 )
-from .private_path import FileIdentity, ObservedPath
+from .private_path import FileRevision, ObservedPath
 from .read_basis import NoDisplaySelection, ReadAuthority
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryCut
@@ -51,7 +51,9 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRe
         return asyncio.run(self.answer(comms, owner, cut))
 
     async def answer(self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut) -> Result:
-        root = FileIdentity.from_stat(comms.root.stat())
+        root = FileRevision.capture(comms.root).require(
+            OwnerIdentityChangedError("Wire root disappeared before the read.")
+        ).identity
         thread = self.require_recipient(cut.snapshot, owner)
         binding = thread.execution.owner_binding(cut.snapshot, thread)
         read = binding.select_read(
@@ -59,9 +61,10 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRe
             partial(self.live_answer, comms, owner),
         )
         result = await read()
+        current = await Coordination.run_worker(comms.registry.snapshot)
         if not ObservedPath.at(comms.root).same_file(root):
             raise OwnerIdentityChangedError("Wire root changed during the read.")
-        self.require_recipient(comms.registry.snapshot(), owner)
+        self.require_recipient(current, owner)
         return result
 
     async def unavailable_answer(

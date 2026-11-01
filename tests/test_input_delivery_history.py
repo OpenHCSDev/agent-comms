@@ -12,6 +12,7 @@ from agent_comms.acp_extension import (
     GoalSnapshotReply, QueuePromptRequest, TurnChangedUpdate, UpdateMetadata, encode_request,
 )
 from agent_comms.child_process import NoProcess, ProcessIdentity
+from agent_comms.bus_read import BusRead, OwnerScopedRead
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_key import AcpInputKey, BusInputKey
 from agent_comms.comms import Comms, wire
@@ -272,6 +273,23 @@ async def test_retained_read_refuses_a_changed_recipient(tmp_path: Path, recreat
     ui = await ReadOwnerOperation(str(comms.root), owner.incarnation, operation).answer(comms)
     assert isinstance(ui, ReadRefused)
     assert isinstance(ui.error, OwnerIdentityChangedError)
+
+
+@pytest.mark.parametrize("operation", tuple(
+    operation() for operation in BusRead.members_with(OwnerScopedRead)
+))
+async def test_captured_owner_read_refuses_an_absent_root_before_its_first_witness(
+    tmp_path: Path, operation: OwnerScopedRead,
+) -> None:
+    root = tmp_path / "wire"
+    comms: Comms = prepare_native_comms(wire(root))
+    owner = comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    cut = comms.registry.store.snapshot_with_authority()
+    root.rename(tmp_path / "retained-original")
+    with pytest.raises(OwnerIdentityChangedError):
+        await operation.answer(comms, owner.incarnation, cut)
+    ui = await ReadOwnerOperation(str(root), owner.incarnation, operation).answer(comms)
+    assert isinstance(ui, ReadRefused)
 
 
 async def test_retained_read_refuses_replaced_root_and_foreign_ui_root(tmp_path: Path) -> None:
