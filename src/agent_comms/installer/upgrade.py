@@ -823,8 +823,9 @@ class Install[Rehearsed: Rehearsal](ABC):
         """The runtime that posts the starting report and stops the owners. The outgoing
         one, unless its own bus write dies in its worker: install is the repair path for
         that runtime, so the staged target drives instead (core-00ce84d3f, 2026-10-26: every
-        bus write raised AttributeError and no install could replace it). The worker is the
-        outgoing runtime's process, the one boundary this install does not control."""
+        bus write raised AttributeError and no install could replace it). Do not retry the
+        starting report: its outcome is uncertain, and the old capture/readback workers
+        cannot decode the target's new service records before the normal writer handoff."""
         try:
             report.starting(mode.destination(cls.initial_writer(root, installed)), target)
             return installed
@@ -836,10 +837,10 @@ class Install[Rehearsed: Rehearsal](ABC):
             except ForeignRuntimeError as held:
                 died.add_note(str(held))
                 raise died from held
-            print(f"install: {installed.runtime.prefix.name} cannot write its bus "
-                  f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install",
+            print(f"install: {installed.runtime.prefix.name} could not confirm its starting report "
+                  f"({died.outcome.summary}); {staged.runtime.prefix.name} drives this install; "
+                  "the starting report is not retried",
                   file=sys.stderr)
-            report.starting(mode.destination(cls.initial_writer(root, staged)), target)
             return staged
 
     @staticmethod
