@@ -240,6 +240,49 @@ selection/root budget still need qualification. Ordinary include()/PracticeBus
 and live-root full backups remain unchanged; a caller cannot label their
 unmeasured union bounded merely by passing an allowance to one selected store.
 
+## Native membership and execution groups
+
+A triage member's `assignment_id` is unique but has no declared assignment FK.
+Forward FK closure alone therefore misses its original source claim. The
+existing `NativeInputExecution.source_membership_sql` and
+`source_assignment_ids` own this relationship for both TRIAGE and FULL. Their
+queries now take the existing `TableSource` through every nested join; ordinary
+calls still use normal local-table lookup. The membership query leads a left
+join into the existing required `WakeAssignment` decoder, rather than silently
+filtering a missing original claim through an inner join. That failure path is
+source-reviewed, not yet executed.
+
+`NativeRuntimeInput` composes `RetainsChildren` for original triage/cursor
+children and overrides the existing cooperative retention hook to consume its
+held execution's original-source assignment query. It uses the shared raw-key
+retainer for the claims; it does not write a second membership query, stage
+roster or new native coordinate. `ExecutionRecord` composes the same capability
+for its original declared child group, including native inputs, attempts and
+links. No participant-wide reverse walk, lifecycle transition, dispatch or
+claim acceptance is added. No field/DDL/carry declaration changed; actual schema,
+MRO and load behavior remain unqualified.
+
+Three new scenarios are authored **UNRUN** in
+`tests/test_retained_coordinator_groups.py`: selected triage keeps only its own
+membership/claim; an execution seed keeps its original claimless FULL input;
+explicit original-source lookup differs from empty destination-local lookup.
+They use existing native-root/schema preparation and typed store owners, not a
+handwritten table layout or fake native provider. These are SQL data-group
+cases, not actual native admission or runnable-root acceptance. FULL wire
+membership, malformed-source refusal, cursor/attempt/publication groups and
+all-state suppression still need the necessary combined behavioral selection.
+The PR now has thirteen added retention scenarios, all unrun in this source pass.
+
+The focused NRA before-map covers nineteen production modules and219 raw/static
+class declarations with no parse omissions. The final delta additionally covers
+the changed test module; counts are not evidence of runtime MRO, complete
+cross-store closure or a delivered root. Complete paginated open-PR paths were
+checked, including712/249-file requests. Published3820's superseded
+`model_contexts_for` hunk is independent; its deletion stays, and the retention
+hook has no `BusReader`/`MessageReference` dependency.3614's relevant changes are
+nominal-import moves already present here. Source recipes/results are retained
+under `p867-native-group-*`.
+
 ## Source evidence and remaining work
 
 The retained NRA source map at baseline `095c4cdfe85632f990be3b6d67411d9685e6dee9`
