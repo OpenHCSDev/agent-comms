@@ -58,6 +58,8 @@ from .selected_triage import (
 from .tool_denial import SelectedToolDenied
 from .turn_item import FreshNativeId
 from .typed_table import (
+    LOCAL_TABLE_SOURCE,
+    AttachedPracticeRebuild,
     Column,
     FrozenColumn,
     IntegerStorage,
@@ -65,8 +67,11 @@ from .typed_table import (
     NoDelete,
     NonDecreasing,
     RequiredUpdateColumns,
+    RetainsChildren,
     StableReferenceColumns,
     TableReference,
+    TableSchema,
+    TableSource,
     TextStorage,
     TypedRow,
     WithoutRowid,
@@ -96,6 +101,7 @@ class PublishedReplyRevision(TypedRow):
 
 @dataclass(frozen=True)
 class NativeRuntimeInput(
+    RetainsChildren,
     WriteOnceColumns,
     RequiredUpdateColumns,
     NoDelete,
@@ -150,10 +156,36 @@ class NativeRuntimeInput(
     required_update_columns = ('sent_owner_claimed_generation',)
 
     @classmethod
-    def source_membership_sql(cls) -> str:
+    def source_membership_sql(
+        cls, *, table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> str:
         return " UNION ALL ".join(
-            member.source_membership_sql() for member in NativeInputExecution.members_with(NativeInputExecution)
+            member.source_membership_sql(table_source=table_source)
+            for member in NativeInputExecution.members_with(NativeInputExecution)
         )
+
+    @classmethod
+    def retain_required_rows(
+        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
+    ) -> int:
+        """Keep original triage/cursor children and the stage-owned source claims.
+
+        Triage membership has no declared assignment FK. Its existing stage
+        query, not a parallel retention join or roster, owns that relationship.
+        Membership comes from the original attachment; only selected native ids
+        come from the destination.
+        """
+        from .coordination_tables.assignments import WakeAssignment
+
+        changed = super().retain_required_rows(original, schema)
+        for native in cls.stream(original.destination):
+            identifiers = native.execution.source_assignment_ids(
+                original.destination, native.input_id, table_source=original.source,
+            )
+            changed += original.retain_keys(WakeAssignment, tuple(
+                {"assignment_id": identifier} for identifier in identifiers
+            ))
+        return changed
 
     def __post_init__(self):
         self.execution
