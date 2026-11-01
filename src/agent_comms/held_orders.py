@@ -1,4 +1,4 @@
-"""A commander's held orders, split once by whether each holder is still registered."""
+"""Shared held work, split once by whether each holder is still registered."""
 
 from __future__ import annotations
 
@@ -34,7 +34,7 @@ class LiveHold:
 
 @dataclass(frozen=True)
 class HeldOrders:
-    """A commander's held orders split once against one registry cut: live holds, whose
+    """The shared board's held orders split once against one registry cut: live holds, whose
     recorded holder is still registered, and orphaned holds, whose holder was deleted or
     registered again since the order. Every reader takes its side of this split."""
 
@@ -42,15 +42,14 @@ class HeldOrders:
     orphaned: tuple[Todo, ...]
 
     @classmethod
-    def read(cls, comms: Comms, commander: str) -> HeldOrders:
-        """The commander's held orders captured once; filtering never reopens the store."""
-        return HeldOrders.of(comms.goals.todos, comms.registry.snapshot(), commander)
+    def read(cls, comms: Comms) -> HeldOrders:
+        """Shared held work captured once; filtering never reopens the store."""
+        return cls.of(comms.goals.todos, comms.registry.snapshot())
 
     @classmethod
-    def of(cls, store: TodoStore, snapshot: RegistrySnapshot, commander: str) -> HeldOrders:
-        """The held orders in ``store`` for ``commander`` as ``snapshot`` registers them."""
-        return HeldOrders.split(store.board_held(),
-                                snapshot)
+    def of(cls, store: TodoStore, snapshot: RegistrySnapshot) -> HeldOrders:
+        """Held work in ``store`` as this one registry cut registers its holders."""
+        return cls.split(store.held_orders(), snapshot)
 
     @classmethod
     def split(cls, todos: Sequence[Todo], snapshot: RegistrySnapshot) -> HeldOrders:

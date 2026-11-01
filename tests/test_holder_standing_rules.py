@@ -806,7 +806,7 @@ def test_channel_messages_without_a_commander_addressee_are_not_a_question(held_
     with held_bus.bus.bus.reading() as source:
         questions = UnansweredUnitAsks.for_orders(
             source, held_bus.registry.snapshot(), 'lead',
-            HeldOrders.read(held_bus, 'lead').holders, time.time(),
+            HeldOrders.read(held_bus).holders, time.time(),
         )
     assert not any(questions.values())
 

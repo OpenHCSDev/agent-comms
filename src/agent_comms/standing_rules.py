@@ -745,7 +745,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
+        return cls.read_scan(comms, commander, HeldOrders.read(comms))
 
     @classmethod
     def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
@@ -1169,7 +1169,7 @@ class OrderlessPullRequest(IdlePullRequest):
     @classmethod
     def scan_orderless(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
-        orders = goals.todos.open_orders()
+        orders = goals.todos.board()
         found = (
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),

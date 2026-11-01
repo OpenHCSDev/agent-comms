@@ -356,7 +356,7 @@ class DeckStart(DealtDeck):
         return "\n".join((
             "FUCK YOUR COMPACTION. Your summary is a paraphrase. What the shared board holds:",
             *(hold.recalled() for commander in commanders
-              for hold in HeldOrders.of(comms.goals.todos, snapshot, commander.name).live),
+              for hold in HeldOrders.of(comms.goals.todos, snapshot).live),
         ))
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...], trigger: DealTrigger) -> None:

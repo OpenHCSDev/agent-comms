@@ -583,7 +583,7 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
     goals = {row.holder: c.registry.require(row.holder).goal for row in originals.values()}
     with LaunchRoot.from_path(ctx.root).selected():
         rules = UnownedWheelSpin.paired(
-            c, ctx.commander, c.goals.todos.reassignable(), HeldOrders.read(c, ctx.commander),
+            c, ctx.commander, c.goals.todos.reassignable(), HeldOrders.read(c),
             ProgressRead(tuple(c.goals.todos.get(pid) for pid in originals)))
         assert {rule.todo.id for rule in rules} == set(originals)
         assert all(isinstance(rule, RetainedHolderWheelSpin) for rule in rules)

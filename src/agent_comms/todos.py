@@ -3465,7 +3465,7 @@ class OrderedHunt(Hunt):
     def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
         super().require_commander(store, commander)
         if not any(todo.id == self.sent
-                   for todo in store.board_held()):
+                   for todo in store.held_orders()):
             raise TodoError("The hunt must name this commander's current order.")
 
 
@@ -3648,12 +3648,10 @@ class IncomingWork:
                     "finish or release that order before assigning it again.")
 
     def idle(self, db: sqlite3.Connection, snapshot: RegistrySnapshot) -> str:
-        """Running order candidates holding no occupying order, read from this transaction
-        and its registry cut; the assigner's commander takes no order and is never listed."""
+        """Running candidates with no occupying order, including the requesting colleague."""
         occupied = {thread.name for todo in TodoStore._open(db, "assignment IS NOT NULL", ())
                     if todo.order.occupies_holder()
                     for thread in todo.held().holder_in(snapshot)}
-        occupied.add(self.assigner.commanding_identity.name)
         return ", ".join(sorted(
             candidate.name
             for thread in snapshot.active_threads(snapshot.active_candidates())
@@ -4920,7 +4918,7 @@ class SupersededVerdict(ToolCallVerdict):
         return f"{super().story_text()} by {self.replacement}: {self.reason}"
 
     def prepare(self, goals, current):
-        replacing = [todo for todo in goals.todos.board_held() if todo.id == self.replacement]
+        replacing = [todo for todo in goals.todos.held_orders() if todo.id == self.replacement]
         if not replacing:
             raise TodoError('The replacing problem is not held for this commander.')
         if any(todo.holder == current.holder for todo in replacing):
@@ -6226,7 +6224,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         if not proposed:
             return self
         snapshot = RegistryStore.at(self.root).snapshot()
-        held = self.held_orders()
+        held = self.held_orders(state=OpenTodoState)
         workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
         return PreparedTodoStore(self.root, workplaces)
 
@@ -6377,7 +6375,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
 
     def require_input_sources(self, inputs: IntegrationInput) -> None:
         """Current Todo links or an exact saved root orderless decision own each source."""
-        todos = self.open_orders()
+        todos = self.board()
         commander = RegistryStore.at(self.root).snapshot().commander_project.require().commander
         approved = set(StoredHeadReview.root_sources(
             self, (head for source in inputs.sources for head in source.heads), commander))
@@ -6390,14 +6388,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
                         f"{head.repo.to_wire()}#{head.pr} has neither unique Todo"
                         " nor saved root source authority")
 
-    def open_orders(self) -> tuple[Todo, ...]:
-        """Every open order, whichever commander created it: their links say which requests
-        any commander's board already owns."""
-        return self._select("1", (), reader=self._open)
-
-    def held_orders(self) -> tuple[Todo, ...]:
+    def held_orders(self, *, state: type[TodoState] = TodoState) -> tuple[Todo, ...]:
+        """Held work across the shared board, optionally within a declared state family."""
         return self._select("assignment IS NOT NULL", (),
-                            reader=partial(self._open, state=OpenTodoState))
+                            reader=partial(self._open, state=state))
 
     def reassignable(self) -> tuple[Todo, ...]:
         """Work Core released after its objective strikes; never a commander's released backlog.
@@ -6431,9 +6425,6 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         """Review rounds from this read's orders and PR facts, excluding installation waits."""
         return tuple((todo, up) for todo in held for up in todo.timer_up(now)
                      if not todo.order.waiting_on_install(todo, progress))
-
-    def board_held(self) -> tuple[Todo, ...]:
-        return self._select("assignment IS NOT NULL", (), reader=self._open)
 
     def held_by(self, commander: ThreadIncarnation, unit: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select('creator=? AND creator_created=?',

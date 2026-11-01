@@ -39,7 +39,7 @@ class CommanderInputs(HeldOrders):
     @classmethod
     def prepare(cls, comms: Comms, commander: str, pulls: ProgressRead,
                 plans: PlanReadings) -> Self:
-        holds = HeldOrders.read(comms, commander)
+        holds = HeldOrders.read(comms)
         pulls.register(holds.todos)
         snapshot = comms.registry.snapshot()
         project = snapshot.commander_project.require()

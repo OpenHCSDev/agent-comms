@@ -348,7 +348,7 @@ def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)
-    holds = HeldOrders.read(comms, "lead").live
+    holds = HeldOrders.read(comms).live
     open_order = {hold.todo.id: NoCommitProgress() for hold in holds}
     merged = {hold.todo.id: MergedProgress("a" * 40) for hold in holds}
     workplaces = EditWorkplaces.capture(
@@ -374,7 +374,7 @@ def edit_sources(fork_bus, tmp_path, configured_repository):
 
 def edit_workplaces(comms):
     snapshot = comms.registry.snapshot()
-    holds = HeldOrders.of(comms.goals.todos, snapshot, "lead").live
+    holds = HeldOrders.of(comms.goals.todos, snapshot).live
     history = comms.goals.todos.board_history()
     return holds, EditWorkplaces.capture(comms, snapshot, holds, ProgressRead(history))
 
@@ -674,7 +674,7 @@ def test_two_commanders_allocate_distinct_global_problem_ids(fork_bus, tmp_path)
     assert all(result.returncode == 0 for result in results), [result.stderr for result in results]
     todos = tuple(
         todo
-        for todo in comms.goals.todos.board_held()
+        for todo in comms.goals.todos.held_orders()
         if todo.id != "P40"
     )
     assert {todo.id for todo in todos} == {"P41", "P42"}
@@ -706,7 +706,7 @@ def test_two_commanders_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_p
     assert sum(result.returncode == 0 for result in results) == 1, [r.stderr for r in results]
     held = tuple(
         todo
-        for todo in comms.goals.todos.board_held()
+        for todo in comms.goals.todos.held_orders()
         if todo.id != "P40"
     )
     assert len(held) == 1 and held[0].holder == "worker"
@@ -749,7 +749,7 @@ def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_
                              "--to", "worker", "--where", "owner.py:2", "--fork", name)
                      for name in ("fork-a", "fork-b"))
     assert first.returncode == 0, first.stderr
-    held, = (todo for todo in comms.goals.todos.board_held() if todo.holder == "worker")
+    held, = (todo for todo in comms.goals.todos.held_orders() if todo.holder == "worker")
     assert second.returncode != 0 and occupied("worker", held) in second.stderr
 
 

@@ -817,7 +817,7 @@ def test_capture_derives_only_exact_saved_root_orderless_sources_in_the_actual_c
     expected = (primary, request) if state == "accepted" else (primary,)
     assert local.heads == expected  # The linked primary also has a NoHeadOrder review: no duplicate.
     comms.goals.todos.require_input_sources(inputs)
-    assert all(link.number != request.pr for todo in comms.goals.todos.open_orders()
+    assert all(link.number != request.pr for todo in comms.goals.todos.board()
                for link in todo.order.checked().pull_requests)
     if state == "accepted":
         record, = StoredHeadReview.head_reviews(comms.goals.todos, request)
@@ -1015,7 +1015,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     held = todo.held()
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    held_orders = comms.goals.todos.board_held()
+    held_orders = comms.goals.todos.held_orders()
     assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
         comms.goals, "lead", ProgressRead(held_orders))] == [request]
     comms.goals.update_goal("outsider", replace(action, problem="P4"))

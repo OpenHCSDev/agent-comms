@@ -470,7 +470,7 @@ class CommanderContext(BaseModel):
 
     def held_orders(self) -> tuple[Todo, ...]:
         """The live holds Core lists unjudged edits under, so a verdict finds every edit shown."""
-        return HeldOrders.read(self.comms, self.commander).todos
+        return HeldOrders.read(self.comms).todos
 
     def held_by(self, unit: str) -> tuple[Todo, ...]:
         return self.comms.goals.todos.held_by(
@@ -1499,7 +1499,7 @@ class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
 
     def run(self, ctx: Commander) -> None:
         for path in HuntDue.next_hunt(ctx.comms, ctx.commander,
-                                      HeldOrders.read(ctx.comms, ctx.commander).todos):
+                                      HeldOrders.read(ctx.comms).todos):
             print(path)
 
 

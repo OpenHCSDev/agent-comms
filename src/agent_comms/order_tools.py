@@ -698,13 +698,13 @@ class CommsOrderStoryTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFleetStoryTool(BoardReadTool):
+class CommsFleetStoryTool(ReadTool, ToolRequest):
     label = "Fleet story"
-    description = ("Read what each order this commander holds out is doing now, one line per "
-                   "order; orders held by units no longer registered collapse into one line.")
+    description = ("Read what each held order on the shared board is doing now, one line per "
+                   "order; orders held by unregistered participants collapse into one line.")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> FleetStory:
-        return FleetStory.collect(HeldOrders.read(comms, caller.subject(self.thread)))
+        return FleetStory.collect(HeldOrders.read(comms))
 
 
 @dataclass(frozen=True, kw_only=True)
