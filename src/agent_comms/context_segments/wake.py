@@ -53,7 +53,6 @@ class SelectedWakeSegment(WireSources, InstructionSegment):
             (
                 relevance.source,
                 NextContextTurn().provenance(owner),
-                *(WireProvenance(initial.message.reference) for initial, _ in sources),
                 *(WireProvenance(outcome.message.reference) for outcome in sent_outcomes),
             ),
             sources=tuple(sources),
