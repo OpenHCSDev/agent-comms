@@ -481,7 +481,7 @@ class NativeTranscript(TranscriptSource):
     window can hold no turn's end."""
 
     def voice(self, deal: Speaking) -> Voice:
-        """A native thread can receive the question; its admitted round proves the answer."""
+        """A native thread can receive the question; its own audit carries the answer."""
         return deal
 
     def receipts(self) -> SessionReceipts:

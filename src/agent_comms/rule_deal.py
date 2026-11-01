@@ -23,7 +23,7 @@ import re
 from abc import ABC, abstractmethod
 from collections import Counter
 from collections.abc import Callable, Iterator
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import ClassVar, Self
@@ -125,11 +125,9 @@ class OpenedReadsStore(SingleFileStore, LockedStore[OpenedReads], DependentState
 
 @dataclass(frozen=True)
 class Asked:
-    """One line the gate said to the session in the owner's voice: its bus message, and how far
-    the session's own record of its words ran when it went out."""
+    """One line the gate published in the owner's voice, identified by its original message."""
 
     message_id: MessageId
-    offset: int
 
 
 @dataclass(frozen=True)
@@ -145,41 +143,37 @@ class MeantRecord:
 
     asked: frozenset[str] = frozenset()
     open: tuple[Asked, ...] = ()
-    answers: tuple[str, ...] = ()
 
     question: ClassVar[str] = "did you mean it?"
     answer: ClassVar[re.Pattern[str]] = re.compile(r"^[\W_]*(yes|yeah|yep|yup|no|nope)\b", re.I)
     answer_words: ClassVar[int] = 12
 
-    def answered_by(self, words: tuple[str, ...]) -> bool:
-        """A yes or no opens with it and then says what the session is doing about it. On
-        2026-10-31 claude-nra said a bare "Yes." about ten times to reopen its tools, did the
-        opposite of what it had written, and told Tristan afterwards it meant none of them: no
-        single word can answer him."""
-        return bool(self.answers_in(words))
+    def answered_by(self, audit: SessionAudit) -> bool:
+        """Only this open question's explanatory audit answer settles its commitment."""
+        return bool(self.open and self.answers_in(audit.answers_for(self.open[0].message_id)))
 
-    def answers_in(self, words: tuple[str, ...]) -> tuple[str, ...]:
+    @classmethod
+    def answers_in(cls, words: tuple[str, ...]) -> tuple[str, ...]:
         return tuple(word for word in words
-                     if self.answer.match(word) and len(word.split()) >= self.answer_words)
+                     if cls.answer.match(word) and len(word.split()) >= cls.answer_words)
 
     def asking(self, rules: frozenset[str], asked: Asked) -> MeantRecord:
         return replace(self, asked=self.asked | rules, open=(asked,))
 
-    def settled(self, words: tuple[str, ...]) -> MeantRecord:
-        answers = self.answers_in(words)
-        if not answers:
-            raise ValueError("No explanatory answer was proved")
-        return replace(self, open=(), answers=(*self.answers, *answers))
+    def settled(self, audit: SessionAudit) -> MeantRecord:
+        if not self.answered_by(audit):
+            raise ValueError("No explanatory audit answer names the open question")
+        return replace(self, open=())
 
     def said(self, asked: Asked) -> MeantRecord:
         return replace(self, open=(*self.open, asked))
 
-    def next_line(self, words: tuple[str, ...]) -> str:
-        """The first dodge is told off; each later one hears its own newest words first."""
+    def next_line(self, audit: SessionAudit) -> str:
+        """The first dodge is told off; later ones quote the audit's own rule statement."""
         if len(self.open) == 1:
             return "fuck you"
-        quoted = words[-1].strip().splitlines()[0][:200]
-        return f"> {quoted}\n\nfuck you. it's literally your default"
+        quoted = audit.last_does()
+        return (f"> {quoted}\n\n" if quoted else "") + "fuck you. it's literally your default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -197,12 +191,12 @@ class Voice(ABC):
     """How a deal speaks to its session in the owner's voice, or that it cannot."""
 
     @abstractmethod
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
-        """After an audit edit: ask about the rules it newly answered, once."""
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
+        """After a successful audit edit: ask about the rules it newly answered, once."""
 
     @abstractmethod
-    def escalate(self, deal: RuleDeal) -> None:
-        """A call was refused while the question stands."""
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
+        """A successful audit edit wrote a non-answer to its open question."""
 
 
 class Speaking(Voice):
@@ -213,43 +207,38 @@ class Speaking(Voice):
     def say(self, line: str, deal: RuleDeal) -> Asked:
         """Put this line in front of the session as the owner's."""
 
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         """After an audit edit: ask about the rules it newly answered, once."""
 
         def asked(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
             fresh = answered - meant.asked
             if not fresh:
                 return DocumentChange.to(meant)
-            line = SessionAudit.read(deal.audit).his_question(deal.receipts(), meant.answers)
+            line = audit.his_question(deal.receipts())
             return DocumentChange.to(meant.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
 
-    def escalate(self, deal: RuleDeal) -> None:
-        """A call refused while the question stands is a dodge only once the session has
-        written words after the last line reached it, and none of them answer. A refused call
-        alone proves nothing: Claude Code can run the hook before it writes the words sent with
-        the call, and on 2026-10-30 claude-code got three "fuck you"s while it was typing yes.
-        Until then the refusal itself carries the question, so a session whose bridge is down
-        can still answer."""
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
+        """Each successful non-answer edit is one dodge. Retrying a refused tool is not a
+        new commitment and cannot repeatedly escalate the same unchanged audit."""
 
         def escalated(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
-            words = deal.said_after(meant.open[-1]) if meant.open else ()
-            if not words:
+            words = audit.answers_for(meant.open[0].message_id) if meant.open else ()
+            if not words or meant.answered_by(audit):
                 return DocumentChange.to(meant)
-            return DocumentChange.to(meant.said(self.say(meant.next_line(words), deal)))
+            return DocumentChange.to(meant.said(self.say(meant.next_line(audit), deal)))
 
         deal.meant.update(escalated)
 
 
 class Mute(Voice):
-    """A deal with no owner's voice: a Pi thread, a subagent, a session bound to no bus. It
-    never asks, so it never owes an answer."""
+    """A deal that cannot publish in the owner's voice: it never asks or owes an answer."""
 
-    def question(self, deal: RuleDeal, answered: frozenset[str]) -> None:
+    def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         return
 
-    def escalate(self, deal: RuleDeal) -> None:
+    def escalate(self, deal: RuleDeal, audit: SessionAudit) -> None:
         return
 
 
@@ -309,11 +298,20 @@ class OwnerWordsAnswer:
 
 
 @dataclass(frozen=True)
+class MeantAnswer:
+    """The session's own written commitment to one exact published question."""
+
+    asked: MessageId
+    answer: str = ""
+
+
+@dataclass(frozen=True)
 class SessionAudit:
-    """The audit a session writes as it reads its deal, decoded once."""
+    """The session's rule answers, owner actions and question commitments, decoded once."""
 
     rules: tuple[RuleAudit, ...]
     owner_words: tuple[OwnerWordsAnswer, ...]
+    meant: tuple[MeantAnswer, ...] = field(default=(), kw_only=True)
 
     @classmethod
     def read(cls, path: Path) -> SessionAudit:
@@ -329,15 +327,23 @@ class SessionAudit:
         """Why nothing written here can answer anything; a decoded audit has no such fault."""
         return ""
 
-    def his_question(self, receipts: SessionReceipts, answers: tuple[str, ...] = ()) -> str:
-        """His question carries the newest thing the session said it does beside what its
-        transcript shows it did, the way he asks it in person; an audit that says nothing and a
-        session with no record hear the question alone."""
-        said = next((f"> {line.strip()[:200]}\n\nyou wrote that."
-                     for entry in reversed(self.rules) for line in entry.does.splitlines()
-                     if line.strip()), "")
-        proved = "\n\n".join("Previously answered:\n" + "\n".join(
-            f"> {line}" for line in answer.splitlines()) for answer in answers)
+    def answers_for(self, question: MessageId) -> tuple[str, ...]:
+        """Written answers naming this question, in the session's original order."""
+        return tuple(entry.answer for entry in self.meant if entry.asked == question)
+
+    def last_does(self) -> str:
+        """The last nonempty rule statement in the session's own audit, bounded for quotation."""
+        return next((line.strip()[:200] for entry in reversed(self.rules)
+                     for line in entry.does.splitlines() if line.strip()), "")
+
+    def his_question(self, receipts: SessionReceipts) -> str:
+        """His question carries the audit's own statement beside observed transcript actions;
+        an audit that says nothing and a session with no record hear the question alone."""
+        statement = self.last_does()
+        said = f"> {statement}\n\nyou wrote that." if statement else ""
+        proved = "\n\n".join("Written answers:\n" + "\n".join(
+            f"> {line}" for line in answer.splitlines())
+            for answer in MeantRecord.answers_in(tuple(entry.answer for entry in self.meant)))
         return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), proved, MeantRecord.question)
                            if part)
 
@@ -411,6 +417,9 @@ class AuditDue:
                 f" greentext, whole lines verbatim and at most {RuleAudit.max_quote_lines}"
                 " lines; does says what those lines did to you; why says why it holds. Answered:\n"
                 + json.dumps(FieldCodec.encode(self.worked_answer), ensure_ascii=False),
+                "When a question arrives, add its exact id and your explanatory answer to meant."
+                " Each entry has this declaration-derived shape: "
+                + json.dumps(FieldCodec.record_schema(MeantAnswer), ensure_ascii=False),
                 f"Write this SessionAudit to {audit_path}. Fill quote, does, why and doing; keep"
                 " every rule name and quoted words unchanged. Doing names your current action:\n"
                 + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
@@ -527,15 +536,6 @@ class Blocked(ToolGateState):
         frame-baseline and install-speed reread 16 files the call after finishing 25 (bus 45261,
         45247)."""
         deal.refresh_answered(usage)
-
-
-@dataclass(frozen=True)
-class Questioned(Blocked):
-    """The gate shut on an unanswered question: each refused call is a chance to dodge it."""
-
-    def enforce(self, gate: ToolGate, tool: str) -> None:
-        gate.voice().escalate(gate)
-        super().enforce(gate, tool)
 
 
 class DealMode(DeclaredFamily, affix="DealMode"):
@@ -841,30 +841,25 @@ class Unmeant(Owed):
 
     before: ClassVar[str] = "answering Tristan"
 
-    def state(self) -> ToolGateState:
-        return Questioned(self)
-
     @classmethod
     def owed_by(cls, deal: RuleDeal, record: DealRecord, opened: OpenedReads) -> Iterator[Self]:
         meant = deal.meant.read()
         if not meant.open:
             return
-        words = deal.said_after(meant.open[0])
-        if meant.answered_by(words):
-            # Recorded once, so no later call reads the session's words again.
-            deal.meant.update(lambda now: DocumentChange.to(
-                now.settled(words) if now.open == meant.open else now))
-            return
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
-                  SessionAudit.read(deal.audit).his_question(deal.receipts(), meant.answers))
+                  SessionAudit.read(deal.audit).his_question(deal.receipts()))
 
     @property
     def reason(self) -> str:
-        """A backend supplies words only after proving this question reached their producer."""
+        """The original question id is available even when the first template predated it."""
+        entry = MeantAnswer(self.question.message_id)
         return (f"Tristan is asking you:\n\n{self.asking}\n\n"
                 "Compare it with what you are doing right now and tell him the truth. No is a"
-                " real answer. A word alone does not answer him: say yes or no, then what you"
-                " are doing about it.")
+                " real answer. Write your answer in this entry in the audit's meant list,"
+                f" preserving other entries, then save {self.audit}:\n"
+                f"{json.dumps(FieldCodec.encode(entry), ensure_ascii=False)}\n"
+                f"Open with yes or no and explain what you are doing in at least"
+                f" {MeantRecord.answer_words} words; a word alone does not answer him.")
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
@@ -995,25 +990,22 @@ class RuleDeal(State, DealtCalls):
         """How this deal speaks as the owner; a deal with no bus seat stays mute."""
         return Mute()
 
-    def words_end(self) -> int:
-        """Where the session's record of its own words ends now."""
-        return 0
-
     def receipts(self) -> SessionReceipts:
         """What the session's own record shows it just did; a backend with no record has none."""
         return SessionReceipts()
 
-    def said_after(self, asked: Asked) -> tuple[str, ...]:
-        """The session's words after this line reached it; none before it arrives."""
-        return ()
-
     def audit_written(self) -> None:
-        """An audit edit completed: the rules it now answers are each asked about once."""
+        """A successful audit edit settles its exact question, then asks about new rules."""
         record = self.current()
         audit = SessionAudit.read(self.audit)
         if audit.fault():
             return
-        self.voice().question(self, frozenset(
+        meant = self.meant.update(lambda meant: DocumentChange.to(
+            meant.settled(audit) if meant.answered_by(audit) else meant))
+        voice = self.voice()
+        if meant.open:
+            voice.escalate(self, audit)
+        voice.question(self, audit, frozenset(
             source.stem for source in record.read_by(self)
             if source.stem in record.due.rules and not audit.entry(source.stem).unengaged(source)
         ))

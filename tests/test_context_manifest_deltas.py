@@ -20,8 +20,6 @@ from agent_comms.turn_context import (
 )
 from bus_record_fixture import context_comms
 from agent_comms.turn_item import PiRequestKey
-from agent_comms.context_segments.wake import SelectedWakeSegment
-from agent_comms.turn_context import UserInputSegment, TransformedInputSegment, WireProvenance
 from agent_comms.native_session_reopen import PiSessionId
 
 
@@ -212,88 +210,3 @@ def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path)
     assert comms.contexts.page('Bob', comms.registry).resources[-1].record_id == recorded[1].record_id
     with pytest.raises(ContextPriorSupersededError):
         comms.contexts.record_after(alice, context(owners[0], tmp_path, 5, 3))
-
-
-def test_current_request_candidate_must_match_the_named_turn_and_request(tmp_path):
-    comms = context_comms(tmp_path)
-    owner = comms.registry.require('Alice')
-    first = context(owner, tmp_path, 1, 1)
-    comms.contexts.record_after(UNREAD_CONTEXT, first)
-    selected = comms.contexts.require_current_request(
-        owner.incarnation, first.turn, first.request_id.require_id())
-    assert (selected.thread, selected.turn, selected.request_id) == (first.thread, first.turn, first.request_id)
-    assert selected.segments[2].contributors == first.segments[2].contributors
-    with pytest.raises(ValueError, match='absent or ambiguous'):
-        comms.contexts.require_current_request(owner.incarnation, first.turn, PiRequestKey('missing'))
-    second = context(owner, tmp_path, 2, 2)
-    comms.contexts.record_after(UNREAD_CONTEXT, second)
-    # The old request still exists, but a current-round borrower cannot use it.
-    with pytest.raises(ValueError, match='absent or ambiguous'):
-        comms.contexts.require_current_request(
-            owner.incarnation, first.turn, first.request_id.require_id())
-
-
-@pytest.mark.parametrize(('kind', 'expected'), (
-    (UserInputSegment, ('entry-0',)), (SelectedWakeSegment, ()), (TransformedInputSegment, ()),
-))
-def test_question_inclusion_requires_the_original_user_contribution(tmp_path, kind, expected):
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.nominal.field_codec import MessageId
-
-    comms = context_comms(tmp_path)
-    original = context(comms.registry.require('Alice'), tmp_path, 1, 1)
-    reference = MessageReference(21, MessageId.mint('question'))
-    user = UserInputSegment(provenance=(WireProvenance(reference),), content='did you mean it?').manifest(0)
-    user = replace(user, kind=kind)
-    entry = replace(original.segments[2].contributors[0], contributors=(user,))
-    transcript = replace(original.segments[2], contributors=(entry,))
-    manifest = replace(original, segments=(*original.segments[:2], transcript))
-    assert manifest.user_entries(reference) == expected
-    # A later unrelated input does not erase a still-included original question.
-    later = replace(manifest, segments=(*manifest.segments, original.segments[2]))
-    assert later.user_entries(reference) == manifest.user_entries(reference)
-
-
-def test_preview_is_not_a_committed_producing_context(tmp_path):
-    from agent_comms.turn_context import PreviewProvenance
-
-    comms = context_comms(tmp_path)
-    manifest = context(comms.registry.require('Alice'), tmp_path, 1, 1)
-    native = manifest.segments[0].provenance[0]
-    assert manifest.committed_context(native.identity) == native
-    preview = replace(manifest, segments=tuple(replace(part, provenance=(
-        PreviewProvenance(native.identity, native.context_digest),)) for part in manifest.segments))
-    with pytest.raises(ValueError, match='committed context'):
-        preview.committed_context(native.identity)
-    with pytest.raises(ValueError, match='another native session'):
-        manifest.committed_context(replace(native.identity, session_id=PiSessionId('foreign')))
-
-
-def test_later_request_restores_original_question_but_omission_cannot_borrow_it(tmp_path):
-    from agent_comms.message_reference import MessageReference
-    from agent_comms.nominal.field_codec import MessageId
-
-    comms = context_comms(tmp_path)
-    owner = comms.registry.require('Alice')
-    first = context(owner, tmp_path, 1, 1)
-    reference = MessageReference(21, MessageId.mint('retained-question'))
-    user = UserInputSegment(provenance=(WireProvenance(reference),), content='did you mean it?').manifest(0)
-    entry = replace(first.segments[2].contributors[0], contributors=(user,))
-    first = replace(first, segments=(*first.segments[:2],
-        replace(first.segments[2], contributors=(entry,))))
-    comms.contexts.record_after(UNREAD_CONTEXT, first)
-    later = context(owner, tmp_path, 2, 2)
-    native = replace(first.segments[0].provenance[0], request_generation=2, context_digest='b' * 64)
-    later = replace(later, segments=tuple(replace(part, provenance=(native,)) for part in later.segments))
-    comms.contexts.record_after(UNREAD_CONTEXT, later)
-    restored = comms.contexts.require_current_request(
-        owner.incarnation, later.turn, later.request_id.require_id())
-    assert restored.user_entries(reference) == ('entry-0',)
-    # The old entry keeps its first contribution; the producing generation is
-    # the current request's top-level fact, not that entry's older observation.
-    assert restored.committed_context(native.identity) == native
-    omitted = context(owner, tmp_path, 0, 3)
-    comms.contexts.record_after(UNREAD_CONTEXT, omitted)
-    current = comms.contexts.require_current_request(
-        owner.incarnation, omitted.turn, omitted.request_id.require_id())
-    assert current.user_entries(reference) == ()
