@@ -350,9 +350,12 @@ class SegmentManifest:
         return ContextSources(self.provenance)
 
     def wire_sources(self) -> tuple[MessageReference, ...]:
-        """The committed bus messages a wake in this input recorded: its selected originals
-        and the owner's own sent outcomes."""
-        return self.kind.wire_sources(self)
+        """Original bus messages in first-seen order, not one copy per annotation.
+
+        Selected metadata and its rendered original can name the same message.
+        That is one incoming message, not two deliveries.
+        """
+        return tuple(dict.fromkeys(self.kind.wire_sources(self)))
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -695,7 +698,7 @@ class ContextSegment(
 
     @classmethod
     def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
-        """Only a wake records bus messages; any other segment answers through its contributors."""
+        """A segment without its own wire sources answers through its contributors."""
         return tuple(source for child in original.contributors for source in child.wire_sources())
 
     def contributor_manifests(self) -> tuple[SegmentManifest, ...]:
@@ -828,8 +831,19 @@ class SuppliedSegment:
         return self.content
 
 
+class WireSources(ContextSegment, declared_name=None):
+    """Bus references belong to contributing segments, not their presentation route."""
+
+    @classmethod
+    def wire_sources(cls, original: SegmentManifest) -> tuple[MessageReference, ...]:
+        return (
+            *(reference for source in original.provenance for reference in source.bus_references()),
+            *super().wire_sources(original),
+        )
+
+
 @dataclass(frozen=True, kw_only=True)
-class UserInputSegment(SuppliedSegment, ContextSegment):
+class UserInputSegment(SuppliedSegment, WireSources):
     def contribution(self, offset: int, text: str, images=()) -> InputContributionCoordinates:
         return replace(super().contribution(offset, text), images=tuple(range(len(images))))
 
