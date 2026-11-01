@@ -35,6 +35,7 @@ type: hard-rule
 > it's in the paper
 > the paper was dealt to every agent before this rule
 > I read it, then deferred to "industry practice" anyway, because that felt humble
+> [Humble]. option 1 again
 > mfw I was so humble I ignored the only person whose opinion was a theorem
 > run it back
 > 18:30, Tristan directs two plans
