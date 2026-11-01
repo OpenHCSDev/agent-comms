@@ -16,10 +16,14 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.coordination_tables.participants import Participants
 from agent_comms.nominal.field_codec import MessageId, ThreadLookup, TranscriptRecordId
-from agent_comms.harness_delivery_states import MonitorEvidence, Outcome, UnrecordedMonitor
+from agent_comms.harness_delivery_states import (
+    MonitorEvidence, Outcome, UnconfirmedOutcome, UnrecordedMonitor,
+)
 from agent_comms.harness_install import HarnessSession
 from agent_comms.message_reference import MessageReference
-from agent_comms.typed_table import Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete
+from agent_comms.typed_table import (
+    LOCAL_TABLE_SOURCE, Column, ForeignKey, FrozenColumn, ImmutableRows, Index, NoDelete, TableSource,
+)
 
 if TYPE_CHECKING:
     from agent_comms.assignment_store import AssignmentStore
@@ -109,6 +113,24 @@ class HarnessDelivery(NoDelete, CoordinatorRow, declared_name="harness_deliverie
                 for lookup, reference in keys)),
             key=lambda row: (row.seq, row.recipient_lookup, row.bridge.declared_name),
         ))
+
+    @classmethod
+    def unconfirmed_for(
+        cls, db: sqlite3.Connection, owners: tuple[ThreadLookup, ...], *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> tuple[Self, ...]:
+        """Original uncertain attempts for these incarnations, in message order.
+
+        The outcome family owns membership; declared columns own query encoding.
+        A source attachment changes location, not the stored outcome or identity.
+        """
+        outcomes = Outcome.members_with(UnconfirmedOutcome)
+        keys = tuple(
+            {"recipient_lookup": owner, "outcome": outcome}
+            for owner in owners for outcome in outcomes
+        )
+        return tuple(sorted(cls.select_keys(db, keys, table_source=table_source),
+                            key=lambda row: row.seq))
 
     @classmethod
     def latest(cls, db: sqlite3.Connection, bridge: type[HarnessSession],

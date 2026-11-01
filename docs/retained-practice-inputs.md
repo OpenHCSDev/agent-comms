@@ -143,6 +143,26 @@ would not establish their preservation or the original group's validity.
   links also require their existing value/store owners; absence from an FK list
   is not evidence that these relations do not exist.
 
+## Unresolved-input seed projection
+
+`HarnessDelivery.unconfirmed_for` now owns the incarnation/outcome query.
+Membership derives from `Outcome.members_with(UnconfirmedOutcome)`; requested
+keys are encoded by the declared columns through `TypedTable.select_keys`, not
+hand-written outcome names. Normal input reads use that same query.
+
+`SnapshotInputDispositions` inherits the unchanged `unresolved(entries)` and
+all-state suppression algorithm. Its sole override reads harness rows through an
+active `AttachedPracticeRebuild` source on that attachment's connection. It has
+no new file/schema declaration. Its `root` must contain the retained bus and
+complete ledger, captured consistently with the coordinator source; the caller
+owns that capture and attachment lifetime. This is not a second ledger or an
+input replay operation.
+
+The view is not yet consumed by a coordinator materializer or `PracticeCopy`.
+Runtime class creation/MRO/registration, the actual attached query, cross-store
+capture and complete preservation remain unqualified. No seed-only database is
+published as a runnable root or complete backup.
+
 ## Copy and backup are different contracts
 
 `PracticeCopy.include` currently invokes each `RootFile` owner's whole-file
