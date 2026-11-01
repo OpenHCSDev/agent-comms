@@ -641,6 +641,11 @@ class RuntimePackage(DeclaredFamily, affix="Package"):
         return resolution.packages[cls.distribution].source.revision()
 
     @classmethod
+    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
+        """Package origin owns its pin; an archive is not a repository revision."""
+        return resolution.packages[cls.distribution].pin()
+
+    @classmethod
     def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
         """Only packages declaring requirements add target-runtime operations."""
         return ()
@@ -657,6 +662,11 @@ class CorePackage(RuntimePackage, ConsoleScriptPackage):
     @classmethod
     def commit(cls, resolution: RuntimeResolution) -> str:
         return resolution.core_commit
+
+    @classmethod
+    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
+        """Core's built wheel carries its source stamp separately from its URL."""
+        return GitPin(resolution.packages[cls.distribution].version, cls.commit(resolution))
 
 
 class ToadPackage(RuntimePackage, ConsoleScriptPackage):
@@ -846,8 +856,12 @@ class UnbuiltRuntime:
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
 
-    def prepare(self, stack: RuntimeStack) -> None:
+    def prepare(self, stack: RuntimeStack, core: str) -> None:
         stack.sync()
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """Only the explicit-input stack can supply wheels before first capture."""
+        return ()
 
     def complete(self, stack: RuntimeStack, core: str) -> None:
         """Link the native package, record the resolution and prove the client imports; a
@@ -893,12 +907,14 @@ class RuntimeResolution(BaseModel):
             return UnbuiltRuntime(prefix)
         return cls.at(prefix)
 
-    def prepare(self, stack: RuntimeStack) -> None:
-        """A recorded runtime is already synced; ``complete`` checks it still matches."""
-
-    def complete(self, stack: RuntimeStack, core: str) -> None:
+    def prepare(self, stack: RuntimeStack, core: str) -> None:
+        """Production-cache reuse must still satisfy the newly resolved source lock."""
         if not self.matches(stack.lock, stack, core):
             raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        """Completion proves recorded inputs, not eligibility for a different build."""
+        self.require_runtime(self.capture(stack, core))
         stack.stage_native()
         stack.prepare_runtime()
 
@@ -925,11 +941,8 @@ class RuntimeResolution(BaseModel):
         result: dict[str, PackagePin] = {
             canonicalize_name(name): record.pin() for name, record in self.packages.items()
         }
-        # Wheel URLs locate build output, not the source revisions recorded by this owner.
         for member in RuntimePackage.members_with(RuntimePackage):
-            result[member.distribution] = GitPin(
-                self.packages[member.distribution].version, member.commit(self)
-            )
+            result[member.distribution] = member.pin(self)
         return result
 
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
