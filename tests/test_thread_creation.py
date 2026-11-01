@@ -1,0 +1,130 @@
+"""Creation contracts through the actual CLI decoder, editor binding and registry.
+
+Author does not execute these controls; the integration owner selects them once.
+"""
+from dataclasses import replace
+import json
+
+import pytest
+
+from agent_comms.cli import build_parser
+from agent_comms.channel_targets import CommandersTag
+from agent_comms.cli_command import PendingCommandBinding
+from agent_comms.cli_verbs.fork import ForkCliCommand
+from agent_comms.cli_verbs.new import NewThreadCliCommand
+from agent_comms.nominal.field_codec import MalformedRecord, compile_decoder
+from agent_comms.target_fields import UnsuppliedTargetField
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.repo import Checkout
+from agent_comms.thread_management import GivenTags, InheritedTags
+
+
+def parsed(arguments):
+    namespace = build_parser(arguments).parse_args(arguments)
+    return namespace.command_declaration.from_arguments(namespace)
+
+
+def test_new_cli_requires_an_explicit_tag_argument(source_repository):
+    with pytest.raises(MalformedRecord):
+        parsed(['new', '--name', 'child', '--project', str(source_repository.checkout)])
+
+
+@pytest.mark.parametrize('text,expected', (
+    ('auth,review', frozenset({'auth', 'review'})),
+    ('', frozenset()),
+))
+def test_new_cli_membership_reaches_registration(comms, source_repository, text, expected):
+    command = parsed(['new', '--name', 'child', '--project', str(source_repository.checkout),
+                      '--tags', text])
+    assert command.tags == GivenTags(expected)
+    # New's declaration path reserves its session but does not launch a provider.
+    child = command.specification().declare(comms.threads, '', LaunchRuntime.running())
+    assert child.tags == expected
+    assert comms.registry.require(child.name).tags == expected
+
+
+def test_pending_new_binding_offers_missing_tags_without_constructing_the_command(comms, source_repository):
+    binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
+    assert type(binding) is PendingCommandBinding
+    name = next(item for item in binding.editable_fields if item.name == 'name')
+    assert type(name) is UnsuppliedTargetField
+    assert name.argument(None) == {}
+    with pytest.raises(MalformedRecord):
+        binding.edited(NewThreadCliCommand.editor_arguments({'tags': ''}))
+    tags = next(item for item in binding.editable_fields if item.name == 'tags')
+    assert tags.required
+    assert type(tags) is UnsuppliedTargetField
+    assert 'editor_default' not in tags.json_schema()
+    assert tags.argument(None) == {}
+    assert tags.argument('') == {'tags': ''}
+    with pytest.raises(MalformedRecord):
+        binding.edited(NewThreadCliCommand.editor_arguments({'name': 'child'}))
+
+
+@pytest.mark.parametrize('text,expected', (
+    ('auth', frozenset({'auth'})),
+    ('', frozenset()),
+))
+def test_pending_new_binding_distinguishes_explicit_empty_from_missing(comms, source_repository, text, expected):
+    binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
+    command = binding.edited(NewThreadCliCommand.editor_arguments({'name': 'child', 'tags': text}))
+    assert command.tags == GivenTags(expected)
+    assert command.project == Checkout(source_repository.checkout)
+
+
+def test_pending_catalog_context_can_change_before_tags_are_supplied(comms, source_repository):
+    binding, = NewThreadCliCommand.project_bindings(comms, Checkout(source_repository.checkout))
+    prepared = binding.for_fields({'task': 'child task', 'name': 'child'})
+    assert prepared.context.task == 'child task'
+    assert type(next(item for item in prepared.editable_fields if item.name == 'name')) is UnsuppliedTargetField
+    tags = next(item for item in prepared.editable_fields if item.name == 'tags')
+    assert tags.argument(None) == {}
+    assert tags.argument('') == {'tags': ''}
+
+
+@pytest.mark.parametrize('creation_arguments,forbidden', (
+    (('new', '--tags', 'auth'), {'not_a_field': 'value'}),
+    (('fork', '--parent', 'parent'), {'not_a_field': 'value'}),
+    (('fork', '--parent', 'parent'), {'parent': 'different-parent'}),
+))
+def test_complete_creation_commands_keep_command_edit_authorization(source_repository, creation_arguments, forbidden):
+    command = parsed([*creation_arguments, '--name', 'child',
+                      '--project', str(source_repository.checkout)])
+    with pytest.raises(ValueError):
+        command.edited(forbidden)
+
+
+def test_structured_editor_reports_malformed_json_at_the_data_boundary():
+    decoder = compile_decoder(tuple[int, ...])
+    with pytest.raises(MalformedRecord) as refused:
+        decoder.decode_editor('[1,')
+    assert type(refused.value.__cause__) is json.JSONDecodeError
+    assert decoder.decode(decoder.decode_editor('[1, 2]')) == (1, 2)
+
+
+def test_fork_cli_defaults_to_actual_parent_membership(comms, source_repository):
+    parent_command = parsed(['new', '--name', 'parent', '--project', str(source_repository.checkout),
+                             '--tags', 'original'])
+    parent = parent_command.specification().declare(comms.threads, '', LaunchRuntime.running())
+    command = parsed(['fork', '--name', 'child', '--parent', parent.name,
+                      '--project', str(source_repository.checkout)])
+    assert command.tags == InheritedTags()
+    binding = ForkCliCommand.thread_binding(parent)
+    assert type(binding) is PendingCommandBinding
+    assert binding.context.parent == parent.name
+    assert type(next(item for item in binding.editable_fields if item.name == 'name')) is UnsuppliedTargetField
+    with pytest.raises(MalformedRecord):
+        binding.edited({})
+    with pytest.raises(ValueError, match='Target-bound'):
+        binding.edited({'name': 'child', 'parent': 'other'})
+    editor = binding.edited(ForkCliCommand.editor_arguments({'name': 'child'}))
+    assert editor.tags == InheritedTags()
+    # A real later parent record, not the stale tags at editor opening, supplies membership.
+    # The commander role is declared, never inherited; an explicit choice keeps it.
+    commander = CommandersTag.declared_name
+    current = comms.registry.declare(replace(parent, tags=frozenset({'current', commander})))
+    child = command.specification().child(current, current.runtime, comms.threads)
+    assert child.tags == current.tags - {commander} == frozenset({'current'})
+    explicit = replace(command, tags=GivenTags(current.tags))
+    assert commander in explicit.specification().child(current, current.runtime, comms.threads).tags
+    assert editor.tags.for_child(current.tags) == current.tags

@@ -15,8 +15,6 @@ import pytest
 from agent_comms.registry_document import RegisteredCommanderProject
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.thread_management import GivenTags
 from agent_comms.commander_heartbeat import CommanderHeartbeat, CommanderObservation
 from agent_comms.comms import Comms
 from commander_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
@@ -1102,17 +1100,6 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
         assert quiet.task.commander == recipient
         assert aged(quiet.task.handled) == aged(first.task.handled)
         assert CommanderFrame.current(comms, recipient.name).packets == (quiet.task,)
-
-
-def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):
-    comms = notification_bus
-    parent = comms.registry.require('worker')
-    tag = CommandersTag.declared_name
-    parent = comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
-    command = ForkCliCommand.thread_binding(parent)
-    assert command.tags.for_new() == parent.tags - {tag}
-    explicit = replace(command, tags=GivenTags(parent.tags))
-    assert tag in explicit.tags.for_new()
 
 
 def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):

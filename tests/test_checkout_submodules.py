@@ -137,7 +137,7 @@ def test_empty_project_does_not_become_the_callers_checkout(tmp_path, monkeypatc
     git(tmp_path, 'init', '-q')
     monkeypatch.chdir(tmp_path)
     comms = wire(tmp_path / 'wire')
-    result = core('--root', str(comms.root), 'new', '--name', 'empty-project', '--project', '')
+    result = core('--root', str(comms.root), 'new', '--name', 'empty-project', '--tags', '', '--project', '')
     assert result.returncode != 0
     assert 'Project path must not be empty' in result.stdout + result.stderr
     assert 'empty-project' not in comms.registry.snapshot().threads

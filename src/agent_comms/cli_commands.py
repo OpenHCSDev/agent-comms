@@ -66,16 +66,6 @@ def _tags(value: str) -> list[str]:
     return [tag.strip() for tag in value.split(",") if tag.strip()]
 
 
-@boundary_decoder
-def _tag_choice_text(value: str | None) -> str | None:
-    """Command-line and editor text is the given tags' wire; no text inherits."""
-    return value
-
-
-def _tag_text(value: frozenset[str] | None) -> str | None:
-    return None if value is None else ', '.join(sorted(value))
-
-
 def _shell_words(value: str) -> list[str]:
     return shlex.split(value)
 

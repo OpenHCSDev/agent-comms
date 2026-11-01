@@ -14,7 +14,7 @@ import sys
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Hashable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass
+from dataclasses import MISSING, Field, dataclass, field, fields, is_dataclass, make_dataclass
 from datetime import datetime
 from enum import Enum, IntFlag
 from functools import cache, cached_property, lru_cache, partial, reduce
@@ -394,10 +394,6 @@ class Normalize(ValueDirective[Callable[[object], object]]):
     pass
 
 
-class EditorFormat(ValueDirective[Callable[[object], JsonValue]]):
-    pass
-
-
 class Editor(ValueDirective[type]):
     pass
 
@@ -679,18 +675,15 @@ class FieldPlan(ViewColumn):
     def editor_normalizer(self) -> Callable[[object], object]:
         return self.setting(Normalize, self.value.decode_editor)
 
-    @cached_property
-    def editor_formatter(self) -> Callable[[object], JsonValue]:
-        return self.setting(EditorFormat, self.value.encode_editor)
-
     def argument_payload(self, value: object) -> object:
         return self.argument_normalizer(value)
 
     def editor_payload(self, value: object) -> object:
         return self.editor_normalizer(value)
 
-    def editor_default(self, value: object) -> JsonValue:
-        return self.editor_formatter(value)
+    def require_constructor_input(self, values: Mapping[str, object]) -> None:
+        if self.constructor_required and self.name not in values:
+            raise MalformedRecord(f'Missing required field {self.key}')
 
     @property
     def description(self) -> str:
@@ -1033,6 +1026,44 @@ class DecoderPlan(ABC):
 
     target: object
 
+    @property
+    def editor_annotation(self) -> object:
+        return str
+
+    @property
+    def native_editor_annotation(self) -> object:
+        return self.editor_annotation
+
+    @property
+    def editor_members(self) -> tuple[EditorMember, ...]:
+        return ()
+
+    def editor_member(self, declared: DecoderPlan) -> EditorMember:
+        return ScalarEditorMember(declared)
+
+    def selected_editor_member(self, value: object) -> EditorMember:
+        return self.editor_member(self)
+
+    def project_editor(self, native: object, wire: Callable[[], object]) -> object:
+        return self.format_editor(wire())
+
+    def editor_argument(self, value: object) -> object:
+        return value
+
+    def accepts_value(self, value: object) -> bool:
+        """Select a native member at this decoder boundary."""
+        return isinstance(value, self.target)
+
+    @abstractmethod
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> object: ...
+
+    def format_editor(self, wire: object) -> str:
+        return json.dumps(wire)
+
+    @boundary_decoder
+    def parse_editor(self, text: object) -> object:
+        return None if text is None else FieldCodec.parse(FieldCodec.decode(str, text))
+
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         """Stored-value predicates; the SQL owner quotes its column and constants."""
         return ()
@@ -1062,6 +1093,123 @@ class DecoderPlan(ABC):
 
     def external_decoders(self, data: object) -> Iterable[ExternalDecoder]:
         return ()
+
+
+class MemberDraftFactory[Draft](ABC):
+    """An integration constructs drafts; selections own which construction applies."""
+
+    @abstractmethod
+    def unchosen(self, member: UnchosenMember) -> Draft: ...
+
+    @abstractmethod
+    def member(self, member: EditorMember, value: object) -> Draft: ...
+
+
+class MemberSelection(ABC):
+    def argument(
+        self, key: str, value: object, decode: Callable[[object], object],
+    ) -> Mapping[str, object]:
+        return {key: decode(value)}
+
+    @property
+    @abstractmethod
+    def declaration(self) -> object: ...
+
+    @property
+    @abstractmethod
+    def label(self) -> str: ...
+
+    @abstractmethod
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft: ...
+
+
+@dataclass(frozen=True)
+class UnchosenMember(MemberSelection):
+    def argument(
+        self, key: str, value: object, decode: Callable[[object], object],
+    ) -> Mapping[str, object]:
+        return {}
+
+    @property
+    def declaration(self) -> object:
+        return type(self)
+
+    @property
+    def label(self) -> str:
+        return 'Choose a member…'
+
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft:
+        return factory.unchosen(self)
+
+
+@dataclass(frozen=True)
+class EditorMember(MemberSelection):
+    """Read-only member metadata; only actual inputs enter a form's ObjectState."""
+
+    decoder: DecoderPlan
+
+    @property
+    def declaration(self) -> object:
+        return self.decoder.target
+
+    @property
+    def label(self) -> str:
+        return str(self.declaration)
+
+    def draft[Draft](self, factory: MemberDraftFactory[Draft], value: object) -> Draft:
+        return factory.member(self, value)
+
+    @property
+    @abstractmethod
+    def fields(self) -> tuple[FieldPlan, ...]: ...
+
+    def current(self, entry: FieldPlan, value: object) -> object:
+        return value
+
+    @abstractmethod
+    def wire_payload(self, arguments: Mapping[str, object]) -> object: ...
+
+    def complete(self, arguments: Mapping[str, object]) -> object:
+        return self.decoder.decode_bound(self.wire_payload(arguments), {})
+
+
+class ScalarEditorMember(EditorMember):
+    @cached_property
+    def fields(self) -> tuple[FieldPlan, ...]:
+        declaration = make_dataclass('MemberInput', [('value', self.declaration)],
+                                     frozen=True, kw_only=True)
+        return FieldCodec.field_plans(declaration)
+
+    def wire_payload(self, arguments: Mapping[str, object]) -> object:
+        entry, = self.fields
+        return entry.editor_payload(entry.raw(dict(arguments)))
+
+
+@dataclass(frozen=True)
+class RecordEditorMember(EditorMember):
+    plans: tuple[FieldPlan, ...]
+
+    @property
+    def fields(self) -> tuple[FieldPlan, ...]:
+        return self.plans
+
+    def current(self, entry: FieldPlan, value: object) -> object:
+        return entry.current(value)
+
+    def wire_payload(self, arguments: Mapping[str, object]) -> object:
+        return {entry.key: entry.editor_payload(arguments[entry.key])
+                for entry in self.fields if entry.key in arguments}
+
+
+class NullEditorMember(EditorMember):
+    @property
+    def fields(self) -> tuple[FieldPlan, ...]:
+        return ()
+
+    def wire_payload(self, arguments: Mapping[str, object]) -> object:
+        if arguments:
+            raise MalformedRecord('A null member has no editor inputs')
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1129,10 +1277,9 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     @classmethod
     @cache
     def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
-        return UnionDecoder(
-            reduce(or_, members),
-            tuple(compile_decoder(member) for member in members),
-        )
+        target = reduce(or_, members)
+        alternatives = tuple(compile_decoder(member) for member in members)
+        return UnionDecoder(target, alternatives)
 
     @abstractmethod
     def decode(self, data: object) -> T:
@@ -1172,10 +1319,6 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
             raise MalformedRecord(f"Resolved value does not match {self.target}")
         return value
 
-    def accepts_value(self, value: object) -> bool:
-        """Select an in-process union case using its compiled declaration."""
-        return isinstance(value, self.target)
-
     def accepts_external_value(self, value: object) -> bool:
         """A structural container match does not validate its contents."""
         return False
@@ -1199,15 +1342,18 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
     def decode_keys(self, data, keys, selections):
         raise TypeError("Selected keys require a mapping field")
 
-    editor_annotation = str
+    @property
+    def editor_wire(self) -> DecoderPlan:
+        return self
+
+    def editor_initial(self, value: T) -> object:
+        return self.editor_wire.project_editor(value, lambda: self.encode(value))
 
     def encode_editor(self, value: T) -> str:
-        encoded = FieldCodec.encode(value, self.target)
-        return json.dumps(encoded)
+        return self.editor_wire.format_editor(self.encode(value))
 
-    @boundary_decoder
-    def decode_editor(self, value):
-        return None if value is None else json.loads(value)
+    def decode_editor(self, value: object) -> object:
+        return self.editor_wire.parse_editor(value)
 
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
@@ -1241,6 +1387,10 @@ class _RepresentedDecoder[T](ValueDecoder[T]):
     @property
     def wire_structure(self) -> DecoderPlan:
         return self.representation.wire_structure(self.structural)
+
+    @property
+    def editor_wire(self) -> DecoderPlan:
+        return self.wire_structure
 
     @property
     def accepts_null(self) -> bool:
@@ -2931,6 +3081,12 @@ class _ExactScalarDecoder[T](_ScalarDecoder[T], JsonScalar):
     def accepts_value(self, value: object) -> bool:
         return self.accepts(value)
 
+    def parse_editor(self, text: object) -> object:
+        value = super().parse_editor(text)
+        if not self.accepts_value(value):
+            raise MalformedRecord(f'Expected native {self.target}, received {type(value).__name__}')
+        return value
+
     def accepts_external_value(self, value: object) -> bool:
         return self.accepts(value)
 
@@ -2955,6 +3111,9 @@ class _NullDecoder(_ExactScalarDecoder[None]):
     annotations = (type(None),)
     json_type = "null"
 
+    def editor_member(self, declared: DecoderPlan) -> EditorMember:
+        return NullEditorMember(declared)
+
     def sql_checks(self, column: str, quote: Callable[[object], str]) -> tuple[str, ...]:
         return (f"{column} IS NULL",)
 
@@ -2967,11 +3126,11 @@ class _TextDecoder(_ExactScalarDecoder[str]):
     def encode(self, value: str) -> str:
         return str(super().encode(value))
 
-    def encode_editor(self, value: str) -> str:
-        return value
+    def format_editor(self, wire: object) -> str:
+        return self.decode(wire)
 
-    def decode_editor(self, value):
-        return value
+    def parse_editor(self, text: object) -> object:
+        return text
 
 
 class _FlagDecoder(_ExactScalarDecoder[bool]):
@@ -3199,13 +3358,31 @@ class UnionDecoder[T](_ContextDecoder[T]):
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
 
+    @property
+    def native_editor_annotation(self) -> object:
+        return self.target
+
+    @property
+    def editor_members(self) -> tuple[EditorMember, ...]:
+        return tuple(member.editor_wire.editor_member(member) for member in self.alternatives)
+
+    def selected_editor_member(self, value: object) -> EditorMember:
+        member = self.selected(value)
+        return member.editor_wire.editor_member(member)
+
+    def project_editor(self, native: object, wire: Callable[[], object]) -> object:
+        return native
+
+    def editor_argument(self, value: object) -> object:
+        return self.format_editor(FieldCodec.encode(value, self.target))
+
     def argument_options(self, argument: Argument) -> dict[str, object]:
         return self.alternatives[0].argument_options(argument)
 
     def accepts_value(self, value: object) -> bool:
         return any(alternative.accepts_value(value) for alternative in self.alternatives)
 
-    def selected(self, value: T) -> ValueDecoder[T]:
+    def selected(self, value: object) -> ValueDecoder[T]:
         for alternative in self.alternatives:
             if alternative.accepts_value(value):
                 return alternative
@@ -3595,6 +3772,9 @@ class _RecordDecoder[T](_ContextDecoder[T]):
     @property
     def plan(self) -> FieldCodec._RecordPlan:
         return FieldCodec._record_plan(self.target)
+
+    def editor_member(self, declared: DecoderPlan) -> EditorMember:
+        return RecordEditorMember(declared, self.plan.bindings)
 
     def fits_wire(self, data: object) -> TypeGuard[dict[str, object]]:
         if not isinstance(data, dict):
