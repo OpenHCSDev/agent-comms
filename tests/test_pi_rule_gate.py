@@ -19,8 +19,11 @@ from agent_comms.native_tools import ReadTool
 from agent_comms.pi_rule_gate import PiRedeal, RulesUnread
 from agent_comms.repo import Checkout
 from agent_comms.selected_tool_broker import SelectedToolRequest, SelectedWriteArguments
-from agent_comms.task_attachments.owner_notices import RestartNotice
+from agent_comms.task_attachments.owner_notices import MeantNotice, RestartNotice
 from agent_comms.threads import Thread
+from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.session_file import RegistrySessionLocation
+from agent_comms.thread_model import DeclaredModel
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import CommanderReader, FleetReader
 from conftest import answer_deal, engaged
@@ -292,3 +295,79 @@ def test_the_dealt_commander_skill_owes_an_answer_like_a_rule(commander_bus):
         deal.audit.write_text(json.dumps({"rules": answered, "owner_words": []}))
     with pytest.raises(RulesUnread, match=f"audit's entry for {skill.stem} does not answer it"):
         deal.judge_read("read", order[order.index(skill) + 1])
+
+
+def pi_line(message: dict[str, object]) -> str:
+    return json.dumps({"type": "message", "timestamp": "2026-10-31T23:00:00.000Z",
+                       "message": message}) + "\n"
+
+
+def assistant(text: str) -> str:
+    return pi_line({"role": "assistant", "content": [{"type": "text", "text": text}]})
+
+
+def owner_lines(bus, name: str) -> list[str]:
+    """The gate's lines to this thread in the owner's voice, oldest first."""
+    lookup = bus.registry.require(name).incarnation.require_recorded().lookup
+    return [delivery.message.body for delivery in reversed(bus.bus.bus.received(lookup, limit=50))
+            if isinstance(delivery.message.task, MeantNotice)]
+
+
+def test_a_pi_thread_is_asked_whether_it_meant_its_answers_and_its_session_file_answers(
+    tmp_path, commander_bus
+):
+    """Pi was mute until 2026-10-31: no Pi thread was ever asked. Writing the audit asks in the
+    owner's voice; the thread's own session file is where its yes, or its dodge, is heard."""
+    session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
+    commander_bus.registry.declare(Thread(
+        "unit-p", frozenset(), Checkout(tmp_path),
+        session_file=RegistrySessionLocation.from_path(str(session), commander_bus.root),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-p"))
+    events.CompactionEnd().deal_rules(deal)
+    record = deal.current()
+    first = next(source for source in record.dealt if source.stem in record.due.rules)
+    for source in record.dealt[:record.dealt.index(first) + 1]:
+        call("read", {"path": str(source)}).judge_under(deal)
+        call("read", {"path": str(source)}).completed_under(deal)
+    deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
+    write = call("write", {"path": str(deal.audit), "content": deal.audit.read_text()})
+    write.judge_under(deal)
+    write.completed_under(deal)
+
+    [line] = owner_lines(commander_bus, "unit-p")
+    assert line.endswith("did you mean it?")
+    with pytest.raises(RulesUnread, match="Tristan is asking you"):
+        call("bash", {"command": "ls"}).judge_under(deal)
+    with session.open("a", encoding="utf-8") as transcript:
+        transcript.write(pi_line({"role": "user", "content": [
+            {"type": "text", "text": f"User follow-up:\n{line}"}]}))
+        transcript.write(assistant("I'm going to go look at this now"))
+    with pytest.raises(RulesUnread, match="Tristan is asking you"):
+        call("bash", {"command": "ls"}).judge_under(deal)  # words after the line: a dodge
+    assert owner_lines(commander_bus, "unit-p")[-1] == "fuck you"
+    with session.open("a", encoding="utf-8") as transcript:
+        transcript.write(assistant("Yes."))
+    with pytest.raises(RulesUnread, match="Tristan is asking you"):
+        call("bash", {"command": "ls"}).judge_under(deal)  # a word alone answers nothing
+    with session.open("a", encoding="utf-8") as transcript:
+        transcript.write(assistant(
+            "Yes, I meant it: I am reading the next batch of rules now and answering each one."))
+    with pytest.raises(RulesUnread) as refusal:
+        call("bash", {"command": "ls"}).judge_under(deal)
+    assert "Tristan is asking you" not in str(refusal.value)  # answered: the deal goes on
+
+
+def test_his_question_reaches_a_running_turn_as_a_user_follow_up():
+    """A bus delivery is framed as untrusted data; his question is a line he typed. Tristan,
+    2026-10-31: "It cannot be presented as something else." """
+
+    class Following:
+        def delivered(self):
+            return "bus delivery"
+
+        def typed(self):
+            return "user follow-up"
+
+    assert MeantNotice().following_segment(Following()) == "user follow-up"
+    assert RestartNotice().following_segment(Following()) == "bus delivery"

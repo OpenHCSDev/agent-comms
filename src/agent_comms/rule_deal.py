@@ -792,7 +792,8 @@ class Unengaged(Owed):
     read: tuple[Path, ...]
     unopened: tuple[Path, ...]
 
-    batch: ClassVar[int] = 4
+    batch: ClassVar[int] = 5
+    """The one declaration of the batch: every refusal and the template read it from here."""
 
     before: ClassVar[str] = "answering the rule you just read"
 
@@ -890,12 +891,21 @@ class Unread(Owed):
             yield cls(record, deal.audit, remaining,
                       tuple(source for source in record.paths if source not in taken))
 
+    def next_batch(self) -> tuple[Path, ...]:
+        """The files that open now: the next `Unengaged.batch` unopened in the dealt order, or the
+        first unread when every one is already opened."""
+        return self.unopened[:Unengaged.batch] or self.remaining[:1]
+
     @property
     def reason(self) -> str:
+        """The batch is named on every refusal: told only the next file, sessions read one file
+        per call."""
         return (
             f"Read the rules you were dealt first, in the order dealt, each in full with your"
-            f" read tool (no offset or limit). Next: {next(iter(self.unopened), self.remaining[0])}."
-            " Still unread: " + ", ".join(str(source) for source in self.remaining)
+            f" read tool (no offset or limit). They open in batches of {Unengaged.batch}: read the"
+            " whole batch in one parallel call, then answer its rules in the audit in one edit."
+            " Next batch: " + ", ".join(str(source) for source in self.next_batch())
+            + ". Still unread: " + ", ".join(str(source) for source in self.remaining)
             + ". Your summary is a paraphrase of them, not a reading."
         )
 
