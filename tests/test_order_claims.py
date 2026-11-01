@@ -80,14 +80,15 @@ pytest_plugins = ("test_held_problem_orders",)
 def test_pathname_handoff_publishes_without_completing_the_held_work(held_commander):
     comms = held_commander.comms
     commander = held_commander.commander
-    original = comms.goals.todos.get("P1")
+    assigned = comms.goals.todos.get("P1")
     comms.goals.update_goal("worker", SetGoalAction(
         text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
+        goal_id=assigned.held().generation,
     ))
+    original = comms.goals.todos.get(assigned.id)
     goals = tuple(comms.registry.require(name).goal for name in ("worker", commander))
     body = (
-        "Recording retained at `/home/ts/.cache/agent-scratch/probe/toad-comms-fixed`; "
+        "Recording saved at `/home/ts/.cache/agent-scratch/probe/toad-comms-fixed`; "
         "investigation continues."
     )
 
