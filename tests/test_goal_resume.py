@@ -26,6 +26,7 @@ from agent_comms.goal_actions import (
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
 from agent_comms.goals import Goal, NoGoal
+from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal
 from agent_comms.lifecycle_capability import Active
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.threads import Thread
@@ -63,27 +64,43 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
     assert comms.registry.require("owner").goal.id == started["id"]
 
 
-def test_second_goal_report_in_one_turn_is_rejected(comms, monkeypatch, tmp_path):
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "owner")
-    comms.registry.declare(
-        Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    )
+@pytest.mark.parametrize("status,extra,expected", [
+    ("active", {}, ActiveGoal()),
+    ("standby", {"wait_for": ["dependency"]}, ActiveGoal()),
+    ("blocked", {}, BlockedGoal("another step")),
+    ("completed", {}, CompletedGoal()),
+])
+def test_later_progress_or_decision_keeps_the_original_turn(comms, tmp_path, status, extra, expected):
+    for name in ("owner", "dependency"):
+        comms.registry.declare(Thread(
+            name, frozenset(), Checkout(tmp_path),
+            process_identity=ProcessIdentity.capture(os.getpid()),
+        ))
     goal = invoke_tool(comms, "comms_set_goal", {"text": "finish this"})["goal"]
-    comms.agents.begin_turn("owner", TurnId('d7f9429f60abc2787fc3e9717054ea41'))
-
-    first = invoke_tool(
-        comms,
-        "comms_goal",
-        {"goal_id": goal["id"], "status": "active", "progress": "one step"},
-    )
-    with pytest.raises(ValueError):
-        invoke_tool(
-            comms,
-            "comms_goal",
-            {"goal_id": goal["id"], "status": "active", "progress": "another step"},
-        )
-    assert first["goal"]["progress"] == "one step"
-    assert comms.registry.require("owner").goal.progress == "one step"
+    goal_id = FieldCodec.decode(GoalId, goal["id"])
+    turn = TurnId('d7f9429f60abc2787fc3e9717054ea41')
+    comms.agents.begin_turn("owner", turn)
+    generation = comms.goals.open_goal_store().require_generation(goal_id)
+    report = tmp_path / "report.md"
+    report.write_text("Delivered report.\n")
+    first = invoke_tool(comms, "comms_goal", {
+        "goal_id": goal["id"], "status": "active", "progress": "one step",
+    })["goal"]
+    result = invoke_tool(comms, "comms_goal", {
+        "goal_id": goal["id"], "status": status, "progress": "another step", **extra,
+        "claims": [{"kind": "report", "source": {
+            "kind": "file", "path": str(report), "sha256": sha256(report.read_bytes()).hexdigest(),
+        }}],
+    })["goal"]
+    saved = wire(comms.root).registry.require("owner").goal
+    assert result["state"] == FieldCodec.encode(expected)
+    assert saved.progress == result["progress"] == "another step"
+    assert saved.id == goal_id and saved.revision == first["revision"] + 1
+    assert saved.reports_turn(ReportedTurn(turn))
+    assert comms.registry.require("owner").turn_record.read().reported_turn == ReportedTurn(turn)
+    assert tuple(target.incarnation.name for target in comms.goals.waits.resolve(saved).targets) == tuple(
+        extra.get("wait_for", ()))
+    assert comms.goals.open_goal_store().require_generation(goal_id) == generation
 
 
 @pytest.mark.parametrize("first_status", ["active", "completed"])
@@ -117,13 +134,13 @@ def test_each_new_goal_can_report_in_same_turn(comms, monkeypatch, tmp_path, fir
         {"goal_id": replacement["id"], "status": "active", "progress": "second"},
     )
     reopened = wire(comms.root)
-    with pytest.raises(ValueError, match="already reported"):
-        invoke_tool(
-            reopened,
-            "comms_goal",
-            {"goal_id": replacement["id"], "status": "active", "progress": "duplicate"},
-        )
-    assert reopened.registry.require("owner").goal.progress == "second"
+    invoke_tool(
+        reopened,
+        "comms_goal",
+        {"goal_id": replacement["id"], "status": "active", "progress": "after reopen"},
+    )
+    assert reopened.registry.require("owner").goal.progress == "after reopen"
+    assert reopened.registry.require("owner").goal.reports_turn(ReportedTurn(turn))
 
     comms.goals.update_goal(
         "owner", ClearGoalAction(expect=GoalPrecondition(goal_id=OneGoal(replacement_goal_id)))
@@ -182,6 +199,9 @@ def test_authorized_retry_does_not_consume_standby_report(comms, monkeypatch, tm
         "goal_id": started["id"], "status": "retry", "progress": "cause fixed",
     })
     assert comms.registry.require("owner").goal.reported_turn == before
+    invoke_tool(comms, "comms_goal", {
+        "goal_id": started["id"], "status": "active", "progress": "recovery inspected",
+    })
     result = invoke_tool(comms, "comms_goal", {
         "goal_id": started["id"], "status": "standby", "wait_for": ["dependency"],
         "progress": "waiting for dependency",
@@ -189,10 +209,14 @@ def test_authorized_retry_does_not_consume_standby_report(comms, monkeypatch, tm
     assert result["goal"]["progress"] == "waiting for dependency"
     reopened = wire(comms.root)
     assert reopened.registry.require("owner").goal.reports_turn(ReportedTurn(turn))
-    with pytest.raises(ValueError, match="already reported"):
-        invoke_tool(reopened, "comms_goal", {
-            "goal_id": started["id"], "status": "active", "progress": "duplicate",
-        })
+    assert tuple(target.incarnation.name for target in reopened.goals.waits.resolve(
+        reopened.registry.require("owner").goal).targets) == ("dependency",)
+    invoke_tool(reopened, "comms_goal", {
+        "goal_id": started["id"], "status": "active", "progress": "dependency resolved",
+    })
+    assert reopened.registry.require("owner").goal.progress == "dependency resolved"
+    assert reopened.registry.require("owner").goal.reports_turn(ReportedTurn(turn))
+    assert not reopened.goals.waits.resolve(reopened.registry.require("owner").goal).targets
 
 
 def test_model_tool_cannot_resume_blocked_uncertain_goal(comms, monkeypatch):
