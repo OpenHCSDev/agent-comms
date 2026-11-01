@@ -59,7 +59,7 @@ class SelectedPrompt:
             sent_outcomes=self.sent_outcomes(),
         )
         return self.context(
-            (frame, SelectedTriageSegment.capture(participant, frame.provenance))
+            (*frame.input_segments(), SelectedTriageSegment.capture(participant, frame.provenance))
         ).render()
 
     async def full(self, assignments, obligations, action: SelectedAction) -> RenderedInput:
@@ -88,7 +88,7 @@ class SelectedPrompt:
         )
         return self.context(
             (
-                frame,
+                *frame.input_segments(),
                 *awareness,
                 SelectedWorkSegment.capture(participant, action, frame.provenance),
                 participant.batch.response_segment(),
