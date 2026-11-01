@@ -1,4 +1,4 @@
-/** Request timing is a diagnostic resource, never admission or retry authority. */
+/** The producing request owns its identity. Timing remains diagnostic only. */
 import { randomUUID } from "node:crypto";
 
 export function observeRequest(options, record, iterator) {
@@ -6,7 +6,7 @@ export function observeRequest(options, record, iterator) {
     try { options?.onRequestProgress?.(record, iterator); } catch { /* observer only */ }
 }
 
-export class NativeRequestObservation {
+export class NativeRequest {
     constructor(config) {
         this.observer = config.onRequestProgress;
         this.requestId = randomUUID();
@@ -69,7 +69,12 @@ export class NativeRequestObservation {
     }
 
     async emit(event, publish) {
-        return this.callback(event.type, () => publish(event), event.type !== "message_update");
+        // Bind at the request's lexical emitter, never from observer order or
+        // a provider call id (which providers may reuse in another round).
+        const emitted = event.message?.role === "assistant"
+            ? { ...event, message: { ...event.message, agentCommsRequestId: this.requestId } }
+            : event;
+        return this.callback(event.type, () => publish(emitted), event.type !== "message_update");
     }
 }
 
