@@ -41,7 +41,7 @@ from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 if TYPE_CHECKING:
     from .threads import Thread
     from .comms import Comms
-    from .input_drain import InputDrain
+    from .input_drain import InputDrain, OwnerSession
     from .session_lifecycle import SessionLifecycle
     from .turn_effects import TurnEffects
 
@@ -263,16 +263,23 @@ class GoalScheduler:
             )
 
     def observe_root(
-        self, document: RegistryDocument, session_ids: Iterable[AcpSessionId], paths: frozenset[Path],
-    ) -> None:
+        self, document: RegistryDocument, owners: Iterable[OwnerSession], paths: frozenset[Path],
+    ) -> tuple[asyncio.Task[None], ...]:
         """Request independent publications without holding up the root's inbox wake.
 
-        RuntimeServer owns each task's retirement and original failure; these
-        projections are not work on a nonexistent inbox input.
+        The original OwnerSession admits and joins publication before retirement;
+        RuntimeServer reports its original failure. No inbox input is invented.
         """
-        execution_changed = not paths.isdisjoint(GoalWakeFile.execution_paths_in(self.comms.root))
-        for session_id in session_ids:
-            thread_name = self.sessions.require(session_id)
-            request = (GoalRefresh() if execution_changed else
-                       DeclaredGoalRefresh(document.entry(thread_name).thread.goal))
-            self.effects._runtime.background(self.sync_goal_execution(session_id, request))
+        return tuple(self.effects._runtime.background(owner.observe_live(partial(
+            self.publish_observed_goal, owner.identifier, document, paths,
+        ))) for owner in owners)
+
+    async def publish_observed_goal(
+        self, session_id: AcpSessionId, document: RegistryDocument, paths: frozenset[Path],
+    ) -> None:
+        """Resolve captured source data only after its original owner admits observation."""
+        thread_name = self.sessions.require(session_id)
+        request = (GoalRefresh()
+                   if not paths.isdisjoint(GoalWakeFile.execution_paths_in(self.comms.root))
+                   else DeclaredGoalRefresh(document.entry(thread_name).thread.goal))
+        await self.sync_goal_execution(session_id, request)

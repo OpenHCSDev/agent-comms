@@ -254,7 +254,7 @@ class InputObservation(ABC):
                             state.observation_ready.set()
                     else:
                         self.effects.turns.goals.observe_root(
-                            document, (owner.identifier for state in targets.values()
+                            document, (owner for state in targets.values()
                                        for owner in state.executors()), watcher.observed_paths,
                         )
                     self.observed_registry = read
@@ -751,6 +751,17 @@ class OwnerSession(DrainedSession):
 
     def executors(self) -> tuple[OwnerSession, ...]:
         return (self,)
+
+    async def observe_live(self, observe: Callable[[], Awaitable[object]]) -> None:
+        """Join an admitted observation before retirement drops session state.
+
+        A shared source may retain this owner across a storage await. Admission
+        belongs to the original owner's stop, not a later session-ID lookup that
+        could create fresh unowned input state after retirement.
+        """
+        async with self.retirement_lock:
+            if not self.stop.done():
+                await observe()
 
     def request_stop(self) -> None:
         self.stop.request()

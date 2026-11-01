@@ -382,7 +382,7 @@ class SessionLifecycle:
                 or not thread.process_identity.runs_here()
                 or not entry.status.running
             ):
-                await self.effects.turns.close_idle_backend(session_id, thread)
+                await self.effects.turns.close_idle_backend(session_id)
             current = PublishedSession.of(thread)
             if self.published[session_id] != current:
                 await self.publish_metadata(session_id, title=thread.title)
