@@ -32,7 +32,7 @@ from agent_comms.owner_connection import OwnerIdentityChangedError
 from agent_comms.coordination_errors import StaleFence, StaleRevision
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ToolCaller
-from agent_comms.ui_model.observation import ReadOwnerOperation, ReadRefused
+from agent_comms.ui_model.observation import ReadOwnerOperation, ReadAnswered, ReadRefused
 from bus_record_fixture import prepare_native_comms
 from delivery_owner_fixture import canonical_delivery_owner
 from stored_inputs import stored_inputs
@@ -239,6 +239,7 @@ async def test_unavailable_native_queue_reads_retained_evidence_without_a_socket
             str(comms.root), thread.incarnation, InputDeliveryRead(include_history=include_history),
         ).answer(comms)
         assert actual == FieldCodec.encode(expected)
+        assert isinstance(ui, ReadAnswered)
         assert ui.value == expected
         assert expected.current_scope is UnobservedInputDeliveryScope
         assert expected.dismissed_historical_count == 2
