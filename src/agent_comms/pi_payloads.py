@@ -229,6 +229,7 @@ if TYPE_CHECKING:
     from .pending_requests import PendingRequest, PendingRequests
     from .pi_commands import PiCommand
     from .pi_events import AutoRetryEnd, Response
+    from .session_receipts import SessionReceipts
     from .routing import Routing
     from .transcript_routes import SentTextDigest
     from .turn_goal_permission import TurnGoalPermission
@@ -828,6 +829,13 @@ class PiMessage(WithheldAnnotations, ExternalNull, OpenPayload, affix="Message")
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
         return ()
 
+    def said(self) -> tuple[str, ...]:
+        """What the model said to its reader in this message; most messages carry none."""
+        return ()
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        """What this message adds to the session's receipts; most add nothing."""
+
     @property
     def unread_reply(self) -> bool:
         return False
@@ -917,6 +925,18 @@ class AssistantMessage(PublicInstructionAnnotations, PiMessage):
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         return (AssistantOutput(),)
+
+    def said(self) -> tuple[str, ...]:
+        """The text parts the reader saw; a tool call or hidden reasoning shows none."""
+        return tuple(text for part in self.parts for text in part.text_parts() if text.strip())
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        """Its words, then each call it makes; a final reply ends the turn on those words."""
+        receipts.said(self.said())
+        for call in self.tool_calls:
+            receipts.called(str(call.id), call.name)
+        if self.final_reply:
+            receipts.turn_ended()
 
     @property
     def authoritative_text(self) -> str:
@@ -1023,6 +1043,9 @@ class ToolResultMessage(PiMessage, declared_name="toolResult"):
 
     def committed_outputs(self) -> tuple[NativeOutputScope, ...]:
         return (ToolOutput(self.tool_call_id),)
+
+    def tally(self, receipts: SessionReceipts) -> None:
+        receipts.resulted(str(self.tool_call_id), self.is_error)
 
     def storage_refusals(self) -> tuple[tuple[str, StorageDenialToolDetails], ...]:
         if not self.is_error:
