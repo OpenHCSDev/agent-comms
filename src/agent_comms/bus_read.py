@@ -5,28 +5,32 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .comms import Comms
+from .coordination_errors import StaleFence
+from .coordinator import Coordination
+from .errors import RelationViolationError, UnregisteredThreadError
 from .owner_connection import (
     AttachedResultRuntimeRequest,
     AttachedRuntimeRequestContext,
     OwnerIdentityChangedError,
     OwnerReading,
+    OwnerReplyConnection,
 )
+from .private_path import FileIdentity, ObservedPath
 from .read_basis import NoDisplaySelection, ReadAuthority
+from .thread_identity import ThreadIncarnation
 from .tool_declaration import ToolDeclaration
 from .tool_request import ThreadReadTool
 from .tool_result import ToolResult
-from .errors import RelationViolationError, UnregisteredThreadError
-from .private_path import FileIdentity, ObservedPath
-from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .registry_store import RegistryCut
-    from .registry_document import RegistrySnapshot
-    from .threads import Thread
     from .owner_connection import OwnerConnection
+    from .registry_document import RegistrySnapshot
+    from .registry_store import RegistryCut
+    from .threads import Thread
 
 
 class BusRead[Result](ToolDeclaration, ABC):
@@ -52,19 +56,41 @@ class OwnerScopedRead[Result: ToolResult = ToolResult](BusRead[Result], ThreadRe
     async def answer(self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut) -> Result:
         root = FileIdentity.from_stat(comms.root.stat())
         thread = self.require_recipient(cut.snapshot, owner)
-        result = await thread.execution.owner_binding(cut.snapshot, thread).read_operation(
-            self, comms, owner, cut,
+        binding = thread.execution.owner_binding(cut.snapshot, thread)
+        read = binding.select_read(
+            partial(self.unavailable_answer, comms, owner, cut),
+            partial(self.live_answer, comms, owner),
         )
+        result = await read()
         if not ObservedPath.at(comms.root).same_file(root):
             raise OwnerIdentityChangedError("Wire root changed during the read.")
         self.require_recipient(comms.registry.snapshot(), owner)
         return result
 
+    async def unavailable_answer(
+        self, comms: Comms, owner: ThreadIncarnation, cut: RegistryCut,
+    ) -> Result:
+        """Keep blocking retained reads inside the captured registry cut's worker."""
+        def retained() -> Result:
+            with cut.current():
+                result = self.unavailable(comms, owner)
+                if not cut.matches_current():
+                    raise StaleFence("Registry changed during the retained read")
+                return result
+
+        return await Coordination.run_worker(retained)
+
+    async def live_answer(self, comms: Comms, owner: ThreadIncarnation) -> Result:
+        request = OwnerReadRuntimeRequest(thread=owner.name, operation=self)
+        return self.decode_reply(await OwnerReplyConnection.answer(comms, owner, request))
+
     def require_recipient(self, snapshot: RegistrySnapshot, owner: ThreadIncarnation) -> Thread:
         try:
             thread = snapshot.require(owner.name)
         except UnregisteredThreadError as error:
-            raise OwnerIdentityChangedError("The read recipient is no longer registered.") from error
+            raise OwnerIdentityChangedError(
+                "The read recipient is no longer registered."
+            ) from error
         if (thread.name, thread.incarnation) != (owner.name, owner):
             raise OwnerIdentityChangedError("The read recipient name or incarnation changed.")
         return thread
