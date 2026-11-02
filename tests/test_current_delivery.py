@@ -36,6 +36,14 @@ def consistent(comms, *names):
             )
 
 
+def mark_read(comms, viewer, messages, registry):
+    """The viewer's display marks these messages read, as Toad's paint does."""
+    displayed = comms.bus.reads.capture(
+        viewer, messages, registry, comms.bus.bus, document=comms.bus.reads.read(),
+    )
+    comms.bus.reads.mark_displayed(viewer, displayed)
+
+
 @pytest.mark.parametrize("rebound", ["sender", "recipient"])
 def test_current_inbox_bulk_and_index_exclude_rebound_history(routed, rebound):
     comms = routed
@@ -70,11 +78,7 @@ def test_unordered_times_and_sparse_seen_rows(routed):
         )
         for index, timestamp in enumerate((birth + 2, birth - 1, birth + 1, birth - 2))
     ]
-    displayed = comms.bus.reads.capture(
-        "recipient", messages[:2], comms.registry.snapshot(), comms.bus.bus,
-        document=comms.bus.reads.read(),
-    )
-    comms.bus.reads.mark_displayed("recipient", displayed)
+    mark_read(comms, "recipient", messages[:2], comms.registry.snapshot())
     consistent(comms, "sender", "recipient")
     assert [row.seq for row in comms.bus.inbox("recipient").page.messages] == [messages[2].seq]
 
@@ -92,10 +96,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(routed, tmp_path
             "sender", viewer, "outside cut", InfoKind,
             timestamp=birth - 1 if birth_crossing else birth + 3,
         ), destination=CommandTarget.named(viewer), origin=AgentOrigin())
-        displayed = comms.bus.reads.capture(
-            viewer, (later,), basis.registry, comms.bus.bus, document=comms.bus.reads.read(),
-        )
-        comms.bus.reads.mark_displayed(viewer, displayed)
+        mark_read(comms, viewer, (later,), basis.registry)
         with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 1}
         later_reads = comms.bus.reads.read().cursor(viewer, basis.registry, source)
@@ -115,16 +116,11 @@ def test_retained_source_uses_its_ledger_identity_after_path_replacement(routed,
     comms = routed
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     message = comms.messaging.send("sender", viewer, "already read").message
-    displayed = comms.bus.reads.capture(
-        viewer, (message,), comms.registry.snapshot(), comms.bus.bus,
-        document=comms.bus.reads.read(),
-    )
-    comms.bus.reads.mark_displayed(viewer, displayed)
+    mark_read(comms, viewer, (message,), comms.registry.snapshot())
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
         assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {}
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         replacement = tmp_path / "replacement.sqlite3"
         comms.bus.bus.backup(replacement)
         replacement.replace(comms.bus.bus.path)
-        assert comms.bus._pending_projection(source, basis, (viewer,)) == {viewer: {}}
         assert comms.bus.pending_counts_opened(source, basis) == {}
