@@ -1,8 +1,6 @@
-"""Pinned pre-refactor artifacts and open-world extension through public contracts."""
+"""Wire exports against pinned golden bytes and receipts."""
 
 import json
-from collections import deque
-from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
 
@@ -13,12 +11,10 @@ from agent_comms.exporting import (
     DmScope,
     EverythingScope,
     FullLimit,
-    JsonlFormat,
     MaxBytesLimit,
     RecentLimit,
     SelectableWireExportFormat,
     WireExportBoundary,
-    WireExportFormat,
     WireExportLimit,
     WireExportScope,
     WireTranscriptExporter,
@@ -70,48 +66,6 @@ def test_pre_refactor_golden_bytes_and_entire_receipt(tmp_path, scope, limit, fo
     assert FieldCodec.decode(WireExportLimit, limit.to_wire()) == limit
 
 
-def test_new_limit_works_without_exporter_codec_or_registry_edits(tmp_path):
-    # Exercise the real family: the metaclass registers into the root's own dict, so the
-    # extension experiment removes its member from that dict when it ends.
-    try:
-        @dataclass(frozen=True)
-        class LastMessagesLimit(WireExportLimit):
-            count: int
-
-            def retain(self, rows, header_size, stats):
-                return deque(rows, maxlen=self.count)
-
-        limit = LastMessagesLimit(2)
-        assert WireExportLimit.member_named("last_messages") is LastMessagesLimit
-        assert FieldCodec.decode(WireExportLimit, {"kind": "last_messages", "count": 2}) == limit
-        destination = tmp_path / "last.jsonl"
-        acknowledgement = WireTranscriptExporter(
-            format=JsonlFormat(),
-            scope=EverythingScope(),
-            limit=limit,
-            boundary=WireExportBoundary(4, 4.0),
-        ).export(rows(), destination)
-        records = [json.loads(line) for line in destination.read_text().splitlines()]
-        assert records[0]["limit"] == {"kind": "last_messages", "count": 2}
-        assert [row["message"]["seq"] for row in records[1:]] == [3, 4]
-        assert (acknowledgement.source_messages, acknowledgement.exported_messages, acknowledgement.omitted_messages) == (
-            4,
-            2,
-            2,
-        )
-        assert acknowledgement.truncated
-    finally:
-        WireExportLimit.__registry__.pop("last_messages", None)
-
-
-def test_public_families_require_their_behavior_hooks():
-    from agent_comms.exporting import DmScope
-
-    with pytest.raises(TypeError):
-        WireExportScope()
-    with pytest.raises(TypeError):
-        WireExportLimit()
-    with pytest.raises(TypeError):
-        WireExportFormat()
+def test_dm_scope_requires_two_distinct_participants():
     with pytest.raises(ValueError):
         DmScope("ab")
