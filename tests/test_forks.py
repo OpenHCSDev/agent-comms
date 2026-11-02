@@ -246,7 +246,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
     # A reissue records Core itself, never reconstructs a departed assigner's authority.
-    reissuer = ReissuedOrderGoalAction.for_todo(saved, parent.name).assigner
+    reissuer = ReissuedOrderGoalAction.for_todo(saved).assigner
     assert reissuer == CoreWatcherIncarnation.watcher()
     reissuer.require_may_change(saved)
     with store.snapshot() as db:

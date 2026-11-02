@@ -150,7 +150,7 @@ def test_reissue_records_core_instead_of_reconstructing_the_original_assigner(fo
     comms, _, _ = fork_bus
     current = comms.goals.todos.get("P40")
     actor = CoreWatcherIncarnation.watcher()
-    action = ReissuedOrderGoalAction.for_todo(current, "lead")
+    action = ReissuedOrderGoalAction.for_todo(current)
     assert action.assigner == actor
     assert actor.commands(current.creator_identity)
     assert not actor.represents(current.held().owner_identity)
@@ -238,7 +238,7 @@ def test_receiving_owner_or_genuine_child_can_accept_work_into_its_goal(fork_bus
 def test_core_reissues_the_exact_accepted_unheld_order_into_a_free_goal_slot(fork_bus):
     comms, _, _ = fork_bus
     current, _ = incoming_work(comms)
-    action = ReissuedOrderGoalAction.for_todo(current, "lead")
+    action = ReissuedOrderGoalAction.for_todo(current)
     goal = comms.goals.update_goal("worker", action)
     assigned = comms.goals.todos.get(current.id)
     assert assigned.order == action.order
@@ -252,7 +252,7 @@ def test_core_reissue_cannot_override_an_existing_independent_goal(fork_bus):
     current, _ = incoming_work(comms)
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Keep my independent work."))
     with pytest.raises(GoalConsentRequired):
-        comms.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(current, "lead"))
+        comms.goals.update_goal("worker", ReissuedOrderGoalAction.for_todo(current))
     assert comms.registry.require("worker").goal == goal
     assert comms.goals.todos.get(current.id) == current
 
