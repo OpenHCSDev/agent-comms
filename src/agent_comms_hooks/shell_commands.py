@@ -6,6 +6,7 @@ import re
 import shlex
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field, replace
+from itertools import islice
 from pathlib import Path
 from typing import ClassVar, Never, Self
 
@@ -13,7 +14,7 @@ from typing import ClassVar, Never, Self
 class ShellText(io.StringIO):
     """shlex skips comments with readline; the shell still needs their newline."""
 
-    def readline(self, size: int = -1) -> str:
+    def readline(self, size: int | None = -1) -> str:
         line = super().readline(size)
         if line.endswith('\n'):
             self.seek(self.tell() - 1)
@@ -22,6 +23,23 @@ class ShellText(io.StringIO):
     def document_lines(self) -> Iterator[str]:
         while line := super().readline():
             yield line
+
+    def read_at(self, position: int, size: int) -> str:
+        """Read only the requested raw span, without invoking the lexer or moving it."""
+        cursor = self.tell()
+        try:
+            self.seek(position)
+            return super().read(size)
+        finally:
+            self.seek(cursor)
+
+    def single_line(self) -> bool:
+        position = 0
+        while chunk := self.read_at(position, io.DEFAULT_BUFFER_SIZE):
+            if '\n' in chunk:
+                return False
+            position += len(chunk)
+        return True
 
 
 @dataclass(frozen=True)
@@ -53,9 +71,12 @@ class HereDocument(Redirection):
     def check_line(self, line: str) -> None:
         pass
 
+    def body_lines(self, lexer: ShellLexer) -> Iterator[str]:
+        return lexer.document_lines()
+
     def read_body(self, lexer: ShellLexer) -> None:
         lexer.resume_at_boundary()
-        for line in lexer.text.document_lines():
+        for line in self.body_lines(lexer):
             if self.line_value(line) == self.target:
                 return
             self.check_line(line)
@@ -63,6 +84,21 @@ class HereDocument(Redirection):
 
 
 class ExpandedHereDocument(HereDocument):
+    def body_lines(self, lexer: ShellLexer) -> Iterator[str]:
+        """Join unquoted continuations before both termination and expansion checks."""
+        parts: list[str] = []
+        for line in super().body_lines(lexer):
+            content = line.removesuffix('\n')
+            backslashes = len(content) - len(content.rstrip('\\'))
+            if line.endswith('\n') and backslashes % 2:
+                parts.append(line[:-2])
+                continue
+            parts.append(line)
+            yield ''.join(parts)
+            parts.clear()
+        if parts:
+            yield ''.join(parts)
+
     def check_line(self, line: str) -> None:
         if '$(' in line or '`' in line:
             raise ValueError('Command substitution in an expanded here-document is not admitted')
@@ -79,6 +115,8 @@ class TabStrippedExpandedHereDocument(TabStrippedHereDocument, ExpandedHereDocum
 
 @dataclass(frozen=True)
 class ShellWord:
+    """Logical spelling retains quotes/escapes; start/end retain physical offsets."""
+
     value: str
     start: int
     end: int
@@ -92,7 +130,9 @@ class ShellWord:
 
     @classmethod
     def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
-        spelling = lexer.command[lexer.word_start:end]
+        source = lexer.read_at(lexer.word_start, end - lexer.word_start)
+        spelling = ''.join(source[position - lexer.word_start]
+                           for position in lexer.word_positions(end))
         kind = cls.members.get(spelling, cls)
         return kind(value, lexer.word_start, end, spelling)
 
@@ -138,7 +178,7 @@ class QuotedWord(ShellWord):
         return TabStrippedHereDocument(self.value)
 
 
-class ShellLexer(shlex.shlex):
+class ShellLexer(shlex.shlex, ShellText):
     """Retain shlex's own punctuation decision, before POSIX quote removal erases it.
 
     No second quoting scanner: native state transitions distinguish punctuation from
@@ -146,15 +186,45 @@ class ShellLexer(shlex.shlex):
     """
 
     def __init__(self, command: str):
-        self.text = ShellText(command)
-        self.command = command
+        ShellText.__init__(self, command)
         self._state: str | None = None
         self.word_start = 0
         self.word_type: type[ShellWord] = ShellWord
+        self.continuations: list[int] = []
         self.documents: list[HereDocument] = []
-        super().__init__(self.text, posix=True, punctuation_chars=';&|><()\n')
+        self.target = ArgumentTarget()
+        super().__init__(self, posix=True, punctuation_chars=';&|><()\n')
         self.whitespace = ' \t\r'
         self.whitespace_split = True
+
+    def continuation_end(self, position: int) -> int:
+        """Skip active continuations; the caller's native state establishes activity."""
+        while self.read_at(position, 2) == '\\\n':
+            position += 2
+        return position
+
+    def read(self, size: int | None = -1) -> str:
+        # Let native shlex see the joined input before it classifies words or
+        # punctuation. Escaped backslashes and single-quoted text remain literal.
+        if self.state not in ("'", '\\'):
+            start = self.tell()
+            end = self.continuation_end(start)
+            if end != start:
+                self.continuations.extend(range(start, end, 2))
+                self.seek(end)
+        character = super().read(size)
+        # Punctuation lookahead belongs to the next word, whose target is not
+        # known yet. Its first character is checked on native word entry below.
+        if self.state in ('a', '"'):
+            self.check_substitution(character, self.tell())
+        return character
+
+    def check_substitution(self, character: str, following: int) -> None:
+        """Inspect active source characters, before native quote/escape removal."""
+        if character == '`':
+            self.target.require_expansion()
+        elif character == '$' and self.read_at(self.continuation_end(following), 1) == '(':
+            self.target.require_expansion()
 
     @property
     def state(self) -> str | None:
@@ -162,29 +232,48 @@ class ShellLexer(shlex.shlex):
 
     @state.setter
     def state(self, value: str | None) -> None:
+        if self._state == '\\':
+            self.word_type = QuotedWord
+            # shlex retains the escape before $/` inside double quotes; an inner
+            # -c must receive the actual shell text, not that retained backslash.
+            if value == '"' and self.token[-1:] in ('$', '`'):
+                self.token = self.token[:-2] + self.token[-1:]
         if self._state == ' ' and value not in (' ', None):
             self.word_start = self.position - 1
+            self.check_substitution(self.read_at(self.word_start, 1),
+                                    self.word_start + 1)
         if value == 'c':
             self.word_type = Operator
-        elif value in ("'", '"', '\\'):
+        elif value in ("'", '"'):
             self.word_type = QuotedWord
         self._state = value
 
     @property
     def position(self) -> int:
-        return self.text.tell() - len(self._pushback_chars)
+        return self.tell() - len(self._pushback_chars)
+
+    def word_positions(self, end: int) -> Iterator[int]:
+        """Physical positions of the logical spelling native shlex just consumed."""
+        start = self.word_start
+        for continuation in self.continuations:
+            if continuation < start:
+                continue
+            if continuation >= end:
+                break
+            yield from range(start, continuation)
+            start = continuation + 2
+        yield from range(start, end)
 
     def take_adjacent(self, character: str) -> bool:
-        if self.command[self.position:self.position + 1] != character:
-            return False
-        if self._pushback_chars:
-            self._pushback_chars.pop()
-        else:
-            self.text.read(1)
-        return True
+        position = self.position
+        self.resume_at_boundary(position)
+        if self.read(1) == character:
+            return True
+        self.resume_at_boundary(position)
+        return False
 
     def resume_at_boundary(self, position: int | None = None) -> None:
-        self.text.seek(self.position if position is None else position)
+        self.seek(self.position if position is None else position)
         self._pushback_chars.clear()
         self.state = ' '
 
@@ -196,13 +285,15 @@ class ShellLexer(shlex.shlex):
         for document in documents:
             document.read_body(self)
 
-    def next_word(self) -> ShellWord | None:
+    def next_word(self, target: ArgumentTarget) -> ShellWord | None:
+        self.target = target
         self.word_type = ShellWord
+        self.continuations.clear()
         value = super().read_token()
         if value is None:
             return None
         end = self.position
-        if self.state == ' ' and self.command[end - 1:end] in self.whitespace:
+        if self.state == ' ' and self.read_at(end - 1, 1) in self.whitespace:
             end -= 1
         return self.word_type.decoded(value, self, end)
 
@@ -216,7 +307,7 @@ class Operator(ShellWord):
                          if value.startswith(key)), '')
         if not spelling:
             raise ValueError(f'Unsupported shell operator {value!r}')
-        end = lexer.word_start + len(spelling)
+        end = next(islice(lexer.word_positions(end), len(spelling) - 1, None)) + 1
         selected = cls.members[spelling](spelling, lexer.word_start, end, spelling)
         # Admit one operator before recursive parsing; native lookahead stays here.
         lexer.resume_at_boundary(end)
@@ -273,10 +364,13 @@ class Redirect(Operator):
     def consume_descriptor(self, parser: ShellParser) -> None:
         pass
 
+    def operand(self) -> RedirectionTarget:
+        return RedirectionTarget(self)
+
     def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         parser.target.require_word()
         self.consume_descriptor(parser)
-        parser.target = RedirectionTarget(self)
+        parser.target = self.operand()
         return iter(())
 
 
@@ -318,11 +412,14 @@ class DocumentRedirect(NumberedRedirect, spellings=('<<',)):
     def bind(self, word: ShellWord) -> Redirection:
         return word.document()
 
+    def operand(self) -> HereDocumentTarget:
+        return HereDocumentTarget(self)
+
     def apply(self, parser: ShellParser) -> Iterator[ShellCommand]:
         super().apply(parser)
         if parser.lexer.take_adjacent('-'):
-            parser.target = RedirectionTarget(TabbedDocumentRedirect(
-                '<<-', self.start, self.end + 1, '<<-'))
+            parser.target = TabbedDocumentRedirect(
+                '<<-', self.start, parser.lexer.position, '<<-').operand()
         return iter(())
 
 
@@ -332,6 +429,9 @@ class TabbedDocumentRedirect(DocumentRedirect):
 
 
 class ArgumentTarget:
+    def require_expansion(self) -> None:
+        raise NotStandalone('Command substitution is not admitted by the bounded shell grammar')
+
     def take(self, parser: ShellParser, word: ShellWord) -> None:
         word.argument(parser)
 
@@ -351,6 +451,13 @@ class RedirectionTarget(ArgumentTarget):
 
     def require_word(self) -> None:
         raise ValueError('Shell redirection requires a word operand')
+
+
+class HereDocumentTarget(RedirectionTarget):
+    """The shell removes delimiter quotes but never expands its word."""
+
+    def require_expansion(self) -> None:
+        pass
 
 
 class ShellParser:
@@ -393,7 +500,7 @@ class ShellParser:
         return iter(completed)
 
     def commands(self) -> Iterator[ShellCommand]:
-        while word := self.lexer.next_word():
+        while word := self.lexer.next_word(self.target):
             yield from word.consume(self)
         self.finish()
         self.lexer.read_documents()
@@ -423,8 +530,13 @@ class NotStandalone(ValueError):
 
 
 class LiteralShellParser(ShellParser):
+    def __init__(self, lexer: ShellLexer):
+        if not lexer.single_line():
+            raise NotStandalone('Recovery requires literal, single-line words')
+        super().__init__(lexer)
+
     def word(self, word: ShellWord) -> None:
-        if set(word.spelling) & {'$', '`', '\n'}:
+        if set(word.spelling) & {'$', '`'}:
             raise NotStandalone('Recovery requires literal, single-line words')
         super().word(word)
 
