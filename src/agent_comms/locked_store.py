@@ -229,8 +229,12 @@ class RootFile:
         """Each declaring owner and its directory, once across composed capabilities."""
         RootFile.load_declarations()
         for family in cls.families():
-            if "filename" in vars(family):
-                yield family, family.directory_in(root)
+            yield from family.root_declaration(root)
+
+    @classmethod
+    def root_declaration(cls, root: Path) -> tuple[tuple[type[Self], Path], ...]:
+        """A bus-relative declaration contributes its location to the bus inventory."""
+        return ((cls, cls.directory_in(root)),) if "filename" in vars(cls) else ()
 
     @classmethod
     def existing_in(cls, root: Path) -> dict[Path, type[Self]]:
@@ -630,6 +634,14 @@ class DurableFile(RootFile):
     """Bus state retained across installations, with conversion owned by its store."""
 
     __slots__ = ()
+
+
+class ExternalFile(DurableFile):
+    """An external or explicitly selected file has no bus-relative location."""
+
+    @classmethod
+    def root_declaration(cls, root: Path) -> tuple[tuple[type[Self], Path], ...]:
+        return ()
 
 
 class RollbackRetained(DurableFile):

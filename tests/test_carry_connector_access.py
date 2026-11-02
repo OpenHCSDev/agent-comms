@@ -14,7 +14,9 @@ from agent_comms.connector_store import (
     RegisteredClient, TrustedBrowser, digest,
 )
 from agent_comms.errors import RelationViolationError
-from agent_comms.locked_store import RetainedCopyRequest
+from agent_comms.installer.backup import StoreBackup
+from agent_comms.installer.practice import PracticeCopy
+from agent_comms.locked_store import LiveFilesRequest, RetainedCopyRequest
 from agent_comms.nominal.field_codec import FieldCodec, MalformedRecord
 from agent_comms.private_path import PrivateDirectoryRole
 from agent_comms.store_files import AtomicFile, ExclusiveLock, store_lock_path
@@ -148,6 +150,39 @@ def test_credential_resource_refuses_an_aliased_retained_input(
     with pytest.raises(RelationViolationError, match="unconfined path"):
         selected_carry.carry(apply=True)
     assert outside.read_bytes() == before
+
+
+def test_live_selected_credentials_copy_carry_and_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, previous_grants: PreviousConnectorGrants,
+) -> None:
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    root = tmp_path / "bus"
+    root.mkdir()
+    path = ConnectorCredentialsFile.path()
+    assert path.is_relative_to(home)
+    PrivateDirectoryRole.make_parents(path.parent)
+    AtomicFile(path).write_text(FieldCodec.compact(FieldCodec.encode(previous_grants)))
+    original = path.read_bytes()
+    step = ConnectorAccessCarry(LiveFilesRequest(root), tmp_path / "spill")
+    copy = PracticeCopy(root, tmp_path / "practice")
+    copy.include(step.input_files())
+    copied_step = ConnectorAccessCarry(copy.request, tmp_path / "practice-spill")
+    resource, = ConnectorCredentialsFile.resources(copy.request)
+    assert copy.request.location(resource).read_bytes() == original
+    assert copied_step.carry(apply=True).changed == 1
+    assert path.read_bytes() == original
+    with ExitStack() as lifetime:
+        ConnectorCredentialsFile.borrowed_locks(lifetime, step.files)
+        backup = StoreBackup.take(root, tmp_path / "route", step.input_files(), tmp_path / "backups")
+        assert resource.path in backup.selected_files()
+        assert backup.original()
+        assert step.carry(apply=True).changed == 1
+        assert ConnectorStore(path).read().clients == previous_grants.clients
+        assert not backup.stores_original()
+        backup.restore(lambda: FieldCodec.decode(PreviousConnectorGrants, FieldCodec.parse(path.read_text())))
+        assert backup.original()
+        assert path.read_bytes() == original
 
 
 def test_selected_credential_writer_lock_lives_until_its_exit_stack_closes(

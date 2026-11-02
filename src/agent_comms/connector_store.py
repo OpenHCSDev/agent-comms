@@ -18,7 +18,7 @@ from .connector_profile import (
 )
 from .nominal.declared_family import DeclaredFamily
 from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
-from .locked_store import DocumentChange, FilesRequest
+from .locked_store import DocumentChange, ExternalFile, FilesRequest
 from .maintenance_barrier import CarriedDocument
 from .store_files import DependentStateTier, DrainedWriters, SingleFileStore
 from .typed_table import GuardedExternalStore
@@ -299,14 +299,18 @@ class ConnectorGrants:
         })
 
 
-class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore):
+class ConnectorFile(ExternalFile):
+    """The credential filename shared by its external declaration and selected reader."""
+
+    filename = "grants.json"
+
+
+class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore, ConnectorFile):
     """The canonical external credential resource retained by the installer.
 
     Its declaration names the global file; ConnectorStore instances read a selected
     live or retained file, rather than lending the carry their live location.
     """
-
-    filename = "grants.json"
 
     @classmethod
     def path(cls) -> Path:
@@ -321,9 +325,8 @@ class ConnectorCredentialsFile(DrainedWriters, GuardedExternalStore):
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], DependentStateTier):
-    filename: ClassVar[str] = ConnectorCredentialsFile.filename
-
+class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], ConnectorFile,
+                     DependentStateTier):
     @classmethod
     def owned(cls) -> ConnectorStore:
         path = ConnectorCredentialsFile.path()
