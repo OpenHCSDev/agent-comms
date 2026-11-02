@@ -4036,7 +4036,10 @@ class AssignTodo(ReleasesHold, TodoOperation):
             proposed.require_receiving_work(self.actor, snapshot)
 
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
+        """The preview judges the revision the sender read, first, as the write does: a stale
+        request conflicts before any consent is asked of a holder it never saw."""
         current = store.get(problem)
+        self.require_current(current)
         proposed = current.proposed_assignment(self.proposed)
         snapshot = store.registry_cut()
         self.require_hold_release(current, snapshot)
