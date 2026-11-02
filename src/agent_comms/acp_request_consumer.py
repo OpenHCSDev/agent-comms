@@ -91,7 +91,7 @@ class AcpRequestConsumer(MroDispatch):
     @handles(SendNowRequest)
     async def send_now(self, request):
         if self.session_id in self.agent.sessions.proxies:
-            self.response = await self.forward(request)
-            return
-        await self.agent.inputs.send_now(self.session_id)
+            await self.agent.sessions.proxies[self.session_id].request("send_now")
+        else:
+            await self.agent.inputs.send_now(self.session_id)
         self.response = PromptResponse(stop_reason="end_turn")

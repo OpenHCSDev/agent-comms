@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from acp.schema import PromptRequest, PromptResponse, SetSessionConfigOptionResponse
@@ -38,10 +39,11 @@ from .goals import Goal
 from .manual_compaction_bridge import compact_context
 from .order_tools import OwnerGoalRead
 from agent_comms.runtime_server import AttachedResultRuntimeRequest, AttachedRuntimeRequest, AttachedRuntimeRequestContext
-from .owner_connection import NoControllerToken, socket_path
+from .owner_connection import NoControllerToken, OwnerConnection, socket_path
 from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerReady
 from .pi_payloads import NativeContextData
 from .thread_identity import ThreadIncarnation
+from .threads import Thread
 from .thread_presentation import LiveThreadOwnerBinding
 from .tool_result import DeclaredReply
 from .turn_context import (
@@ -71,6 +73,10 @@ class ProjectReply(DeclaredReply):
 @dataclass(frozen=True)
 class CancelReply(DeclaredReply):
     pass
+
+
+class QueueActionReply(DeclaredReply):
+    """The owner applied a queue action to its session's queued inputs."""
 
 
 @dataclass(frozen=True)
@@ -239,6 +245,30 @@ class CancelRuntimeRequest(AttachedResultRuntimeRequest):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CancelReply:
         await ctx.server.agent.turns.cancel(ctx.session)
         return CancelReply()
+
+
+@dataclass(frozen=True, kw_only=True)
+class QueueActionRuntimeRequest(AttachedResultRuntimeRequest, declared_name=None):
+    """A queue action any client asks of a thread's owner, attached over ACP or not."""
+
+    @classmethod
+    def at_owner(cls, root: Path, thread: Thread) -> None:
+        """Ask the thread's live owner process to apply this action to its queued inputs."""
+        OwnerConnection.exchange(root, thread.require_process(), cls(thread=thread.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendNowRuntimeRequest(QueueActionRuntimeRequest):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
+        await ctx.server.agent.inputs.send_now(ctx.session)
+        return QueueActionReply()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClearQueueRuntimeRequest(QueueActionRuntimeRequest):
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
+        await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
+        return QueueActionReply()
 
 
 @dataclass(frozen=True, kw_only=True)
