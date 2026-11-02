@@ -871,7 +871,7 @@ def test_codex_usage_decodes_window_and_keeps_refusal_visible():
     assert not usage.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(usage)) == usage
     refused = CodexUsage(UnreadableUsage(reason='Codex: account unavailable'))
-    assert refused.line() == 'usage unreadable: Codex: account unavailable'
+    assert refused.line() == 'Codex usage unreadable: Codex: account unavailable'
     assert refused.needs_hand()
     assert FieldCodec.decode(CodexUsage, FieldCodec.encode(refused)) == refused
 
