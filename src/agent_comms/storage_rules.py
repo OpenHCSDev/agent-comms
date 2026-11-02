@@ -472,7 +472,7 @@ class StorageRule(RoomAllocation, DurableFile):
 
     def require_owned_checkout(self, owner: Thread, path: Path,
                                repository: RepositoryName, reads: RepositoryReads) -> None:
-        """Admit a mutating checkout operation through the same allocation rule."""
+        """Check a mutating checkout operation through the same allocation rule."""
         if not self.owns_checkout(owner, path, repository, reads):
             raise StorageDenied(f"Source checkout {path} is not owned by {owner.name}")
 

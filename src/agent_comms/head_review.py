@@ -21,13 +21,12 @@ from .nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, Rec
 from .installer.runtime_resolution import PrivateUvProject, StackSources
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
+from .thread_identity import ThreadIncarnation
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
-    from .integration import IntegrationRun
     from .team.order import TeamContext
     from .goal_management import Goals
-    from .thread_identity import ThreadIncarnation
     from .todos import HeadReviewRecord, HeadVerdict, Todo
 
 
@@ -164,6 +163,20 @@ class SourceCheckout(Checkout, ABC):
     def materialize(
         cls, source: IntegrationSource, repository: Repo, path: Path
     ) -> SourceCheckout: ...
+
+
+class InputPublication(ABC):
+    """The publication operations a frozen source input requires of its executor."""
+
+    checkout: SourceCheckout
+
+    @abstractmethod
+    def capture(
+        self, context: TeamContext, prepared: UnpublishedInput, carrier: PullRequestHead
+    ) -> CombinedInput: ...
+
+    @abstractmethod
+    def retain_capture(self, inputs: CombinedInput, commit: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -470,7 +483,7 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         """Ordinary source comparisons do not require a combined change."""
 
     def resume_publication(
-        self, run: IntegrationRun, context: TeamContext, carrier: PullRequestHead
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
     ) -> CombinedInput:
         """An ordinary source record cannot become a combined publication."""
         raise ToolRefusedError("This input is not a resumable combined publication")
@@ -611,7 +624,7 @@ class UnpublishedInput(SubstantiveInput):
         self.require_substantive(repositories)
 
     def resume_publication(
-        self, run: IntegrationRun, context: TeamContext, carrier: PullRequestHead
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
     ) -> CombinedInput:
         return run.capture(context, self, carrier)
 
@@ -657,7 +670,7 @@ class CombinedInput(SubstantiveInput):
             raise MalformedRecord("The combined carrier is separate from every source member")
 
     def resume_publication(
-        self, run: IntegrationRun, context: TeamContext, carrier: PullRequestHead
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
     ) -> CombinedInput:
         core = Repo.of(run.checkout.path)
         commit = Repo.git(run.checkout.path, "rev-parse", "HEAD").strip()

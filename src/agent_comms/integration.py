@@ -27,6 +27,7 @@ from .head_review import (
     HeadSide,
     IntegrationInput,
     IntegrationSource,
+    InputPublication,
     LocalIntegrationSource,
     MergedIntegrationSource,
     MergeHeadReview,
@@ -183,7 +184,7 @@ class IntegrationCheckout(SourceCheckout):
         return checkout
 
     def owned_repository(self, context: TeamContext) -> Repo:
-        """Admit this actor's actual allocation before creating source output or writing Git."""
+        """Check this actor's actual allocation before creating source output or writing Git."""
         repository = Repo.of(self.path)
         owner = context.comms.registry.require(context.actor_name)
         context.comms.registry.storage_rule.require_owned_checkout(
@@ -713,7 +714,7 @@ class MainSources(TestedSources, declared_name="push"):
 
 
 @dataclass(frozen=True)
-class IntegrationRun:
+class IntegrationRun(InputPublication):
     checkout: IntegrationCheckout
     output: Path
     risk: str
@@ -1125,6 +1126,7 @@ def run() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     checkout_option = parser.add_argument("--checkout", type=Path)
     local_options = parser.add_argument_group("local integration")
+    source_options = parser.add_argument_group("source publication and qualification")
     output_option = local_options.add_argument(
         "--output",
         type=Path,
@@ -1165,20 +1167,20 @@ def run() -> int:
         type=Path,
         help="append derived base/job selection to GitHub's output file during CI resolution",
     )
-    local_options.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
-    local_options.add_argument("--from", dest="callers", type=PeerCaller, nargs=1, default=(),
-                               help="the independent actor preparing or publishing the cut")
-    local_options.add_argument("--title", default="", help="title of the first real carrier")
-    local_options.add_argument("--body-file", dest="body_files", type=Path, nargs=1, default=(),
-                               help="the carrier's explanation and evidence, not an empty draft")
-    local_options.add_argument(
+    source_options.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
+    source_options.add_argument("--from", dest="callers", type=PeerCaller, nargs=1, default=(),
+                                help="the independent actor preparing or publishing the cut")
+    source_options.add_argument("--title", default="", help="title of the first real carrier")
+    source_options.add_argument("--body-file", dest="body_files", type=Path, nargs=1, default=(),
+                                help="the carrier's explanation and evidence, not an empty draft")
+    source_options.add_argument(
         "--carrier",
         type=int,
         default=0,
         metavar="PR",
         help="the existing separate combined PR at this checkout's published HEAD",
     )
-    local_options.add_argument(
+    source_options.add_argument(
         "--companion-carrier",
         nargs=2,
         action="append",
@@ -1213,7 +1215,8 @@ def run() -> int:
         or arguments.revalidate_ci_inputs
         or arguments.check_merge_inputs
     ):
-        forbidden = {option.dest for option in local_options._group_actions if values[option.dest]}
+        forbidden = {option.dest for group in (local_options, source_options)
+                     for option in group._group_actions if values[option.dest]}
         if forbidden:
             parser.error(
                 "CI source resolution does not accept tests, a bus root"
@@ -1279,8 +1282,7 @@ def run() -> int:
                 companions=selected,
             )
         return 0
-    if (arguments.with_problem or arguments.carrier or arguments.companion_carrier
-            or arguments.callers or arguments.title or arguments.body_files):
+    if any(values[option.dest] for option in source_options._group_actions):
         parser.error("Source selection/publication options require --qualify or --publish")
     return run.execute()
 
