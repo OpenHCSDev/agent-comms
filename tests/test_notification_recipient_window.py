@@ -4,7 +4,6 @@ No model, provider, product monkeypatch or hand-edited coordination row is used.
 """
 from __future__ import annotations
 
-from agent_comms.notification_assignment import NotificationSelection
 from pathlib import Path
 import pytest
 
@@ -14,10 +13,9 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery
 from agent_comms.coordinator import Coordination
 from agent_comms.harness_delivery_states import PersistedOutcome
-from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_assignment import NotificationAssignment, NotificationSelection
 from agent_comms.notification_progress import AnsweredResponse
-from agent_comms.notification_evidence import AllOutcomes, AfterRecipient, OwnerOutcomes
-from agent_comms.notification_evidence import RecipientLimit
+from agent_comms.notification_evidence import AfterRecipient, AllOutcomes, OwnerOutcomes, RecipientLimit
 from agent_comms.message_notification import MessageNotification
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.repo import Checkout
