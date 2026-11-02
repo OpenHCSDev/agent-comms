@@ -17,6 +17,7 @@ from agent_comms.native_entries import TranscriptProjection
 from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.threads import Thread
+from agent_comms.turn_item import FreshNativeIdText
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
@@ -32,7 +33,8 @@ def saved_row(native_id, text, *, images=False, role="user"):
     if images:
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return transcript_records.message(
-        {"role": role, "inputId": str(native_id), "content": content}, id=native_id[:8]
+        {"role": role, "inputId": str(native_id), "content": content},
+        id=FreshNativeIdText.decode(native_id[:8]),
     )
 
 
