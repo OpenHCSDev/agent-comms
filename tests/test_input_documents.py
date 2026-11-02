@@ -1,6 +1,7 @@
 """Typed saved boundaries and durable acceptance precede process-local scheduling."""
 
 from agent_comms.repo import Checkout
+from agent_comms.comms import wire
 import json
 import sqlite3
 from contextlib import ExitStack, closing
@@ -127,6 +128,9 @@ def _insert_raw(store: InputDispositions, key: InputKey, attempt: dict) -> None:
 
 def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_path):
     goal_id = GoalId.mint()
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
+    entry = comms.registry.snapshot().entry('worker')
     store = InputDispositions(tmp_path)
     from agent_comms.text_digest import TextDigest
 
@@ -156,7 +160,7 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     assert row.reviewed_for_goal(goal_id)
     assert FieldCodec.encode(row) == saved
     assert store.in_turn(TURN).rows == {OLD_KEY: row}
-    assert store.unresolved(frozenset({"worker"})).rows == {OLD_KEY: row}
+    assert store.unresolved((entry,)).rows == {OLD_KEY: row}
     assert not store.bind(
         row.key,
         claim_scope=1,
@@ -446,6 +450,9 @@ def test_started_delivery_and_original_ingress_use_distinct_owned_relations(
 
 
 def test_reads_select_only_the_rows_their_index_names(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path)))
+    entry = comms.registry.snapshot().entry('owner')
     store = InputDispositions(tmp_path)
     for key, owner in ((A_KEY, "owner"), (B_KEY, "owner"), (C_KEY, "other")):
         assert store.record(key, seq=None, owner=owner, claim_scope=1, target=owner, text=str(key))
@@ -460,7 +467,7 @@ def test_reads_select_only_the_rows_their_index_names(tmp_path):
         A_KEY, turn_id=TURN, native_id=InputId("a" * 32), text="sent"
     )
     assert store.in_turn(TURN).rows.keys() == {A_KEY}
-    assert store.unresolved(frozenset({"owner"})).rows.keys() == {B_KEY}
+    assert store.unresolved((entry,)).rows.keys() == {B_KEY}
     assert store.read((C_KEY, MISSING_KEY)).rows.keys() == {C_KEY}
     with closing(sqlite3.connect(store.path)) as connection:
         plans = [connection.execute("EXPLAIN QUERY PLAN SELECT * FROM input_disposition WHERE " + where,

@@ -3229,7 +3229,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
         descriptor, staged = cls.stage_file(destination)
         os.close(descriptor)
         try:
-            with closing(cls.writer(staged, isolation_level=None)) as db:
+            with closing(cls.writer(staged, isolation_level=None, uri=True)) as db:
                 cls.configure_connection(db)
                 SQLiteDatabase.named(db, "main").limit_bytes(db, maximum_bytes)
                 with PracticeRebuild(source).attached(db) as attached:

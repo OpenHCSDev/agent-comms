@@ -3,6 +3,7 @@ from collections.abc import Callable, Iterator
 from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 
@@ -16,7 +17,7 @@ from agent_comms.coordination_errors import IdentityConflict, ParticipantNotRegi
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordination_tables.executions import (
-    AcpOrigin, CurrentExecutions, ExecutionRecord, NoPointedAttempt, NoPointedExecution,
+    AcpOrigin, CurrentExecutions, ExecutionRecord,
 )
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
 from agent_comms.coordination_tables.recovery import RecoveryAudit
@@ -25,13 +26,13 @@ from agent_comms.harness_delivery_states import EmittedOutcome, ReceivingMonitor
 from agent_comms.message_reference import MessageReference
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordId
+from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordIdText
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.recovery_states import ModelStalledRecovery
 from agent_comms.triage_native_sources import TriageNativeSource
-from agent_comms.typed_table import AttachedPracticeRebuild, TypedTable, UnallocatedRowId
+from agent_comms.typed_table import AttachedPracticeRebuild, NoDelete, TypedTable, UnallocatedRowId
 from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID, RECIPIENT_LOOKUP, prepare_native_comms,
@@ -84,7 +85,7 @@ def harness_source(tmp_path: Path) -> Iterator[HarnessSource]:
         parts = tuple(
             HarnessObservedPart(delivery.bridge, delivery.recipient_lookup, delivery.message_id,
                                 number, 'Sender', f'original body {delivery.seq}/{number}',
-                                TranscriptRecordId(f'original-record-{delivery.seq}-{number}'),
+                                TranscriptRecordIdText.decode(str(uuid4())),
                                 10.0 + delivery.seq + number / 10)
             for delivery, monitor in zip(deliveries, monitors, strict=True)
             for number in range(1, monitor.total + 1)
@@ -269,12 +270,8 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     assert CoordinationStore.digest(source.path) == before
 
 
-@pytest.mark.parametrize('surviving', (
-    OwnerGenerations(owner_lookup=ThreadLookup('7' * 32), generation=3),
-    CurrentExecutions(owner_lookup=ThreadLookup('7' * 32),
-                      execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
-                      pointer_revision=5),
-))
+@pytest.mark.parametrize('missing', (OwnerGenerations, CurrentExecutions),
+                         ids=('missing-generation', 'missing-pointer'))
 @pytest.mark.parametrize('retain_seed', (
     lambda original, delivery: ParticipantStore.retain_owners(
         original, (delivery.recipient_lookup,),
@@ -282,7 +279,7 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     lambda original, delivery: delivery.retain_original(original),
 ), ids=('direct-owner', 'fk-discovered-owner'))
 def test_incomplete_original_participant_refuses_selected_publication(
-    native_group_source: NativeGroupSource, tmp_path: Path, surviving: TypedTable,
+    native_group_source: NativeGroupSource, tmp_path: Path, missing: type[TypedTable],
     retain_seed: Callable[[AttachedPracticeRebuild, HarnessDelivery], int],
 ) -> None:
     source = native_group_source
@@ -290,10 +287,22 @@ def test_incomplete_original_participant_refuses_selected_publication(
     delivery = HarnessDelivery(
         ClaudeBridge, lookup, MessageId.mint('incomplete-owner-message'), 7, EmittedOutcome,
     )
+    source.store.participants.register(lookup, committed=True)
+    source.store.participants.get(lookup)  # The original aggregate starts valid.
     with source.store.session.writing() as db:
-        Participants(participant_lookup=lookup, committed=True).insert(db)
-        surviving.insert(db)
         delivery.insert(db)
+        # Explicit foreign corruption, not an admitted coordinator transition:
+        # remove only this type's delete guard, leaving insertion membership intact,
+        # then restore the exact declared schema before the retained reader sees it.
+        delete_guards = NoDelete.mutation_guards(missing)
+        for guard in delete_guards:
+            db.execute(f'DROP TRIGGER "{guard.name}"')
+        missing.delete(db, owner_lookup=lookup)
+        for guard in delete_guards:
+            db.execute(guard.sql)
+        CoordinationStore.table_schema().require_schema(db)
+    with pytest.raises(ParticipantNotRegistered):
+        source.store.participants.get(lookup)
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'incomplete-participant' / 'coordination.sqlite3'
     with pytest.raises(ParticipantNotRegistered):
