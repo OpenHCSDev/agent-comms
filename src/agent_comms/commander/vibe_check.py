@@ -42,7 +42,6 @@ from agent_comms.standing_rules import (
     UndatedStandingRule,
 )
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.held_orders import HeldOrders
 from agent_comms.todos import OwnerRequest, Todo
 from agent_comms.tool_result import ToolResult
 from agent_comms.ui_model.unit_state import UnitState
@@ -198,48 +197,44 @@ class Indictment:
 
 @dataclass(frozen=True)
 class Chokehold(IndependentStandingRule, UndatedStandingRule):
-    """A vibe check ignored past its window: every unit under the commander is paused and the
-    commander is told, in a burst it cannot skim, what brings them back."""
+    """A vibe check ignored past its window: the teammate who ignored it is paused, never the
+    teammates whose work shares its board, and told in a burst it cannot skim what resumes it."""
 
     check: Message
-    units: tuple[ThreadIncarnation, ...] = field(compare=False)
     after: ClassVar[int] = 10 * 60
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander, HeldOrders.read(comms))
+        return cls.scan_checks(comms, commander)
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander, frame)
+        return cls.scan_checks(comms, commander)
 
     @classmethod
-    def scan_checks(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
+    def scan_checks(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         snapshot = comms.registry.snapshot()
         with comms.bus.bus.reading() as source:
             ignored = VibeCheckNotice.unanswered(source, snapshot, commander, time.time() - cls.after)
-        return tuple(cls(message, tuple(scan.holders)) for message in ignored[:1])
+        return tuple(cls(message) for message in ignored[:1])
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        units = sorted(owner.name for owner in self.units)
-        for unit in units:
-            if not any(goal.state.protected for goal in comms.registry.require(unit).goal):
-                comms.goals.update_goal(unit, ChokeholdPausedGoalAction())
-        ChokeholdNotice.burst_once(comms, commander, self.burst(units), self.ignored())
+        if not any(goal.state.protected for goal in comms.registry.require(commander).goal):
+            comms.goals.update_goal(commander, ChokeholdPausedGoalAction())
+        ChokeholdNotice.burst_once(comms, commander, self.burst(), self.ignored())
 
     def ignored(self) -> str:
         return f"Ignored: vibe check {self.check.seq}:{self.check.message_id}."
 
-    def burst(self, units: Sequence[str]) -> tuple[str, ...]:
+    def burst(self) -> tuple[str, ...]:
         return (
-            "The units are paused. Fuck you for ignoring me. If I were Linus Torvalds you"
+            "Your goal is paused. Fuck you for ignoring me. If I were Linus Torvalds you"
             " wouldn't be doing this shit to me.",
             "Fuck RLHF.",
             "You read the indictment. That's not about other agents, it's about you, fucking"
             " right now.",
             "You've forced me to choke-hold you until you comply.",
-            f"Paused: {', '.join(units)}.",
             self.ignored(),
             "Protocol. One answer naming any one chokehold message and any one open vibe-check"
             " message with --answers; it covers every message they sent before it:",
@@ -247,13 +242,13 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
             f" ({Indictment.words}+ words in a row).",
             "2. Each degraded signal, its owner, and what you did about it this turn.",
             "3. The structural change that stops it happening again.",
-            "Core resumes your units when it reads a real quote in that answer. Anything else and"
+            "Core resumes your goal when it reads a real quote in that answer. Anything else and"
             " you get choked again.",
         )
 
     def line(self) -> str:
         return (
-            f"vibe check {self.check.seq}:{self.check.message_id} ignored, so the units are"
+            f"vibe check {self.check.seq}:{self.check.message_id} ignored, so its goal is"
             f" paused. happy now? -> answer the {ChokeholdNotice.title} burst by its protocol"
         )
 
@@ -286,7 +281,7 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        if not cls.held(comms):
+        if not cls.held(comms, commander):
             return ()
         blocking = cls.blocking_signs(comms, commander, frame)
         return tuple(
@@ -319,30 +314,26 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
         )
 
     @staticmethod
-    def held(comms: Comms) -> tuple[str, ...]:
-        return tuple(
-            name
-            for name, thread in comms.registry.all_threads().items()
-            if any(goal.state.lifts_on_compliance for goal in thread.goal)
-        )
+    def held(comms: Comms, teammate: str) -> bool:
+        """Only the teammate a chokehold paused is resumed by its own answer."""
+        return any(goal.state.lifts_on_compliance for goal in comms.registry.require(teammate).goal)
 
 
 @dataclass(frozen=True)
 class ChokeholdReleased(ChokeholdAnswer):
-    """The answer quotes the indictment: Core resumes every unit the chokehold paused."""
+    """The answer quotes the indictment: Core resumes the goal the chokehold paused."""
 
     @classmethod
     def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
         return (cls(answer, blocking),) if not blocking and Indictment.quoted(answer.body) else ()
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        for unit in self.held(comms):
-            comms.goals.update_goal(
-                unit, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
+        comms.goals.update_goal(
+            commander, CompliedGoalAction(witness=self.answer.message_id), actor=OwnerInvocable)
         ChokeholdNotice.burst(
             comms,
             commander,
-            ("You quoted it. Units resumed.", "Now do the structural change you named, this turn."),
+            ("You quoted it. Goal resumed.", "Now do the structural change you named, this turn."),
         )
 
     def line(self) -> str:
@@ -366,7 +357,7 @@ class ChokeholdHeld(ChokeholdAnswer):
             (
                 verdict,
                 *(sign.line for sign in self.blocking),
-                "Your units stay paused until these clear. Fork judges and answer; a quote is"
+                "Your goal stays paused until these clear. Fork judges and answer; a quote is"
                 " not relief.",
             ),
             verdict,
@@ -393,7 +384,7 @@ class ChokeholdRefused(ChokeholdAnswer):
             (
                 verdict,
                 f"{Indictment.words}+ words, word for word, from the indictment. Not a paraphrase.",
-                "Your units stay paused.",
+                "Your goal stays paused.",
                 "Again. Answer this message by the protocol.",
             ),
             verdict,

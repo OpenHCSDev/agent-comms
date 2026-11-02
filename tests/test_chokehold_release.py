@@ -1,4 +1,4 @@
-"""A unit the chokehold paused is found again, so a quoting answer can resume it."""
+"""The teammate a chokehold paused is found again, so its quoting answer can resume it."""
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -20,28 +20,38 @@ def _unit(comms, monkeypatch, name):
     partial(invoke_tool, caller=ThreadCaller(name))(comms, "comms_set_goal", {"text": "work"})
 
 
-def test_a_chokehold_paused_unit_is_held_and_an_owner_pause_is_not(comms, monkeypatch):
+def test_only_the_teammate_a_chokehold_paused_is_held(comms, monkeypatch):
     _unit(comms, monkeypatch, "choked")
     _unit(comms, monkeypatch, "owner-paused")
-    _unit(comms, monkeypatch, "running")
     comms.goals.update_goal("choked", ChokeholdPausedGoalAction())
     comms.goals.update_goal("owner-paused", PausedGoalAction())
 
-    assert ChokeholdAnswer.held(comms) == ("choked",)
+    assert ChokeholdAnswer.held(comms, "choked")
+    assert not ChokeholdAnswer.held(comms, "owner-paused")
 
 
-def test_a_chokehold_holds_the_others_and_leaves_an_owner_pause_alone(comms, monkeypatch):
-    """One unit the owner paused must not kill the heartbeat before the burst goes out."""
-    _unit(comms, monkeypatch, "owner-paused")
+def test_a_chokehold_pauses_only_the_teammate_who_ignored_the_check(comms, monkeypatch):
+    """Teammates sharing the board keep working; the one who ignored the vibe check stops."""
+    _unit(comms, monkeypatch, "ignored")
     _unit(comms, monkeypatch, "running")
+    burst = []
+    monkeypatch.setattr(ChokeholdNotice, "burst_once", lambda *args: burst.append(args))
+
+    Chokehold(SimpleNamespace(seq=1, message_id="check")).enforce(comms, "ignored")
+
+    assert isinstance(comms.registry.require("ignored").goal.state.source, ChokeholdPause)
+    assert not ChokeholdAnswer.held(comms, "running")
+    assert burst
+
+
+def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
+    """A goal the owner paused must not kill the heartbeat before the burst goes out."""
+    _unit(comms, monkeypatch, "owner-paused")
     comms.goals.update_goal("owner-paused", PausedGoalAction(), actor=OwnerInvocable)
     burst = []
     monkeypatch.setattr(ChokeholdNotice, "burst_once", lambda *args: burst.append(args))
 
-    units = tuple(comms.registry.require(name).incarnation for name in ("owner-paused", "running"))
-    Chokehold(SimpleNamespace(seq=1, message_id="check"), units).enforce(comms, "owner-paused")
+    Chokehold(SimpleNamespace(seq=1, message_id="check")).enforce(comms, "owner-paused")
 
-    source = {name: comms.registry.require(name).goal.state.source for name in ("owner-paused", "running")}
-    assert isinstance(source["owner-paused"], OwnerPause)
-    assert isinstance(source["running"], ChokeholdPause)
+    assert isinstance(comms.registry.require("owner-paused").goal.state.source, OwnerPause)
     assert burst
