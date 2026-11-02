@@ -87,20 +87,25 @@ def test_every_bus_file_is_a_declared_root_file(tmp_path: Path, source_repositor
     assert not durable & runtime
 
 
+def journal_one_context(db: sqlite3.Connection) -> None:
+    """Create the native context journal and commit one context row through its owner."""
+    for statement in NativeContextJournal.schema_objects().values():
+        db.execute(statement)
+    db.commit()
+    NativeContextJournal(
+        input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id=FreshNativeId("entry"),
+        request_generation=1, llm_context_digest="c" * 64,
+        committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
+    ).insert(db)
+
+
 @pytest.mark.parametrize("journal_mode", ("DELETE", "WAL"))
 def test_parameterized_sqlite_resources_follow_their_file_owner(tmp_path: Path, journal_mode: str) -> None:
     proof = NativeInputProof.path_in(tmp_path, lookup="a" * 32, name="session.jsonl")
     proof.parent.mkdir(parents=True, mode=0o700)
     with sqlite3.connect(proof) as db:
         db.execute(f"PRAGMA journal_mode={journal_mode}")
-        for statement in NativeContextJournal.schema_objects().values():
-            db.execute(statement)
-        db.commit()
-        NativeContextJournal(
-            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id=FreshNativeId("entry"),
-            request_generation=1, llm_context_digest="c" * 64,
-            committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
-        ).insert(db)
+        journal_one_context(db)
         actual = {path for path in tmp_path.rglob("*") if path.is_file()}
         assert len(actual) > 1  # The real SQLite writer has an open journal/WAL.
         assert actual <= NativeInputProof.files_in(tmp_path)
@@ -111,13 +116,7 @@ def test_installer_reconciles_a_native_proof_journal_onto_its_declaration(tmp_pa
     proof = NativeInputProof.path_in(tmp_path, lookup="a" * 32, name="session")
     proof.parent.mkdir(parents=True, mode=0o700)
     with sqlite3.connect(proof) as db:
-        for statement in NativeContextJournal.schema_objects().values():
-            db.execute(statement)
-        NativeContextJournal(
-            input_id=InputId.mint(), session_id=PiSessionId("session"), session_entry_id=FreshNativeId("entry"),
-            request_generation=1, llm_context_digest="c" * 64,
-            committed_at_ms=1_791_964_800_001, schema=2, type="context_committed",
-        ).insert(db)
+        journal_one_context(db)
         # A journal written before the trigger names moved: triggers hold no rows.
         for name in ("insert", "update", "delete"):
             db.execute(f"DROP TRIGGER native_context_journal_{name}_before_abort")
