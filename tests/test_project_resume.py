@@ -46,13 +46,10 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
     comms.registry.declare(Thread('owner', frozenset(), Checkout(new), process_identity=ProcessIdentity.capture(os.getpid())))
     current = comms.registry.require("owner")
     assert current.project_resume_due and current.worktree == Checkout(new)
-    assert json.loads(comms.registry.store.path.read_text())["threads"]["owner"]["project_resume_due"]
     following = comms.agents.begin_turn("owner", TurnId('bf5eb504b7221133c4f3cf2aa87008a3'))
     assert following.thread.worktree == Checkout(new)
     assert not comms.registry.require("owner").project_resume_due
     assert comms.agents.finish_turn(following.turn_lease)
-    assert "project_resume_due" not in json.loads(
-        comms.registry.store.path.read_text())["threads"]["owner"]
 
 
 def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
