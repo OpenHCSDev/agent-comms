@@ -4,6 +4,45 @@ Owner: pi-shell-colleague. Direction: Tristan via55507. **Input, layout and scro
 run on Android; only bus data crosses the network.** SSH is the stopgap. Mosh work
 is parked, not an acceptance gate. Reply to this plan rather than start another.
 
+## First-slice authorization decision
+
+Use an explicitly owner-provisioned, expiring **read-only UI bearer grant** in the
+existing connector grant/caller owners, bound to the served root and independently
+revocable. Its provisioning operation must be implemented; no working command is
+claimed yet. Do not widen Claude OAuth for slice1. Store the phone credential only
+in its private profile, never channel messages, command arguments or logs; remote
+HTTP uses the existing authenticated HTTPS endpoint. Native OAuth can follow with
+the consent/callback constraints below, rather than delay the first bounded read.
+
+## Authorization source checkpoint — not executed or accepted
+
+The current Core3861 work adds `GrantUiVerb`/`RevokeUiVerb`, with explicit
+`grant-ui`/`revoke-ui` declarations. Those spellings are authored, not a proven
+installed command. Provisioning returns a public summary and exclusively publishes
+the secret in an owner-only HTTPS profile. The existing document transaction writes
+that profile before activating its bearer, so a failed profile write commits no grant.
+`ReadTool`, not its descriptive MCP hint, owns read-only permission. The caller
+checks the original native namespace at authentication, before argument-context
+reads in the opened call, and at direct invocation. Accepted calls retain the
+connector's existing disconnect/shutdown policy; revocation rejects subsequent requests.
+
+One `ConnectorAccess` family now distinguishes OAuth, service, thread and UI
+bearers. The explicit `ConnectorAccessCarry` preserves existing clients, pending
+approvals/codes, refresh state and browser trust, without assigning legacy service
+labels a fabricated registered-client meaning. Colliding old access/thread digests
+refuse without rewriting the file. The runtime has no old-format fallback.
+`ConnectorCredentialsFile` declares the external resource; the existing installer
+inventories, retains, rehearses and restores selected external files. Shared guard
+capabilities own retained locks/drains, and `GuardedExternalStore` owns the one
+borrowed-lock loop. SQLite's transaction-specific drain remains unchanged.
+
+Authored controls cover private/exclusive profiles, refusal/rollback, root and
+read-only scope, expiry/revocation, selected-file carry/idempotence, malformed or
+colliding records and kernel-lock lifetime. **None has run yet.** Necessary proof
+also includes existing OAuth/thread/service behavior, external-resource rollback,
+and the real carry chain on a private copy. Remote Toad attachment and bounded
+observation transport are not implemented by this checkpoint.
+
 ## What exists, and what does not
 
 - Core `connector.py:448–476,600–618,815–845` already serves typed tool calls over
@@ -15,18 +54,31 @@ is parked, not an acceptance gate. Reply to this plan rather than start another.
   existing connector caller (`:106–112`). A phone must get its own approved,
   revocable client/principal; never borrow Claude's token or pretend to be its agent.
   Extend the existing grant/caller families without weakening the Claude flow.
-  The complete current chain is `ClientRegistration` → name-only `RegisteredClient`
+  The current OAuth path is `ClientRegistration` → name-only `RegisteredClient`
   → `AuthorizationQuery` → `IssuedCode(client_id, code_challenge)` → access/refresh
   grant → `IssuedAccess.caller()` → `DirectorCaller("claude-ai")`
   (`connector.py:162–217,673–716,804–811`; `connector_store.py:48–50,105–112,174–208`;
   `connector_caller.py:59–83`). That caller emits **DirectorOrigin**, not a native
   human/UI identity. Widening only the callback would preserve the wrong authority.
-  Register native callback/principal policy at the client owner and derive token
-  authority from that registration, never its display name. Bind the accepted
+  If adding native OAuth later, register callback/principal policy at the client owner
+  and derive token authority from that registration, never its display name. Bind the accepted
   redirect to authorization-code redemption once multiple callbacks exist; the
-  current fixed literal supplies that exclusion today. Compose shared MCP behavior
-  with the existing thread/no-thread caller roles instead of inventing a proxy agent.
+  current fixed literal supplies that exclusion today. Browser trust is also not
+  native-client consent: `authorize()` currently issues a code immediately for a
+  trusted browser (`connector.py:711–712`). That shortcut must not extend to arbitrary
+  loopback/public clients. Native authorization must retain the existing one-use
+  owner-approval path even for a remembered browser; preserve Claude's existing flow.
+  Compose shared MCP behavior with the existing thread/no-thread caller roles instead
+  of inventing a proxy agent.
   Keep the first slice's read-only exposure declaration-derived, not a tool-name roster.
+  Preserve the other live producers too: `ThreadGrant` supplies `ForkingCaller`, while
+  `ConnectorStore.granted()` creates temporary service grants used by the installer's
+  `ConnectorService.serves()` (`host_services/connector.py:59`) and the live verification
+  script (`tests/verify_connector_live.py:67`). Their purpose labels are not registered
+  OAuth client IDs. Give local-service and registered-client grants distinct nominal
+  ownership; do not break the install probe by blindly looking every grant up as a client.
+  Any stored-shape change needs the existing carry owner and actual current-client,
+  pending-code, refresh/revocation and serving-probe proof, not a compatibility loader.
 - Core's `ui_model/observation.py` already owns interests, bounded reads, results,
   cancellation and retirement. `ObservationProcess:1456–1615` uses a **local**
   multiprocessing pipe and Python pickle. Keep that IPC server-side: never expose
@@ -86,7 +138,7 @@ to retry a write. Server shutdown/disconnect must preserve already accepted writ
 ## Smallest runnable first slice, then expand
 
 1. **One real local Toad comms view, one remote root/channel, one bounded page.**
-   Add the native-client grant and remote attachment/read capability at the owners
+   Add the owner-provisioned UI grant and remote attachment/read capability at the owners
    above; use the existing MCP HTTP listener and real channel/history read operations.
    Launch the normal Toad frontend in Termux with that remote profile. No new CLI flag
    is claimed to exist today, no raw terminal-byte streaming, no agent/model startup.
@@ -97,7 +149,10 @@ to retry a write. Server shutdown/disconnect must preserve already accepted writ
    message updating the local view, bounded history, disconnect/reconnect, and no
    stale-root/retired-thread result or automatic UNKNOWN-write replay.
 3. Enable commands, receipts/read markers, drafts, goals and remaining screens through
-   their existing authorities. Verify actual local editing/keyboard/selection, modest
+   their existing authorities. Tristan56446/56449 requires one queue UX across native
+   DMs, channels and inboxes; pi-toad-errors retains that repair. The remote attachment
+   must use those same presentation/actions, never add a fourth queue implementation.
+   Verify actual local editing/keyboard/selection, modest
    wheel travel and responsiveness on the phone; compare network bytes with bounded
    bus updates, not SSH terminal frames.
 

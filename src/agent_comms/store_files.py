@@ -273,6 +273,13 @@ class StoreGuard:
     __slots__ = ()
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
+    @classmethod
+    @contextmanager
+    def retaining(cls, path: Path) -> Iterator[BorrowedStoreLock]:
+        """Retain the existing store lock while a child borrows its open description."""
+        with cls.write_guard(path) as held:
+            yield BorrowedStoreLock(held.descriptor, path)
+
     contention: ClassVar[StoreLockContention] = StoreLockContention(5.0)
 
     @classmethod
@@ -310,6 +317,17 @@ class StoreGuard:
         async with _async_store_lock(path, ExclusiveLock(), cls.contention,
                                      read_budget=read_budget, lock_type=cls.lock_type) as lock:
             yield lock
+
+
+class DrainedWriters(StoreGuard):
+    """Snapshot admission shared by guarded bus files and guarded external files."""
+
+    @classmethod
+    @contextmanager
+    def writers_drained(cls, path: Path) -> Iterator[None]:
+        """Its writers ask maintenance under this lock, so holding it waits out the last."""
+        with cls.write_guard(path):
+            yield
 
 
 class StoreLockOwner(StoreGuard, StoreLockFile, declared_name=None):
@@ -560,13 +578,6 @@ class SqliteStore(StoreGuard, ABC):
         uri: bool = False, check_same_thread: bool = True,
     ) -> sqlite3.Connection:
         """Open the file family's writer with its declared contention policy and options."""
-
-    @classmethod
-    @contextmanager
-    def retaining(cls, path: Path) -> Iterator[BorrowedStoreLock]:
-        """Retain the existing store lock while a child borrows its open description."""
-        with cls.write_guard(path) as held:
-            yield BorrowedStoreLock(held.descriptor, path)
 
     @classmethod
     @contextmanager

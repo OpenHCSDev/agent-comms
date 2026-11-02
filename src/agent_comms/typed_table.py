@@ -87,6 +87,7 @@ from .private_path import PrivateDirectoryRole
 from .store_files import (
     BorrowedStoreLock,
     ExclusiveAtomicFile,
+    StoreGuard,
     StoreLockFile,
 )
 
@@ -3341,7 +3342,19 @@ class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
         return super()._member_declarations()
 
 
-class WriterOwnedStore(SQLiteStorage, ExternalStore, declared_name=None):
+class GuardedExternalStore(ExternalStore, StoreGuard, ABC, declared_name=None):
+    """External declarations lend the installer their existing file writer lock.
+
+    Keep StoreGuard before the shared ABC ancestor, as SqliteStore does.
+    """
+
+    @classmethod
+    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
+        return tuple(lifetime.enter_context(cls.retaining(files.location(resource)))
+                     for resource in cls.resources(files))
+
+
+class WriterOwnedStore(SQLiteStorage, GuardedExternalStore, declared_name=None):
     """An external SQLite file its own writer reconciles when it opens it
     (``WriterOwnedFile``). Before cutover the installer opens a copy of each with the
     target's declaration, so a stored schema the declaration cannot carry refuses the install
@@ -3352,12 +3365,6 @@ class WriterOwnedStore(SQLiteStorage, ExternalStore, declared_name=None):
         """Retain the original primary and committed WAL bytes without checkpointing."""
         observed = {member: member.stat() for member in cls.files(path) if member.is_file()}
         return cls.snapshot_members(path, observed)
-
-    @classmethod
-    def borrowed_locks(cls, lifetime: ExitStack, files: FilesRequest) -> tuple[BorrowedStoreLock, ...]:
-        """The installer retains each file lock through rollback; the worker only borrows it."""
-        return tuple(lifetime.enter_context(cls.retaining(files.location(resource)))
-                     for resource in cls.resources(files))
 
     @classmethod
     def practice_opening(cls, files: FilesRequest, directory: Path) -> None:

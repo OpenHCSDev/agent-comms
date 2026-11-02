@@ -4,16 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 
+from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from .bus_publication import DirectorOrigin
 from .comms import Comms
-from .nominal.field_codec import FieldCodec, MalformedRecord
+from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
+from .registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
-from .tool_request import ToolArgumentsRefusedError, ToolRequest
+from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest
+from .tool_result import ToolResult
+
+
+class GrantRefusedError(ToolRefusedError):
+    """The bearer token identifies no live caller authorized for the served root."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -21,9 +29,14 @@ class ActingFork:
     fork: ForkCaller | NoThreadCaller = NoThreadCaller()
 
 
-@dataclass(frozen=True)
-class ConnectorCaller(ThreadCaller):
-    """A registered thread calling through the connector with its own grant."""
+class ConnectorCaller(ToolCaller):
+    """The MCP contract, independent of whether its principal is a bus thread."""
+
+    def require_root(self, root: Path) -> None:
+        """Existing thread and Director grants retain their current root admission."""
+
+    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+        """A thread-free, unscoped caller has no membership to publish."""
 
     def exposed(self) -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
@@ -35,7 +48,44 @@ class ConnectorCaller(ThreadCaller):
         return FieldCodec.record_schema(tool)
 
 
-class ForkingCaller(ConnectorCaller):
+@dataclass(frozen=True)
+class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
+    """A registered thread calling through MCP with its own grant."""
+
+    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+        self.identity(comms)
+        acting.join(comms, self.own_thread())
+
+
+@dataclass(frozen=True)
+class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
+    """A thread-free MCP principal admitted only to the declared read capability."""
+
+    def exposed(self) -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
+        return {tool.declared_name: tool for tool in ToolRequest.members_with(ReadTool)}
+
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
+        request.require_read_only()
+        self.require_root(comms.root)
+        return super().invoke(request, comms)
+
+
+@dataclass(frozen=True)
+class UiReadCaller(ReadOnlyConnectorCaller):
+    """The provisioned UI reader of an existing original native namespace."""
+
+    namespace: RootId
+
+    def require_root(self, root: Path) -> None:
+        RegistryStore.at(root).privacy().require_root(
+            self.namespace, GrantRefusedError("UI grant belongs to a different root."))
+
+    def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
+        """Recheck the opened root before argument context reads or tool execution."""
+        self.require_root(comms.root)
+
+
+class ForkingCaller(ThreadConnectorCaller):
     """A thread grant; its holder may act as one of its own registered teammate forks."""
 
     def acting(self, arguments: Mapping[str, object]) -> tuple[ToolCaller, Mapping[str, object]]:
@@ -55,7 +105,7 @@ class ForkingCaller(ConnectorCaller):
 
 
 @dataclass(frozen=True)
-class DirectorCaller(OperatorOutcomes, ConnectorCaller):
+class DirectorCaller(OperatorOutcomes, ThreadConnectorCaller):
     """claude-ai speaks for the owner, so its sends carry the director origin, which records each
     message to a thread as a directive like the owner's own."""
 

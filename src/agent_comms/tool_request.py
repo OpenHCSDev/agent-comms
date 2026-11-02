@@ -167,6 +167,10 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             ) from error
         return request.reply(FieldCodec.encode(caller.invoke(request, comms).to_wire()), caller)
 
+    def require_read_only(self) -> None:
+        """Mutating declarations cannot run under a read-only connector principal."""
+        raise ToolRefusedError("This connector grant permits declared reads only.")
+
     def reply(self, read: dict[str, JsonValue], caller: ToolCaller) -> dict[str, JsonValue]:
         """The encoded result as every adapter receives it; a tool whose reply must name
         what it read overrides this."""
@@ -216,6 +220,9 @@ class ReadTool(ReadWork, FreshIngress):
     __slots__ = ()
     bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
     read_only_hint: ClassVar[bool] = True
+
+    def require_read_only(self) -> None:
+        """Read capability is admission; the descriptive MCP hint is not authority."""
 
     @classmethod
     def require_entry_open(cls, root: Path) -> None:

@@ -80,6 +80,7 @@ claude-comms = "agent_comms.cli_bridges.claude_launch:main"
 
 [project.entry-points."agent_comms.writer_owned_stores"]
 bridge-delivery = "agent_comms.cli_bridges.shared"
+connector-credentials = "agent_comms.connector_store"
 
 [tool.hatch.build.hooks.custom]
 path = "hatch_build.py"
