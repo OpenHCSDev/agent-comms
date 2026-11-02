@@ -5,8 +5,21 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
+
+
+def follow_git(request):
+    """The foreign forge's branch head and PR ref follow the actual Git push."""
+    for remote in request.get("remotes", ()):
+        row = request["listed"]
+        row["head"] = subprocess.run(
+            ("git", "--git-dir", remote, "rev-parse", f"refs/heads/{row['branch']}"),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        subprocess.run(("git", "--git-dir", remote, "update-ref",
+                        f"refs/pull/{row['number']}/head", row["head"]), check=True)
 
 
 def main():
@@ -20,15 +33,23 @@ def main():
             raise FileNotFoundError("The actual gh executable is required for its option declarations.")
         os.execv(executable, [executable, *arguments])
     repositories = json.loads((directory / "pull_requests.json").read_text())
+    for repository in repositories.values():
+        for request in repository["requests"].values():
+            follow_git(request)
     with (directory / "calls.jsonl").open("a") as calls:
         calls.write(json.dumps(arguments) + "\n")
     if arguments[:2] == ["pr", "create"]:
         repository = arguments[arguments.index("-R") + 1]
         data = repositories[repository]
-        row = data.pop("next_creation")
+        creation = data.pop("next_creation")
+        row = creation["listed"]
         assert "--draft" in arguments and arguments[-2:] == ["--body-file", "-"]
-        data["requests"][str(row["number"])] = {"body": sys.stdin.read(), "listed": row}
+        request = {"body": sys.stdin.read(), "listed": row, "remotes": creation["remotes"]}
+        follow_git(request)
+        data["requests"][str(row["number"])] = request
         (directory / "pull_requests.json").write_text(json.dumps(repositories))
+        if creation["reply_refusal"]:
+            sys.exit(creation["reply_refusal"])
         print(f"https://github.com/{repository}/pull/{row['number']}")
     elif arguments[:2] == ["pr", "view"]:
         repository = arguments[arguments.index("-R") + 1]

@@ -11,21 +11,22 @@ from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from agent_comms_hooks import ToolRefusedError
 
 from .build_identity import RepositoryCommit
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems
+from .nominal.field_codec import FieldCodec, GitCommitText, MalformedRecord, RecordProblems, boundary_decoder
 from .installer.runtime_resolution import PrivateUvProject, StackSources
 from .repo import Checkout, GitCommandError, Repo
 from .repository_name import RepositoryName
+from .thread_identity import ThreadIncarnation
 from .work_branches import WorkBranches
 
 if TYPE_CHECKING:
+    from .team.order import TeamContext
     from .goal_management import Goals
-    from .thread_identity import ThreadIncarnation
     from .todos import HeadReviewRecord, HeadVerdict, Todo
 
 
@@ -111,6 +112,11 @@ class PullRequestHead:
             IntegrationInput.digest_from_message(reader.commit_message(self.head)),
         )
 
+    @property
+    def identity(self) -> PullRequestHead:
+        """Capture repository/PR/commit, not the forge observation's transient draft state."""
+        return PullRequestHead(self.repo, self.pr, self.head)
+
     def holds(self, commit: str) -> bool:
         return self.head.startswith(commit)
 
@@ -157,6 +163,20 @@ class SourceCheckout(Checkout, ABC):
     def materialize(
         cls, source: IntegrationSource, repository: Repo, path: Path
     ) -> SourceCheckout: ...
+
+
+class InputPublication(ABC):
+    """The publication operations a frozen source input requires of its executor."""
+
+    checkout: SourceCheckout
+
+    @abstractmethod
+    def capture(
+        self, context: TeamContext, prepared: UnpublishedInput, carrier: PullRequestHead
+    ) -> CombinedInput: ...
+
+    @abstractmethod
+    def retain_capture(self, inputs: CombinedInput, commit: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -462,6 +482,12 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
     def require_substantive(self, repositories: tuple[Repo, ...]) -> None:
         """Ordinary source comparisons do not require a combined change."""
 
+    def resume_publication(
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
+    ) -> CombinedInput:
+        """An ordinary source record cannot become a combined publication."""
+        raise ToolRefusedError("This input is not a resumable combined publication")
+
     def require_source_reviews(self) -> None:
         """Native promotion and the hosted gate require these same exact source decisions."""
         for source in self.sources:
@@ -510,7 +536,7 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         return f"{self.trailer_name}: {self.canonical}"
 
     @classmethod
-    def from_message(cls, message: str) -> tuple[IntegrationInput, ...]:
+    def from_message(cls, message: str) -> tuple[Self, ...]:
         """Absent is ordinary; any attempted malformed/duplicate trailer refuses."""
         lines = message.rstrip("\n").split("\n")
         marked = tuple(line for line in lines if line.lstrip().startswith(cls.trailer_name))
@@ -523,14 +549,14 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
         return (cls.from_canonical(payload),)
 
     @classmethod
-    def from_canonical(cls, payload: str) -> IntegrationInput:
+    def from_canonical(cls, payload: str) -> Self:
         decoded = FieldCodec.decode(cls, FieldCodec.parse(payload))
         if decoded.canonical != payload:
             raise MalformedRecord("Integration metadata is not canonical.")
         return decoded
 
     @classmethod
-    def at(cls, directory: Path) -> IntegrationInput:
+    def at(cls, directory: Path) -> Self:
         """A derived execution artifact; Git/event validation remains mandatory in CI."""
         return cls.from_canonical((directory / cls.filename).read_text().removesuffix("\n"))
 
@@ -548,10 +574,8 @@ class OrdinaryInput(IntegrationInput):
 
 
 @dataclass(frozen=True)
-class CombinedInput(IntegrationInput):
-    """The actual separate carrier before publication of this immutable source capture."""
-
-    carrier: PullRequestHead
+class SubstantiveInput(IntegrationInput, declared_name=None):
+    """A source cut must change a declared source, before or after publication."""
 
     def require_substantive(self, repositories: tuple[Repo, ...]) -> None:
         """Any captured repository may supply the change; none may fabricate one."""
@@ -560,6 +584,67 @@ class CombinedInput(IntegrationInput):
             for source in self.sources
         ):
             raise ToolRefusedError("The captured sources have no substantive change")
+
+
+@dataclass(frozen=True)
+class UnpublishedInput(SubstantiveInput):
+    """A real source cut whose carrier has not been published, never merge permission."""
+
+    predecessor: RepositoryCommit
+    trailer_name: ClassVar[str] = "Agent-Comms-Unpublished"
+    filename: ClassVar[str] = "unpublished-input.json"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.predecessor.repository != self.local.repository:
+            raise MalformedRecord("The prepared predecessor must belong to the local source")
+
+    @classmethod
+    @boundary_decoder
+    def restore(cls, message: str, fresh: UnpublishedInput) -> UnpublishedInput:
+        """An existing prospective message fixes the cut; absent metadata prepares anew."""
+        recorded = cls.from_message(message)
+        if not recorded:
+            return fresh
+        (frozen,) = recorded
+        if frozen.sources != fresh.sources:
+            raise ToolRefusedError("The prepared source cut changed; preserve and recapture explicitly")
+        return frozen
+
+    def require_current(self, repositories: tuple[Repo, ...]) -> None:
+        """Recheck this same source cut, including during a resumed publication."""
+        for source in self.companions:
+            source.require_tree(Repo.selected(repositories, source.repository.to_wire()))
+        for source in self.sources:
+            repository = Repo.selected(repositories, source.repository.to_wire())
+            if IntegrationSource.main_head(repository) != source.baseline.commit:
+                raise ToolRefusedError("A captured main moved; preserve and recapture inputs")
+            for head in source.heads:
+                head.current()
+        self.require_substantive(repositories)
+
+    def resume_publication(
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
+    ) -> CombinedInput:
+        return run.capture(context, self, carrier)
+
+    def bind(self, repository: Repo, carrier: PullRequestHead) -> CombinedInput:
+        """Bind the actual publication without substituting another source tree or history."""
+        if carrier.repo != self.predecessor.repository:
+            raise ToolRefusedError("The published carrier belongs to another repository")
+        self.local.require_origin(repository)
+        repository.acquire(self.predecessor.commit, carrier.head)
+        if not Repo.descends(repository.checkout, self.predecessor.commit, carrier.head):
+            raise ToolRefusedError("The published carrier dropped its prepared predecessor")
+        self.local.require_ancestry(repository, carrier.head)
+        return CombinedInput(self.sources, carrier.identity)
+
+
+@dataclass(frozen=True)
+class CombinedInput(SubstantiveInput):
+    """The actual separate carrier before publication of this immutable source capture."""
+
+    carrier: PullRequestHead
 
     @property
     def combined(self) -> bool:
@@ -583,6 +668,17 @@ class CombinedInput(IntegrationInput):
             head.same_pull_request(self.carrier) for source in self.sources for head in source.heads
         ):
             raise MalformedRecord("The combined carrier is separate from every source member")
+
+    def resume_publication(
+        self, run: InputPublication, context: TeamContext, carrier: PullRequestHead
+    ) -> CombinedInput:
+        core = Repo.of(run.checkout.path)
+        commit = Repo.git(run.checkout.path, "rev-parse", "HEAD").strip()
+        if carrier.head not in (self.carrier.head, commit):
+            raise ToolRefusedError("The published carrier moved outside this captured attempt")
+        self.require_carrier(core, PullRequestHead(core.github, carrier.pr, commit))
+        run.retain_capture(self, commit)
+        return self
 
     def require_local_candidate(self, core: Repo, carrier: PullRequestHead) -> None:
         self.local.require_origin(core)

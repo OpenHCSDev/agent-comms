@@ -1167,12 +1167,9 @@ class NewPullRequestSelection(PullRequestSelection):
             title: str, body_file: str) -> str:
         if not title or not body_file:
             raise ValueError("Creating a PR requires --title and --body-file.")
-        if source.github != todo.repo:
-            sys.exit(f'Refused: a new PR is created in {todo.repo.to_wire()}, not '
-                     f'{source.github.to_wire()}; adopt a companion PR with --existing.')
         return todo.order.checked().open_pull_request(
             todo, source, title, Path(body_file).read_text(),
-            ctx.comms.goals.todos, ctx.incarnation)
+            ctx.comms.goals.todos, ctx.incarnation).url
 
 
 @dataclass(frozen=True)
@@ -1188,15 +1185,15 @@ class ExistingPullRequestSelection(PullRequestSelection):
         if title or body_file:
             raise ValueError("--existing does not create or edit the PR; omit title and body.")
         link = PullRequestLink.existing(source.github, self.number)
-        ctx.comms.goals.todos.apply(todo.id, RecordPullRequest(
-            todo.revision, ctx.incarnation, link, todo.held().generation))
+        ctx.comms.goals.todos.apply(todo.id, RecordPullRequest.for_order(
+            todo, ctx.incarnation, link))
         return link.url
 
 
 @dataclass(frozen=True, kw_only=True)
 class PullRequestVerb(OrderVerb, declared_name="pr"):
-    help = ("create a PR in the order's repository, or adopt an existing one in it or a "
-            "registered companion, and record its GitHub identity on this order")
+    help = ("create or adopt a PR in the owned project checkout, "
+            "and record its GitHub identity on this order")
     pid: Annotated[str, Argument(flags=("pid",))]
     title: Annotated[str, Argument(flags=("--title",))] = ""
     body_file: Annotated[str, Argument(flags=("--body-file",))] = ""
@@ -1218,8 +1215,7 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
         source = Repo.of(Path.cwd())
         holder = ctx.comms.registry.require(todo.held().owner)
         storage = ctx.comms.registry.storage_rule
-        if not storage.owns_checkout(holder, source.checkout, source.github, RepositoryReads()):
-            raise ValueError(f"Run order pr from a source checkout owned by {holder.name}.")
+        storage.require_owned_checkout(holder, source.checkout, source.github, RepositoryReads())
         print(self.existing.run(ctx, todo, source, self.title, self.body_file))
 
 

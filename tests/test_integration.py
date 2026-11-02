@@ -1,11 +1,13 @@
 """Integration policy at real TOML/Git/gh boundaries; no patched Core methods."""
 
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import replace
 import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 import tomllib
 
@@ -16,13 +18,16 @@ from agent_comms import integration
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
-from agent_comms.repo import Repo, UnavailableCommitError
+from agent_comms.repo import GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import (
     DraftListedPullRequest, MergedListedPullRequest, PullRequestCommit, QualifiedHeadVerdict,
-    ReviewedHeadVerdict, UnmergedListedPullRequest, VerdictReason,
+    ReviewedHeadVerdict, TodoError, UnmergedListedPullRequest, VerdictReason,
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.test_lease import TestLease
+from agent_comms.shell_effects import StorageDenied
+from agent_comms.errors import TodoConflict
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime
@@ -506,6 +511,166 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
     assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
 
 
+def test_first_publication_requires_the_actual_holder_not_creator_authority(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    pair = replace(pair, context=pair.context.model_copy(update={"actor": PeerCaller("lead")}))
+    primary = pair.context.comms.goals.todos.get("P3")
+    primary.require_actor(pair.context.actor_identity, primary.held().generation)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    with pytest.raises(TodoConflict):
+        pair.publish(pair.output)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert not pair.output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 0
+
+
+def test_publication_refuses_sibling_checkout_before_commit_push_or_creation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    with pytest.raises(StorageDenied):
+        pair.publish(pair.output)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert pair.core.git(pair.checkout.path, "status", "--porcelain") == ""
+    assert not pair.output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 0
+
+
+def test_existing_carrier_capture_refuses_sibling_checkout_before_mutation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", checkout_owner="lead")
+    carrier = pair.publish_carrier(pair.github)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    with pytest.raises(StorageDenied):
+        integration.IntegrationRun(pair.checkout, pair.output, "Refuse foreign capture").qualify(
+            pair.context, ("P3",), carrier=carrier)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not pair.output.exists()
+
+
+@pytest.mark.parametrize("reply_refusal", ("", "Connection lost after actual PR creation"))
+def test_first_publication_recovers_actual_carrier_without_repeating_creation(
+    mutual_sources: MutualSources, reply_refusal: str,
+) -> None:
+    pair = mutual_sources.starting_publication(reply_refusal)
+    with pytest.raises(TodoError) if reply_refusal else nullcontext():
+        pair.publish(pair.output)
+    inputs = pair.publish(pair.output.with_name("resumed-publication"))
+    commit = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    current = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    assert current.head == commit
+    inputs.validate(pair.context.repos, current)
+    linked = pair.context.comms.goals.todos.get("P3").order.checked().pull_requests
+    assert inputs.carrier.repo == pair.core.github
+    assert inputs.carrier.pr == pair.carrier_number
+    assert any(link.repo == current.repo and link.number == current.pr for link in linked)
+    assert pair.publish(pair.output.with_name("verified-publication")) == inputs
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == commit
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+    assert FieldCodec.decode(IntegrationInput, FieldCodec.parse(
+        (pair.output.with_name("verified-publication") / "input.json").read_bytes())) == inputs
+
+
+def test_publication_resumes_captured_commit_after_real_push_refusal(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("Reply lost after creation")
+    with pytest.raises(TodoError):
+        pair.publish(pair.output)
+    refusal = shutil.which("false")
+    assert refusal, "The foreign Git refusal fixture requires the false executable"
+    hook = pair.core.remote_path / "hooks" / "pre-receive"
+    hook.symlink_to(refusal)
+    with pytest.raises(GitCommandError):
+        pair.publish(pair.output.with_name("refused-final-push"))
+    captured = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    hook.unlink()
+    inputs = pair.publish(pair.output.with_name("resumed-final-push"))
+    current = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    assert current.head == captured
+    inputs.validate(pair.context.repos, current)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == captured
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_publication_recovery_refuses_changed_companion_without_recreating(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("Reply lost after creation")
+    with pytest.raises(TodoError):
+        pair.publish(pair.output)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    changed = pair.client.publish_change("Move the original source head", *pair.client.write_files({
+        Path("src/workflow.py"): 'def run() -> str:\n    return "different source cut"\n',
+    }))
+    stamp = "2026-10-24T00:00:00Z"
+    pair.github.put(pair.client.github, DraftListedPullRequest(
+        pair.client.number, "feature", changed, stamp, "main", reviewable_times=(stamp,)))
+    with pytest.raises(integration.IntegrationFailed):
+        pair.publish(pair.output.with_name("changed-source-refusal"))
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_prepared_attempt_without_discoverable_carrier_never_repeats_creation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    prepared = integration.IntegrationRun(pair.checkout, pair.output, "Interrupted publication").prepare(
+        pair.context, ("P3",))
+    pair.core.git(pair.checkout.path, "commit", "--allow-empty", "-m", prepared.trailer)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    with pytest.raises(integration.IntegrationFailed):
+        pair.publish(pair.output.with_name("missing-carrier-refusal"))
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 0
+
+
+def test_publication_cli_uses_explicit_actor_and_real_source_cut(
+    mutual_sources: MutualSources, tmp_path: Path,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    body = tmp_path / "publication-body.md"
+    body.write_text("The real companion migration supplies the substantive source change.\n")
+    command = (str(Path(sys.executable).with_name("agent-comms-integrate")),
+               "--publish", "P3", "--from", "worker", "--comms-root", str(pair.context.root),
+               "--checkout", str(pair.checkout.path), "--output", str(pair.output),
+               "--risk", "Exercise the actual explicit-actor publication entry",
+               "--title", "Publish the selected companion source", "--body-file", str(body))
+    result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    inputs = IntegrationInput.at(pair.output)
+    inputs.validate(pair.context.repos, PullRequestHead.at(pair.core.github, pair.carrier_number))
+    assert pair.context.comms.goals.todos.get("P3").held().owner == "worker"
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_companion_source_cut_prepares_before_any_carrier_is_published(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources
+    prepared = integration.IntegrationRun(
+        pair.checkout, pair.output, "Prepare the real source cut before first publication"
+    ).prepare(pair.context, ("P3",))
+    assert prepared.predecessor.repository == pair.core.github
+    assert prepared.predecessor.commit == pair.core.main_commit
+    assert prepared.local.heads == ()
+    assert not prepared.local.has_changes(pair.core)
+    assert prepared.source(pair.client.github).has_changes(pair.client)
+    assert IntegrationInput.from_canonical(prepared.canonical) == prepared
+    source = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+    with pytest.raises(ToolRefusedError):
+        prepared.require_carrier(pair.core, source)
+
+
 def test_companion_only_capture_preserves_native_review_and_empty_test_selection(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
 ) -> None:
@@ -518,6 +683,9 @@ def test_companion_only_capture_preserves_native_review_and_empty_test_selection
     with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
         MergeHeadReview.require_combined(carrier, pair.context.repos)
     assert pair.checkout.test_files(inputs.local.baseline.commit, inputs.local.heads) == ()
+    with pytest.raises(integration.IntegrationFailed):
+        integration.IntegrationRun(pair.checkout, pair.output, "An empty union cannot run a suite").test(
+            inputs.local.baseline.commit, inputs.local.heads, TestLease.default_start, 1)
 
 
 def test_qualification_refuses_an_entirely_unchanged_source_set(

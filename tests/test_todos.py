@@ -474,7 +474,7 @@ def adopt_pr(ctx, pid, number):
 
 
 def test_order_pr_adopts_a_registered_companion_once(pr_team, proof_build_checkouts,
-                                                     github_cli, tmp_path):
+                                                     github_cli):
     """An agent-comms order records a registered Toad PR from its companion checkout; an
     unregistered repository's PR is refused at the Todo write; repeating changes nothing."""
     core = pr_team.repos[0]
@@ -500,11 +500,7 @@ def test_order_pr_adopts_a_registered_companion_once(pr_team, proof_build_checko
         repository.git(repository.checkout, 'worktree', 'add', '-q', '-b', 'companion',
                        str(checkout))
 
-    body = tmp_path / "body.md"
-    body.write_text("A companion PR is never created by this order.")
-    with pytest.raises(SystemExit, match="adopt a companion PR with --existing"):
-        order_pr(ctx, toad_checkout, original.id, "--title", "Companion", "--body-file", str(body))
-    with pytest.raises(TodoError, match="openhcsdev/textual is not a repository of this team project"):
+    with pytest.raises(TodoError):
         order_pr(ctx, textual_checkout, original.id, "--existing", "1")
     assert TodoStore(ctx.root).get(original.id) == original
 

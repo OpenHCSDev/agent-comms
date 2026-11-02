@@ -13,6 +13,15 @@ from agent_comms.todos import ListedPullRequest, UnmergedListedPullRequest
 
 
 @dataclass(frozen=True)
+class PullRequestCreation:
+    """The fixture's creation response, including the real foreign transport outcomes."""
+
+    listed: ListedPullRequest
+    remotes: tuple[Path, ...] = ()
+    reply_refusal: str = ""
+
+
+@dataclass(frozen=True)
 class GitHubFixture:
     directory: Path
 
@@ -42,10 +51,12 @@ class GitHubFixture:
         data[repository.to_wire()]["requests"][str(number)]["read_refusal"] = refusal
         self.path.write_text(json.dumps(data))
 
-    def create_next(self, repository: RepositoryName, row: ListedPullRequest) -> None:
-        """The external forge will create this real checkout's declared PR, not edit another."""
+    def create_next(self, repository: RepositoryName, row: ListedPullRequest, *,
+                    remotes: tuple[Path, ...] = (), reply_refusal: str = "") -> None:
+        """The forge can follow a real pushed branch and lose its reply after creating it."""
         data = json.loads(self.path.read_text())
-        data[repository.to_wire()]["next_creation"] = FieldCodec.encode(row)
+        data[repository.to_wire()]["next_creation"] = FieldCodec.encode(
+            PullRequestCreation(row, remotes, reply_refusal))
         self.path.write_text(json.dumps(data))
 
     def refuse_status(self, repository: RepositoryName, head: str, context: str,
