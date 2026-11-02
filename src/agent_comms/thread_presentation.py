@@ -16,7 +16,6 @@ from .child_process import ProcessIdentity
 from .message_reference import MessageReference
 
 if TYPE_CHECKING:
-    from .session_load import SessionLoadPlan
     from .presentation import MessageNotification
     from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
@@ -151,7 +150,8 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
         return False
 
     async def reload_if_superseded(
-        self, previous: SessionLoadPlan, reload: Callable[[SessionLoadPlan], Awaitable[None]],
+        self, previous: session_load.SessionLoadPlan,
+        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
     ) -> None:
         """An unavailable owner cannot supply a new existing-session load."""
 
@@ -193,7 +193,8 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
         return replacement.replaces(self)
 
     async def reload_if_superseded(
-        self, previous: SessionLoadPlan, reload: Callable[[SessionLoadPlan], Awaitable[None]],
+        self, previous: session_load.SessionLoadPlan,
+        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
     ) -> None:
         await previous.reload_if_superseded(self, reload)
 
@@ -302,4 +303,9 @@ class NoThreadPresentation(ThreadPresentation):
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
         return self
+
+
+# Session-load annotations use the module namespace. Publish these declarations
+# before loading its coordinator dependencies, which consume our status classes.
+import agent_comms.session_load as session_load
 
