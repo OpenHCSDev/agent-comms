@@ -6070,6 +6070,105 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         """)
         return StoryFacts.capture(db.execute(query, problems))
 
+class MaintainsWork(TodoOperation, declared_name=None):
+    """Shared maintenance of a problem: the actor must work within the problem's request."""
+
+    actor: ThreadIncarnation
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        current.require_maintainer(self.actor)
+        super().validate(db, current, store)
+
+
+@dataclass(frozen=True)
+class DropTodo(ReleasesHold):
+    """A newer live order to the same holder replaces an older one, without a strike."""
+
+    actor: ThreadIncarnation
+    newer: ExpectedProblem
+    replacing_message: MessageId
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        super().validate(db, current, store)
+        store._current(db, self.newer.problem).require_revision(self.newer.expected_revision)
+
+    def changed(self, current: Todo) -> Todo:
+        return replace(
+            current, assignment=None, revision=current.revision + 1,
+            order=current.order.copy_as(DroppedProblemOrder, replacing_message=self.replacing_message))
+
+    def history_events(self, current: Todo) -> tuple[ReleaseTodo, ...]:
+        return (ReleaseTodo(current.revision, self.actor, current.held(), StrikeReason(
+            f"Order {current.id} replaced by newer {self.newer.problem} without a strike.")),)
+
+
+@dataclass(frozen=True)
+class FoldSourceTodo(MaintainsWork, ReleasesHold):
+    """A problem folded into another closes with the reason they are one problem."""
+
+    actor: ThreadIncarnation
+    into: ExpectedProblem
+    why: str
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        super().validate(db, current, store)
+        target = store._current(db, self.into.problem)
+        target.require_revision(self.into.expected_revision)
+        current.require_fold(target, self.why)
+
+    def changed(self, current: Todo) -> Todo:
+        return replace(current, state=DoneTodoState, assignment=None, revision=current.revision + 1,
+                       order=current.order.folded(self.into.problem, self.why))
+
+
+@dataclass(frozen=True)
+class FoldTargetTodo(MaintainsWork, ReleasesHold):
+    """The problem a fold lands in keeps the folded problem's text."""
+
+    actor: ThreadIncarnation
+    source: str
+    source_text: str
+
+    def changed(self, current: Todo) -> Todo:
+        return replace(current, text=f"{current.text} [+{self.source}: {self.source_text}]",
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class LinkTodo(MaintainsWork, ReleasesHold):
+    """A problem takes over the order its holder already has, with that order's history."""
+
+    actor: ThreadIncarnation
+    sent: Todo
+    unit: str
+
+    def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
+        """Both holds change: the order's own holder and the problem's."""
+        super().require_hold_release(current, snapshot)
+        self.sent.current_holder.require_release(self.actor, self.sent, snapshot)
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        store._current(db, self.sent.id).require_result(self.sent)
+        super().validate(db, current, store)
+
+    def changed(self, current: Todo) -> Todo:
+        current.state.require_open(current)
+        if current.holder not in (None, self.unit):
+            raise TodoError(f"{current.id} is already held by {current.holder}")
+        return replace(current, order=current.order.linked(self.sent.order),
+                       assignment=self.sent.held(), request=self.sent.request,
+                       review_at=self.sent.review_at, revision=current.revision + 1)
+
+    def write(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> Todo:
+        """The linked problem also carries the order's declarations and messages."""
+        result = super().write(db, current, store)
+        source = store._current(db, self.sent.id)
+        for event in (*source.history.events(source.id, CheckedProblemOrder),
+                      *source.history.events(source.id, OrderMessage)):
+            StoredOrderStory.insert_values(db, problem=current.id, event=event)
+        return result
+
+
 
 class TodoHistory:
     """Shared history queries; a board snapshot overrides only its aggregate lookup."""
@@ -6303,65 +6402,24 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         newer = self.resolve_order(commander, unit, by)
         if not old.pending or not newer.pending or newer.order.at.at <= old.order.at.at:
             raise TodoError('Only a live newer order to the same unit replaces an old one.')
-        with self.writing() as db:
-            current = self._current(db, old.id)
-            current.require_result(old)
-            self._current(db, newer.id).require_result(newer)
-            current.current_holder.require_release(
-                commander, current, self.registry_cut())
-            result = replace(
-                current,
-                order=current.order.copy_as(
-                    DroppedProblemOrder, replacing_message=newer.latest_message.message_id
-                ),
-                assignment=None,
-                revision=current.revision + 1,
-            )
-            StoredOrderStory.insert_values(db, problem=current.id, event=ReleaseTodo(
-                current.revision, commander, current.held(),
-                StrikeReason(f'Order {problem} replaced by newer {by} without a strike.'),
-            ))
-            StoredOrderStory.archive(db, current, result.order)
-            result.upsert(db)
-            return self._snapshot_rows(db, (result,))[0]
+        return self.apply_together((ProblemCommand(old.id, DropTodo(
+            old.revision, commander, ExpectedProblem(newer.id, newer.revision),
+            newer.latest_message.message_id)),))[0]
 
     def fold(self, commander: ThreadIncarnation, problem: str, into: str, why: str) -> None:
-        with self.writing() as db:
-            source, target = self._current(db, problem), self._current(db, into)
-            source.require_maintainer(commander)
-            target.require_maintainer(commander)
-            source.require_fold(target, why)
-            snapshot = self.registry_cut()
-            source.current_holder.require_release(commander, source, snapshot)
-            target.current_holder.require_release(commander, target, snapshot)
-            replace(target, text=f'{target.text} [+{source.id}: {source.text}]',
-                    revision=target.revision + 1).upsert(db)
-            replace(source, state=DoneTodoState, order=source.order.folded(into, why),
-                    assignment=None, revision=source.revision + 1).upsert(db)
+        source, target = self.get(problem), self.get(into)
+        self.apply_together((
+            ProblemCommand(source.id, FoldSourceTodo(
+                source.revision, commander, ExpectedProblem(target.id, target.revision), why)),
+            ProblemCommand(target.id, FoldTargetTodo(target.revision, commander, source.id, source.text)),
+        ))
 
     def link(
         self, commander: ThreadIncarnation, problem: str, unit: str, held_problem: str
     ) -> None:
         sent = self.resolve_order(commander, unit, held_problem)
-        with self.writing() as db:
-            source, target = self._current(db, sent.id), self._current(db, problem)
-            source.require_result(sent)
-            snapshot = self.registry_cut()
-            source.current_holder.require_release(commander, source, snapshot)
-            target.current_holder.require_release(commander, target, snapshot)
-            target.require_maintainer(commander)
-            target.state.require_open(target)
-            if target.holder not in (None, unit):
-                raise TodoError(f'{problem} is already held by {target.holder}')
-            linked = target.order.linked(source.order)
-            StoredOrderStory.archive(db, target, linked)
-            for declaration in source.history.events(source.id, CheckedProblemOrder):
-                StoredOrderStory.insert_values(db, problem=target.id, event=declaration)
-            for message in source.history.events(source.id, OrderMessage):
-                StoredOrderStory.insert_values(db, problem=target.id, event=message)
-            replace(target, order=linked,
-                    assignment=source.held(), request=source.request, review_at=source.review_at,
-                    revision=target.revision + 1).upsert(db)
+        target = self.get(problem)
+        self.apply_together((ProblemCommand(target.id, LinkTodo(target.revision, commander, sent, unit)),))
 
     @staticmethod
     def _open(db: sqlite3.Connection, where: str, parameters: tuple,
