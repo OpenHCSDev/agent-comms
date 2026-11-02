@@ -442,7 +442,8 @@ def test_install_swap_keeps_the_claim_and_resumes_the_same_process_on_the_new_ru
                 )
             bridges.require_resumed()
             assert bridges.failures == ()
-            resumed = InspectSession().information(claim.socket_path)
+            # The install no longer waits for the bridge; the bridge resumes itself.
+            resumed = InspectSession().awaited(claim, lambda claim: None)
             assert resumed.process == observed.process
             assert resumed.process.pid == child.pid
             assert resumed.runtime.prefix == new.prefix.resolve()
