@@ -69,6 +69,7 @@ from .lifecycle import LifecycleState
 from .locked_store import (
     DeclaredFile,
     DurableFile,
+    ExternalFile,
     FilesRequest,
     PublishedSQLiteFile,
     RegistryFile,
@@ -3264,7 +3265,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             return schema.reconcile_schema(db, cls.schema_change(path), rebuild=rebuild)
 
 
-class ExternalStore(DurableFile, DeclaredFamily, affix="Store"):
+class ExternalStore(ExternalFile, DeclaredFamily, affix="Store"):
     """Durable files outside the bus that their own writer owns. An installed package declares
     each one through the ``agent_comms.writer_owned_stores`` entry point; the installer
     inventories, backs up, retains and restores the selected ones through these resources."""
