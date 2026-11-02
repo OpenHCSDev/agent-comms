@@ -1,6 +1,12 @@
-from agent_comms.transcripts import RecordedPageSource
+from agent_comms.transcripts import (
+    EarlierThan,
+    LaterThan,
+    NativeTranscriptCursor,
+    Through,
+    WireTranscriptCursor,
+)
 from agent_comms.repo import Checkout
-from conftest import transcript_records
+from conftest import installed_comms, transcript_records
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.coordination_errors import TranscriptChanged
 import json
@@ -8,10 +14,8 @@ from dataclasses import replace
 
 import pytest
 
-from conftest import installed_comms
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.transcripts import EarlierThan, LaterThan, NativeTranscriptCursor, Through, WireTranscriptCursor
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.nominal.field_codec import FieldCodec

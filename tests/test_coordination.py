@@ -1,6 +1,6 @@
 """Slice-1 store_files, direct-SQL authority and crash/reopen shape tests."""
 
-from agent_comms.nominal.field_codec import SnapshotExclude
+from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId, SnapshotExclude
 
 import os
 import sqlite3
@@ -67,7 +67,6 @@ from agent_comms.execution_states import (
     PendingExecution,
 )
 from agent_comms.attempt_states import AttemptState, LiveAttempt
-from agent_comms.nominal.field_codec import AssignmentId, FieldCodec, MessageId
 from agent_comms.typed_table import HeldBusFile, JsonStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.obligation_states import (

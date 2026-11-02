@@ -13,7 +13,7 @@ from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from conftest import accept_initial
+from conftest import accept_initial, publish_initial, responder
 from agent_comms.coordination_errors import (
     IdentityConflict,
     StaleFence,
@@ -40,7 +40,6 @@ from agent_comms.registration import Registration
 from agent_comms.selected_source_batch import SelectedSource
 from agent_comms.threads import Thread
 from bus_record_fixture import prepare_native_comms
-from conftest import publish_initial, responder
 
 # Private bus publication requires POSIX owner/mode ancestry; Windows stat
 # emulation cannot attest this boundary or exercise its durability contract.
