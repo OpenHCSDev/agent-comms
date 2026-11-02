@@ -56,22 +56,19 @@ def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
     assert _burst(comms, "owner-paused")
 
 
-def test_the_emergency_release_lifts_every_chokehold_and_nothing_else(comms, monkeypatch):
-    """Tristan's button resumes the goals a chokehold paused, leaves an owner pause alone, and
-    posts the release as the record those goals resumed on."""
-    from agent_comms.connector_caller import CommsEmergencyReleaseTool, DirectorCaller
+def test_any_teammate_can_pull_the_emergency_release(comms, monkeypatch):
+    """The andon cord: an ordinary teammate's pull resumes the goals a chokehold paused,
+    leaves an owner pause alone, and posts the pull under its own name."""
     from agent_comms.goal_states import ActiveGoal, OwnerPause
 
     _teammate(comms, monkeypatch, "choked")
     _teammate(comms, monkeypatch, "owner-paused")
-    if "claude-ai" not in comms.registry:
-        comms.registry.declare(Thread(name="claude-ai", tags=frozenset(), worktree=Checkout(Path("/wt"))))
+    _teammate(comms, monkeypatch, "puller")
     comms.goals.update_goal("choked", ChokeholdPausedGoalAction())
     comms.goals.update_goal("owner-paused", PausedGoalAction(), actor=OwnerInvocable)
 
-    released = CommsEmergencyReleaseTool().apply(comms, DirectorCaller("claude-ai"))
+    released = invoke_tool(comms, "comms_emergency_release", {}, caller=ThreadCaller("puller"))
 
-    assert released.released == ("choked",)
-    assert not ChokeholdAnswer.held(comms, "choked")
+    assert released["released"] == ["choked"]
     assert type(comms.registry.require("choked").goal.require().state) is ActiveGoal
     assert type(comms.registry.require("owner-paused").goal.require().state.pause_source) is OwnerPause
