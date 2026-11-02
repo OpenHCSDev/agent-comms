@@ -3,9 +3,6 @@
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
-
-import os
-
 import pytest
 
 from agent_comms.acp import CommsAgent
@@ -66,10 +63,6 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
     assert not comms.registry.snapshot().threads
 
 
-@pytest.mark.skipif(
-    not os.environ.get("AC_NATIVE_COPIED_PACKAGE"),
-    reason="Prepared native package required; no provider request",
-)
 async def test_configured_acp_new_and_retained_attach_use_same_checked_root(
     tmp_path, native_runtime_package
 ):

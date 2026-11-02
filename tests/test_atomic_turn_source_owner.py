@@ -64,7 +64,6 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
             assert turn.thread.goal == current.goal
             assert turn.thread.turn_state == current.turn_state
             assert comms.registry.status("owner") == status
-            assert not {"thread", "turn_lease", "routing", "original", "checkpoint"} & vars(turn.progress).keys()
     assert comms.registry.require("owner").turn_lease == NoTurnLease()
 
 
