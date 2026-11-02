@@ -250,7 +250,8 @@ async def test_subscription_replay_uses_requested_alias(
         assert identity_position < replay_position
         assert len(snapshots) == 1
         session, snapshot = snapshots[0]
-        assert session == requested == snapshot.identity.requested_name
+        assert session == requested
+        assert snapshot.identity.requested_name == "renamed"
         assert snapshot.identity.thread.incarnation == comms.registry.require("renamed").incarnation
         assert [event.text for event in snapshot.page.events] == ["An original saved answer"]
     finally:
