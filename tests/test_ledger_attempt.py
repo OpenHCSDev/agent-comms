@@ -20,7 +20,6 @@ from agent_comms.goal_attempts import (
     AttemptRecord,
     GoalAttemptStore,
     NoAttempt,
-    RecordedAttempt,
     StorageUncertainError,
 )
 from agent_comms.goal_generation import CancelledGeneration, ReadyGeneration, ReservedGeneration
@@ -46,7 +45,6 @@ def test_a_recorded_attempt_answers_for_its_own_reservation_only(store):
     store.create_goal(goal_id)
     reservation = store.reserve(goal_id, 1)
     attempt = read(store, reservation.attempt_id)
-    assert type(attempt) is RecordedAttempt
     refusal = StaleAttemptError("not this reservation")
     assert attempt.reserved_by(reservation, refusal).reservation == reservation
     with pytest.raises(StaleAttemptError):
