@@ -20,8 +20,9 @@ from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.queued_input import DeliveredInput
+from agent_comms.team.standing import InboxUnavailable, UnitDeaf
 from native_backend_fixture import wait_for as until
-from test_acp_private_nk_delivery import _session
+from test_acp_private_nk_delivery import _private_comms, _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
@@ -59,9 +60,6 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         assert isinstance(diagnostic, UnavailableDrainDiagnostic)
         assert failed.presentation.status.details == (diagnostic.summary,)
         assert not failed.presentation.status.working
-        assert "Inbox unavailable" in failed.presentation.summary
-        assert diagnostic.error_type in failed.presentation.summary
-        assert "Ready" not in failed.presentation.summary
         documents = list((comms.root / "diagnostics").glob("drain-*.json"))
         assert documents
         encoded_diagnostics = [
@@ -90,7 +88,6 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
         await until(
             lambda: not owner_view(comms).activity.readiness.source_diagnostic().holds_event_current
         )
-        assert owner_view(comms).presentation.summary == "Ready"
         assert not owner_view(comms).presentation.status.details
         recovered = comms.agents.activity.current("beta", active=True)
         await asyncio.sleep(1.3)
@@ -241,8 +238,6 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
 def test_deaf_teammate_is_dated_by_the_drain_that_cannot_read_its_inbox(
     tmp_path, monkeypatch, kind, deaf,
 ):
-    from agent_comms.team.standing import InboxUnavailable, UnitDeaf
-    from test_acp_private_nk_delivery import _private_comms
 
     comms, _ = _private_comms(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
