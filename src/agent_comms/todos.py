@@ -2837,10 +2837,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return tuple(self.merged(merged.sha) for merged in candidates if repo.contains(merged.sha))
 
     def open_pull_request(self, todo: Todo, source: Repo, title: str, body: str,
-                          store: TodoStore, actor: ThreadIncarnation) -> str:
-        """Create once; record the returned identity on this order, not in its prose."""
+                          store: TodoStore, actor: ThreadIncarnation) -> PullRequestLink:
+        """Create once; retain and return its nominal identity, never reparse our own URL."""
         todo.require_actor(actor, todo.held().generation)
         self.require_linkable()
+        RecordPullRequest.require_repository(store.registry_cut().commander_project,
+                                             todo, source.github)
         created = subprocess.run(
             ("gh", "pr", "create", "--draft", "-R", source.github.to_wire(),
              "--title", title, "--body-file", "-"),
@@ -2851,13 +2853,12 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
             raise TodoError(created.stderr.strip() or "Order pull request creation failed.")
         url = created.stdout.strip()
         try:
-            store.apply(todo.id, RecordPullRequest(todo.revision, actor,
-                                                  PullRequestLink.created(source.github, url),
-                                                  todo.held().generation))
+            link = PullRequestLink.created(source.github, url)
+            store.apply(todo.id, RecordPullRequest.for_order(todo, actor, link))
         except (ValueError, TodoError, subprocess.SubprocessError) as error:
             raise TodoError(f"Created {url}, but recording its link failed: {error}. "
                              "Use order pr --existing; do not create another PR.") from error
-        return url
+        return link
 
     def work_instructions(self) -> tuple[str, ...]:
         return (f"Owner: {self.owner.to_wire()}",
@@ -5350,12 +5351,21 @@ class RecordPullRequest(TodoCommand):
     link: PullRequestLink
     generation: GoalId
 
+    @classmethod
+    def for_order(cls, todo: Todo, actor: ThreadIncarnation, link: PullRequestLink) -> Self:
+        """Creation and adoption derive the same revision and hold from the actual order."""
+        return cls(todo.revision, actor, link, todo.held().generation)
+
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """A companion link is checked against the registered project under the write."""
-        project = store.registry_cut().commander_project
-        if self.link.repo not in project.linkable(current.repo):
-            raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this teammate "
-                            f"project; {current.id} links only registered repositories.")
+        self.require_repository(store.registry_cut().commander_project, current, self.link.repo)
+
+    @staticmethod
+    def require_repository(project: TeamProject, todo: Todo, repository: RepositoryName) -> None:
+        """Creation preflight and the transactional link share the project's admission rule."""
+        if repository not in project.linkable(todo.repo):
+            raise TodoError(f"{repository.to_wire()} is not a repository of this teammate "
+                            f"project; {todo.id} links only registered repositories.")
 
     def changed(self, current: Todo) -> Todo:
         current.require_actor(self.actor, self.generation)

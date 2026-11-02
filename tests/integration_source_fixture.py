@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 import sys
 import time
+from typing import Self
 
 import pytest
 
@@ -44,6 +45,21 @@ class MutualSources:
             self.carrier_number, "combined", commit, stamp, "main", reviewable_times=(stamp,),
         ))
         return PullRequestHead(self.core.github, self.carrier_number, commit)
+
+    def starting_publication(self, reply_refusal: str) -> Self:
+        """The forge follows the pushed carrier branch, including an actually lost reply."""
+        self.core.git(self.checkout.path, "switch", "-c", "publish-carrier")
+        stamp = "2026-10-24T00:00:00Z"
+        self.github.create_next(self.core.github, DraftListedPullRequest(
+            self.carrier_number, "publish-carrier", self.core.main_commit, stamp, "main",
+            reviewable_times=(stamp,)), remotes=(self.core.remote_path,),
+            reply_refusal=reply_refusal)
+        return replace(self, context=self.context.model_copy(update={"actor": PeerCaller("worker")}))
+
+    def publish(self, output: Path) -> CombinedInput:
+        return IntegrationRun(self.checkout, output, "Actual companion-only first publication").publish(
+            self.context, ("P3",), title="Publish the actual paired source cut",
+            body="The client migration is substantive; Core retains its actual source cut.")
 
     def prepare_carrier(self, problems: tuple[str, ...]) -> PullRequestHead:
         """Fixture setup owns an actual published combination before production capture."""

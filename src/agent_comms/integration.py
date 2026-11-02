@@ -45,7 +45,8 @@ from .repo import DetachedStart, GitCommandError, Repo
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease
-from .todos import CarriedHeadVerdict, PullRequests, StoredHeadReview, VerdictReason
+from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, VerdictReason
+from .tool_caller import PeerCaller
 from .work_branches import WorkBranches
 
 
@@ -180,6 +181,15 @@ class IntegrationCheckout(SourceCheckout):
         checkout = cls.create(repository, path, source.candidate_commit)
         source.prepare_candidate(checkout)
         return checkout
+
+    def publication_branch(self) -> str:
+        """First publication and recovery require an isolated attached non-main branch."""
+        self.require_editable()
+        branches = WorkBranches(self.path).head.checked_branch()
+        if len(branches) != 1 or branches[0] == WorkBranches.main:
+            raise IntegrationFailed("First publication requires an isolated attached non-main branch")
+        (branch,) = branches
+        return branch
 
     def include(self, head: PullRequestHead) -> None:
         """Fetch exactly the captured member; Git, not a patch heuristic, combines it."""
@@ -800,22 +810,23 @@ class IntegrationRun:
                 context.comms.goals.todos, candidates
             )
             for head in approved:
-                if any(head.same_pull_request(excluded) for excluded in excluded_carriers):
-                    continue
                 for container in containers:
                     if container.repository == repo.github:
                         repo.acquire(head.head, container.commit)
                         if Repo.descends(repo.checkout, head.head, container.commit):
                             selected.append(head)
             heads[repo.github] = tuple(
-                sorted({head.pr: head for head in selected}.values(), key=lambda head: head.pr)
+                sorted({head.pr: head for head in selected
+                        if not any(head.same_pull_request(excluded)
+                                   for excluded in excluded_carriers)}.values(),
+                       key=lambda head: head.pr)
             )
         self.output.mkdir(parents=True, exist_ok=False)
         IntegrationCheckout.create(
             core, BaseSide.checkout(self.output, core.github), base
         )
         tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
-        resolved = {companion.repo: companion for companion in companions}
+        resolved = {companion.repo: companion.identity for companion in companions}
         if len(resolved) != len(companions) or set(resolved) - companion_repositories.keys():
             raise IntegrationFailed(
                 "Select at most one actual carrier per declared companion repository"
@@ -852,17 +863,7 @@ class IntegrationRun:
             RepositoryCommit(core.github, candidate_commit),
         )
         inputs.local.require_ancestry(core, candidate_commit)
-        for source in inputs.companions:
-            source.require_tree(repositories[source.repository])
-        # Revalidate original sources before attaching the shared value's payload.
-        for source in inputs.sources:
-            repo = repositories[source.repository]
-            if IntegrationSource.main_head(repo) != source.baseline.commit:
-                raise IntegrationFailed(
-                    "A captured main moved; preserve this failed attempt and recapture"
-                )
-            for head in source.heads:
-                head.current()
+        inputs.require_current(tuple(repositories.values()))
         current_todos = tuple(context.comms.goals.todos.get(todo.id) for todo in todos)
         current_snapshot = context.comms.registry.snapshot()
         for todo in current_todos:
@@ -871,7 +872,71 @@ class IntegrationRun:
             current_snapshot.commander_project.require_scope(
                 current_snapshot, actor, source.repository)
         context.comms.goals.todos.require_input_sources(inputs)
-        inputs.require_substantive(tuple(repositories.values()))
+        return inputs
+
+    def publish(
+        self,
+        context: TeamContext,
+        problems: tuple[str, ...],
+        *,
+        title: str,
+        body: str,
+        companions: tuple[PullRequestHead, ...] = (),
+    ) -> CombinedInput:
+        """Publish one real prospective cut, then bind its actual returned carrier."""
+        if not problems:
+            raise IntegrationFailed("First publication requires an actual primary problem")
+        actor = context.actor_identity
+        store = context.comms.goals.todos
+        primary = store.get(problems[0])
+        generation = primary.held().generation
+        primary.require_actor(actor, generation)
+        branch = self.checkout.publication_branch()
+        repository = Repo.of(self.checkout.path)
+        message = WorkBranches(self.checkout.path).commit_message("HEAD")
+        recorded = (*IntegrationInput.from_message(message), *UnpublishedInput.from_message(message))
+        existing = tuple(row for row in PullRequests().open(repository.github)
+                         if row.branch == branch)
+        # The foreign publication boundary chooses new versus recorded input once.
+        # A prepared marker is also a durable creation-attempt boundary: never replay create.
+        if recorded:
+            if len(recorded) != 1 or len(existing) != 1:
+                raise IntegrationFailed(
+                    "Publication already started but no unique real carrier is discoverable; "
+                    "preserve this attempt, do not repeat creation")
+            (saved,) = recorded
+            (row,) = existing
+            carrier = PullRequestHead.at(repository.github, row.number)
+            fresh = self.prepare(context, problems, companions=companions,
+                                 excluded_carriers=(carrier, *companions))
+            if saved.sources != fresh.sources:
+                raise IntegrationFailed("The prepared source cut changed; preserve and recapture explicitly")
+            inputs = saved.resume_publication(self, context, carrier)
+        else:
+            if existing:
+                raise IntegrationFailed("An existing source PR cannot be reused as a new carrier")
+            prepared = self.prepare(context, problems, companions=companions,
+                                    excluded_carriers=companions)
+            prepared.write(self.output)
+            Repo.git(self.checkout.path, "commit", "--allow-empty", "-m",
+                     f"Prepare the actual source cut\n\n{prepared.trailer}")
+            Repo.git(self.checkout.path, "push", "-u", "origin", branch)
+            primary = store.get(primary.id)
+            primary.require_actor(actor, generation)
+            link = primary.order.checked().open_pull_request(
+                primary, repository, title,
+                f"{body}\n\nPrepared source identities (not execution):\n{prepared.canonical}\n",
+                store, actor)
+            carrier = PullRequestHead.at(link.repo, link.number)
+            inputs = prepared.resume_publication(self, context, carrier)
+        primary = store.get(primary.id)
+        primary.require_actor(actor, generation)
+        link = PullRequestLink(repository.github, carrier.pr)
+        store.apply(primary.id, RecordPullRequest.for_order(primary, actor, link))
+        Repo.git(self.checkout.path, "push", "origin", branch)
+        current = PullRequestHead.at(repository.github, carrier.pr)
+        inputs.validate(context.repos, current)
+        print(f"PUBLISHED {link.url}; qualification only; no merge permission", flush=True)
         return inputs
 
     def qualify(
@@ -898,6 +963,25 @@ class IntegrationRun:
             context, problems, companions=companions,
             excluded_carriers=(carrier, *companions),
         )
+        original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
+        return self.capture(context, UnpublishedInput.restore(original_message, prepared), carrier)
+
+    def capture(
+        self, context: TeamContext, prepared: UnpublishedInput, carrier: PullRequestHead
+    ) -> CombinedInput:
+        """Finish the same frozen cut after actual first publication or explicit resumption."""
+        core = Repo.of(self.checkout.path)
+        current = carrier.current()
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        if (current.repo != core.github or current.base != WorkBranches.main
+                or current.head != candidate_commit):
+            raise IntegrationFailed("The real carrier must still match this checkout's HEAD")
+        snapshot = context.comms.registry.snapshot()
+        for source in prepared.sources:
+            snapshot.commander_project.require_scope(snapshot, context.actor_identity,
+                                                     source.repository)
+        context.comms.goals.todos.require_input_sources(prepared)
+        prepared.require_current(context.repos)
         inputs = prepared.bind(core, carrier)
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
         if IntegrationInput.from_message(original_message):
@@ -913,16 +997,19 @@ class IntegrationRun:
             f"Capture the resolved combined sources\n\n{inputs.trailer}",
         )
         commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
-        IntegrationCheckout.create(
-            core, HeadSide.checkout(self.output, core.github), commit
-        )
-        inputs.write(self.output)
+        self.retain_capture(inputs, commit)
         print(
             f"QUALIFICATION ONLY {commit}; inputs {inputs.digest}; {self.output};"
             " no review or merge permission",
             flush=True,
         )
         return inputs
+
+    def retain_capture(self, inputs: CombinedInput, commit: str) -> None:
+        """Both first capture and recovery materialize the same recorded local source."""
+        core = Repo.of(self.checkout.path)
+        IntegrationCheckout.create(core, HeadSide.checkout(self.output, core.github), commit)
+        inputs.write(self.output)
 
     def test(
         self, base: str, heads: tuple[PullRequestHead, ...], start: LeaseStart, attempt: int
@@ -1055,7 +1142,11 @@ def run() -> int:
         "--qualify",
         default="",
         metavar="PROBLEM",
-        help="prepare sources from this actual primary order, without running tests",
+        help="bind an existing carrier to this actual primary order, without running tests",
+    )
+    operation.add_argument(
+        "--publish", default="", metavar="PROBLEM",
+        help="prepare the actual source cut and create its first real carrier once",
     )
     parser.add_argument(
         "--workflow-output",
@@ -1063,6 +1154,11 @@ def run() -> int:
         help="append derived base/job selection to GitHub's output file during CI resolution",
     )
     local_options.add_argument("--with-problem", action="append", default=[], metavar="PROBLEM")
+    local_options.add_argument("--from", dest="callers", type=PeerCaller, nargs=1, default=(),
+                               help="the independent actor preparing or publishing the cut")
+    local_options.add_argument("--title", default="", help="title of the first real carrier")
+    local_options.add_argument("--body-file", dest="body_files", type=Path, nargs=1, default=(),
+                               help="the carrier's explanation and evidence, not an empty draft")
     local_options.add_argument(
         "--carrier",
         type=int,
@@ -1137,27 +1233,43 @@ def run() -> int:
         arguments.drop_on_failure,
         tuple(pytest_arguments),
     )
-    # Decode the foreign CLI operation once; qualification never enters execute/test/lease.
-    if arguments.qualify:
+    # Decode foreign operations once; source publication never enters execute/test/lease.
+    if arguments.qualify or arguments.publish:
         if pytest_arguments:
-            parser.error("Qualification cannot run tests")
+            parser.error("Source publication and qualification cannot run tests")
         context = TeamContext.read_root(resolve_comms_route(arguments.comms_root).root)
-        if arguments.carrier <= 0:
-            parser.error("Qualification requires --carrier naming the actual separate combined PR")
-        carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)
+        if arguments.callers:
+            context = context.model_copy(update={"actor": arguments.callers[0]})
         companions = tuple(
             PullRequestHead.at(Repo.selected(context.repos, name).github, int(number))
             for name, number in arguments.companion_carrier
         )
-        run.qualify(
-            context,
-            (arguments.qualify, *arguments.with_problem),
-            carrier=PullRequestHead(carrier.repo, carrier.pr, carrier.head),
-            companions=tuple(PullRequestHead(head.repo, head.pr, head.head) for head in companions),
-        )
+        selected = tuple(head.identity for head in companions)
+        if arguments.publish:
+            if arguments.carrier:
+                parser.error("First publication has no prior --carrier; resume with --qualify")
+            if not arguments.callers or not arguments.title or not arguments.body_files:
+                parser.error("--publish requires --from, --title and --body-file")
+            run.publish(
+                context, (arguments.publish, *arguments.with_problem),
+                title=arguments.title, body=arguments.body_files[0].read_text(),
+                companions=selected,
+            )
+        else:
+            if arguments.title or arguments.body_files:
+                parser.error("--title and --body-file belong to first --publish")
+            if arguments.carrier <= 0:
+                parser.error("Qualification requires --carrier naming the actual separate combined PR")
+            carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)
+            run.qualify(
+                context, (arguments.qualify, *arguments.with_problem),
+                carrier=carrier.identity,
+                companions=selected,
+            )
         return 0
-    if arguments.with_problem or arguments.carrier or arguments.companion_carrier:
-        parser.error("--with-problem, --carrier and --companion-carrier require --qualify")
+    if (arguments.with_problem or arguments.carrier or arguments.companion_carrier
+            or arguments.callers or arguments.title or arguments.body_files):
+        parser.error("Source selection/publication options require --qualify or --publish")
     return run.execute()
 
 
