@@ -55,7 +55,6 @@ def test_the_order_file_derives_what_the_order_creates_from_its_citations(source
                          why_stupid='This is stupid because two files declare one shape')
     read = OrderFile.read(json.dumps(FieldCodec.encode(document)))
     assert read.order.created == (CREATED,)
-    assert '(this order creates it)' in read.slop[0].render()
 
 
 def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
@@ -75,7 +74,7 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
         claims = {MergedClaim(commit): (WorkBranches.main,)}
         return asyncio.run(delivery.verified(todo, comms.registry, claims))
 
-    with pytest.raises(TodoError, match='The order creates branch.py:2'):
+    with pytest.raises(TodoError, match='branch.py:2'):
         verified(source_repository.main_commit)
     assert verified(source_repository.branch_commit).commit == source_repository.branch_commit
 

@@ -8,7 +8,10 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation
 from agent_comms.config_options import ModelConfigOption
 from agent_comms.thread_configuration import ThreadConfiguration
-from agent_comms.thread_model import DeclaredModel
+from agent_comms.native_arguments import NativeArguments
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.thread_model import DeclaredModel, ThreadModel
+from agent_comms.threads import ModelChoice, Thread
 from conftest import installed_comms
 
 
@@ -17,10 +20,6 @@ from conftest import installed_comms
     (None, ()),
 ])
 def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire(wire, arguments):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.native_arguments import NativeArguments
-    from agent_comms.thread_model import ThreadModel
-    from agent_comms.threads import ModelChoice
 
     for family in (ThreadModel, ModelChoice):
         model = FieldCodec.decode(family, wire)
@@ -30,8 +29,6 @@ def test_saved_models_and_requests_share_catalog_arguments_without_changing_wire
 
 
 def test_keep_request_preserves_the_existing_model_and_chosen_request_replaces_it(tmp_path):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.threads import ModelChoice, Thread
 
     thread = Thread('worker', frozenset(), Checkout(tmp_path), model=DeclaredModel('test/one'))
     assert FieldCodec.decode(ModelChoice, None).configured(thread) is thread

@@ -7,7 +7,7 @@ from agent_comms.team.teammate_talk import BlockedTalk, Ceremony, TeammateTalk
 from agent_comms.nominal.field_codec import MessageId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
-UNIT = RecordedThreadIncarnation("install-speed", 1792869186.2298183)
+TEAMMATE = RecordedThreadIncarnation("install-speed", 1792869186.2298183)
 
 
 @dataclass(frozen=True)
@@ -18,7 +18,7 @@ class Talk(TeammateTalk):
     committed: int = 0
     holding: bool = True
     source: SimpleNamespace = field(default_factory=lambda: SimpleNamespace(
-        thread=SimpleNamespace(incarnation=UNIT), now=0.0, pending=(), sources=()))
+        thread=SimpleNamespace(incarnation=TEAMMATE), now=0.0, pending=(), sources=()))
 
     @property
     def messages(self):
@@ -44,7 +44,7 @@ def said(body: str, mentions: tuple = ()) -> SimpleNamespace:
 ))
 def test_an_unowned_wait_is_a_named_row(body: str) -> None:
     row, = BlockedTalk.derive(Talk(said=(said(body),)))
-    assert row.holder == UNIT and row.message_id == MessageId("0123456789ab")
+    assert row.holder == TEAMMATE and row.message_id == MessageId("0123456789ab")
 
 
 @pytest.mark.parametrize("message", (

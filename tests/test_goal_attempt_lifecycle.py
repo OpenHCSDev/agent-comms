@@ -1,17 +1,15 @@
-"""Stored lifecycle decoding must not manufacture permission from malformed rows."""
+"""A failed attempt blocks its goal until a recorded retry decision, and the store keeps that history through retirement."""
 
 import sqlite3
 
 import pytest
-
-from agent_comms.turn_failure import BackendFailed
 
 from agent_comms.nominal.field_codec import GoalId, NoAttemptId, RetryDecisionId
 from agent_comms.goal_attempts import AttemptRecord, GoalAttemptStore, GoalWorkDecision
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, ReadyGeneration
 from agent_comms.attempt_resolution import DecidedResolution, RetryDecision
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.turn_failure import BackendFailed, FailedTurnResolution
 
 
 @pytest.fixture
@@ -22,7 +20,7 @@ def store(tmp_path):
 
 
 def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
-    _decision_0 = RetryDecision(RetryDecisionId.mint())
+    decision = RetryDecision(RetryDecisionId.mint())
     goal_id = GoalId.mint()
     store.create_goal(goal_id)
     attempt = store.reserve(goal_id, 1)
@@ -39,7 +37,7 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
         goal_id,
         expected_generation=1,
         attempt_id=attempt.attempt_id,
-        decision=_decision_0,
+        decision=decision,
     )
     assert successor.lifecycle == ReadyGeneration()
     reopened.retire_goal(goal_id, expected_generation=2, attempt_id=NoAttemptId())
@@ -48,9 +46,9 @@ def test_current_saved_failure_and_history_survive_retry_and_retirement(store):
     with sqlite3.connect(store.path) as conn:
         attempts = AttemptRecord.select(conn)
         assert [(row.reservation, row.phase.declared_name, row.resolution) for row in attempts] == [
-            (attempt, "resolved", DecidedResolution(_decision_0))
+            (attempt, "resolved", DecidedResolution(decision))
         ]
         decisions = GoalWorkDecision.select(conn)
-        assert [(row.decision, row.generation) for row in decisions] == [(_decision_0, 1)]
+        assert [(row.decision, row.generation) for row in decisions] == [(decision, 1)]
     with pytest.raises(UnresolvedAttemptError):
         reopened.ready_grant(goal_id, 2)
