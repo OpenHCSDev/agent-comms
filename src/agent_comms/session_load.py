@@ -94,7 +94,7 @@ class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
     """The original failed load command's witness; never an input permission."""
 
     @classmethod
-    def from_failure(cls, data: object) -> 'FailedSessionLoadPlan | None':
+    def from_failure(cls, data: object) -> FailedSessionLoadPlan | None:
         if not isinstance(data, dict):
             return None
         witness = data.get("agentCommsLoadFailure")
