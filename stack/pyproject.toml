@@ -22,8 +22,8 @@ override-dependencies = [
 
 [tool.uv.sources]
 agent-comms = { path = "..", editable = true }
-formbridge = { git = "https://github.com/OpenHCSDev/formbridge.git", branch = "main" }
-metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", branch = "main" }
-batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", branch = "main" }
-textual = { git = "https://github.com/OpenHCSDev/textual.git", branch = "main" }
-ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", branch = "main" }
+formbridge = { git = "https://github.com/OpenHCSDev/formbridge.git", rev = "b67c97e5c3ad1eda5c06a464fdc578038d01e3e8" }
+metaclass-registry = { git = "https://github.com/OpenHCSDev/metaclass-registry", rev = "60138d533ef0758c5f093d9110ba9f5656f0934a" }
+batrachian-toad = { git = "https://github.com/OpenHCSDev/toad.git", rev = "5a52b4841d0d2ed27224b8b940f7323cb66a8be5" }
+textual = { git = "https://github.com/OpenHCSDev/textual.git", rev = "7c62867cce97d2b0c521c869750413132a315a77" }
+ui-theme = { git = "https://github.com/OpenHCSDev/ui-theme.git", rev = "ba614bcb90b38c1f70789059a3c6aef8c017971b" }
