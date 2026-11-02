@@ -724,7 +724,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
         assert any(rule.message.message_id == claim.message.message_id
                    for rule in OwedAnswer.opened(c, ctx.incarnation))
         released = pr_order(ctx, "P3", goal_id=pr_work_goal_id)
-        c.goals.todos.apply(released.id, ReleaseTodo(
+        released = c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, released.held().owner_identity, released.held(),
             StrikeReason("The worker stopped before this order was completed and published.")))
         rule = c.registry.storage_rule
@@ -778,7 +778,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
             SayVerb(units="#comms", body_file=str(report)).apply(Team.read_root(root))
-            assert copied.goals.todos.get(released.id).held() == released.held()
+            assert copied.goals.todos.get(released.id).holder_state == released.holder_state
             assert any(line.startswith("gh ") for line in observed)
             assert any(line.startswith("git ") for line in observed)
             held = [line for line in observed if line.split()[1] != "free"]
