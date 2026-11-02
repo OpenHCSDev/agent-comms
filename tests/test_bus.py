@@ -1,3 +1,4 @@
+from agent_comms.bus_tables import AuthoredAnswers
 import ast
 import json
 import os
@@ -626,16 +627,17 @@ def test_unanswered_reference_selection_requires_the_recorded_original_and_exact
     bus.append(lambda seq, db: PublicRecord.from_message(
         Message("another-teammate", "#comms", "Someone else's answer", InfoKind, seq=seq,
                 answers=(original.reference,))))
-    assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == (original.reference,)
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead"}))) == (original.reference,)
+    assert bus.unanswered_references((original.seq,)) == ()
     with bus.reading() as before_reply:
         bus.append(lambda seq, db: PublicRecord.from_message(
             Message("renamed-lead", "#comms", "The owner's answer", InfoKind, seq=seq,
                     answers=(original.reference,))))
-        assert before_reply.unanswered_references((original.seq,), frozenset({"lead", "renamed-lead"})) == (
+        assert before_reply.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead", "renamed-lead"}))) == (
             original.reference,)
-    assert bus.unanswered_references((original.seq,), frozenset({"lead", "renamed-lead"})) == ()
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead", "renamed-lead"}))) == ()
     with pytest.raises(RowNotFoundError):
-        bus.unanswered_references((original.seq, bus.revision() + 1), frozenset({"lead"}))
+        bus.unanswered_references((original.seq, bus.revision() + 1), AuthoredAnswers(frozenset({"lead"})))
 
 
 def test_answer_projection_rebuild_preserves_sequence_links_and_public_references(bus):
@@ -654,7 +656,7 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
         assert db.execute("PRAGMA foreign_key_check").fetchall() == []
     assert bus.lookup(reply.seq).answers == (original.reference,)
     assert bus.replies((original.reference,)) == (reply,)
-    assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
+    assert bus.unanswered_references((original.seq,), AuthoredAnswers(frozenset({"lead"}))) == ()
 
 
 def team_packet(bus, holder, body):

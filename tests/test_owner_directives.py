@@ -29,7 +29,7 @@ def overdue(comms, directive: RequestDirective):
     request, = comms.goals.todos.open_requests(comms.registry.require("lead").incarnation)
     with comms.bus.bus.reading() as source:
         return tuple(due for due, _original in request.directive_messages(
-            source, comms.registry.snapshot().names_for("lead"))
+            source, comms.registry.require("lead").incarnation.require_recorded().lookup)
             if due.deadline < directive.deadline + 1)
 
 
@@ -66,7 +66,10 @@ def test_connector_keeps_the_selected_request_when_notification_fails(tmp_path):
     store = comms.goals.todos
     original, = store.open_requests(comms.registry.require("lead").incarnation)
     newer = store.add_request(original.commander, "An independent newer request")
-    comms.bus.bus.path.with_suffix(".changed").mkdir()
+    signal, = comms.bus.bus.source_paths(comms.root)
+    signal.unlink(missing_ok=True)
+    signal.parent.mkdir(exist_ok=True)
+    signal.mkdir()
     with pytest.raises(CommittedMessageError) as failed:
         ConnectorSendTool(
             target="lead", request=original.id,
@@ -87,9 +90,10 @@ def test_recorded_directives_keep_repeated_sequences_and_refuse_an_older_bus_cut
         comms.goals.todos.record_directive(request.id, RequestDirective(
             message.seq, message.timestamp + RequestDirective.window + 1))
         order = comms.goals.todos.owner_request(request.id)
-        responders = comms.registry.snapshot().names_for("lead")
         assert len(order.directives) == 2
         with pytest.raises(RowNotFoundError):
-            order.directive_messages(older, responders)
+            order.directive_messages(
+                older, comms.registry.require("lead").incarnation.require_recorded().lookup)
     with comms.bus.bus.reading() as source:
-        assert tuple(directive for directive, _ in order.directive_messages(source, responders)) == order.directives
+        assert tuple(directive for directive, _ in order.directive_messages(
+            source, comms.registry.require("lead").incarnation.require_recorded().lookup)) == order.directives

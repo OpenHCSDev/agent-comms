@@ -5588,11 +5588,16 @@ class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
         return RequestAtRevision(self.id, len(directives))
 
     def directive_messages(
-        self, source: BusReader, responders: frozenset[str],
+        self, source: BusReader, recipient: ThreadLookup,
     ) -> tuple[tuple[RequestDirective, Message], ...]:
-        """Select exact unanswered references before loading their originals."""
-        unanswered = {reference.seq for reference in source.unanswered_references(
-            tuple(directive.seq for directive in self.directives), responders)}
+        """A committed answer survives its representative's rename or retirement.
+
+        Receipt and response authority is checked when the answer is published,
+        not reconstructed from whichever authors are in a channel at read time.
+        """
+        references = source.unanswered_references(tuple(directive.seq for directive in self.directives))
+        unreceived = frozenset(source.unreceived((recipient,), references))
+        unanswered = {reference.seq for reference in references if reference not in unreceived}
         return tuple((directive, directive.original(source)) for directive in self.directives
                      if directive.seq in unanswered)
 

@@ -722,7 +722,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
             original.revision, worker.incarnation, original.held().generation, claim,
         ).record(c.goals, original.id)
         assert any(rule.message.message_id == claim.message.message_id
-                   for rule in OwedAnswer.opened(c, ctx.commander))
+                   for rule in OwedAnswer.opened(c, ctx.incarnation))
         released = pr_order(ctx, "P3", goal_id=pr_work_goal_id)
         c.goals.todos.apply(released.id, ReleaseTodo(
             released.revision, released.held().owner_identity, released.held(),
@@ -774,7 +774,7 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
             assert application.order.sha == merged and not application.order.accepted
             assert application.order.team_claims() == ()
             assert not any(rule.message.message_id == claim.message.message_id
-                           for rule in OwedAnswer.opened(copied, ctx.commander))
+                           for rule in OwedAnswer.opened(copied, ctx.incarnation))
             report = root / "after-merge.txt"
             report.write_text("Merged; installation evidence is still pending")
             SayVerb(units="#comms", body_file=str(report)).apply(Team.read_root(root))

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, cast
 
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.declared_verb import DeclaredVerb
-from agent_comms.errors import RejectedEnforcementError, TodoConflict
+from agent_comms.errors import RejectedEnforcementError, RelationViolationError, TodoConflict
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
@@ -750,7 +750,8 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         now = time.time()
-        return tuple(rule for rule in cls.opened(comms, commander) if rule.due(now))
+        owner = comms.registry.require(commander).incarnation
+        return tuple(rule for rule in cls.opened(comms, owner) if rule.due(now))
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -759,15 +760,20 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         return tuple(rule for rule in frame.answers if isinstance(rule, cls) and rule.due(now))
 
     @classmethod
-    def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, HeldOrders.read(comms))
+    def opened(cls, comms: Comms, owner: ThreadIncarnation) -> tuple[Self, ...]:
+        return cls.read_scan(comms, owner, HeldOrders.read(comms))
 
     @classmethod
-    def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
+    def read_scan(cls, comms: Comms, owner: ThreadIncarnation, scan: HeldOrders) -> tuple[Self, ...]:
         # Capture committed order/directive references before the bus cut.
         cut = comms.registry.store.snapshot_with_authority()
         snapshot = cut.snapshot
-        thread = snapshot.require(commander)
+        thread = snapshot.require(owner.name)
+        if thread.incarnation != owner:
+            raise RelationViolationError(
+                f"Answer owner {owner.name} changed incarnation; read the current owner before retrying")
+        commander = thread.name
+        # Maintaining another owner's work does not make its private directives ours.
         requests = comms.goals.todos.open_requests(thread.acting_identity)
         held = scan.holders
         with comms.bus.bus.reading() as source:
@@ -1287,17 +1293,16 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """One debt whoever reads it: the request's teammate answering clears it for every
-        peer and fork that inherits the request, and any of them may answer it themselves."""
+        """The frozen recipient owes the private directive, not every request maintainer.
+        Stored request associations cannot substitute a different mailbox or birth.
+        """
         reader = snapshot.require(commander)
-        names = snapshot.names_for(commander) | frozenset(
-            thread.name for thread in snapshot.teammates_channel())
         return tuple(
             cls(message=original, request=request.id, directive=directive,
-                answerer=snapshot.participant(request.commander.name).answering_thread(reader))
+                answerer=reader)
             for request in requests
             for directive, original in request.directive_messages(
-                source, names | snapshot.names_for(request.commander.name))
+                source, reader.incarnation.require_recorded().lookup)
         )
 
     def answered_in(self) -> tuple[str, ...]:

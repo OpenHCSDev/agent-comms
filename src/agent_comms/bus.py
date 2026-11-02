@@ -19,6 +19,7 @@ from agent_comms.channel_targets import NamedTarget
 from agent_comms.bus_route_counts import RouteCounts
 from agent_comms.bus_tables import (
     AnsweredSource,
+    RecordedAnswers,
     BusSchema,
     DirectReplySource,
     MessageIdentitySource,
@@ -424,11 +425,19 @@ class BusReader(RouteCounts, ABC):
         )) as positions:
             return source.deliveries_at(positions)
 
+    def unreceived(self, lookups: tuple[ThreadLookup, ...],
+                   references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
+        """The references outside every one of these participants' frozen delivery audiences."""
+        with self.observing() as db:
+            return tuple(reference for reference in references if not any(
+                ReceivedSource.exists(db, where="{seq} = ?", parameters=(reference.seq,),
+                                      lookup=lookup) for lookup in lookups))
+
     def unanswered_references(
-        self, sequences: tuple[int, ...], responders: frozenset[str],
+        self, sequences: tuple[int, ...], answers: RecordedAnswers = RecordedAnswers(),
     ) -> tuple[MessageReference, ...]:
         with self.observing() as db:
-            return AnsweredSource.unanswered_references(db, sequences, responders)
+            return AnsweredSource.unanswered_references(db, sequences, answers)
 
     def unanswered_page(
         self, scope: RepliesDisplayScope, *,
@@ -518,14 +527,6 @@ class Bus(FileStore, StoredBusReader, ReconciledFile, WalStore, CarriedWriter, B
     """One SQLite transaction owns the sequence and all of a record's fields."""
 
     filename = "bus.sqlite3"
-
-    def unreceived(self, lookups: tuple[ThreadLookup, ...],
-                   references: Iterable[MessageReference]) -> tuple[MessageReference, ...]:
-        """The references outside every one of these participants' frozen delivery audiences."""
-        with self.observing() as db:
-            return tuple(reference for reference in references if not any(
-                ReceivedSource.exists(db, where="{seq} = ?", parameters=(reference.seq,),
-                                      lookup=lookup) for lookup in lookups))
 
     def received_after(self, lookup: ThreadLookup, after: int) -> bool:
         """Whether this recipient has a newer candidate; read one indexed metadata row."""

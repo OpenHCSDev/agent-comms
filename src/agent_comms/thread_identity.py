@@ -238,9 +238,14 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         """Shared work maintenance; this does not authorize taking its holder's work."""
         return creator == self.acting_identity
 
+    @property
+    def represented_owners(self) -> tuple[ThreadIncarnation, ...]:
+        """The exact owners this actor speaks for, independently of shared maintenance."""
+        return (self,)
+
     def represents(self, owner: ThreadIncarnation) -> bool:
         """Only its own incarnation, unless a real in-turn caller binds a parent."""
-        return self == owner
+        return owner in self.represented_owners
 
     def answerable(self, owners: Sequence[ThreadIncarnation]) -> tuple[ThreadLookup, ...]:
         """Whose receipts this actor may answer: a birthless member received nothing."""
@@ -356,8 +361,9 @@ class ForkIdentity(RecordedThreadIncarnation):
         """A fork acts with its parent's authority, a teammate peer's included."""
         return self.authority.commands(creator)
 
-    def represents(self, owner: ThreadIncarnation) -> bool:
-        return super().represents(owner) or self.authority.represents(owner)
+    @property
+    def represented_owners(self) -> tuple[ThreadIncarnation, ...]:
+        return (self, *self.authority.represented_owners)
 
 
 @dataclass(frozen=True, eq=False)

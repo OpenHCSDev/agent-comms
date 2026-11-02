@@ -84,8 +84,8 @@ def test_retired_team_requests_follow_peer_authority(
     assert store.owner_request(first.id).commander == author.incarnation
 
 
-def test_a_directive_the_team_answered_is_owed_by_no_peer(comms: Comms) -> None:
-    """The gate and --answers both read this debt, so it cannot depend on who reads it."""
+def test_shared_request_maintenance_does_not_transfer_directive_debt(comms: Comms) -> None:
+    """A peer can maintain the request without owing its owner's private directive."""
     checkout = Checkout(Path.cwd())
     teammates = frozenset({TeammatesTag.declared_name})
     for name, tags in (("author", teammates), ("peer", teammates), ("claude-code", frozenset())):
@@ -98,11 +98,14 @@ def test_a_directive_the_team_answered_is_owed_by_no_peer(comms: Comms) -> None:
     directive, = store.owner_request(request.id).directives
     with comms.bus.bus.reading() as source:
         original = directive.original(source)
-    owed = {rule.message.reference for rule in DirectiveUnacted.opened(comms, "peer")}
-    assert owed == {original.reference}
+    assert store.open_requests(comms.registry.require("peer").acting_identity) == (
+        store.owner_request(request.id),)
+    assert DirectiveUnacted.opened(comms, comms.registry.require("peer").incarnation) == ()
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require("author").incarnation)} == {
+        original.reference}
     comms.messaging.send("author", "claude-code", "Done.", answers=(original.reference,))
-    assert DirectiveUnacted.opened(comms, "author") == ()
-    assert DirectiveUnacted.opened(comms, "peer") == ()
+    assert DirectiveUnacted.opened(comms, comms.registry.require("author").incarnation) == ()
+    assert DirectiveUnacted.opened(comms, comms.registry.require("peer").incarnation) == ()
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:
@@ -205,7 +208,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     renamed = replace(first, commander=lead.incarnation.renamed("lead-renamed"))
     with comms.bus.bus.reading() as source:
-        assert not renamed.directive_messages(source, comms.registry.snapshot().names_for(lead.name))
+        assert not renamed.directive_messages(source, lead.incarnation.require_recorded().lookup)
 
     CommsSendTool(
         target="lead",

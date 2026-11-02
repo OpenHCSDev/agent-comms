@@ -32,6 +32,7 @@ def test_shared_maintenance_and_storage_selection_do_not_release_another_holder(
     actor = caller.identity(comms)
     assert actor.commands(current.creator_identity)
     assert actor.acting_identity == comms.registry.require(name).incarnation
+    assert actor.represented_owners == (comms.registry.require(name).incarnation,)
     assert not actor.represents(current.held().owner_identity)
     with pytest.raises(HolderConsentRequired):
         ReleaseTodo(current.revision, actor, current.held(), RELEASE).record(comms.goals, current.id)
@@ -62,6 +63,20 @@ def test_raw_child_identity_does_not_inherit_a_parents_holder_consent(fork_bus):
     with pytest.raises(HolderConsentRequired):
         ReleaseTodo(current.revision, actor, current.held(), RELEASE).record(comms.goals, current.id)
     assert comms.goals.todos.get(current.id) == current
+
+
+def test_represented_owners_follow_only_actual_bound_parent_identities():
+    parent = RecordedThreadIncarnation("parent", 100.0).as_colleague()
+    foreign = RecordedThreadIncarnation("storage-owner", 200.0)
+    child = RecordedThreadIncarnation("child", 300.0).acting_for(parent)
+    nested = RecordedThreadIncarnation("nested", 400.0).acting_for(child)
+    assert parent.commands(foreign) and not parent.represents(foreign)
+    assert parent.represented_owners == (parent,)
+    assert child.represented_owners == (child, parent)
+    assert nested.represented_owners == (nested, child, parent)
+    assert all(nested.represents(owner) for owner in nested.represented_owners)
+    assert not nested.represents(foreign)
+    assert not nested.represents(RecordedThreadIncarnation("parent", 500.0))
 
 
 def test_reused_holder_name_has_no_consent_from_its_previous_birth(fork_bus):
