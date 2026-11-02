@@ -548,10 +548,8 @@ class OrdinaryInput(IntegrationInput):
 
 
 @dataclass(frozen=True)
-class CombinedInput(IntegrationInput):
-    """The actual separate carrier before publication of this immutable source capture."""
-
-    carrier: PullRequestHead
+class SubstantiveInput(IntegrationInput, declared_name=None):
+    """A source cut must change a declared source, before or after publication."""
 
     def require_substantive(self, repositories: tuple[Repo, ...]) -> None:
         """Any captured repository may supply the change; none may fabricate one."""
@@ -560,6 +558,38 @@ class CombinedInput(IntegrationInput):
             for source in self.sources
         ):
             raise ToolRefusedError("The captured sources have no substantive change")
+
+
+@dataclass(frozen=True)
+class UnpublishedInput(SubstantiveInput):
+    """A real source cut whose carrier has not been published, never merge permission."""
+
+    predecessor: RepositoryCommit
+    trailer_name: ClassVar[str] = "Agent-Comms-Unpublished"
+    filename: ClassVar[str] = "unpublished-input.json"
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.predecessor.repository != self.local.repository:
+            raise MalformedRecord("The prepared predecessor must belong to the local source")
+
+    def bind(self, repository: Repo, carrier: PullRequestHead) -> CombinedInput:
+        """Bind the actual publication without substituting another source tree or history."""
+        if carrier.repo != self.predecessor.repository:
+            raise ToolRefusedError("The published carrier belongs to another repository")
+        self.local.require_origin(repository)
+        repository.acquire(self.predecessor.commit, carrier.head)
+        if not Repo.descends(repository.checkout, self.predecessor.commit, carrier.head):
+            raise ToolRefusedError("The published carrier dropped its prepared predecessor")
+        self.local.require_ancestry(repository, carrier.head)
+        return CombinedInput(self.sources, carrier)
+
+
+@dataclass(frozen=True)
+class CombinedInput(SubstantiveInput):
+    """The actual separate carrier before publication of this immutable source capture."""
+
+    carrier: PullRequestHead
 
     @property
     def combined(self) -> bool:

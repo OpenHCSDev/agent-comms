@@ -36,6 +36,7 @@ from .head_review import (
     ResolvedIntegrationSource,
     Side,
     SourceCheckout,
+    UnpublishedInput,
     UnpromotedHeadReview,
 )
 from .launch_runtime import CheckoutSource, RestoredRuntime
@@ -718,15 +719,15 @@ class IntegrationRun:
             if HeadReview.accepted(repo.github, request.head)
         )
 
-    def qualify(
+    def prepare(
         self,
         context: TeamContext,
         problems: tuple[str, ...],
         *,
-        carrier: PullRequestHead,
         companions: tuple[PullRequestHead, ...] = (),
-    ) -> CombinedInput:
-        """Capture the existing resolved carrier and its distinct stored source members."""
+        excluded_carriers: tuple[PullRequestHead, ...] = (),
+    ) -> UnpublishedInput:
+        """Prepare actual source identities before a separate carrier needs to exist."""
         self.checkout.require_editable()
         self.failure.require_qualification()
         if not problems or len(set(problems)) != len(problems):
@@ -739,20 +740,11 @@ class IntegrationRun:
         for todo in todos:
             project.require_scope(snapshot, actor, todo.repo)
         core = Repo.of(self.checkout.path)
-        registered_core = Repo.selected(context.repos, core.github.to_wire())
-        base = IntegrationSource.main_head(registered_core)
-        current = carrier.current()
+        Repo.selected(context.repos, core.github.to_wire())
+        base = IntegrationSource.main_head(core)
         candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
-        if (
-            current.repo != core.github
-            or current.base != WorkBranches.main
-            or current.head != candidate_commit
-        ):
-            raise IntegrationFailed(
-                "Capture requires the actual published combined carrier at this checkout's HEAD"
-            )
-        registered_core.acquire(base, candidate_commit)
-        required = IntegrationInput.declared_repositories(registered_core, base, candidate_commit)
+        core.acquire(base)
+        required = IntegrationInput.declared_repositories(core, base, candidate_commit)
         linked_repositories = {
             link.repo
             for todo in todos
@@ -765,8 +757,11 @@ class IntegrationRun:
             name: Repo.selected(context.repos, name.to_wire()) for name in required
         }
         companion_repositories.pop(core.github)
-        repositories = {core.github: registered_core, **companion_repositories}
-        carriers = (carrier, *companions)
+        repositories = {core.github: core, **companion_repositories}
+        containers = (
+            RepositoryCommit(core.github, candidate_commit),
+            *(RepositoryCommit(companion.repo, companion.head) for companion in companions),
+        )
         mains = {
             core.github: base,
             **{
@@ -805,17 +800,19 @@ class IntegrationRun:
                 context.comms.goals.todos, candidates
             )
             for head in approved:
-                for container in carriers:
-                    if container.repo == repo.github and not head.same_pull_request(container):
-                        repo.acquire(head.head, container.head)
-                        if Repo.descends(repo.checkout, head.head, container.head):
+                if any(head.same_pull_request(excluded) for excluded in excluded_carriers):
+                    continue
+                for container in containers:
+                    if container.repository == repo.github:
+                        repo.acquire(head.head, container.commit)
+                        if Repo.descends(repo.checkout, head.head, container.commit):
                             selected.append(head)
             heads[repo.github] = tuple(
                 sorted({head.pr: head for head in selected}.values(), key=lambda head: head.pr)
             )
         self.output.mkdir(parents=True, exist_ok=False)
         IntegrationCheckout.create(
-            registered_core, BaseSide.checkout(self.output, core.github), base
+            core, BaseSide.checkout(self.output, core.github), base
         )
         tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         resolved = {companion.repo: companion for companion in companions}
@@ -850,10 +847,11 @@ class IntegrationRun:
                     RepositoryCommit(name, baseline), heads[name], tree
                 )
             sources.append(source)
-        inputs = CombinedInput(
-            tuple(sorted(sources, key=lambda source: source.repository.key)), carrier
+        inputs = UnpublishedInput(
+            tuple(sorted(sources, key=lambda source: source.repository.key)),
+            RepositoryCommit(core.github, candidate_commit),
         )
-        inputs.local.require_ancestry(registered_core, candidate_commit)
+        inputs.local.require_ancestry(core, candidate_commit)
         for source in inputs.companions:
             source.require_tree(repositories[source.repository])
         # Revalidate original sources before attaching the shared value's payload.
@@ -874,6 +872,33 @@ class IntegrationRun:
                 current_snapshot, actor, source.repository)
         context.comms.goals.todos.require_input_sources(inputs)
         inputs.require_substantive(tuple(repositories.values()))
+        return inputs
+
+    def qualify(
+        self,
+        context: TeamContext,
+        problems: tuple[str, ...],
+        *,
+        carrier: PullRequestHead,
+        companions: tuple[PullRequestHead, ...] = (),
+    ) -> CombinedInput:
+        """Bind the existing real carrier to the independently prepared source cut."""
+        core = Repo.of(self.checkout.path)
+        current = carrier.current()
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        if (
+            current.repo != core.github
+            or current.base != WorkBranches.main
+            or current.head != candidate_commit
+        ):
+            raise IntegrationFailed(
+                "Capture requires the actual published combined carrier at this checkout's HEAD"
+            )
+        prepared = self.prepare(
+            context, problems, companions=companions,
+            excluded_carriers=(carrier, *companions),
+        )
+        inputs = prepared.bind(core, carrier)
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
         if IntegrationInput.from_message(original_message):
             raise IntegrationFailed(
@@ -889,7 +914,7 @@ class IntegrationRun:
         )
         commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
         IntegrationCheckout.create(
-            registered_core, HeadSide.checkout(self.output, core.github), commit
+            core, HeadSide.checkout(self.output, core.github), commit
         )
         inputs.write(self.output)
         print(

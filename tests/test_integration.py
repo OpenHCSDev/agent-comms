@@ -506,6 +506,25 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
     assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
 
 
+def test_companion_source_cut_prepares_before_any_carrier_is_published(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources
+    prepared = integration.IntegrationRun(
+        pair.checkout, pair.output, "Prepare the real source cut before first publication"
+    ).prepare(pair.context, ("P3",))
+    assert prepared.predecessor.repository == pair.core.github
+    assert prepared.predecessor.commit == pair.core.main_commit
+    assert prepared.local.heads == ()
+    assert not prepared.local.has_changes(pair.core)
+    assert prepared.source(pair.client.github).has_changes(pair.client)
+    assert IntegrationInput.from_canonical(prepared.canonical) == prepared
+    assert prepared.carriers() == ()
+    source = PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+    with pytest.raises(ToolRefusedError, match="not a captured combined carrier"):
+        prepared.require_carrier(pair.core, source)
+
+
 def test_companion_only_capture_preserves_native_review_and_empty_test_selection(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
 ) -> None:
