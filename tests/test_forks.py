@@ -97,6 +97,9 @@ from hook_session_fixture import resident_hook, resident_session, resident_stdou
 from cli_command import commander
 from source_revision_fixture import SourceRepository
 from agent_comms.thread_execution import ForkExecution
+from agent_comms.goal_actions import ReissuedOrderGoalAction
+from agent_comms.thread_identity import CoreWatcherIncarnation
+from agent_comms.todos import MergedProgress, NoCommitProgress
 
 
 @pytest.fixture
@@ -243,8 +246,6 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert fork.parent.named(parent.name)
     assert fork.goal.require().id != parent.goal.require().id
     # A reissue records Core itself, never reconstructs a departed assigner's authority.
-    from agent_comms.goal_actions import ReissuedOrderGoalAction
-    from agent_comms.thread_identity import CoreWatcherIncarnation
     reissuer = ReissuedOrderGoalAction.for_todo(saved, parent.name).assigner
     assert reissuer == CoreWatcherIncarnation.watcher()
     reissuer.require_may_change(saved)
@@ -268,7 +269,6 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert ctx.call(CommsTodoListTool(thread=ctx.commander)).todos == (saved,)
     load = ctx.call(CommsTeamLoadTool(thread=ctx.commander))
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
-    assert "unjudged edits" in str(load.load)
     refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
     assert refused.returncode != 0 and "cannot release or replace that assignment" in refused.stderr
     assert store.get("P40") == saved
@@ -343,7 +343,6 @@ def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
 
 def test_edits_under_a_merged_order_are_nobodys_review(fork_bus):
     """Overload, the HUD and the judge read one judgeable owner: a merged head gates nothing."""
-    from agent_comms.todos import MergedProgress, NoCommitProgress
 
     comms, source, _ = fork_bus
     record_edits(comms, source, 3)

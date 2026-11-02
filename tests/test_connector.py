@@ -64,6 +64,11 @@ from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
 from agent_comms.tools import CommsChannelsTool, invoke_tool
 from agent_comms.tool_request import ReadTool, ToolRequest
 from agent_comms.threads import Thread
+import subprocess
+import site
+import socket
+import sys
+from agent_comms.channel_targets import CommandTarget
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -79,7 +84,6 @@ def test_serve_requires_explicit_root(tmp_path):
 
 def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
     """The actual serve entrypoint, curl transport and production maintenance thread."""
-    import subprocess
 
     project = Path(__file__).resolve().parents[1]
     environment = {**os.environ, "PYTHONPATH": str(project / "src"),
@@ -96,10 +100,6 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
 
 @pytest.mark.parametrize("registered", [True, False])
 def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
-    import site
-    import socket
-    import subprocess
-    import sys
 
     original = comms.registry.declare(Thread("claude-ai", frozenset(), Checkout(comms.root)))
     with socket.socket() as probe:
@@ -608,7 +608,6 @@ async def test_connector_reads_two_newest_first_conversation_pages(client, store
 async def test_connector_channel_history_on_a_copy_leaves_unread_unchanged(
     client, comms, tmp_path, copied_connector,
 ):
-    from agent_comms.channel_targets import CommandTarget
 
     comms.channels.create_tag("comms")
     for name in ("worker", "claude-ai"):

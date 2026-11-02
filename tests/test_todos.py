@@ -87,6 +87,10 @@ from agent_comms.todos import (
 )
 from agent_comms.work_branches import WorkBranches
 from source_revision_fixture import SourceRepository
+from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
+from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
+from agent_comms.team.standing import ReassignedWheelSpin
+from agent_comms.goals import GoalChangedError, NoGoal
 
 pytest_plugins = ("test_holder_standing_rules", "test_unowned_checkout_work", "test_proof_build", "github_fixture")
 
@@ -115,8 +119,6 @@ def order(source: SourceRepository):
 def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
     tmp_path, source_repository, folds,
 ):
-    from agent_comms.plan_phases import RetainedStorePhase, UnplannedPhase
-    from agent_comms.todos import FoldedProblemOrder, UnorderedProblemOrder
 
     store = TodoStore(tmp_path)
     lead = thread('lead', tmp_path, 1.0)
@@ -785,8 +787,6 @@ def test_watcher_git_and_github_reads_leave_wire_free(pr_team, monkeypatch):
 
 
 def test_reused_enforcement_rejects_a_new_idle_goal(checkout_bus):
-    from agent_comms.team.standing import ReassignedWheelSpin, UnownedWheelSpin
-    from agent_comms.goals import GoalChangedError, NoGoal
 
     with LaunchRoot.from_path(checkout_bus.root).selected():
         rule, = UnownedWheelSpin.violations(checkout_bus, 'lead')
