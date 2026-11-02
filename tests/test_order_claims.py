@@ -16,12 +16,13 @@ from agent_comms.coordination_errors import (
 )
 
 from agent_comms.change_report import FileLine
-from agent_comms.team.order import OrderFile, main
+from agent_comms.team.order import OrderFile, TeamContext, main
 from agent_comms.team.standing import DeliveryAwaitingJudgement, Scrutinize
 from agent_comms.standing_rules import OwedAnswer
 from agent_comms.errors import (
     TodoConflict,
     TodoError,
+    HumanSendRefusedError,
 )
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -59,6 +60,7 @@ from agent_comms.todos import (
     DoneTodoState,
     FailedCheckStrike,
     OrderClaim,
+    OrderMessage,
     PendingProblemOrder,
     PullRequestLink,
     ReleaseTodo,
@@ -144,6 +146,76 @@ def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
     claim = comms.goals.todos.get("P1").order.claim
     assert claim.pull_request == PullRequestLink(RepositoryName.from_wire("openhcsdev/textual"), 213)
     assert claim.pull_request.repo != original.repo
+
+
+def current_parent_order(ctx: TeamContext) -> Todo:
+    """A current assignment under a request opened by the previous teammate."""
+    comms = ctx.comms
+    original = comms.goals.todos.get("P1")
+    parent = thread("current-parent", ctx.root.parent / "current-parent", 4.0)
+    holder = thread("claim-worker", ctx.root.parent / "claim-worker", 5.0)
+    comms.registry.register(parent)
+    comms.registry.register(holder)
+    todo = comms.goals.todos.create(
+        "P2", original.repo, "Repair the workflow under its current teammate",
+        creator=comms.registry.require(ctx.commander), assigner=parent.incarnation,
+        owner=holder, generation=GoalId.mint(),
+        request=original.request.require(), review_at=RecordedEventTime(time.time() + 1000),
+        order=replace(original.order.checked(), id=OrderId.mint()),
+    )
+    sent = comms.messaging.send(
+        parent.name, holder.name, "Repair the workflow and report to the current teammate.",
+    ).message
+    return comms.goals.todos.apply(todo.id, OrderMessage(
+        todo.revision, holder.incarnation, sent.message_id, at=RecordedEventTime(time.time()),
+    ))
+
+
+@pytest.mark.parametrize("historical_state", ("retired", "reborn"))
+def test_claim_uses_current_parent_not_retired_request_author(held_team, historical_state):
+    ctx = held_team
+    comms = ctx.comms
+    original = current_parent_order(ctx)
+    historical = ctx.commander
+    comms.registry.unregister(historical)
+    comms.registry.remove(historical)
+    if historical_state == "reborn":
+        comms.registry.register(thread(historical, ctx.root.parent / "reborn-author", 8.0))
+    request = replace(delivery(
+        ctx, "Killed the historical-author routing slop at todos.py; the assignment owns the target."),
+        problem=original.id,
+    )
+    ThreadCaller(original.holder).invoke(request, comms)
+    claimed = comms.goals.todos.get(original.id)
+    claim = claimed.order.claim
+    published = comms.bus.bus.lookup_message(claim.message.message_id).message
+    assert published.target == original.held().parent_identity.name == "current-parent"
+    assert published.answers == claim.message.answers
+    before = comms.bus.bus.revision()
+    ThreadCaller(original.holder).invoke(request, comms)
+    assert comms.goals.todos.get(original.id) == claimed
+    assert comms.bus.bus.revision() == before
+
+
+@pytest.mark.parametrize("parent_state", ("retired", "reborn"))
+def test_claim_refuses_retired_or_reborn_current_parent(held_team, parent_state):
+    ctx = held_team
+    comms = ctx.comms
+    original = current_parent_order(ctx)
+    parent = original.held().parent_identity.name
+    comms.registry.unregister(parent)
+    comms.registry.remove(parent)
+    if parent_state == "reborn":
+        comms.registry.register(thread(parent, ctx.root.parent / "reborn-parent", 9.0))
+    before = comms.bus.bus.revision()
+    request = replace(delivery(
+        ctx, "Killed the historical-author routing slop at todos.py; the assignment owns the target."),
+        problem=original.id,
+    )
+    with pytest.raises(HumanSendRefusedError):
+        ThreadCaller(original.holder).invoke(request, comms)
+    assert comms.goals.todos.get(original.id) == original
+    assert comms.bus.bus.revision() == before
 
 
 def test_claim_verdict_family_on_retained_copy(held_team):
@@ -504,7 +576,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
         ).message
         claim = OrderClaim.for_order(
             todo, holder.incarnation, PullRequestLink(todo.repo, 1), head, "The source repair is published for review.",
-            sent.reference, store=store,
+            sent.reference,
         )
         claim = replace(claim, message=replace(claim.message, timestamp=time.time() - 3600))
         claims.append(ClaimOrder(

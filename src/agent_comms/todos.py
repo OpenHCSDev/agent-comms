@@ -3198,12 +3198,11 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
-        report: str, answer: MessageReference, *, store: TodoStore,
+        report: str, answer: MessageReference,
     ) -> OrderClaim:
-        request = store.owner_request(todo.request.require())
         return cls(
             pull_request, head,
-            Message(actor.name, request.commander.name, report, InfoKind, answers=(answer,)),
+            Message(actor.name, todo.held().parent_identity.name, report, InfoKind, answers=(answer,)),
         )
 
 
@@ -5401,8 +5400,7 @@ class ClaimOrder(TodoCommand):
         """Retain the publication's actual address before saving its content identity."""
         with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
-            target = IncarnationThreadTarget(
-                goals.todos.owner_request(current.request.require()).commander)
+            target = IncarnationThreadTarget(current.held().parent_identity)
             target.require_publication(
                 self.claim.message, boundary.registry, goals.bus.require_channel)
             message = replace(
@@ -5427,7 +5425,7 @@ class ClaimOrder(TodoCommand):
         try:
             goals.bus.publisher.publish_ordinary(
                 self.claim.message, destination=IncarnationThreadTarget(
-                    goals.todos.owner_request(changed.request.require()).commander),
+                    changed.held().parent_identity),
                 origin=AgentOrigin())
         except (OSError, sqlite3.Error) as error:
             raise ClaimPublicationUnavailable(changed.id, self.claim) from error
@@ -5446,8 +5444,7 @@ class ResumeClaimOrder(ClaimOrder):
     def record(self, goals: Goals, problem: str) -> Todo:
         with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
-            target = IncarnationThreadTarget(
-                goals.todos.owner_request(current.request.require()).commander)
+            target = IncarnationThreadTarget(current.held().parent_identity)
             target.require_publication(
                 self.claim.message, boundary.registry, goals.bus.require_channel)
             retained = (self.claim.message.sender, self.claim.message.target)
