@@ -121,12 +121,15 @@ def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], Ma
 
 @pytest.fixture
 def mutual_sources(source_pair: MutualSources) -> MutualSources:
-    """The same source owner, with its companion linked by a separate real checked order."""
+    """The same source owner, with its companion linked by a separate real checked order.
+
+    The worker takes the companion problem itself: its goal slot is occupied, so only the
+    goal's own owner may add work to it."""
     comms = source_pair.context.comms
     primary = comms.goals.todos.get("P2")
     comms.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P3", commander="lead", request=primary.request,
-        assigner=comms.registry.require("lead").incarnation,
+        assigner=comms.registry.require("worker").incarnation,
         repo=source_pair.client.github, text="Migrate the paired source client",
         order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
                       check=replace(primary.order.check, directory=source_pair.client.checkout)),
