@@ -76,6 +76,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "plain-reporting",
         "refactor-game",
         "no-blocking",
+        "finish-line",
         "fork-orders",
         "tests-and-commands",
         "ship-and-install",
