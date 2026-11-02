@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from enum import StrEnum
 from importlib.metadata import Distribution, distributions
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
@@ -71,6 +72,23 @@ class SourceRecord(BaseModel, WheelSource):
         raise ValueError("The installed package does not record a Git revision")
 
 
+class ArchiveScheme(StrEnum):
+    """The external URL scheme admitted for an observable local wheel."""
+
+    local_file = "file"
+
+
+class ArchiveHost(StrEnum):
+    """RFC8089's local-file authority spellings."""
+
+    empty = ""
+    loopback = "localhost"
+
+
+class WheelSuffix(StrEnum):
+    wheel = ".whl"
+
+
 class ArchiveInfo(BaseModel):
     """PEP610's algorithm-to-digest map; an empty map supplies no content proof."""
 
@@ -91,9 +109,10 @@ class ArchiveInfo(BaseModel):
         source = urlsplit(url)
         # Remote archives retain their PEP610 hashes, not a request to fetch them.
         # Only local wheel inputs can be re-observed without a network operation.
-        if source.scheme != "file" or Path(source.path).suffix != ".whl":
+        if (source.scheme != ArchiveScheme.local_file.value
+                or Path(source.path).suffix != WheelSuffix.wheel.value):
             return ()
-        if source.netloc not in ("", "localhost"):
+        if source.netloc not in (ArchiveHost.empty.value, ArchiveHost.loopback.value):
             raise ValueError("Runtime wheel input names a foreign file host")
         wheel = Path(unquote(source.path))
         if not wheel.is_absolute():
