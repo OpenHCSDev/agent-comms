@@ -1,8 +1,4 @@
-
-from agent_comms.repo import Checkout
 """Scoped attachment retirement through original stores, sockets and ACP routing."""
-from agent_comms.owner_connection import NoControllerToken
-from agent_comms.controller import SessionUpdateSink
 
 import asyncio
 import os
@@ -13,11 +9,14 @@ from acp.agent.router import build_agent_router
 from acp.schema import SessionInfoUpdate
 
 from agent_comms.acp import CommsAgent, CommsClient
-from agent_comms.comms import wire
-from conftest import installed_comms
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
+from agent_comms.controller import SessionUpdateSink
 from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.owner_connection import NoControllerToken
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
+from conftest import installed_comms
 
 
 class AttachmentClient(SessionUpdateSink):
