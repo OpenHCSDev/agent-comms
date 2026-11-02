@@ -3979,7 +3979,21 @@ class TodoOperation(TodoCommand, declared_name=None):
 
 
 @dataclass(frozen=True)
-class AssignTodo(TodoOperation):
+class ReleasesHold(TodoOperation, declared_name=None):
+    """Changing held work needs its holder's consent, decided in the write transaction against
+    the registry cut it commits under."""
+
+    actor: ThreadIncarnation
+
+    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
+        super().validate(db, current, store)
+        self.require_hold_release(current, store.registry_cut())
+
+    def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
+        current.current_holder.require_release(self.actor, current, snapshot)
+
+
+class AssignTodo(ReleasesHold):
     """The order's commander gives the problem to a unit.
 
     Its group is every problem the same order assigns in this Todo transaction; a command
@@ -4010,10 +4024,10 @@ class AssignTodo(TodoOperation):
     def changes_work(self, current: Todo, proposed: Assignment) -> bool:
         return (current.assignment, current.order) != (proposed, self.order)
 
-    def require_holder_consent(self, current: Todo, proposed: Assignment,
-                               snapshot: RegistrySnapshot) -> None:
-        if self.changes_work(current, proposed):
-            current.current_holder.require_release(self.actor, current, snapshot)
+    def require_hold_release(self, current: Todo, snapshot: RegistrySnapshot) -> None:
+        """Only an assignment that changes the work asks its current holder."""
+        if self.changes_work(current, current.proposed_assignment(self.proposed)):
+            super().require_hold_release(current, snapshot)
 
     def require_receiving_work(
         self, current: Todo, proposed: Assignment, snapshot: RegistrySnapshot,
@@ -4024,15 +4038,15 @@ class AssignTodo(TodoOperation):
     def proposed_work(self, store: TodoStore, problem: str) -> tuple[Todo, ...]:
         current = store.get(problem)
         proposed = current.proposed_assignment(self.proposed)
-        snapshot = RegistryStore.at(store.root).snapshot()
-        self.require_holder_consent(current, proposed, snapshot)
+        snapshot = store.registry_cut()
+        self.require_hold_release(current, snapshot)
         self.require_receiving_work(current, proposed, snapshot)
         return (replace(current, assignment=proposed, order=self.order),)
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        snapshot = RegistryStore.at(store.root).snapshot()
+        super().validate(db, current, store)
+        snapshot = store.registry_cut()
         proposed = current.proposed_assignment(self.proposed)
-        self.require_holder_consent(current, proposed, snapshot)
         self.require_receiving_work(current, proposed, snapshot)
         proposed.require_available_in(
             db, current.id, IncomingWork(
@@ -4050,7 +4064,6 @@ class AssignTodo(TodoOperation):
 
     def changed(self, current: Todo) -> Todo:
         self.actor.require_may_change(current)
-        self.require_holder_consent(current, self.proposed)
         if self.order != current.order:
             self.order.require_wording()
             self.order.require_writable()
@@ -5136,7 +5149,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
+class ReleaseTodo(ReleasesHold, StoryEvent, TodoHolder):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
 
     def previous_assignment(self) -> Assignment:
@@ -5160,10 +5173,6 @@ class ReleaseTodo(TodoOperation, StoryEvent, TodoHolder):
         current.require_assignment(self.previous)
         return replace(current, assignment=None, revision=current.revision + 1)
 
-    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        current.current_holder.require_release(
-            self.actor, current, RegistryStore.at(store.root).snapshot())
-
     def retained_assignments(self, current: Todo, pulls: PullRequests) -> tuple[Assignment, ...]:
         return pulls.retained_assignments(current, self.previous)
 
@@ -5182,7 +5191,7 @@ class RestoreHolderTodo(TodoCommand):
         return (replace(store.get(problem), assignment=self.previous),)
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        snapshot = RegistryStore.at(store.root).snapshot()
+        snapshot = store.registry_cut()
         if not self.previous.running_holders(snapshot):
             raise TodoConflict(current)
         self.previous.require_available_in(db, current.id, IncomingWork(
@@ -5339,7 +5348,7 @@ class RecordPullRequest(TodoCommand):
 
     def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
         """A companion link is checked against the registered project under the write."""
-        project = RegistryStore.at(store.root).snapshot().commander_project
+        project = store.registry_cut().commander_project
         if self.link.repo not in project.linkable(current.repo):
             raise TodoError(f"{self.link.repo.to_wire()} is not a repository of this commander "
                             f"project; {current.id} links only registered repositories.")
@@ -5513,7 +5522,7 @@ class InstallTodo(CloseOrderTodo):
 
 
 @dataclass(frozen=True)
-class WithdrawTodo(CloseOrderTodo):
+class WithdrawTodo(ReleasesHold, CloseOrderTodo):
     """An undelivered order sent in error leaves its problem with its reason and no strike."""
     previous: Assignment
     why: str
@@ -5524,11 +5533,6 @@ class WithdrawTodo(CloseOrderTodo):
         current.require_previous_assignment(self.previous)
         _text(self.why, "Withdrawal reason", 2000)
         return order
-
-    def validate(self, db: sqlite3.Connection, current: Todo, store: TodoStore) -> None:
-        super().validate(db, current, store)
-        current.current_holder.require_release(
-            self.actor, current, RegistryStore.at(store.root).snapshot())
 
 
 @dataclass(frozen=True)
@@ -6233,6 +6237,10 @@ class TodoStore(OwnerRequestStore, TodoHistory):
     This store never launches a child.
     """
 
+    def registry_cut(self) -> RegistrySnapshot:
+        """The registry this store's writes commit under: holders, goals and their status."""
+        return RegistryStore.at(self.root).snapshot()
+
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
     tables = TodoStoreRows
@@ -6259,7 +6267,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         """Prepare physical allocations outside SQL; the prepared store lives for this write only."""
         if not proposed:
             return self
-        snapshot = RegistryStore.at(self.root).snapshot()
+        snapshot = self.registry_cut()
         held = self.held_orders(state=OpenTodoState)
         workplaces = EditWorkplaces.for_assignment(self.root, snapshot, held, proposed)
         return PreparedTodoStore(self.root, workplaces)
@@ -6300,7 +6308,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             current.require_result(old)
             self._current(db, newer.id).require_result(newer)
             current.current_holder.require_release(
-                commander, current, RegistryStore.at(self.root).snapshot())
+                commander, current, self.registry_cut())
             result = replace(
                 current,
                 order=current.order.copy_as(
@@ -6323,7 +6331,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             source.require_maintainer(commander)
             target.require_maintainer(commander)
             source.require_fold(target, why)
-            snapshot = RegistryStore.at(self.root).snapshot()
+            snapshot = self.registry_cut()
             source.current_holder.require_release(commander, source, snapshot)
             target.current_holder.require_release(commander, target, snapshot)
             replace(target, text=f'{target.text} [+{source.id}: {source.text}]',
@@ -6338,7 +6346,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         with self.writing() as db:
             source, target = self._current(db, sent.id), self._current(db, problem)
             source.require_result(sent)
-            snapshot = RegistryStore.at(self.root).snapshot()
+            snapshot = self.registry_cut()
             source.current_holder.require_release(commander, source, snapshot)
             target.current_holder.require_release(commander, target, snapshot)
             target.require_maintainer(commander)
@@ -6520,7 +6528,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
         number = ProblemNumber.parse(todo_id)
         identity, assignee = _participant(creator), _thread(owner)
         assignment = Assignment.of(assignee, assigner, generation)
-        assignment.require_receiving_work(assigner, RegistryStore.at(self.root).snapshot())
+        assignment.require_receiving_work(assigner, self.registry_cut())
         DirectiveText.require(text)
         order.require_wording()
         order.require_writable()
@@ -6528,7 +6536,7 @@ class TodoStore(OwnerRequestStore, TodoHistory):
             todo_id, repo, text, identity, assignment, review_at, order, request)
         prepared = self.preparing_edits((proposed,))
         with prepared.writing() as db:
-            snapshot = RegistryStore.at(self.root).snapshot()
+            snapshot = self.registry_cut()
             proposed.held().require_receiving_work(assigner, snapshot)
             proposed.held().require_available_in(
                 db, todo_id, IncomingWork(frozenset({todo_id}), frozenset({order.id})),
