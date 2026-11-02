@@ -41,6 +41,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .native_tools import ReadTool
+from .selected_triage import SelectedTriage
 from .session_receipts import SessionReceipts
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId
@@ -234,9 +235,13 @@ class StoredRecord(NativeRecord):
 
 @dataclass
 class NativeReceipts(SessionReceipts):
-    """A Pi session's receipts: its read tool has Pi's own name."""
+    """A Pi session's receipts: its read tool has Pi's own name, and a reply to Core's triage
+    prompt is a decision record, not words the session ended a turn on."""
 
     reading_tool: ClassVar[str] = ReadTool.declared_name
+
+    def said(self, words: tuple[str, ...]) -> None:
+        super().said(tuple(text for text in words if not SelectedTriage.recognizes(text)))
 
 
 class NativeTranscript(TranscriptSource):

@@ -23,14 +23,13 @@ from agent_comms_hooks.skill import DeckReader, RulesOnly
 
 from .coordinator import Coordination
 from .bus_publication import Delivered
-from .channel_targets import ThreadTarget
 from .comms import Comms
 from .nominal.field_codec import ThreadLookup
 from .rule_deal import (
-    Asked, DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Speaking, Voice,
+    DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Voice,
 )
 from .session_receipts import SessionReceipts
-from .task_attachments.owner_notices import MeantNotice
+from .meant_voice import BusVoice
 from .tool_denial import SelectedToolDenied
 from .threads import Thread
 
@@ -70,7 +69,7 @@ class PiRuleGate(DealtRuleGate):
 
 
 @dataclass(frozen=True)
-class PiThreadGate(PiRuleGate, Speaking):
+class PiThreadGate(PiRuleGate, BusVoice):
     """A thread's deal seated on its bus: publish the owner's question and format receipts.
 
     Successful audit edits settle answers through the shared RuleDeal owner.
@@ -91,10 +90,8 @@ class PiThreadGate(PiRuleGate, Speaking):
     def voice(self) -> Voice:
         return self.session().voice(self)
 
-    def say(self, line: str, deal: RuleDeal) -> Asked:
-        """His line goes to the thread under his own thread, as every owner notice does."""
-        message = MeantNotice().publish(self.comms.messaging, ThreadTarget(self.thread.name), line)
-        return Asked(message.message_id)
+    def speaker(self) -> str:
+        return self.thread.name
 
     def receipts(self) -> SessionReceipts:
         return self.session().receipts()

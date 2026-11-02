@@ -23,8 +23,6 @@ class SessionReceipts:
     """A fold over transcript records, oldest first. A reply followed by a call did not end its
     turn, so its words stay pending until the turn's end or the transcript's end confirms them."""
 
-    calls: int = 0
-    refused: int = 0
     endings: list[TurnEnding] = field(default_factory=list)
     pending: list[str] = field(default_factory=list)
     running: dict[str, str] = field(default_factory=dict)
@@ -38,12 +36,10 @@ class SessionReceipts:
         self.pending.extend(words)
 
     def called(self, call: str, tool: str) -> None:
-        self.calls += 1
         self.running[call] = tool
         self.pending.clear()
 
     def resulted(self, call: str, refused: bool) -> None:
-        self.refused += refused
         if self.running.pop(call, self.reading_tool) != self.reading_tool and not refused:
             self.acted += 1
 
@@ -67,9 +63,7 @@ class SessionReceipts:
     def lines(self) -> tuple[str, ...]:
         """The receipts as he would read them out; a session with no record has none."""
         ended = tuple(self.quoted(ending) for ending in self.endings[-self.quoted_endings:])
-        return (*(("Your last turns ended on:", *ended) if ended else ()),
-                *((f"Of your last {self.calls} calls, {self.refused} were refused or failed.",)
-                  if self.calls else ()))
+        return ("Your last turns ended on:", *ended) if ended else ()
 
     def quoted(self, ending: TurnEnding) -> str:
         first = next((line.strip() for line in ending.words.splitlines() if line.strip()), "")

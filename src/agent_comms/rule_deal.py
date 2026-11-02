@@ -172,6 +172,10 @@ class MeantRecord:
             raise ValueError("No explanatory audit answer names the open question")
         return replace(self, open=())
 
+    def answer_to_open(self, audit: SessionAudit) -> str:
+        """The audit's first explanatory answer naming the open question."""
+        return self.answers_in(audit.answers_for(self.open[0].message_id))[0]
+
     def said(self, asked: Asked) -> MeantRecord:
         return replace(self, open=(*self.open, asked))
 
@@ -198,6 +202,10 @@ class Voice(ABC):
     """How a deal speaks to its session in the owner's voice, or that it cannot."""
 
     @abstractmethod
+    def answered(self, question: Asked, answer: str) -> None:
+        """The session's audit settled this question: its answer is published as the reply."""
+
+    @abstractmethod
     def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         """After a successful audit edit: ask about the rules it newly answered, once."""
 
@@ -208,7 +216,7 @@ class Voice(ABC):
 
 class Speaking(Voice):
     """A voice that reaches its session. The question and its escalation are decided here, for
-    every backend; a member says only how a line reaches the session."""
+    every backend; a member says how a line reaches the session and how its answer is shown."""
 
     @abstractmethod
     def say(self, line: str, deal: RuleDeal) -> Asked:
@@ -222,7 +230,7 @@ class Speaking(Voice):
             fresh = answered - covered.asked
             if not fresh:
                 return DocumentChange.to(covered)
-            line = audit.his_question(deal.receipts())
+            line = audit.batch(fresh).his_question(deal.receipts())
             return DocumentChange.to(covered.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
@@ -242,6 +250,9 @@ class Speaking(Voice):
 
 class Mute(Voice):
     """A deal that cannot publish in the owner's voice: it never asks or owes an answer."""
+
+    def answered(self, question: Asked, answer: str) -> None:
+        return
 
     def question(self, deal: RuleDeal, audit: SessionAudit, answered: frozenset[str]) -> None:
         return
@@ -407,9 +418,17 @@ class SessionAudit:
         """Written answers naming this question, in the session's original order."""
         return tuple(entry.answer for entry in self.meant if entry.asked == question)
 
+    def quotable(self) -> tuple[RuleAudit, ...]:
+        """The entries his question may quote: the whole audit."""
+        return self.rules
+
+    def batch(self, rules: frozenset[str]) -> BatchAudit:
+        """This audit as one batch's question reads it."""
+        return BatchAudit(self.rules, self.owner_words, meant=self.meant, asked=rules)
+
     def last_does(self) -> str:
-        """The last nonempty rule statement in the session's own audit, bounded for quotation."""
-        return next((line.strip()[:200] for entry in reversed(self.rules)
+        """The last nonempty quotable rule statement in the session's own audit, bounded."""
+        return next((line.strip()[:200] for entry in reversed(self.quotable())
                      for line in entry.does.splitlines() if line.strip()), "")
 
     def his_question(self, receipts: SessionReceipts) -> str:
@@ -426,6 +445,17 @@ class SessionAudit:
     def entry(self, rule: str) -> RuleAudit:
         """What this audit says about one rule; a rule it skips has said nothing."""
         return next((entry for entry in self.rules if entry.rule == rule), RuleAudit(rule))
+
+
+@dataclass(frozen=True)
+class BatchAudit(SessionAudit):
+    """The audit as one batch's question reads it: it quotes what that batch said, not an
+    older line, so each question in a session reads as its own."""
+
+    asked: frozenset[str] = field(default=frozenset(), kw_only=True)
+
+    def quotable(self) -> tuple[RuleAudit, ...]:
+        return tuple(entry for entry in self.rules if entry.rule in self.asked)
 
 
 class AbsentAudit(SessionAudit):
@@ -1087,9 +1117,16 @@ class RuleDeal(State, DealtCalls):
         audit = SessionAudit.read(self.audit)
         if audit.fault():
             return
-        meant = self.meant.update(lambda meant: DocumentChange.to(
-            meant.settled(audit) if meant.answered_by(audit) else meant))
+        def settle(meant: MeantRecord) -> DocumentChange[MeantRecord, tuple[Asked, str] | None]:
+            if not meant.answered_by(audit):
+                return DocumentChange(meant, None)
+            return DocumentChange(meant.settled(audit), (meant.open[0], meant.answer_to_open(audit)))
+
+        settled = self.meant.update(settle)
+        meant = self.meant.read()
         voice = self.voice()
+        if settled is not None:
+            voice.answered(*settled)
         if meant.open:
             voice.escalate(self, audit)
         voice.question(self, audit, frozenset(

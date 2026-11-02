@@ -19,7 +19,7 @@ from typing import ClassVar
 
 from agent_comms_hooks.shell_commands import ConnectCommand, ShellCommand
 from agent_comms.nominal.declared_family import DeclaredFamily
-from agent_comms.rule_deal import Asked, DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Speaking, Voice
+from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal, Voice
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
@@ -28,8 +28,7 @@ from agent_comms.cli_bridges.shared import Binding, Watch
 import time
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
-from agent_comms.channel_targets import ThreadTarget
-from agent_comms.task_attachments.owner_notices import MeantNotice
+from agent_comms.meant_voice import BusVoice
 from .claude_transcript import ClaudeJsonLines
 from .hook_forks import SeatedSubagent
 
@@ -133,7 +132,7 @@ class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
 
 
 @dataclass(frozen=True)
-class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
+class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, BusVoice):
     """One tool call of the session's own agent, judged before it runs and seen after it
     completes. Its deal lives beside the transcript, and a refusal is a PreToolUse denial."""
 
@@ -176,10 +175,8 @@ class GatedCall(ClaudeToolHook, TranscriptWords, DealtRuleGate, Speaking):
         """The supplied resident bus and binding are already this call's speaking seat."""
         return self
 
-    def say(self, line: str, deal: RuleDeal) -> Asked:
-        owner = self.binding.owner.require_recorded()
-        message = MeantNotice().publish(self.comms.messaging, ThreadTarget(owner.name), line)
-        return Asked(message.message_id)
+    def speaker(self) -> str:
+        return self.binding.owner.require_recorded().name
 
 
 @dataclass(frozen=True)

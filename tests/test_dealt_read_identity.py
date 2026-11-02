@@ -76,8 +76,11 @@ def test_his_question_quotes_the_written_audit_statement():
     from agent_comms.session_receipts import SessionReceipts
 
     wrote = RuleAudit("spine", does="I end turns on a unit's state, not on a wait.\nSecond line")
-    asked = SessionAudit((wrote, RuleAudit("ally")), ()).his_question(SessionReceipts())
+    audit = SessionAudit((wrote, RuleAudit("ally"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
+    asked = audit.batch(frozenset({"spine", "ally"})).his_question(SessionReceipts())
     assert asked == f"> I end turns on a unit's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
+    assert audit.batch(frozenset({"owner-authority"})).his_question(SessionReceipts()).startswith(
+        "> I take his plan as the work.")  # a batch quotes its own rules, not an older line
     assert SessionAudit((), ()).his_question(SessionReceipts()) == MeantRecord.question
 
 
@@ -111,5 +114,4 @@ def test_the_receipts_read_what_a_transcript_shows_the_session_did():
         "did the work", "Skipped", "Yes, I meant it\nsecond line"]
     assert receipts.idle_turns() == 2  # a refused call changed nothing, and neither did a read
     assert receipts.lines() == (
-        "Your last turns ended on:", "> did the work", "> Skipped", "> Yes, I meant it",
-        "Of your last 3 calls, 1 were refused or failed.")
+        "Your last turns ended on:", "> did the work", "> Skipped", "> Yes, I meant it")
