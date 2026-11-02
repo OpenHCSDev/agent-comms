@@ -89,7 +89,10 @@ def test_checkout_native_tests_use_a_private_runtime(tmp_path, test_uv):
             sys.executable,
             "-m",
             "agent_comms.installer.test_runtime",
-            "tests/test_native_input_bus_path.py",
+            # Qualify the private runtime with one real saved-owner roundtrip.
+            # The bus-path module exercises its queue/steer/cancel cases independently.
+            "tests/test_native_input_bus_path.py::"
+            "test_saved_owner_dm_replies_and_core_reads_exact_native_proof",
         ],
         cwd=checkout,
         env={
