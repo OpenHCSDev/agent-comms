@@ -8,7 +8,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from math import ceil
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 
 from agent_comms.bus import Bus
 from agent_comms.context_store import ContextManifestReference, ContextStore
@@ -21,6 +22,8 @@ from agent_comms.registry_document import RegistryEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.backup import pinned_bus_files, saved_bus_files
+from agent_comms.registry_store import RegistryCut, RegistryStore
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
@@ -180,6 +183,40 @@ class PracticeCopy:
         """
         return min(PracticeMeasurement.capture(self.path).remaining(maximum_bytes),
                    self.available_bytes)
+
+    @contextmanager
+    def capturing_inputs(self) -> Iterator[RegistryCut]:
+        """Enclose the first and every subsequent selected-input materialization.
+
+        The caller already owns the install's retargeted hold and does no source
+        writes here. Pins prevent last-close WAL checkpoints, not writers. Drain
+        admitted transactions separately, releasing each SQL lock before seeking
+        another or the registry. The hold excludes later non-holder transactions;
+        source observations reject holder-side writes during the materialization.
+        Ordinary whole-file include() and complete backups keep their own lifetime.
+        This supplies a recorded cut, not native launch or write authority.
+        """
+        if self.copied or self.path.exists():
+            raise UpgradeRefused("Selected input capture must start before materialization")
+        barrier = MaintenanceBarrier(RegistryFile.path_in(self.root))
+        files = LiveFilesRequest(self.root)
+        resources = RootFile.owned_files(files, tuple(
+            owner.path_in(self.root)
+            for owner in (Bus, InputDispositions, ContextStore, CoordinationStore)
+        ))
+        present = tuple(resource for resource in resources if files.location(resource).exists())
+        with (barrier.capturing(LaunchRuntime.running()),
+              pinned_bus_files(files, present)):
+            for resource in present:
+                with resource.owner.writers_drained(files.location(resource)):
+                    pass
+            with RegistryStore.at(self.root).current_snapshot() as original:
+                before = saved_bus_files(files, resources)
+                yield original
+                if not original.matches_current():
+                    raise UpgradeRefused("Registry changed during selected input capture")
+                if saved_bus_files(files, resources) != before:
+                    raise UpgradeRefused("Source stores changed during selected input capture")
 
     def include_contexts(
         self, identities: Iterable[NativeSessionIdentity], *, maximum_bytes: int,
