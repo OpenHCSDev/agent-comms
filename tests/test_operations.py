@@ -36,12 +36,12 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import ChosenModel, NextTurnConfiguration
 from agent_comms.thread_text import ForkedParent, GivenThreadText
 from agent_comms.thread_model import DeclaredModel
-from agent_comms.thread_status import HeartbeatThreadStatus
+from agent_comms.thread_status import ArchivedThreadStatus, HeartbeatThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment() -> None:
-    assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner", "PI_WORKTREE": "/declared"}).worktree == "/declared"
+    assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner", "PI_WORKTREE": "/declared"}).worktree == Checkout(Path("/declared"))
     for environment in ({}, {"AGENT_COMMS_THREAD": "owner"}):
         with pytest.raises(CallingThreadUnavailable):
             ThreadLaunch.current(environment)
@@ -180,7 +180,6 @@ class TestThreadOps:
 
         assert len(events) == 1
         notice = events[0]
-        assert notice.declared_name == "notice"
         assert isinstance(notice, NoticeTranscript)
         assert "Important decisions" in notice.text
 
@@ -280,7 +279,7 @@ class TestThreadOps:
         assert attached.task == GivenThreadText("fix auth")
         assert attached.process_identity == ProcessIdentity.capture(os.getpid())
         assert attached.session_file == RegistrySessionLocation.from_path(str(session_file.resolve()), wired.root)
-        assert wired.registry.status("fixer").declared_name == "running"
+        assert type(wired.registry.status("fixer")) is RunningThreadStatus
 
     def test_release_only_allows_the_calling_thread(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         for variable, value in ThreadLaunch.from_thread(wired.registry.require("fixer")).encode().items():
@@ -290,7 +289,7 @@ class TestThreadOps:
             wired.owners.release("PR111")
 
         wired.owners.release("fixer")
-        assert wired.registry.status("fixer").declared_name == "stopped"
+        assert type(wired.registry.status("fixer")) is StoppedThreadStatus
 
     def test_stop_current_calling_thread_uses_voluntary_release(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         owner = wired.registry.require("fixer")
@@ -303,7 +302,7 @@ class TestThreadOps:
         wired.owners.stop(owner.name)
 
         snapshot = wired.registry.snapshot()
-        assert snapshot.statuses[owner.name].declared_name == "stopped"
+        assert type(snapshot.statuses[owner.name]) is StoppedThreadStatus
         assert snapshot.claim_generation(owner.name) > before
 
     def test_archive_requires_stopped_thread(self, wired: Comms) -> None:
@@ -312,7 +311,7 @@ class TestThreadOps:
             wired.threads.archive("fixer")
         wired.owners.stop("fixer")
         wired.threads.archive("fixer")
-        assert wired.registry.status("fixer").declared_name == "archived"
+        assert type(wired.registry.status("fixer")) is ArchivedThreadStatus
         assert not any(row.thread.name == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
         assert [message.body for message in list(wired.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)] == [
@@ -441,7 +440,7 @@ class TestThreadOps:
         try:
             wired.owners.stop("live-process")
             assert process.wait(timeout=5) == -__import__("signal").SIGTERM
-            assert wired.registry.status("live-process").declared_name == "stopped"
+            assert type(wired.registry.status("live-process")) is StoppedThreadStatus
         finally:
             if process.poll() is None:
                 process.kill()
