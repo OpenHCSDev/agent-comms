@@ -141,8 +141,47 @@ class GitOpening:
 _git_opening: ContextVar[GitOpening] = ContextVar("git_opening", default=GitOpening())
 
 
+@dataclass(frozen=True, order=True)
+class GitVersion:
+    """A Git release by its numeric components; ``git --version`` reports its spelling."""
+
+    major: int
+    minor: int
+    patch: int = 0
+
+    reported_prefix: ClassVar[str] = "git version "
+
+    @classmethod
+    def reported(cls, line: str) -> GitVersion:
+        """Decode Git's own report, such as "git version 2.44.0 (Apple Git-1)"."""
+        if not line.startswith(cls.reported_prefix):
+            raise ValueError(f"Not a Git version report: {line!r}")
+        components = line.removeprefix(cls.reported_prefix).split()[0].split(".")[:3]
+        try:
+            return cls(*(int(component) for component in components))
+        except (TypeError, ValueError) as unread:
+            raise ValueError(f"Unreadable Git version report: {line!r}") from unread
+
+    def __str__(self) -> str:
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+
+class GitVersionUnsupported(RuntimeError):
+    """The Git on PATH predates the options every launch passes; nothing drops them."""
+
+    def __init__(self, program: Path, found: GitVersion, required: GitVersion) -> None:
+        self.program, self.found, self.required = program, found, required
+        super().__init__(
+            f"{program} is Git {found}; agent-comms requires Git {required} or later "
+            "(every repository read passes --no-lazy-fetch)."
+        )
+
+
 class GitLaunch(Executable):
     """One Git child boundary, also usable by the isolated stdlib bootstrap."""
+
+    # --no-lazy-fetch (switch_options, Repo.command) first shipped in Git 2.44.
+    minimum_version: ClassVar[GitVersion] = GitVersion(2, 44)
 
     program: ClassVar[str] = "git"
     chdir_option: ClassVar[str] = "-C"
@@ -198,6 +237,24 @@ class GitLaunch(Executable):
 
     @staticmethod
     @cache
+    def _version(program: Path, modified_ns: int) -> GitVersion:
+        """The binary's own version report; its stamp keys this immutable answer."""
+        probe = GitLaunch.completed(
+            (str(program), "--version"),
+            stdio=ConfiguredChildStdio(stdout=subprocess.PIPE, stderr=subprocess.PIPE),
+            env={name: value for name, value in os.environ.items() if not name.startswith("GIT_")}
+            | {"LC_ALL": "C"}, timeout=10,
+        )
+        probe.check_returncode()
+        return GitVersion.reported(probe.stdout.decode().strip())
+
+    @classmethod
+    def require_version(cls, program: Path, found: GitVersion) -> None:
+        if found < cls.minimum_version:
+            raise GitVersionUnsupported(program, found, cls.minimum_version)
+
+    @staticmethod
+    @cache
     def _local_environment(program: Path, modified_ns: int) -> frozenset[str]:
         """Git declares local selectors; the binary's stamp keys this immutable answer."""
         command = (str(program), "rev-parse", "--local-env-vars")
@@ -217,7 +274,9 @@ class GitLaunch(Executable):
                 program = Path(executable)
             case _:
                 raise FileNotFoundError(cls.program)
-        local = cls._local_environment(program, program.stat().st_mtime_ns)
+        stamp = program.stat().st_mtime_ns
+        cls.require_version(program, cls._version(program, stamp))
+        local = cls._local_environment(program, stamp)
         # GIT_CONFIG_* carries command configuration, including auth and fixture
         # identity; GIT_CONFIG instead selects an alternate configuration file.
         return {
