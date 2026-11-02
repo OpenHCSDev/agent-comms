@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Self
 
 from agent_comms.installer.carry import STEPS
+from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.repo import DetachedStart, Repo, ScratchCheckout
 
 
@@ -26,7 +27,13 @@ class ScratchTree(AbstractContextManager):
         """The launcher starts the install inside its tree (InstallRun.spawn): the scratch
         directory holds it and its checkout names the revision."""
         path = Path.cwd()
-        return cls(path.parent, Repo.git(path, "rev-parse", "HEAD").strip())
+        tree = cls(path.parent, Repo.git(path, "rev-parse", "HEAD").strip())
+        if tree.path != path:
+            # The scratch directory is retired whole on exit, so a start anywhere else (a
+            # checkout's own root) would delete that directory's parent.
+            raise UpgradeRefused(f"the install bootstrap must start in its target tree "
+                                 f"{tree.path.name}, not {path}")
+        return tree
 
     @property
     def path(self) -> Path:

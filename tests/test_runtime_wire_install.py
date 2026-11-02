@@ -91,6 +91,7 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     result = subprocess.run(
         (sys.executable, "-m", "agent_comms.installer"),
         input=json.dumps(FieldCodec.encode(request)), text=True, capture_output=True,
+        cwd=target_tree.path,
         env={**os.environ, "HOME": str(home),
              "PYTHONPATH": os.pathsep.join(map(str, (wire.checkout / "src", target_tree.steps_package)))},
         timeout=60,

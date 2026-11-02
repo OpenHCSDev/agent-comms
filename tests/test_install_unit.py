@@ -171,3 +171,21 @@ def test_retiring_old_logs_spares_a_running_units_directory(tmp_path, systemd, m
     assert live.logs.is_dir()
     assert sorted(unit.logs for unit in logs.units()) == sorted(
         [live.logs, *(unit.logs for unit in later[-StoreBackup.kept:])])
+
+
+def test_a_bootstrap_started_outside_its_target_tree_deletes_nothing(tmp_path, monkeypatch):
+    """The bootstrap retires its scratch directory whole, so it must refuse a start from any
+    directory but ``scratch/tree-<revision>``: from a checkout's root it deleted the checkout's
+    parent, which took /home/user on 2026-11-02."""
+    from agent_comms.installer.refusals import UpgradeRefused
+    from agent_comms.installer.target_tree import ScratchTree
+
+    checkout = tmp_path / "parent" / "checkout"
+    checkout.mkdir(parents=True)
+    subprocess.run(("git", "init", "-q", str(checkout)), check=True)
+    subprocess.run(("git", "-C", str(checkout), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-q", "--allow-empty", "-m", "base"), check=True)
+    monkeypatch.chdir(checkout)
+    with pytest.raises(UpgradeRefused, match="must start in its target tree"):
+        ScratchTree.entered()
+    assert checkout.is_dir()
