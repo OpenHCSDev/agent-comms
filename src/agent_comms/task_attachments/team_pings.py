@@ -355,8 +355,9 @@ class TeamUpdate(OwnerNotice, declared_name=None):
              publication: PublicationFacts = UnpublishedFacts()) -> tuple[Message, ...]:
         recipient = comms.registry.require(self.commander.name)
         packet = replace(self, publication=publication)
-        return recipient.heartbeat_delivery.publish(lambda: packet.publish(
-            comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud)))
+        return comms.registry.status(recipient.name).publish_heartbeat(
+            lambda: recipient.heartbeat_delivery.publish(lambda: packet.publish(
+                comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud))))
 
 
 

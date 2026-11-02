@@ -1147,3 +1147,14 @@ def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_i
     assert spoken.category is InboundCategory
     assert IncomingTranscript.of(board, reader="lead").category is HeartbeatCategory
     assert HeartbeatCategory in all_categories()
+
+
+def test_an_archived_lead_keeps_its_board_and_the_pass_completes(notification_bus):
+    """2026-11-02: from 14:49 every heartbeat pass died on 'Initial direct target must be visible'
+    sending the archived lead its packet, so no teammate had a board."""
+    from agent_comms.thread_status import ArchivedThreadStatus
+
+    comms = notification_bus
+    comms.registry.register(comms.registry.require("lead"), ArchivedThreadStatus())
+    assert beat(comms) is not None
+    assert comms.registry.status("lead") == ArchivedThreadStatus()
