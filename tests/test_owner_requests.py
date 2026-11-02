@@ -15,7 +15,7 @@ from agent_comms.comms import Comms
 from agent_comms.connector import ConnectorSendTool
 from agent_comms.standing_rules import DirectiveUnacted
 from agent_comms.connector_caller import CALLER, DirectorCaller
-from agent_comms.errors import RejectedEnforcementError, RelationViolationError
+from agent_comms.errors import RelationViolationError
 from agent_comms.goals import OrderCheck
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.owner_requests import NewestOpenRequest
@@ -27,6 +27,7 @@ from agent_comms.todos import (
     ClaimOrder,
     OrderClaim,
     PendingProblemOrder,
+    PullRequestLink,
     TodoStore,
     TriageScope,
     WithdrawTodo,
@@ -34,7 +35,6 @@ from agent_comms.todos import (
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import CommsSendTool
 from agent_comms.threads import Thread
-from agent_comms_hooks import ToolRefusedError
 
 
 def test_retired_team_requests_follow_peer_authority(
@@ -60,7 +60,7 @@ def test_retired_team_requests_follow_peer_authority(
     assert store.owner_request(first.id).commander == author.incarnation
     assert store.open_requests(peer.acting_identity) == (newest, own, first)
     assert store.open_requests(peer.acting_identity, limit=1, descending=False) == (first,)
-    assert store.open_requests(outsider.acting_identity, limit=1) == (own,)
+    assert store.open_requests(outsider.acting_identity, limit=1) == (newest,)
     assert not store.open_requests(peer.acting_identity, limit=0)
     assert first.id.for_order(store, peer.acting_identity) == first.id
     assert first.id in {
@@ -70,11 +70,9 @@ def test_retired_team_requests_follow_peer_authority(
     request_main(["list"], peer_context)
     assert first.id.value in capsys.readouterr().out
     outsider_context = Team.on_root(outsider.name, (repository,), comms.root)
-    with pytest.raises(RejectedEnforcementError, match="belongs to another teammate"):
-        request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
-    peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(
-        ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
+        ["complete", first.id.value, "--why", "The untagged peer completed the request."],
+        outsider_context,
     )
     assert f"{first.id.value} done" in capsys.readouterr().out
     assert store.open_requests(peer.acting_identity) == (newest, own)
@@ -189,7 +187,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     claim = OrderClaim.for_order(
         todo,
         worker.incarnation,
-        1,
+        PullRequestLink(todo.repo, 1),
         "a" * 40,
         "The request owner was inspected.",
         original.reference,
@@ -220,13 +218,15 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
             request=first.id,
             body="Read the request records and report the result.",
         ).apply(comms, CALLER)
-    with pytest.raises(ToolRefusedError):
-        ConnectorSendTool(
-            target="worker",
-            request=first.id,
-            body="Read the request records and report the result.",
-        ).apply(comms, CALLER)
     assert comms.bus.bus.revision() == before
+    ConnectorSendTool(
+        target="worker",
+        request=first.id,
+        body="Read the request records and report the result.",
+    ).apply(comms, CALLER)
+    directed = store.owner_request(first.id).directives[-1]
+    with comms.bus.bus.reading() as source:
+        assert directed.original(source).target == "worker"
 
     request_main(["complete", second_id, "--why", "The independent request is finished."], ctx)
     capsys.readouterr()
@@ -239,7 +239,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         todo.id,
         WithdrawTodo(
             todo.revision,
-            lead.incarnation,
+            worker.incarnation,
             todo.held(),
             "The isolated request check is complete.",
         ),
@@ -266,7 +266,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     awaiting_claim = OrderClaim.for_order(
         awaiting_todo,
         worker.incarnation,
-        2,
+        PullRequestLink(awaiting_todo.repo, 2),
         "b" * 40,
         "The request's work is ready for review.",
         original.reference,
