@@ -36,7 +36,7 @@ from .native_input_proof import NativeContextProof
 from .native_integer import PositiveNativeIntegerBounds
 from .native_session_reopen import PiSessionId
 from .transcript_routes import InputDisplay, NoDisplayText
-from .typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage
+from .typed_table import LOCAL_TABLE_SOURCE, SqlStorage, TableSource, TextStorage, sql_literal
 
 if TYPE_CHECKING:
     from sqlite3 import Connection
@@ -190,6 +190,14 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         self, db: Connection, input_id: InputId, *,
         table_source: TableSource = LOCAL_TABLE_SOURCE,
     ) -> tuple[AssignmentId, ...]:
+        return tuple(row.assignment_id for row in self.source_assignments(
+            db, input_id, table_source=table_source,
+        ))
+
+    def source_assignments(
+        self, db: Connection, input_id: InputId, *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> tuple[WakeAssignment, ...]:
         """Membership leads: a missing claim reaches the required-row decoder.
 
         An inner join would silently erase a declared source whose claim was
@@ -202,7 +210,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
             "ON m.assignment_id=c.assignment_id "
             "WHERE m.input_id=? ORDER BY m.ordinal", (input_id,),
         ))
-        return tuple(original.assignment_id for original in originals)
+        return tuple(originals)
 
     @abstractmethod
     def record_sources(
@@ -294,7 +302,7 @@ class FullNativeExecution(NativeInputExecution):
                 f"FROM {table_source.qualified(NativeRuntimeInput.declared_name)} n "
                 f"JOIN {table_source.qualified(ExecutionAssignmentLink.declared_name)} c "
                 "ON c.execution_id=n.execution_id "
-                f"WHERE n.stage='{cls.declared_name}'")
+                f"WHERE n.stage={sql_literal(cls)}")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],

@@ -347,6 +347,10 @@ def test_native_membership_query_uses_the_supplied_attachment(
     with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
         # Both table sets exist. Ordinary lookup sees the empty destination;
         # qualification must keep every join on the original attachment.
+        assert selected.execution.source_assignments(original.destination, selected.input_id) == ()
+        assert selected.execution.source_assignments(
+            original.destination, selected.input_id, table_source=original.source,
+        ) == (source.claims[0],)
         assert selected.execution.source_assignment_ids(original.destination, selected.input_id) == ()
         assert selected.execution.source_assignment_ids(
             original.destination, selected.input_id, table_source=original.source,

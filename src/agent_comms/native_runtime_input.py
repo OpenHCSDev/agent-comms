@@ -190,16 +190,12 @@ class NativeRuntimeInput(
         Membership comes from the original attachment; only selected native ids
         come from the destination.
         """
-        from .coordination_tables.assignments import WakeAssignment
-
         changed = super().retain_required_rows(original, schema)
         for native in cls.stream(original.destination):
-            identifiers = native.execution.source_assignment_ids(
+            for assignment in native.execution.source_assignments(
                 original.destination, native.input_id, table_source=original.source,
-            )
-            changed += original.retain_keys(WakeAssignment, tuple(
-                {"assignment_id": identifier} for identifier in identifiers
-            ))
+            ):
+                changed += assignment.retain_original(original)
         return changed
 
     def __post_init__(self):

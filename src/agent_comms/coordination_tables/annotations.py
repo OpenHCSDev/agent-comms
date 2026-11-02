@@ -188,17 +188,22 @@ class AnnotationRequestsRow(ContextSpanRows, CoordinatorRow):
         cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
     ) -> int:
         """Keep original grant usage and each request's complete answer/correction group."""
-        from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
-
         changes = super().retain_required_rows(original, schema)
         changes += original.retain_keys(cls, tuple(
             {"grant_reference": row.request.grant} for row in cls.stream(original.destination)
         ))
-        changes += original.retain_keys(SpanAnnotationsRow, tuple(
-            WorkingMemoryAnnotations.address(row.request.span, row.request.question,
-                                             row.request.classifier)
-            for row in cls.stream(original.destination)
-        ))
+        # One natural address can name multiple correction rows; it is not a
+        # foreign key. Compare the actual declared generated columns, without
+        # making storage import a reader to reconstruct their domain values.
+        related = " AND ".join(
+            f"{SpanAnnotationsRow.qualified(name)} IS {cls.qualified(name)}"
+            for name in SpanAnnotationsRow.address
+        )
+        changes += original.retain_rows(
+            SpanAnnotationsRow,
+            where=f"EXISTS (SELECT 1 FROM main.{LOCAL_TABLE_SOURCE.qualified(cls.declared_name)} "
+                  f"WHERE {related})",
+        )
         return changes
 
     @classmethod

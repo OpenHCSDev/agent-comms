@@ -13,7 +13,10 @@ from collections.abc import Iterable
 from agent_comms.bus import Bus
 from agent_comms.context_store import ContextManifestReference, ContextStore
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.input_disposition import InputDispositions, InputDocument
+from agent_comms.coordination_tables.annotations import ContextSpanRows
+from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
+from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.participant_store import ParticipantStore
 from agent_comms.registry_document import RegistryEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
@@ -225,11 +228,17 @@ class PracticeCopy:
             raise UpgradeRefused("Copied contexts have no captured original reader source")
         source = CoordinationStore.path_in(self.root)
         resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source,))
-        selected = CoordinationStore.retain_inputs(
-            source, CoordinationStore.path_in(self.path), entries,
-            identities=identities, maximum_bytes=self.remaining_bytes(maximum_bytes),
-            segments=contexts.original_segments() if source_contexts in self.copied else (),
-        )
+        segments = contexts.original_segments() if source_contexts in self.copied else ()
+        with CoordinationStore.retaining_rows(
+            source, CoordinationStore.path_in(self.path),
+            maximum_bytes=self.remaining_bytes(maximum_bytes),
+        ) as original:
+            selected = SnapshotInputDispositions(self.path, original).retain_unresolved(entries)
+            ParticipantStore.retain_owners(original, tuple(
+                entry.thread.incarnation.require_recorded().lookup for entry in entries
+            ))
+            NativeRuntimeInput.retain_sessions(original, identities)
+            ContextSpanRows.retain_segments(original, segments)
         self.copied[source] = resource
         return selected
 

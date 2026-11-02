@@ -7,11 +7,11 @@ import sqlite3
 import stat
 import tempfile
 from abc import abstractmethod
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Self
+from typing import Self
 
 from agent_comms.coordination_errors import CoordinationReadUnavailable, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
@@ -26,13 +26,6 @@ from agent_comms.typed_table import (
 from .child_process import Platform
 from .nominal.declared_family import DeclaredFamily
 from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
-
-if TYPE_CHECKING:
-    from .input_disposition import InputDocument
-    from .native_session_reopen import NativeSessionIdentity
-    from .registry_document import RegistryEntry
-    from .turn_context import SegmentManifest
-
 
 class StoreFile(DeclaredFamily):
     """One decoded file state, with the consumer's result inside its read lifetime."""
@@ -87,33 +80,6 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
         from .registry_store import RegistryStore
 
         return RegistryStore.at(path.parent).privacy().coordinator_schema()
-
-    @classmethod
-    def retain_inputs(
-        cls, source: Path, destination: Path, entries: tuple[RegistryEntry, ...], *,
-        maximum_bytes: int, identities: Iterable[NativeSessionIdentity] = (),
-        segments: Iterable[SegmentManifest] = (),
-    ) -> InputDocument:
-        """Materialize original input witnesses under the existing fresh-file owner.
-
-        The caller supplies a consistent retained bus/complete ledger beside the
-        destination and the original registry entries from that same cut. This
-        selects data only; capture consistency and runnable-root authority remain
-        the capture/preparation owners' separate obligations.
-        """
-        from .input_disposition import SnapshotInputDispositions
-        from .native_runtime_input import NativeRuntimeInput
-        from .participant_store import ParticipantStore
-        from .coordination_tables.annotations import ContextSpanRows
-
-        with cls.retaining_rows(source, destination, maximum_bytes=maximum_bytes) as original:
-            selected = SnapshotInputDispositions(destination.parent, original).retain_unresolved(entries)
-            ParticipantStore.retain_owners(original, tuple(
-                entry.thread.incarnation.require_recorded().lookup for entry in entries
-            ))
-            NativeRuntimeInput.retain_sessions(original, identities)
-            ContextSpanRows.retain_segments(original, segments)
-        return selected
 
     @classmethod
     def observed(cls, path: Path) -> StoreFile:

@@ -223,8 +223,8 @@ name/generation or a fabricated birth. `HarnessAttemptOrigin.retain_harness_rows
 owns its bridge/reference selection and full-sequence check; origins without a
 harness witness contribute no harness rows. No synthesized reservation is stored.
 
-`CoordinationStore.retain_inputs` runs these seeds through the existing
-`ReconciledFile.retaining_rows` loading/dependency/publication lifetime.
+`PracticeCopy.include_inputs` runs these seeds directly through the existing
+`CoordinationStore.retaining_rows` loading/dependency/publication lifetime.
 `NativeRuntimeInput.retain_sessions` additionally selects original native groups
 by both recorded session id and original session path. A bare ledger native id
 is not treated as a coordinator FK. The existing row hooks retain the selected
