@@ -19,8 +19,8 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     for comms in roots:
         comms.registry.declare(Thread('writer', frozenset({'review', 'other'}), Checkout(comms.root)))
         for number in range(3):
-            comms.messaging.send("writer", "#review", f"{comms.root.name} {number}").message.message_id
-            comms.messaging.send("writer", "#other", f"excluded {number}").message.message_id
+            comms.messaging.send("writer", "#review", f"{comms.root.name} {number}")
+            comms.messaging.send("writer", "#other", f"excluded {number}")
     prior, current = roots
     original = prior.bus.bus.revision()
     current.views.attach_history(prior.root)

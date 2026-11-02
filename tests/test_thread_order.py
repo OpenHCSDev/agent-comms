@@ -2,9 +2,6 @@
 
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
-
-
-
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
@@ -14,7 +11,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 
 
-def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeypatch):
+def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread(name='alpha', tags=frozenset(), worktree=Checkout(tmp_path), created_at=100))
     comms.registry.declare(Thread(name='beta', tags=frozenset(), worktree=Checkout(tmp_path), created_at=200))
@@ -23,12 +20,12 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
         Message(
             sender="alpha", target="beta", body="outgoing", type=InfoKind, timestamp=400
         ), destination=CommandTarget.named("beta"), origin=AgentOrigin()
-    ).message_id
+    )
     comms.bus.publisher.publish_ordinary(
         Message(
             sender="beta", target="alpha", body="incoming", type=InfoKind, timestamp=500
         ), destination=CommandTarget.named("alpha"), origin=AgentOrigin()
-    ).message_id
+    )
     with comms.bus.opened_activity() as clocks:
         assert comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot()) == {"alpha": 400, "beta": 500}
     comms.owners.acquire_thread("alpha")
@@ -39,7 +36,6 @@ def test_sort_metadata_survives_selection_heartbeat_and_rename(tmp_path, monkeyp
     assert people["alpha"]["last_activity"] == 300
     assert people["beta"]["last_activity"] == 0
     assert comms.agents.activity_of("alpha", snapshot=comms.registry.snapshot()).timestamp == 300
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     comms.threads.rename_self("renamed", caller=ThreadCaller("alpha"))
     assert comms.registry.require("renamed").created_at == 100
     with comms.bus.opened_activity() as clocks:
