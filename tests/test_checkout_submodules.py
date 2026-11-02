@@ -216,10 +216,10 @@ def test_checkout_remove_retires_the_order_checkout_with_its_submodule(
     assert added.returncode == 0, added.stderr
     rule = comms.registry.storage_rule
     path = rule.order_checkout(rule.initial_roots("worker"), "P1")
-    # The commander may close the problem before its unit retires the checkout.
+    # The holder may close the problem before retiring its checkout.
     current = comms.goals.todos.get("P1")
     closed = comms.goals.todos.apply("P1", WithdrawTodo(
-        current.revision, comms.registry.require("lead").incarnation, current.held(),
+        current.revision, comms.registry.require("worker").incarnation, current.held(),
         "The order is closed before its teammate retires the checkout it worked in."))
     assert closed.assignment is None
     (path / "owner.py").write_text("an unpushed edit\n")
@@ -488,7 +488,7 @@ def test_transfer_refuses_before_moving_retained_work(retained_transfer, refusal
         current = comms.goals.todos.get('P1')
         stale = OrderCheckoutGrant(worker, current)
         comms.goals.todos.apply('P1', WithdrawTodo(
-            current.revision, comms.registry.require('lead').incarnation, current.held(),
+            current.revision, worker.incarnation, current.held(),
             'The target assignment ends before the prepared transfer runs.'))
         with pytest.raises(ValueError, match='changed before checkout transfer'):
             stale.require_transfer(comms, repository)
