@@ -478,7 +478,7 @@ def test_transfer_refuses_current_reviewer_then_keeps_departed_reviewers_history
     assert (git(source.path, 'rev-parse', 'HEAD'),
             git(source.path, 'status', '--porcelain')) == before
 
-    assert comms.threads.set_project(reviewer.name, str(reviewer_path)).changed
+    assert comms.threads.set_project(reviewer.incarnation, str(reviewer_path)).changed
     departed = comms.registry.require(reviewer.name)
     assert departed.incarnation == reviewer.incarnation
     assert departed.worktree == Checkout(reviewer_path)
@@ -506,8 +506,8 @@ def test_transfer_refuses_foreign_allocation_even_after_its_owner_changes_projec
         'reviewer', frozenset(), source, execution=ExternalThreadExecution))
     reviewer_path = rule.order_checkout(rule.roots_of(reviewer), 'P3')
     Checkout.add(repository, reviewer_path, NewBranchStart('reviewer-next', 'HEAD'))
-    assert comms.threads.set_project(worker.name, str(worker_path)).changed
-    assert comms.threads.set_project(reviewer.name, str(reviewer_path)).changed
+    assert comms.threads.set_project(worker.incarnation, str(worker_path)).changed
+    assert comms.threads.set_project(reviewer.incarnation, str(reviewer_path)).changed
     worker = comms.registry.require(worker.name)
     reviewer = comms.registry.require(reviewer.name)
     assert worker.worktree == Checkout(worker_path)
@@ -539,8 +539,8 @@ def test_transfer_accepts_callers_historical_launch_without_current_allocation(
         rule.require_transfer_source(
             worker, source, comms.registry.snapshot().threads.values(),
             comms.goals.todos.get('P1').repository)
-    assert comms.threads.set_project(worker.name, str(source)).changed
-    assert comms.threads.set_project(worker.name, str(next_project)).changed
+    assert comms.threads.set_project(worker.incarnation, str(source)).changed
+    assert comms.threads.set_project(worker.incarnation, str(next_project)).changed
     worker = comms.registry.require(worker.name)
     assert checkout in worker.earlier_projects
     assert not rule.owns_present_checkout(worker, source, RepositoryReads())

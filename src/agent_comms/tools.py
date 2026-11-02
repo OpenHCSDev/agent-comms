@@ -460,7 +460,7 @@ class CommsSetProjectTool(ThreadToolRequest):
     path: Annotated[str, *tool_field("New project directory")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProjectSet:
-        result = comms.threads.set_project(caller.name, self.path)
+        result = comms.threads.set_project(caller.identity(comms), self.path)
         return ProjectSet(
             result.thread, result.previous, result.current, result.changed,
             (

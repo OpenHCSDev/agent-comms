@@ -17,6 +17,7 @@ from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.native_arguments import GivenArguments, GivenBinary
+from agent_comms.repo import Checkout
 
 
 
@@ -39,13 +40,13 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
             return True
 
     agent.on_connect(Client())
-    comms.threads.set_project(session, str(new))
+    comms.threads.set_project(comms.registry.require(session).incarnation, str(new))
     await agent.sessions.sync_identity(session)
     assert next(
         update.worktree
         for update in decode_updates(updates[-1].field_meta)
         if isinstance(update, CoordinationChangedUpdate)
-    ) == str(new)
+    ) == Checkout(new)
     await agent.shutdown()
     resumed = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()))
     try:
@@ -54,7 +55,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
             update.worktree
             for update in decode_updates(result.field_meta)
             if isinstance(update, CoordinationChangedUpdate)
-        ) == str(new)
+        ) == Checkout(new)
         with pytest.raises(RequestError):
             await resumed.load_session(str(tmp_path / "unrelated"), session)
         assert len(comms.registry.all_threads()) == 1
@@ -92,13 +93,13 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_run
                 update.worktree
                 for update in decode_updates(await proxy.subscribe())
                 if isinstance(update, CoordinationChangedUpdate)
-            ) == str(old)
-        comms.threads.set_project(session, str(new))
+            ) == Checkout(old)
+        comms.threads.set_project(comms.registry.require(session).incarnation, str(new))
         await owner.sessions.sync_identity(session)
         async with asyncio.timeout(2):
             while not all(
                 any(
-                    update.worktree == str(new)
+                    update.worktree == Checkout(new)
                     for value in values
                     for update in decode_updates(value.get("_meta"))
                     if isinstance(update, CoordinationChangedUpdate)
