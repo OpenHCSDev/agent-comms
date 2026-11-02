@@ -1235,9 +1235,7 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
 
     @classmethod
     def hunted(cls, comms: Comms, commander: str) -> float:
-        hunts = comms.goals.todos.hunts_for_team(
-            comms.registry.require(commander).incarnation)
-        return max((hunt.at.recorded_at("A hunt") for hunt in hunts), default=0)
+        return max((hunt.at.recorded_at("A hunt") for hunt in comms.goals.todos.hunts()), default=0)
 
     @classmethod
     def reason(cls, comms: Comms, commander: str, frame: HeartbeatFrame) -> str | None:
@@ -1252,16 +1250,14 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule, FamilyScan):
         todos = tuple(todo for todo in frame.todos
                       if todo.held().owner_identity in readable)
         return next((LocatedHuntDue(why=why, since=since, where=path)
-                     for path in cls.next_hunt(comms, commander, todos)),
+                     for path in cls.next_hunt(comms, todos)),
                     cls(why=why, since=since))
 
     @classmethod
-    def next_hunt(cls, comms: Comms, commander: str,
-                  todos: Iterable[Todo]) -> tuple[str, ...]:
+    def next_hunt(cls, comms: Comms, todos: Iterable[Todo]) -> tuple[str, ...]:
         """Least recently hunted hot file in the held orders' declared check repositories."""
-        actor = comms.registry.require(commander).incarnation
         hunted: dict[str, float] = {}
-        for hunt in comms.goals.todos.hunts_for_team(actor):
+        for hunt in comms.goals.todos.hunts():
             hunted[hunt.where.file] = max(hunted.get(hunt.where.file, 0),
                                           hunt.at.recorded_at("A hunt"))
         repos = {todo.repository
