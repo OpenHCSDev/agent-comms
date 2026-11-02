@@ -15,6 +15,18 @@ is parked, not an acceptance gate. Reply to this plan rather than start another.
   existing connector caller (`:106–112`). A phone must get its own approved,
   revocable client/principal; never borrow Claude's token or pretend to be its agent.
   Extend the existing grant/caller families without weakening the Claude flow.
+  The complete current chain is `ClientRegistration` → name-only `RegisteredClient`
+  → `AuthorizationQuery` → `IssuedCode(client_id, code_challenge)` → access/refresh
+  grant → `IssuedAccess.caller()` → `DirectorCaller("claude-ai")`
+  (`connector.py:162–217,673–716,804–811`; `connector_store.py:48–50,105–112,174–208`;
+  `connector_caller.py:59–83`). That caller emits **DirectorOrigin**, not a native
+  human/UI identity. Widening only the callback would preserve the wrong authority.
+  Register native callback/principal policy at the client owner and derive token
+  authority from that registration, never its display name. Bind the accepted
+  redirect to authorization-code redemption once multiple callbacks exist; the
+  current fixed literal supplies that exclusion today. Compose shared MCP behavior
+  with the existing thread/no-thread caller roles instead of inventing a proxy agent.
+  Keep the first slice's read-only exposure declaration-derived, not a tool-name roster.
 - Core's `ui_model/observation.py` already owns interests, bounded reads, results,
   cancellation and retirement. `ObservationProcess:1456–1615` uses a **local**
   multiprocessing pipe and Python pickle. Keep that IPC server-side: never expose
