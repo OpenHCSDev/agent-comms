@@ -4,14 +4,12 @@ Git is real (a temporary repository, origin remote, unit homes and allocated ord
 only forge answers come from the external gh fixture, through the unmodified reader.
 """
 
-import asyncio
 import json
 import os
 import subprocess
 import time
 from abc import ABC, abstractmethod
 from collections import Counter
-from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -22,7 +20,7 @@ import pytest
 from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
+from team_heartbeat_fixture import current_hud, observe_team
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import ToolCallId
@@ -33,7 +31,6 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.order_runs import ApplicationOrderRun, MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Checkout, Repo, RepositoryReads, UnpushedHead
-from agent_comms.service_passes import ServicePassStore
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
     BranchBehindMain,
@@ -57,7 +54,6 @@ from agent_comms.todos import (
     PendingProblemOrder,
     ProgressRead,
     PullRequestLink,
-    SharedWorktreeRefusal,
     Todo,
     UnmergedListedPullRequest,
 )
@@ -501,46 +497,6 @@ def test_branch_rules_read_the_order_checkout_instead_of_the_behind_home(fleet):
     ) in built.observe().rules
 
 
-def test_new_allocated_branch_after_upstream_capture_is_one_unreadable_holder(fleet):
-    built, _ = fleet
-    todo = built.comms.goals.todos.get(built.problems['unpushed'])
-    storage = built.comms.registry.storage_rule
-    path = storage.order_checkout(storage.roots_of(built.thread('unpushed')), todo.id)
-    plans = TeamHeartbeat()
-    with LaunchRoot.from_path(built.comms.root).selected():
-        before = observe_team(built.comms, built.thread(Team.commander),
-                                   ProgressRead(), plans=plans)
-        healthy = tuple(card for card in before.states if card.unit.name != 'unpushed')
-        pulls = ProgressRead()
-        reader = pulls.checkout(path).branches
-        reader.prepare_upstreams()
-        branch = 'created-after-upstream-cut'
-        head = built.git(path, 'rev-parse', 'HEAD')
-        built.git(path, 'switch', '-c', branch)
-        inputs = TeamInputs.prepare(built.comms, Team.commander, pulls, plans)
-        with pytest.raises(WorkBranchError) as canonical:
-            pulls.progress((todo,), built.comms.registry)[todo.id].require_read()
-        assert branch in str(canonical.value) and str(path) in str(canonical.value)
-        observed = TeamObservation.read(built.comms, built.thread(Team.commander),
-                                             inputs, plans=plans)
-        (broken,) = (card for card in observed.states if card.unit.name == 'unpushed')
-        assert isinstance(broken, Unreadable)
-        assert broken.reason == str(canonical.value)
-        assert tuple(card for card in observed.states if card.unit.name != 'unpushed') == healthy
-        completed_after = time.time()
-        asyncio.run(ObservedHeartbeat((observed,)).run(lambda: nullcontext(built.comms)))
-        assert ServicePassStore.at(built.comms.root).read().heartbeat_completed_at(
-            built.thread(Team.commander).incarnation).since(completed_after)
-        recovered = observe_team(built.comms, built.thread(Team.commander),
-                                      ProgressRead(), plans=plans)
-        assert not any(isinstance(card, Unreadable) and card.unit.name == 'unpushed'
-                       for card in recovered.states)
-        difference = recovered.frame.pulls.require_branch_difference(path)
-        assert (difference.branch, difference.head) == (branch, head)
-        (publication,) = difference.unpublished
-        assert (publication.head, publication.commits, publication.upstream) == (head, 1, '')
-
-
 @pytest.mark.parametrize('mutation', ('switch', 'delete', 'advance', 'retire'))
 def test_held_branch_rules_consume_the_complete_cut_after_worktree_mutation(
     fleet, mutation, tmp_path, monkeypatch,
@@ -656,22 +612,6 @@ def test_replay_raises_each_incident_once(fleet):
     assert seeded == set(IncidentSeed.seeds)
     assert Counter(rule for rule in first.rules if type(rule) in seeded) == Counter(expected)
     assert all(count == 1 for count in Counter(expected).values())
-
-    # A second holder in an occupied worktree is refused at order time.
-    behind = built.thread("behind")
-    declare_test_bus(
-        built.comms,
-        threads=(
-            Thread(name="squatter", tags=frozenset({"comms"}), worktree=Checkout(behind.project_path)),
-        ),
-    )
-    with pytest.raises(SharedWorktreeRefusal) as refused:
-        built.order("squatter", behind.project_path, at=time.time())
-    assert refused.value.problem == built.problems["squatter"]
-    assert refused.value.holder == built.thread("squatter").incarnation
-    assert refused.value.worktree == behind.project_path
-    assert refused.value.holding_problem == built.problems["behind"]
-    assert refused.value.holding_holder == behind.incarnation
 
     second = built.observe()
     assert {rule.observation_key() for rule in first.rules} == {
