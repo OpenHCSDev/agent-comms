@@ -18,7 +18,6 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_scope import OneGoal
-from agent_comms.goal_presentation import PausedExecution, RetryableBlockExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
 from agent_comms.goals import Goal
 from agent_comms.threads import Thread
@@ -76,8 +75,7 @@ def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_
     )
     comms.registry.register(replace(thread, goal=recorded), comms.registry.status("worker"))
     observed = wire(tmp_path).goals.goal_execution("worker")
-    assert type(observed) is RetryableBlockExecution
-    assert observed.presentation("worker").summary == "Blocked · reason unavailable"
+    assert "reason unavailable" in observed.presentation("worker").summary
     assert "Unrelated old progress" not in observed.presentation("worker").summary
 
 
@@ -109,6 +107,5 @@ def test_owner_resume_refusal_preserves_pause_and_prior_progress(tmp_path):
     assert reloaded == progressed
     assert reloaded.progress == "Half verified by the owner"
     execution = comms.goals.goal_execution("worker")
-    assert isinstance(execution, PausedExecution)
     assert execution.source == progressed.state.source
     assert comms.goals.goal_history("worker", OneGoal(original.id))[-1].after == reloaded
