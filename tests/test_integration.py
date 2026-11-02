@@ -593,8 +593,7 @@ def test_publication_cli_uses_explicit_actor_and_real_source_cut(
     pair = mutual_sources.starting_publication("")
     body = tmp_path / "publication-body.md"
     body.write_text("The real companion migration supplies the substantive source change.\n")
-    command = (sys.executable, "-c",
-               "from agent_comms.integration import run; raise SystemExit(run())",
+    command = (str(Path(sys.executable).with_name("agent-comms-integrate")),
                "--publish", "P3", "--from", "worker", "--comms-root", str(pair.context.root),
                "--checkout", str(pair.checkout.path), "--output", str(pair.output),
                "--risk", "Exercise the actual explicit-actor publication entry",
