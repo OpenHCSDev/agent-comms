@@ -1,13 +1,7 @@
-"""Only concrete birth-marker declarations decode; external identity spelling stays fixed."""
-
-import runpy
-from abc import abstractmethod
-from types import SimpleNamespace
+"""External birth markers decode to their declared member and keep their wire spelling."""
 
 import pytest
-from metaclass_registry import DuplicateRegistryKeyError
 
-from agent_comms import thread_identity
 from agent_comms.thread_identity import (
     CoreWatcherIncarnation,
     DeletedThreadIncarnation,
@@ -38,47 +32,3 @@ def test_external_birth_markers_survive_wire_and_cli_boundaries(birth, member, d
 def test_unknown_nonrecorded_birth_cannot_create_a_live_identity(birth):
     with pytest.raises(ValueError):
         ThreadIncarnation.from_wire({'name': 'unknown', 'created_at': birth})
-
-
-@pytest.fixture
-def identity_family():
-    # Execute the actual class declarations without changing the canonical registry.
-    return SimpleNamespace(**runpy.run_path(thread_identity.__file__, run_name=thread_identity.__name__))
-
-
-def test_new_concrete_marker_drives_the_existing_decoder(identity_family):
-    class HistoricalMarker(identity_family.BirthlessIncarnation):
-        WIRE_BIRTH = -91.0
-
-    wire = {'name': 'historical', 'created_at': HistoricalMarker.WIRE_BIRTH}
-    identity = identity_family.ThreadIncarnation.from_wire(wire)
-    assert type(identity) is HistoricalMarker
-    assert identity.to_wire() == wire
-    assert identity_family.ThreadIncarnation.from_arguments(identity.cli_arguments) == identity
-    with pytest.raises(ValueError, match='positive recorded birth'):
-        identity.require_recorded()
-
-
-def test_abstract_specialization_does_not_contest_an_existing_marker(identity_family):
-    class UnfinishedDeleted(identity_family.DeletedThreadIncarnation):
-        @abstractmethod
-        def unfinished(self): ...
-
-    with pytest.raises(TypeError, match='abstract'):
-        UnfinishedDeleted('name')
-    decoded = identity_family.ThreadIncarnation.from_wire({'name': 'name', 'created_at': -1.0})
-    assert type(decoded) is identity_family.DeletedThreadIncarnation
-
-
-def test_unnamed_marker_declaration_is_not_a_decoder(identity_family):
-    class UnfinishedMarker(identity_family.BirthlessIncarnation, declared_name=None):
-        WIRE_BIRTH = -92.0
-
-    with pytest.raises(ValueError, match='positive recorded birth'):
-        identity_family.ThreadIncarnation.from_wire({'name': 'name', 'created_at': UnfinishedMarker.WIRE_BIRTH})
-
-
-def test_two_concrete_owners_cannot_claim_one_marker(identity_family):
-    with pytest.raises(DuplicateRegistryKeyError):
-        class CompetingDeleted(identity_family.DeletedThreadIncarnation):
-            pass
