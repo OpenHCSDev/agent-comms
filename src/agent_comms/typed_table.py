@@ -2662,11 +2662,18 @@ class TypedTable(
         """Rows equal to any of these named keys under the same null-safe IS equality select()
         uses: the requested keys drive an indexed join, one batch per the connection's own
         variable limit, each distinct key probed once."""
-        return [row for requested in cls.requested_keys(db, keys, table_source=table_source)
-                for row in cls.iterate(db.execute(
-            f"WITH {requested.values} "
-            f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
-            requested.bindings))]
+        return list(cls.stream_keys(db, keys, table_source=table_source))
+
+    @classmethod
+    def stream_keys(cls, db: sqlite3.Connection,
+                    keys: Sequence[Mapping[str, object]], *,
+                    table_source: TableSource = LOCAL_TABLE_SOURCE) -> Generator[Self]:
+        """Consume the same indexed batches without materializing every matched row."""
+        for requested in cls.requested_keys(db, keys, table_source=table_source):
+            yield from cls.iterate(db.execute(
+                f"WITH {requested.values} "
+                f"SELECT {cls.qualified(*cls.column_projection())} {requested.join}",
+                requested.bindings))
 
     @classmethod
     def requested_keys(cls, db: sqlite3.Connection,

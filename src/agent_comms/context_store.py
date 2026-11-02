@@ -516,6 +516,20 @@ class ContextStore(DurableStore):
                                                    session_file=identity.session_file,
                                                    entry_id=entry_id)}
 
+    def original_segments(self) -> Iterator[SegmentManifest]:
+        """Original segments actually present in this selected entry/request store.
+
+        Requests restore through the same original predecessor/entry reader as
+        the browser. Entry-only stores need no invented request/store identity.
+        """
+        with self.snapshot() as db:
+            for entry in ContextEntry.stream(db):
+                yield from entry.manifest.original_values()
+            for request in ContextRequest.stream(db):
+                source = ContextStoreInfo.require(db, singleton=1).source
+                for root in self.resolve(db, source, request).value.segments:
+                    yield from root.original_values()
+
     def retain_contexts(
         self, destination: ContextStore, identities: Iterable[NativeSessionIdentity], *,
         maximum_bytes: int, requests: Iterable[ContextManifestReference] = (),

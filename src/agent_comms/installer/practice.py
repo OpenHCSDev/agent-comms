@@ -187,7 +187,11 @@ class PracticeCopy:
         Normal include() and the installer's live-root backup remain whole-file
         operations. This selection must precede including the context resource;
         an existing destination is refused rather than overwritten or reimported.
+        Select contexts before finalizing coordinator evidence, whose annotation
+        dependency selection consumes these exact retained segments.
         """
+        if CoordinationStore.path_in(self.root) in self.copied:
+            raise UpgradeRefused("Select contexts before finalizing coordinator input evidence")
         self.prepare()
         source = ContextStore(self.root)
         resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source.path,))
@@ -215,11 +219,16 @@ class PracticeCopy:
                     raise UpgradeRefused(f"Capture complete {source.name} before selecting input evidence")
             elif owner.path_in(self.path).exists():
                 raise UpgradeRefused(f"Copied {source.name} has no original reader source")
+        contexts = ContextStore(self.path)
+        source_contexts = ContextStore.path_in(self.root)
+        if contexts.path.exists() and source_contexts not in self.copied:
+            raise UpgradeRefused("Copied contexts have no captured original reader source")
         source = CoordinationStore.path_in(self.root)
         resource, = RootFile.owned_files(LiveFilesRequest(self.root), (source,))
         selected = CoordinationStore.retain_inputs(
             source, CoordinationStore.path_in(self.path), entries,
             identities=identities, maximum_bytes=self.remaining_bytes(maximum_bytes),
+            segments=contexts.original_segments() if source_contexts in self.copied else (),
         )
         self.copied[source] = resource
         return selected

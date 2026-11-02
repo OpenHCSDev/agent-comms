@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .native_session_reopen import NativeSessionIdentity
     from .registry_document import RegistryEntry
+    from .turn_context import SegmentManifest
 
 
 class StoreFile(DeclaredFamily):
@@ -91,6 +92,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
     def retain_inputs(
         cls, source: Path, destination: Path, entries: tuple[RegistryEntry, ...], *,
         maximum_bytes: int, identities: Iterable[NativeSessionIdentity] = (),
+        segments: Iterable[SegmentManifest] = (),
     ) -> InputDocument:
         """Materialize original input witnesses under the existing fresh-file owner.
 
@@ -102,6 +104,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
         from .input_disposition import SnapshotInputDispositions
         from .native_runtime_input import NativeRuntimeInput
         from .participant_store import ParticipantStore
+        from .coordination_tables.annotations import ContextSpanRows
 
         with cls.retaining_rows(source, destination, maximum_bytes=maximum_bytes) as original:
             selected = SnapshotInputDispositions(destination.parent, original).retain_unresolved(entries)
@@ -109,6 +112,7 @@ class CoordinationStore(FileStore, CarriedWriter, ReconciledFile):
                 entry.thread.incarnation.require_recorded().lookup for entry in entries
             ))
             NativeRuntimeInput.retain_sessions(original, identities)
+            ContextSpanRows.retain_segments(original, segments)
         return selected
 
     @classmethod

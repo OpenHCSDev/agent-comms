@@ -86,18 +86,15 @@ class WorkingMemoryAnnotations:
     @classmethod
     def for_segments(cls, source: ReadableStore, segments, classifier) -> tuple[ModelLabel, ...]:
         """One acquisition serves context and selected-segment readers alike."""
-        originals = {}
-        for segment in segments:
-            originals.setdefault(segment.sha256, []).append(segment)
         with cls.reading(source) as db:
-            rows = SpanAnnotationsRow.for_digests(db, tuple(originals), classifier)
+            rows = sorted(SpanAnnotationsRow.for_segments(
+                db, segments, classifier=classifier.classifier, classifier_pin=classifier.pin,
+            ), key=lambda row: row.id)
         grouped = {}
         for row in rows:
             label = row.label
-            if any(segment.contains_span(label.span)
-                   for segment in originals[label.span.segment_sha256]):
-                key = tuple(cls.address(label.span, label.question, label.classifier).values())
-                grouped.setdefault(key, []).append(row)
+            key = tuple(cls.address(label.span, label.question, label.classifier).values())
+            grouped.setdefault(key, []).append(row)
         return tuple(SpanAnnotationsRow.effective(tuple(rows)) for rows in grouped.values())
 
     def reserve(self, request: DisclosureRequest, grant) -> AnnotationRequestsRow:
