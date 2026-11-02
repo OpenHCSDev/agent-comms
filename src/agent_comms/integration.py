@@ -9,7 +9,7 @@ import subprocess
 import sys
 import tomllib
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
@@ -46,7 +46,7 @@ from .repo import DetachedStart, GitCommandError, Repo, RepositoryReads
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease
-from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, VerdictReason
+from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, Todo, VerdictReason
 from .tool_caller import PeerCaller
 from .work_branches import WorkBranches
 
@@ -219,6 +219,9 @@ class IntegrationCheckout(SourceCheckout):
                 Repo.git(self.path, "merge", "--abort")
             raise
 
+    def prepare_main(self, base: str) -> None:
+        """Ordinary preparation preserves its candidate; recapture can integrate main."""
+
     def combine_sources(self, base: str, heads: tuple[PullRequestHead, ...]) -> str:
         """Checking preserves every source member, including when their merge conflicts."""
         self.require_editable()
@@ -254,6 +257,20 @@ class IntegrationCheckout(SourceCheckout):
             ).split("\0")
         )
         return TestSelection.read(self.path).files(self.path, changed)
+
+
+@dataclass(frozen=True)
+class RecaptureCheckout(IntegrationCheckout):
+    """Integrate current main only after the shared source preparation checks."""
+
+    context: TeamContext
+    primary: Todo
+
+    def prepare_main(self, base: str) -> None:
+        self.owned_repository(self.context)
+        current = self.context.comms.goals.todos.get(self.primary.id)
+        current.require_assignee(self.context.actor_identity, self.primary.held().generation)
+        self.merge_revision(base)
 
 
 @dataclass(frozen=True)
@@ -836,16 +853,18 @@ class IntegrationRun(InputPublication):
                                    for excluded in excluded_carriers)}.values(),
                        key=lambda head: head.pr)
             )
-        self.output.mkdir(parents=True, exist_ok=False)
-        IntegrationCheckout.create(
-            core, BaseSide.checkout(self.output, core.github), base
-        )
-        tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         resolved = {companion.repo: companion.identity for companion in companions}
         if len(resolved) != len(companions) or set(resolved) - companion_repositories.keys():
             raise IntegrationFailed(
                 "Select at most one actual carrier per declared companion repository"
             )
+        self.output.mkdir(parents=True, exist_ok=False)
+        self.checkout.prepare_main(base)
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        IntegrationCheckout.create(
+            core, BaseSide.checkout(self.output, core.github), base
+        )
+        tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         sources: list[IntegrationSource] = [
             LocalIntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)
         ]
@@ -1001,13 +1020,11 @@ class IntegrationRun(InputPublication):
             raise IntegrationFailed("Recapture requires one existing published source cut")
         (previous,) = recorded
         previous.require_recapture(repository, carrier)
-        baseline = IntegrationSource.main_head(repository)
-        repository.acquire(baseline)
         primary = store.get(primary.id)
         primary.require_assignee(context.actor_identity, generation)
-        self.checkout.merge_revision(baseline)
-        prepared = self.prepare(context, problems, companions=companions,
-                                excluded_carriers=(carrier, *companions))
+        prepared = replace(self, checkout=RecaptureCheckout(self.checkout.path, context, primary)).prepare(
+            context, problems, companions=companions,
+            excluded_carriers=(carrier, *companions))
         primary = store.get(primary.id)
         primary.require_assignee(context.actor_identity, generation)
         self.prepare_publication(prepared, branch)

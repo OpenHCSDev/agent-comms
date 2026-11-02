@@ -73,6 +73,17 @@ class MutualSources:
             self.context, ("P3",), title="Publish the actual paired source cut",
             body="The client migration is substantive; Core retains its actual source cut.")
 
+    @staticmethod
+    def advance_main(*sources: SourceRepository) -> None:
+        """One real main-advance procedure for the paired cut's refusal controls."""
+        for source in sources:
+            source.git(source.checkout, "switch", "main")
+            source.commit_change("Advance actual main", *source.write_files({
+                Path("main-only.py"): "advanced = True\n",
+            }))
+            source.git(source.checkout, "push", "origin", "main")
+            source.git(source.checkout, "switch", "feature")
+
     def prepare_carrier(self, problems: tuple[str, ...]) -> PullRequestHead:
         """Fixture setup owns an actual published combination before production capture."""
         todos = tuple(self.context.comms.goals.todos.get(problem) for problem in problems)

@@ -659,13 +659,7 @@ def test_explicit_recapture_preserves_real_carrier_and_old_history_after_changed
     old = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     original_input = tuple(path.read_bytes() for path in pair.output.glob("*input.json"))
     sources = (pair.client, pair.core) if advance_core else (pair.client,)
-    for source in sources:
-        source.git(source.checkout, "switch", "main")
-        source.commit_change("Advance actual main", *source.write_files({
-            Path("main-only.py"): "advanced = True\n",
-        }))
-        source.git(source.checkout, "push", "origin", "main")
-        source.git(source.checkout, "switch", "feature")
+    pair.advance_main(*sources)
     with pytest.raises(ToolRefusedError):
         pair.publish(pair.output.with_name("changed-cut-refusal"))
     carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
@@ -713,9 +707,7 @@ def test_explicit_recapture_rechecks_scope_before_integrating_core_main(
 ) -> None:
     pair = mutual_sources.starting_publication("")
     pair.publish(pair.output)
-    pair.core.git(pair.core.checkout, "switch", "main")
-    pair.core.commit_change("Advance Core main", *pair.core.write_files({Path("main-only.py"): "new = True\n"}))
-    pair.core.git(pair.core.checkout, "push", "origin", "main")
+    pair.advance_main(pair.core)
     before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
     refs = pair.core.git(pair.core.remote_path, "show-ref")
     carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
@@ -726,6 +718,44 @@ def test_explicit_recapture_rechecks_scope_before_integrating_core_main(
             pair.context, ("P3",), carrier=carrier.identity)
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
     assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_preserves_reused_output_before_integrating_main(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.core)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    inputs = IntegrationInput.at(pair.output)
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    with pytest.raises(FileExistsError):
+        integration.IntegrationRun(pair.checkout, pair.output, "Preserve existing output").recapture(
+            pair.context, ("P3",), carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert IntegrationInput.at(pair.output) == inputs
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+@pytest.mark.parametrize(("problems", "failure"), (
+    (("P3", "P3"), integration.StopAfterFailure()),
+    (("P3",), integration.ExcludeAfterFailure(7)),
+))
+def test_explicit_recapture_rejects_invalid_preparation_before_integrating_main(
+    mutual_sources: MutualSources, problems: tuple[str, ...], failure: integration.FailureAction,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.core)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    output = pair.output.with_name("invalid-preparation")
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    with pytest.raises(integration.IntegrationFailed):
+        integration.IntegrationRun(pair.checkout, output, "Refuse invalid preparation", failure).recapture(
+            pair.context, problems, carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
     assert not output.exists()
     assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
 
@@ -757,9 +787,7 @@ def test_explicit_recapture_cli_uses_same_real_carrier_without_creation(
 ) -> None:
     pair = mutual_sources.starting_publication("")
     pair.publish(pair.output)
-    pair.client.git(pair.client.checkout, "switch", "main")
-    pair.client.commit_change("Move client main", *pair.client.write_files({Path("main-only.py"): "new = True\n"}))
-    pair.client.git(pair.client.checkout, "push", "origin", "main")
+    pair.advance_main(pair.client)
     output = pair.output.with_name("cli-recapture")
     result = subprocess.run((
         str(Path(sys.executable).with_name("agent-comms-integrate")),
