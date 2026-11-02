@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ctypes
-import os
 from pathlib import Path
 import sys
 import sysconfig
@@ -12,28 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
 from agent_comms.build_artifact import BuildArtifact
-
-
-class PythonNativeImage(ctypes.Structure):
-    """POSIX dladdr's ABI, queried for the image actually providing Py_GetVersion."""
-
-    _fields_ = (
-        ("filename", ctypes.c_char_p),
-        ("base", ctypes.c_void_p),
-        ("symbol", ctypes.c_char_p),
-        ("address", ctypes.c_void_p),
-    )
-
-    @classmethod
-    def running(cls) -> Path:
-        lookup = ctypes.CDLL(None).dladdr
-        lookup.argtypes = (ctypes.c_void_p, ctypes.POINTER(cls))
-        lookup.restype = ctypes.c_int
-        image = cls()
-        if not lookup(ctypes.cast(ctypes.pythonapi.Py_GetVersion, ctypes.c_void_p),
-                      ctypes.byref(image)) or not image.filename:
-            raise ValueError("The loader did not identify the running Python native image")
-        return Path(os.fsdecode(image.filename)).resolve(strict=True)
+from agent_comms.child_process import Platform
 
 
 class InterpreterBuild(BaseModel):
@@ -71,10 +49,15 @@ class InterpreterBuildProbe(TargetProbe, RuntimeProbe[RecordedInterpreterBuild])
         abi = sysconfig.get_config_var("SOABI")
         if not isinstance(abi, str) or not abi:
             raise ValueError("The selected interpreter does not declare its native ABI")
-        images = dict.fromkeys((Path(sys.executable).resolve(strict=True),
-                                PythonNativeImage.running()))
+        address = ctypes.cast(ctypes.pythonapi.Py_GetVersion, ctypes.c_void_p)
+        with Platform.current().native_image(address) as stream:
+            native = BuildArtifact.from_stream(stream)
+        executable = Path(sys.executable).resolve(strict=True)
+        images = {native.path: native}
+        if executable not in images:
+            images[executable] = BuildArtifact.capture(executable)
         return RecordedInterpreterBuild(
             invoked=Path(sys.executable), version=sys.version, abi=abi,
             stdlib=Path(sysconfig.get_path("stdlib")).resolve(strict=True),
-            artifacts=tuple(BuildArtifact.capture(path) for path in images),
+            artifacts=tuple(images[path] for path in dict.fromkeys((executable, native.path))),
         )

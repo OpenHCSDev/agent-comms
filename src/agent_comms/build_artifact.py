@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, BinaryIO
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -29,10 +29,17 @@ class BuildArtifact(BaseModel):
     def capture(cls, path: Path) -> BuildArtifact:
         path = path.resolve(strict=True)
         with path.open("rb") as stream:
-            revision = FileRevision.from_file(stream)
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
-            if revision != FileRevision.from_file(stream):
-                raise ValueError(f"Build artifact changed while reading: {path}")
+            return cls.from_stream(stream)
+
+    @classmethod
+    def from_stream(cls, stream: BinaryIO) -> BuildArtifact:
+        """Capture the already-open file, including a platform-qualified native image."""
+        path = Path(stream.name).resolve(strict=True)
+        stream.seek(0)
+        revision = FileRevision.from_file(stream)
+        digest = hashlib.file_digest(stream, "sha256").hexdigest()
+        if revision != FileRevision.from_file(stream):
+            raise ValueError(f"Build artifact changed while reading: {path}")
         if FileRevision.capture(path) != revision:
             raise ValueError(f"Build artifact was replaced while reading: {path}")
         return cls(path=path, revision=revision, sha256=digest)
