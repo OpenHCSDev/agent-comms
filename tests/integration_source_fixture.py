@@ -13,10 +13,12 @@ from agent_comms.comms import Comms
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.head_review import CombinedInput, IntegrationInput, IntegrationSource, PullRequestHead
 from agent_comms.integration import IntegrationCheckout, IntegrationRun
+from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import Repo
 from agent_comms.repository_name import RepositoryName
 from agent_comms.todos import DraftListedPullRequest, PullRequests, RecordPullRequest
+from agent_comms.tool_caller import CommanderPeerCaller
 from fixture_git import ENVIRONMENT
 from github_fixture import GitHubFixture
 from source_revision_fixture import SourceRepository
@@ -123,16 +125,18 @@ def materialized_clients(test_uv: Path) -> Callable[[Path, IntegrationInput], Ma
 def mutual_sources(source_pair: MutualSources) -> MutualSources:
     """The same source owner, with its companion linked by a separate real checked order.
 
-    The worker takes the companion problem itself: its goal slot is occupied, so only the
-    goal's own owner may add work to it."""
+    The worker's goal slot is occupied, so the worker accepts the companion itself, acting
+    within the lead's storage as any receiving owner does."""
     comms = source_pair.context.comms
     primary = comms.goals.todos.get("P2")
-    comms.goals.update_goal("worker", CreateProblemGoalAction(
+    creation = CreateProblemGoalAction(
         problem="P3", commander="lead", request=primary.request,
-        assigner=comms.registry.require("worker").incarnation,
+        assigner=comms.registry.require("lead").incarnation,
         repo=source_pair.client.github, text="Migrate the paired source client",
         order=replace(primary.order.checked(), pull_requests=(source_pair.client.link,),
                       check=replace(primary.order.check, directory=source_pair.client.checkout)),
         review_at=RecordedEventTime(time.time() + 3600),
-    ))
+    )
+    CommanderPeerCaller("worker").as_thread("lead").invoke(
+        CommsTodoCreateTool(owner="worker", order=creation), comms)
     return source_pair
