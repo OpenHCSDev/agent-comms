@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
+from .locked_store import InputCaptureFile
 from .nominal.field_codec import ContextStoreId, FieldCodec, MalformedRecord, NullMember
 from .native_session_reopen import NativeSessionIdentity
 from .registration import Registration
@@ -479,7 +480,7 @@ class ContextManifestPage:
 
 
 @dataclass(frozen=True)
-class ContextStore(DurableStore):
+class ContextStore(DurableStore, InputCaptureFile):
     root: Path
     filename: ClassVar[str] = "turn_context.sqlite3"
     tables = ContextStoreRows

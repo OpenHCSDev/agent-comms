@@ -33,7 +33,7 @@ from .input_attempt import (
 from .input_key import InputKey, InputKeyText, TurnInputKey
 from .input_origin import HarnessAttemptOrigin, InputOrigin, UnattributedInputOrigin
 from .lifecycle_capability import Unresolved
-from .locked_store import DocumentChange, PublishedProperty
+from .locked_store import CompleteInputReader, DocumentChange, PublishedProperty
 from .message_reference import MessageReference
 from .messages import MessageInput
 from .native_input_proof import NativeContextProof
@@ -248,7 +248,7 @@ def _members(column: str, values) -> tuple[str, tuple]:
 
 
 @dataclass(frozen=True, slots=True)
-class InputDispositions(DurableStore):
+class InputDispositions(DurableStore, CompleteInputReader):
     """Indexed durable input rows; each operation reads only the rows it names."""
 
     root: Path

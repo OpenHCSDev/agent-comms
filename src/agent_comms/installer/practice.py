@@ -10,13 +10,10 @@ from pathlib import Path
 from math import ceil
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from typing import ClassVar
-
-from agent_comms.bus import Bus
 from agent_comms.context_store import ContextManifestReference, ContextStore
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.annotations import ContextSpanRows
-from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
+from agent_comms.input_disposition import InputDocument, SnapshotInputDispositions
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.registry_document import RegistryEntry
@@ -28,7 +25,8 @@ from agent_comms.registry_store import RegistryCut, RegistryStore
 from agent_comms.installer.declared_uv import DeclaredUv
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
-    DeclaredFile, LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
+    CompleteInputReader, DeclaredFile, InputCaptureFile, LiveFilesRequest, RegistryFile,
+    RetainedCopyRequest, RootFile, UndeclaredFile,
 )
 from agent_comms.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
 from agent_comms.storage_rules import StorageRule
@@ -149,7 +147,6 @@ class PracticeCopy:
     root: Path
     path: Path
     copied: dict[Path, DeclaredFile | UndeclaredFile] = field(default_factory=dict)
-    input_readers: ClassVar[tuple[type[RootFile], ...]] = (Bus, InputDispositions)
 
     @property
     def request(self) -> RetainedCopyRequest:
@@ -194,7 +191,7 @@ class PracticeCopy:
         drops its claim, including the exported claim inherited by new children,
         so ordinary source writers refuse while the private target stays writable.
         Pins prevent last-close WAL checkpoints, not writers. Drain
-        admitted transactions separately, releasing each SQL lock before seeking
+        in-flight transactions separately, releasing each SQL lock before seeking
         another or the registry. The hold excludes later non-holder transactions;
         source observations additionally reject changes outside that writer path.
         Ordinary whole-file include() and complete backups keep their own lifetime.
@@ -208,8 +205,8 @@ class PracticeCopy:
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.root))
         files = LiveFilesRequest(self.root)
         resources = RootFile.owned_files(files, tuple(
-            owner.path_in(self.root)
-            for owner in (*self.input_readers, ContextStore, CoordinationStore)
+            owner.path_in(directory)
+            for owner, directory in InputCaptureFile.declarations_in(self.root)
         ))
         present = tuple(resource for resource in resources if files.location(resource).exists())
         with (barrier.capturing(LaunchRuntime.running()),
@@ -241,7 +238,8 @@ class PracticeCopy:
             entries = tuple(original.snapshot.entry(original.snapshot.born(owner).name)
                             for owner in owners)
             self.prepare()
-            paths = tuple(owner.path_in(self.root) for owner in self.input_readers)
+            paths = tuple(owner.path_in(directory) for owner, directory
+                          in CompleteInputReader.declarations_in(self.root))
             files = LiveFilesRequest(self.root)
             readers = saved_bus_files(files, RootFile.owned_files(files, paths))
             required = sum(member.size for group in readers.values() for member in group.values())
@@ -289,8 +287,8 @@ class PracticeCopy:
         one consistent cut and serial materialization, not native launch authority.
         """
         self.prepare()
-        for owner in self.input_readers:
-            source = owner.path_in(self.root)
+        for owner, directory in CompleteInputReader.declarations_in(self.root):
+            source = owner.path_in(directory)
             if source.exists():
                 if source not in self.copied:
                     raise UpgradeRefused(f"Capture complete {source.name} before selecting input evidence")

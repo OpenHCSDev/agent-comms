@@ -473,3 +473,25 @@ aggregate capture and peak budget, then the combined backend/carry and actual
 prepared-root saved-history journey. No pytest, provider, donor mutation or new
 native/physical run was performed for this source checkpoint. Reader promotion
 still requires the separate default-storage and decorator creation-cut proofs.
+
+## Selected capture file capabilities
+
+The selected operation now derives its files through `RootFile.declarations_in`.
+`InputCaptureFile` identifies each store participating in the common cut;
+`CompleteInputReader(InputCaptureFile)` identifies stores copied whole before
+context/coordinator selection. Bus and InputDispositions compose the latter;
+ContextStore and CoordinationStore compose the former. Their existing storage,
+writer, schema and copy behavior remains on their original parents.
+
+The `PracticeCopy.input_readers` roster is deleted. Capture pinning/draining,
+complete-reader preflight/copy and missing-original-reader checks use the declared
+capabilities. A new reader joins through its declaration rather than a second
+list. This also removes the heterogeneous tuple that mypy inferred as `object`.
+
+The changed file-family bases and traversal were executed in the actual capture
+and annotation tests: 19 collected, 19 passed, 4.97 seconds, exit0, using the host
+TestLease and a fresh owned `/home/ts/wt` basetemp. This includes each original
+store's in-flight/later writer controls and the decoded selected ProbeRequest.
+Focused mypy on installer/practice.py passed. These results remain fixture/backend
+qualification, not original-data, cross-runtime, resource-peak or native/physical
+acceptance. The earlier 125-case execution belongs to the preceding source epoch.
