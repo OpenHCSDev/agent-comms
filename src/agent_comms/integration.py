@@ -9,9 +9,11 @@ import subprocess
 import sys
 import tomllib
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
+
+from _pytest.config import get_config
 
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
@@ -19,7 +21,7 @@ from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
 from .team.order import TeamContext
 from .nominal.declared_family import DeclaredFamily
 from agent_comms_hooks import ToolRefusedError
-from .nominal.field_codec import FieldCodec, GitCommitText, PathText, WireName, boundary_decoder
+from .nominal.field_codec import FieldCodec, GitCommitText, GoalId, PathText, WireName, boundary_decoder
 from .head_review import (
     BaseSide,
     CombinedInput,
@@ -46,7 +48,7 @@ from .repo import DetachedStart, GitCommandError, Repo, RepositoryReads
 from .repository_name import RepositoryName
 from .systemd_unit import AgentsSlice
 from .test_lease import LeaseStart, TestLease
-from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, VerdictReason
+from .todos import CarriedHeadVerdict, PullRequestLink, PullRequests, RecordPullRequest, StoredHeadReview, Todo, VerdictReason
 from .tool_caller import PeerCaller
 from .work_branches import WorkBranches
 
@@ -62,16 +64,19 @@ class TestSelection:
 
     @classmethod
     def read(cls, checkout: Path) -> TestSelection:
-        # Decode only this consumer's declared fields; pytest owns the other options.
+        # Register pytest's built-in declarations without loading project plugins,
+        # conftests or collection. Missing options belong to those declarations.
+        defaults = get_config()
         with (checkout / "pyproject.toml").open("rb") as source:
             match tomllib.load(source):
                 case {"tool": {"pytest": {"ini_options": {**configuration}}}}:
                     return FieldCodec.decode(
                         cls,
                         {
-                            entry.key: configuration[entry.key]
+                            entry.key: configuration.get(
+                                entry.key, defaults.getini(entry.key)
+                            )
                             for entry in FieldCodec.argument_fields(cls)
-                            if entry.key in configuration
                         },
                     )
         raise IntegrationFailed("pyproject.toml requires [tool.pytest.ini_options]")
@@ -82,7 +87,7 @@ class TestSelection:
                 {
                     str(path)
                     for path in changed
-                    if any(path.is_relative_to(root) for root in self.directories)
+                    if any(path.is_relative_to(root) for root in self.directories or (".",))
                     and any(path.match(pattern) for pattern in self.patterns)
                     and (checkout / path).is_file()
                 }
@@ -189,6 +194,8 @@ class IntegrationCheckout(SourceCheckout):
         owner = context.comms.registry.require(context.actor_name)
         context.comms.registry.storage_rule.require_owned_checkout(
             owner, repository.checkout, repository.github, RepositoryReads())
+        snapshot = context.comms.registry.snapshot()
+        snapshot.commander_project.require_scope(snapshot, context.actor_identity, repository.github)
         return repository
 
     def publication_branch(self) -> str:
@@ -206,12 +213,19 @@ class IntegrationCheckout(SourceCheckout):
         fetched = Repo.git(self.path, "rev-parse", "FETCH_HEAD").strip()
         if fetched != head.head:
             raise IntegrationFailed(f"#{head.pr} moved while fetching; capture its new head")
+        self.merge_revision(head.head)
+
+    def merge_revision(self, commit: str) -> None:
+        """The integration checkout owns merging and conflict cleanup for members and main."""
         try:
-            Repo.git(self.path, "merge", "--no-ff", "--no-edit", head.head, timeout=300)
+            Repo.git(self.path, "merge", "--no-ff", "--no-edit", commit, timeout=300)
         except GitCommandError:
             if Repo.answers(self.path, "rev-parse", "-q", "--verify", "MERGE_HEAD"):
                 Repo.git(self.path, "merge", "--abort")
             raise
+
+    def prepare_main(self, base: str) -> None:
+        """Ordinary preparation preserves its candidate; recapture can integrate main."""
 
     def combine_sources(self, base: str, heads: tuple[PullRequestHead, ...]) -> str:
         """Checking preserves every source member, including when their merge conflicts."""
@@ -248,6 +262,20 @@ class IntegrationCheckout(SourceCheckout):
             ).split("\0")
         )
         return TestSelection.read(self.path).files(self.path, changed)
+
+
+@dataclass(frozen=True)
+class RecaptureCheckout(IntegrationCheckout):
+    """Integrate current main only after the shared source preparation checks."""
+
+    context: TeamContext
+    primary: Todo
+
+    def prepare_main(self, base: str) -> None:
+        self.owned_repository(self.context)
+        current = self.context.comms.goals.todos.get(self.primary.id)
+        current.require_assignee(self.context.actor_identity, self.primary.held().generation)
+        self.merge_revision(base)
 
 
 @dataclass(frozen=True)
@@ -830,16 +858,18 @@ class IntegrationRun(InputPublication):
                                    for excluded in excluded_carriers)}.values(),
                        key=lambda head: head.pr)
             )
-        self.output.mkdir(parents=True, exist_ok=False)
-        IntegrationCheckout.create(
-            core, BaseSide.checkout(self.output, core.github), base
-        )
-        tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         resolved = {companion.repo: companion.identity for companion in companions}
         if len(resolved) != len(companions) or set(resolved) - companion_repositories.keys():
             raise IntegrationFailed(
                 "Select at most one actual carrier per declared companion repository"
             )
+        self.output.mkdir(parents=True, exist_ok=False)
+        self.checkout.prepare_main(base)
+        candidate_commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        IntegrationCheckout.create(
+            core, BaseSide.checkout(self.output, core.github), base
+        )
+        tree = Repo.git(self.checkout.path, "rev-parse", "HEAD^{tree}").strip()
         sources: list[IntegrationSource] = [
             LocalIntegrationSource(RepositoryCommit(core.github, base), heads[core.github], tree)
         ]
@@ -930,10 +960,7 @@ class IntegrationRun(InputPublication):
                                     excluded_carriers=companions)
             primary = store.get(primary.id)
             primary.require_assignee(actor, generation)
-            prepared.write(self.output)
-            Repo.git(self.checkout.path, "commit", "--allow-empty", "-m",
-                     f"Prepare the actual source cut\n\n{prepared.trailer}")
-            Repo.git(self.checkout.path, "push", "-u", "origin", branch)
+            self.prepare_publication(prepared, branch)
             primary = store.get(primary.id)
             primary.require_assignee(actor, generation)
             link = primary.order.checked().open_pull_request(
@@ -942,15 +969,77 @@ class IntegrationRun(InputPublication):
                 store, actor)
             carrier = PullRequestHead.at(link.repo, link.number)
             inputs = prepared.resume_publication(self, context, carrier)
-        primary = store.get(primary.id)
-        primary.require_assignee(actor, generation)
+        return self.finish_publication(context, primary.id, generation, carrier, branch, inputs)
+
+    def prepare_publication(self, prepared: UnpublishedInput, branch: str) -> None:
+        """A durable prospective cut precedes both first publication and explicit recapture."""
+        prepared.write(self.output)
+        Repo.git(self.checkout.path, "commit", "--allow-empty", "-m",
+                 f"Prepare the actual source cut\n\n{prepared.trailer}")
+        Repo.git(self.checkout.path, "push", "-u", "origin", branch)
+
+    def finish_publication(
+        self, context: TeamContext, problem: str, generation: GoalId,
+        carrier: PullRequestHead, branch: str, inputs: CombinedInput,
+    ) -> CombinedInput:
+        """Link and validate the capture we actually pushed, not a lagging forge head."""
+        repository = self.checkout.owned_repository(context)
+        store = context.comms.goals.todos
+        primary = store.get(problem)
+        primary.require_assignee(context.actor_identity, generation)
         link = PullRequestLink(repository.github, carrier.pr)
-        store.apply(primary.id, RecordPullRequest.for_order(primary, actor, link))
+        store.apply(primary.id, RecordPullRequest.for_order(primary, context.actor_identity, link))
         Repo.git(self.checkout.path, "push", "origin", branch)
-        current = PullRequestHead.at(repository.github, carrier.pr)
-        inputs.validate(context.repos, current)
+        captured = PullRequestHead(repository.github, carrier.pr,
+                                   Repo.git(self.checkout.path, "rev-parse", "HEAD").strip())
+        inputs.validate_published(context.repos, captured)
         print(f"PUBLISHED {link.url}; qualification only; no merge permission", flush=True)
         return inputs
+
+    def recapture(
+        self, context: TeamContext, problems: tuple[str, ...], *, carrier: PullRequestHead,
+        companions: tuple[PullRequestHead, ...] = (),
+    ) -> CombinedInput:
+        """Explicitly replace a changed cut on its real carrier; preserve the old capture."""
+        if not problems:
+            raise IntegrationFailed("Recapture requires an actual primary problem")
+        repository = self.checkout.owned_repository(context)
+        branch = self.checkout.publication_branch()
+        store = context.comms.goals.todos
+        primary = store.get(problems[0])
+        generation = primary.held().generation
+        primary.require_assignee(context.actor_identity, generation)
+        current = carrier.current()
+        matching = tuple(row for row in PullRequests().rows(repository.github, (current.pr,))
+                         if row.branch == branch)
+        if len(matching) != 1:
+            raise IntegrationFailed("Recapture requires the real PR on this owned publication branch")
+        commit = Repo.git(self.checkout.path, "rev-parse", "HEAD").strip()
+        if current.repo != repository.github or not Repo.descends(
+            self.checkout.path, current.head, commit
+        ):
+            raise IntegrationFailed("Recapture must preserve the same real carrier's published history")
+        message = WorkBranches(self.checkout.path).commit_message(current.head)
+        recorded = (*IntegrationInput.from_message(message), *UnpublishedInput.from_message(message))
+        if len(recorded) != 1:
+            raise IntegrationFailed("Recapture requires one existing published source cut")
+        (previous,) = recorded
+        previous.require_recapture(repository, carrier)
+        primary = store.get(primary.id)
+        primary.require_assignee(context.actor_identity, generation)
+        prepared = replace(self, checkout=RecaptureCheckout(self.checkout.path, context, primary)).prepare(
+            context, problems, companions=companions,
+            excluded_carriers=(carrier, *companions))
+        primary = store.get(primary.id)
+        primary.require_assignee(context.actor_identity, generation)
+        self.prepare_publication(prepared, branch)
+        prospective = PullRequestHead(repository.github, carrier.pr,
+                                      Repo.git(self.checkout.path, "rev-parse", "HEAD").strip())
+        observed = prospective.published_after(current)
+        primary = store.get(primary.id)
+        primary.require_assignee(context.actor_identity, generation)
+        inputs = prepared.resume_publication(self, context, observed)
+        return self.finish_publication(context, primary.id, generation, observed, branch, inputs)
 
     def qualify(
         self,
@@ -1162,6 +1251,10 @@ def run() -> int:
         "--publish", default="", metavar="PROBLEM",
         help="prepare the actual source cut and create its first real carrier once",
     )
+    operation.add_argument(
+        "--recapture", default="", metavar="PROBLEM",
+        help="explicitly replace a changed source cut on the same existing captured carrier",
+    )
     parser.add_argument(
         "--workflow-output",
         type=Path,
@@ -1249,7 +1342,7 @@ def run() -> int:
         tuple(pytest_arguments),
     )
     # Decode foreign operations once; source publication never enters execute/test/lease.
-    if arguments.qualify or arguments.publish:
+    if arguments.qualify or arguments.publish or arguments.recapture:
         if pytest_arguments:
             parser.error("Source publication and qualification cannot run tests")
         context = TeamContext.read_root(resolve_comms_route(arguments.comms_root).root)
@@ -1262,7 +1355,7 @@ def run() -> int:
         selected = tuple(head.identity for head in companions)
         if arguments.publish:
             if arguments.carrier:
-                parser.error("First publication has no prior --carrier; resume with --qualify")
+                parser.error("First publication has no prior --carrier; resume the same --publish")
             if not arguments.callers or not arguments.title or not arguments.body_files:
                 parser.error("--publish requires --from, --title and --body-file")
             run.publish(
@@ -1274,16 +1367,22 @@ def run() -> int:
             if arguments.title or arguments.body_files:
                 parser.error("--title and --body-file belong to first --publish")
             if arguments.carrier <= 0:
-                parser.error("Qualification requires --carrier naming the actual separate combined PR")
+                parser.error("Qualification or recapture requires the actual separate --carrier PR")
             carrier = PullRequestHead.at(Repo.of(run.checkout.path).github, arguments.carrier)
-            run.qualify(
-                context, (arguments.qualify, *arguments.with_problem),
-                carrier=carrier.identity,
-                companions=selected,
-            )
+            if arguments.recapture:
+                if not arguments.callers:
+                    parser.error("Explicit recapture requires --from naming the actual holder")
+                run.recapture(context, (arguments.recapture, *arguments.with_problem),
+                              carrier=carrier.identity, companions=selected)
+            else:
+                run.qualify(
+                    context, (arguments.qualify, *arguments.with_problem),
+                    carrier=carrier.identity,
+                    companions=selected,
+                )
         return 0
     if any(values[option.dest] for option in source_options._group_actions):
-        parser.error("Source selection/publication options require --qualify or --publish")
+        parser.error("Source selection/publication options require a publication operation")
     return run.execute()
 
 

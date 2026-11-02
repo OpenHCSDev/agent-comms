@@ -55,7 +55,8 @@ class MutualSources:
         ))
         return PullRequestHead(self.core.github, self.carrier_number, commit)
 
-    def starting_publication(self, reply_refusal: str, *, checkout_owner: str = "worker") -> Self:
+    def starting_publication(self, reply_refusal: str, *, checkout_owner: str = "worker",
+                             lag_reads: int = 0) -> Self:
         """The forge follows the pushed carrier branch, including an actually lost reply."""
         context = self.context.model_copy(update={"actor": PeerCaller("worker")})
         checkout = self.owned_checkout(context, self.core, checkout_owner, "P3")
@@ -64,13 +65,24 @@ class MutualSources:
         self.github.create_next(self.core.github, DraftListedPullRequest(
             self.carrier_number, "publish-carrier", self.core.main_commit, stamp, "main",
             reviewable_times=(stamp,)), remotes=(self.core.remote_path,),
-            reply_refusal=reply_refusal)
+            reply_refusal=reply_refusal, lag_reads=lag_reads)
         return replace(self, context=context, checkout=checkout)
 
     def publish(self, output: Path) -> CombinedInput:
         return IntegrationRun(self.checkout, output, "Actual companion-only first publication").publish(
             self.context, ("P3",), title="Publish the actual paired source cut",
             body="The client migration is substantive; Core retains its actual source cut.")
+
+    @staticmethod
+    def advance_main(*sources: SourceRepository) -> None:
+        """One real main-advance procedure for the paired cut's refusal controls."""
+        for source in sources:
+            source.git(source.checkout, "switch", "main")
+            source.commit_change("Advance actual main", *source.write_files({
+                Path("main-only.py"): "advanced = True\n",
+            }))
+            source.git(source.checkout, "push", "origin", "main")
+            source.git(source.checkout, "switch", "feature")
 
     def prepare_carrier(self, problems: tuple[str, ...]) -> PullRequestHead:
         """Fixture setup owns an actual published combination before production capture."""

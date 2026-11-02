@@ -15,6 +15,7 @@ import pytest
 import tomli_w
 
 from agent_comms import integration
+from agent_comms.team.order import Team
 from agent_comms_hooks import ToolRefusedError
 from agent_comms.head_review import BaseSide, CombinedInput, HeadReview, HeadSide, IntegrationInput, MergeHeadReview, PromotedHeadReview, PullRequestHead, ResolvedIntegrationSource
 from agent_comms.repository_name import RepositoryName
@@ -457,6 +458,29 @@ def test_selection_uses_the_project_declaration_and_unions_existing_files(tmp_pa
                                       Path("checks/spec_missing.py"))) == (str(selected),)
 
 
+@pytest.mark.parametrize("configuration", (
+    'testpaths = ["checks"]\n',
+    '',
+))
+def test_selection_uses_pytest_defaults_without_loading_project_code(
+    tmp_path: Path, configuration: str,
+):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\n' + configuration
+    )
+    (tmp_path / "conftest.py").write_text(
+        'raise RuntimeError("selection must not execute project code")\n'
+    )
+    selected = Path("checks/test_owner.py")
+    ignored = Path("checks/owner.py")
+    for path in (selected, ignored):
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text("def test_ok(): pass\n")
+    assert integration.TestSelection.read(tmp_path).files(
+        tmp_path, (selected, ignored, selected),
+    ) == (str(selected),)
+
+
 def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
     source = SourceRepository.create(tmp_path / "integration-source")
     github_cli.configure(source.github)
@@ -617,6 +641,186 @@ def test_publication_recovery_refuses_changed_companion_without_recreating(
     with pytest.raises(integration.IntegrationFailed):
         pair.publish(pair.output.with_name("changed-source-refusal"))
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_first_publication_waits_only_for_known_previous_forge_head(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("", lag_reads=2)
+    inputs = pair.publish(pair.output)
+    current = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    inputs.validate(pair.context.repos, current)
+    assert current.head == pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_published_head_observation_refuses_an_unexpected_foreign_replacement(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    inputs = pair.publish(pair.output)
+    expected = PullRequestHead.at(pair.core.github, pair.carrier_number).identity
+    stamp = "2026-10-24T00:00:00Z"
+    replacement = "f" * 40
+    pair.github.put(pair.core.github, DraftListedPullRequest(
+        pair.carrier_number, "publish-carrier", replacement, stamp, "main",
+        reviewable_times=(stamp,)))
+    with pytest.raises(ToolRefusedError, match=replacement):
+        expected.published_after(inputs.carrier)
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+@pytest.mark.parametrize("advance_core", (False, True))
+@pytest.mark.parametrize("lost_reply", (False, True))
+def test_explicit_recapture_preserves_real_carrier_and_old_history_after_changed_mains(
+    mutual_sources: MutualSources, advance_core: bool, lost_reply: bool,
+) -> None:
+    pair = mutual_sources.starting_publication("Reply lost after creation" if lost_reply else "")
+    with pytest.raises(TodoError) if lost_reply else nullcontext():
+        pair.publish(pair.output)
+    old = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    original_input = tuple(path.read_bytes() for path in pair.output.glob("*input.json"))
+    sources = (pair.client, pair.core) if advance_core else (pair.client,)
+    pair.advance_main(*sources)
+    with pytest.raises(ToolRefusedError):
+        pair.publish(pair.output.with_name("changed-cut-refusal"))
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    output = pair.output.with_name("explicit-recapture")
+    inputs = integration.IntegrationRun(pair.checkout, output, "Replace changed mains explicitly").recapture(
+        pair.context, ("P3",), carrier=carrier.identity)
+    current = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    inputs.validate(pair.context.repos, current)
+    assert inputs.carrier.pr == carrier.pr == pair.carrier_number
+    assert inputs.source(pair.client.github).baseline.commit == pair.client.main_commit
+    assert inputs.local.baseline.commit == pair.core.main_commit
+    assert not inputs.local.has_changes(pair.core)
+    assert pair.core.git(pair.checkout.path, "show", "-s", "--format=%P", current.head).split() == [inputs.carrier.head]
+    assert Repo.descends(pair.checkout.path, old, current.head)
+    assert tuple(path.read_bytes() for path in pair.output.glob("*input.json")) == original_input
+    assert pair.publish(pair.output.with_name("recovered-recapture")) == inputs
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == current.head
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+@pytest.mark.parametrize("borrowed", (False, True))
+def test_explicit_recapture_refuses_wrong_holder_or_borrowed_checkout_before_mutation(
+    mutual_sources: MutualSources, borrowed: bool,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    creator_checkout = pair.owned_checkout(pair.context, pair.core, "lead", "P3")
+    pair.core.git(creator_checkout.path, "switch", "-c", "creator-recapture")
+    context = pair.context if borrowed else pair.context.model_copy(update={"actor": PeerCaller("lead")})
+    before = pair.core.git(creator_checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    output = pair.output.with_name("forbidden-recapture")
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    with pytest.raises(StorageDenied if borrowed else TodoConflict):
+        integration.IntegrationRun(creator_checkout, output, "Refuse foreign recapture").recapture(
+            context, ("P3",), carrier=carrier.identity)
+    assert pair.core.git(creator_checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_rechecks_scope_before_integrating_core_main(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.core)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    Team.on_root("lead", (pair.client,), pair.context.root)
+    output = pair.output.with_name("revoked-scope-recapture")
+    with pytest.raises(ToolRefusedError):
+        integration.IntegrationRun(pair.checkout, output, "Refuse revoked Core scope").recapture(
+            pair.context, ("P3",), carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_preserves_reused_output_before_integrating_main(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.core)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    inputs = IntegrationInput.at(pair.output)
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    with pytest.raises(FileExistsError):
+        integration.IntegrationRun(pair.checkout, pair.output, "Preserve existing output").recapture(
+            pair.context, ("P3",), carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert IntegrationInput.at(pair.output) == inputs
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+@pytest.mark.parametrize(("problems", "failure"), (
+    (("P3", "P3"), integration.StopAfterFailure()),
+    (("P3",), integration.ExcludeAfterFailure(7)),
+))
+def test_explicit_recapture_rejects_invalid_preparation_before_integrating_main(
+    mutual_sources: MutualSources, problems: tuple[str, ...], failure: integration.FailureAction,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.core)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    output = pair.output.with_name("invalid-preparation")
+    carrier = PullRequestHead.at(pair.core.github, pair.carrier_number)
+    with pytest.raises(integration.IntegrationFailed):
+        integration.IntegrationRun(pair.checkout, output, "Refuse invalid preparation", failure).recapture(
+            pair.context, problems, carrier=carrier.identity)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_refuses_a_different_actual_carrier_branch(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("Reply lost after creation")
+    with pytest.raises(TodoError):
+        pair.publish(pair.output)
+    before = pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip()
+    stamp = "2026-10-24T00:00:00Z"
+    foreign = PullRequestHead(pair.core.github, pair.carrier_number + 1, before)
+    pair.github.put(pair.core.github, DraftListedPullRequest(
+        foreign.pr, "another-carrier", before, stamp, "main", reviewable_times=(stamp,)))
+    refs = pair.core.git(pair.core.remote_path, "show-ref")
+    output = pair.output.with_name("different-carrier-refusal")
+    with pytest.raises(integration.IntegrationFailed):
+        integration.IntegrationRun(pair.checkout, output, "Refuse a different real carrier").recapture(
+            pair.context, ("P3",), carrier=foreign)
+    assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD").strip() == before
+    assert pair.core.git(pair.core.remote_path, "show-ref") == refs
+    assert not output.exists()
+    assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
+
+
+def test_explicit_recapture_cli_uses_same_real_carrier_without_creation(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources.starting_publication("")
+    pair.publish(pair.output)
+    pair.advance_main(pair.client)
+    output = pair.output.with_name("cli-recapture")
+    result = subprocess.run((
+        str(Path(sys.executable).with_name("agent-comms-integrate")),
+        "--recapture", "P3", "--from", "worker", "--comms-root", str(pair.context.root),
+        "--carrier", str(pair.carrier_number), "--checkout", str(pair.checkout.path),
+        "--output", str(output), "--risk", "Exercise the explicit recapture console",
+    ), capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0, result.stdout + result.stderr
+    inputs = IntegrationInput.at(output)
+    inputs.validate(pair.context.repos, PullRequestHead.at(pair.core.github, pair.carrier_number))
     assert sum(call[:2] == ("pr", "create") for call in pair.github.calls()) == 1
 
 

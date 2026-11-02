@@ -19,6 +19,7 @@ class PullRequestCreation:
     listed: ListedPullRequest
     remotes: tuple[Path, ...] = ()
     reply_refusal: str = ""
+    lag_reads: int = 0
 
 
 @dataclass(frozen=True)
@@ -52,11 +53,12 @@ class GitHubFixture:
         self.path.write_text(json.dumps(data))
 
     def create_next(self, repository: RepositoryName, row: ListedPullRequest, *,
-                    remotes: tuple[Path, ...] = (), reply_refusal: str = "") -> None:
+                    remotes: tuple[Path, ...] = (), reply_refusal: str = "",
+                    lag_reads: int = 0) -> None:
         """The forge can follow a real pushed branch and lose its reply after creating it."""
         data = json.loads(self.path.read_text())
         data[repository.to_wire()]["next_creation"] = FieldCodec.encode(
-            PullRequestCreation(row, remotes, reply_refusal))
+            PullRequestCreation(row, remotes, reply_refusal, lag_reads))
         self.path.write_text(json.dumps(data))
 
     def refuse_status(self, repository: RepositoryName, head: str, context: str,

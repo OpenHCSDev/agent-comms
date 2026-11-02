@@ -87,21 +87,6 @@ class CheckerStack(Stack, StackSources):
             self.clients.environment,
         )
 
-    def require_runtime_compatibility(self) -> None:
-        # Local package presence differs legitimately; only the real external contract agrees.
-        before, after = (
-            frozenset(
-                str(requirement)
-                for requirement in self.requirements(side)
-                if canonicalize_name(requirement.name) not in self.local_names
-            )
-            for side in (BaseSide, HeadSide)
-        )
-        if before != after:
-            raise ValueError(
-                "External runtime dependency migration requires an explicit compatible environment"
-            )
-
     @cached_property
     def bootstrap_lock(self) -> ResolvedLock:
         return ResolvedLock.read(self.core / "uv.lock")
@@ -144,7 +129,6 @@ class CheckerStack(Stack, StackSources):
 
     def write_project(self) -> None:
         """Declare both complete root graphs and retained identities before the one solve."""
-        self.require_runtime_compatibility()
         retained = (
             self.retained_packages
         )  # Conflicting runtime-only locks refuse before prefix mutation.
@@ -154,6 +138,13 @@ class CheckerStack(Stack, StackSources):
         document = self.source_projects[HeadSide].model_copy(deep=True)
         projects = self.clients.projects(HeadSide)
         document.enrich(projects[CorePackage.repository])
+        for active in self.requirements(BaseSide):
+            if canonicalize_name(active.name) not in self.local_names:
+                # Activation already used the baseline interpreter/extras. A root has
+                # no parent extra, so retain the selected edge without its old marker.
+                requirement = Requirement(str(active))
+                requirement.marker = None
+                document.project.dependencies.append(str(requirement))
         materialized = {
             identity: (
                 HeadSide.require_materialized(self.source_directory, self.inputs.source(identity)),
