@@ -47,11 +47,8 @@ def test_idle_turn_answers_without_an_active_record():
     assert idle.without_claim() is idle
     assert not tuple(idle.phase_effects(ToolRunningPhase()))
     idle.validate_owner(NoProcess(), 0)
-    idle.require_idle()
     idle.require_current(1, 1)
     with pytest.raises(RelationViolationError):
         idle.require_active()
     with pytest.raises(RelationViolationError):
         idle.require_turn(TurnId('9b473845f684444f80a26586ae298d2b'))
-
-

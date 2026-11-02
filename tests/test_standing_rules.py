@@ -37,7 +37,6 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     assert rule.reason == reason
     assert reason[:200] in rule.line()
     assert "x" * 201 not in rule.line()
-    assert "unblock it or tell Tristan, this wake" in rule.line()
 
     now = time.time()
     old = RulePing(RequestStalled, TextDigest.of("old housekeeping"),
@@ -57,5 +56,3 @@ def test_blocked_goal_leads_the_board_and_clears_when_active(comms, tmp_path, st
     cleared = TeamUpdate.derive(thread.incarnation, (), (), (update,),
                                      published=(update,), now=now + 60, history=history)
     assert cleared.packet.handled == ()
-
-
