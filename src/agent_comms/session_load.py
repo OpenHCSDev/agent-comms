@@ -2,7 +2,7 @@
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from functools import partial
-import agent_comms.coordinator as coordinator
+from .coordination_work import CoordinationWork
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 
-class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
+class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan'):
     @classmethod
     def at_ingress(cls, metadata: object) -> 'SessionLoadPlan':
         return EnsuringSessionLoadPlan() if metadata is None else FieldCodec.decode(cls, metadata)
@@ -49,7 +49,7 @@ class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
 @dataclass(frozen=True, slots=True)
 class EnsuringSessionLoadPlan(SessionLoadPlan):
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        return await coordinator.Coordination.run_worker(partial(
+        return await self.run_worker(partial(
             lifecycle.comms.owners.ensure_owner, thread.name,
             agent_bin=lifecycle.effects.inputs.configuration.launch.binary,
             agent_args=GivenArguments(lifecycle.effects.inputs.configuration.agent_args.argv),
@@ -78,7 +78,7 @@ class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
     binding: thread_presentation.LiveThreadOwnerBinding
 
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread":
-        entry = (await coordinator.Coordination.run_worker(partial(
+        entry = (await self.run_worker(partial(
             lifecycle.comms.registry.entry, thread.name,
         ))).entry
         if thread.incarnation != self.binding.owner.incarnation:
