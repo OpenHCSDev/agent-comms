@@ -36,13 +36,9 @@ ASKS = Path.home() / ".claude" / "tristan-asks.md"
 
 
 def team_directory() -> Path:
-    """This checkout's team package, or the agent-comms checkout beside another repository."""
-    project = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path.cwd()))
-    for root in (project, project.parent / "agent-comms", Path("/home/user/agent-comms")):
-        team = root / "src" / "agent_comms" / "team"
-        if (team / "rules").is_dir():
-            return team
-    raise FileNotFoundError("no agent-comms checkout holds src/agent_comms/team/rules")
+    """The team package of the agent-comms checkout this script lives in: whichever session
+    runs the hook, the rules it gates on are the ones beside the gate."""
+    return Path(__file__).resolve().parents[2] / "src" / "agent_comms" / "team"
 
 
 @dataclass(frozen=True)
