@@ -768,7 +768,8 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
         cut = comms.registry.store.snapshot_with_authority()
         snapshot = cut.snapshot
         thread = snapshot.require(commander)
-        requests = comms.goals.todos.open_requests(thread.acting_identity)
+        # Maintaining another owner's work does not make its private directives ours.
+        requests = comms.goals.todos.open_requests(thread.incarnation)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
@@ -1287,8 +1288,8 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """One debt whoever reads it: the request's teammate answering clears it for every
-        peer and fork that inherits the request, and any of them may answer it themselves."""
+        """The request owner answers its directive; a bound child reads that owner's slice.
+        Shared request maintenance alone does not transfer this obligation."""
         reader = snapshot.require(commander)
         names = snapshot.names_for(commander) | frozenset(
             thread.name for thread in snapshot.teammates_channel())

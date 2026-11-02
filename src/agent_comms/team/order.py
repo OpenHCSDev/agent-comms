@@ -436,14 +436,9 @@ class TeamContext(BaseModel):
 
     @property
     def receipts(self) -> TeamReceipts:
-        """Whose receipts this actor answers: its teammate's, and those of every teammate of
-        an open owner request it owes. ``open_requests`` is the same ``commands`` selection
-        OwedAnswer reads as this actor's debt, so every directive it owes is one it may answer,
-        a retired teammate's directives included."""
+        """Shared record selection grants no receipt ownership; real children keep parents."""
         actor = self.actor_identity
-        owners = (self.incarnation, *(request.commander for request
-                                      in self.comms.goals.todos.open_requests(actor)))
-        return TeamReceipts(actor, tuple(dict.fromkeys(owners)))
+        return TeamReceipts(actor, actor.represented_owners)
 
     def delivery(self, reference: MessageReference) -> str:
         """The recipients' delivery as the notification owner reports it.
@@ -910,9 +905,9 @@ class DirectiveVerb(TeamVerb):
         the replies that answer all of them at once, so one round trip clears the gate.
         """
         now = time.time()
-        # A peer acting for the teammate owes that teammate's asks too: debts follow the
-        # live teammates, so a retired creator's asks are never orphaned.
-        owers = tuple(dict.fromkeys((self.who(ctx), ctx.commander)))
+        # Debt and reply receipts follow the same exact represented owners, not the
+        # project's storage lead or every request the actor may maintain.
+        owers = tuple(owner.name for owner in ctx.actor_identity.represented_owners)
         opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
         owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
