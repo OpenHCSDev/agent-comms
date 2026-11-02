@@ -43,7 +43,7 @@ from agent_comms.nominal.field_codec import (
     ToolCallId,
 )
 from agent_comms.goal_actions import OrderGoalAction, SetGoalAction
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.goals import CountCheckResult, GoalConsentRequired, OrderCheck
 from agent_comms.held_orders import HeldOrders
 from agent_comms.native_transcript import NativeTranscript
 from agent_comms.repository_name import RepositoryName
@@ -270,7 +270,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     load = ctx.call(CommsTeamLoadTool(thread=ctx.commander))
     assert load.load.owed == 1 and load.load.timers_up == 0 and load.load.unjudged == 0
     refused = command(comms, "order", "send", "worker", body, "--fork", "fork-two")
-    assert refused.returncode != 0 and "cannot release or replace that assignment" in refused.stderr
+    assert refused.returncode != 0 and consent_refused(comms, "fork-two") in refused.stderr
     assert store.get("P40") == saved
     interim = tmp_path / "interim.txt"
     interim.write_text("The first review is complete; another check remains.")
@@ -700,11 +700,17 @@ def test_two_teammates_cannot_assign_the_same_holder_concurrently(fork_bus, tmp_
         if todo.id != "P40"
     )
     assert len(held) == 1 and held[0].holder == "worker"
+    loser = next(name for name, result in zip(("fork-a", "fork-b"), results) if result.returncode)
     refused = next(result for result in results if result.returncode)
-    # One decision inside the Todo transaction: the loser always meets the winner's held order
-    # as other work, the same refusal the sequential sends below give.
-    assert occupied("worker", held[0]) in refused.stderr
+    # The winner's order gave worker its goal; the loser is not that goal's owner (#3824).
+    assert consent_refused(comms, loser) in refused.stderr
     assert "Traceback" not in refused.stderr, refused.stderr
+
+
+def consent_refused(comms, actor):
+    """The refusal an actor meets assigning work to worker while another's order owns its goal."""
+    return str(GoalConsentRequired(comms.registry.require("worker"),
+                                   comms.registry.require(actor).incarnation))
 
 
 def occupied(holder, todo):
@@ -731,7 +737,7 @@ def released(comms, todo):
         StrikeReason("The holder releases this problem so another order can name it.")))
 
 
-def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_path):
+def test_a_second_fork_assignment_is_refused_without_the_goal_owners_consent(fork_bus, tmp_path):
     comms, source, order = fork_bus
     first, second = (command(comms, "order", "problem",
                              document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint())),
@@ -739,7 +745,7 @@ def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_
                      for name in ("fork-a", "fork-b"))
     assert first.returncode == 0, first.stderr
     held, = (todo for todo in comms.goals.todos.held_orders() if todo.holder == "worker")
-    assert second.returncode != 0 and occupied("worker", held) in second.stderr
+    assert second.returncode != 0 and consent_refused(comms, "fork-b") in second.stderr
 
 
 @pytest.mark.parametrize("held_first", (True, False))
