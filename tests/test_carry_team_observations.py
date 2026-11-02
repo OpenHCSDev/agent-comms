@@ -32,12 +32,12 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
         name="carry-lead", tags=frozenset(), worktree=Checkout(tmp_path),
         heartbeat_delivery=OnHeartbeatDelivery,
     ))
-    commander = comms.registry.require("carry-lead").incarnation
+    lead = comms.registry.require("carry-lead").incarnation
     now = time.time()
-    original = TeamUpdateNotice(commander, ())
+    original = TeamUpdateNotice(lead, ())
     original.send(comms, ("original quiet publication",))
     TeamFrame.replace_all(comms.root, (TeamHud(
-        commander=commander, units=(), phases=(), forks=(),
+        commander=lead, units=(), phases=(), forks=(),
         load=OverloadDegradation.from_orders((), 0, 0),
         usage=CodexUsage(UnreadableUsage(reason="carry fixture needs no account")),
         packets=(original,), open_pings=(),
@@ -45,7 +45,7 @@ def carry_bus(comms: Comms, tmp_path: Path) -> Comms:
     failure = ServicePassFailing(watch="carry-source", since=now - 120,
                                 failed_at=now - 60, error="later failure")
     latest, = TeamUpdate.report_failure(
-        commander, failure, (original,), published=(original,), now=now,
+        lead, failure, (original,), published=(original,), now=now,
     )
     latest.send(comms, ("failure after the older HUD was saved",))
     return comms
@@ -55,11 +55,11 @@ def test_carry_preserves_indexed_failure_and_age_without_rewriting_history(
     carry_bus: Comms, tmp_path: Path,
 ) -> None:
     comms = carry_bus
-    commander = comms.registry.require("carry-lead").incarnation
-    expected = TeamUpdate.published(comms, commander)
-    stale, = TeamFrame.at(comms.root, commander).read().packets
+    lead = comms.registry.require("carry-lead").incarnation
+    expected = TeamUpdate.published(comms, lead)
+    stale, = TeamFrame.at(comms.root, lead).read().packets
     assert expected[0].handled and not stale.handled
-    store = TeamUpdateStore.for_team(comms.root, commander)
+    store = TeamUpdateStore.for_team(comms.root, lead)
     step = TeamObservations(LiveFilesRequest(comms.root), tmp_path / "spill")
     before = Bus.digest(Bus.path_in(comms.root))
     assert step.carry(apply=False).changed == 1
@@ -76,15 +76,15 @@ def test_carry_keeps_advanced_destination_and_birth_key_across_rename_and_recrea
     carry_bus: Comms, tmp_path: Path,
 ) -> None:
     comms = carry_bus
-    commander = comms.registry.require("carry-lead").incarnation.require_recorded()
-    published, = TeamUpdate.published(comms, commander)
-    renamed = commander.renamed("renamed-carry-lead")
+    lead = comms.registry.require("carry-lead").incarnation.require_recorded()
+    published, = TeamUpdate.published(comms, lead)
+    renamed = lead.renamed("renamed-carry-lead")
     advanced = replace(published, commander=renamed,
                        not_applied=("newer retained observation",))
     TeamUpdateStore.record(comms.root, advanced)
-    existing = TeamUpdateStore.for_team(comms.root, commander)
+    existing = TeamUpdateStore.for_team(comms.root, lead)
     assert existing.path == TeamUpdateStore.for_team(comms.root, renamed).path
-    recreated = RecordedThreadIncarnation(commander.name, commander.created_at + 1)
+    recreated = RecordedThreadIncarnation(lead.name, lead.created_at + 1)
     recreated_packet = TeamUpdateNotice(recreated, ())
     TeamUpdateStore.record(comms.root, recreated_packet)
     distinct = TeamUpdateStore.for_team(comms.root, recreated)

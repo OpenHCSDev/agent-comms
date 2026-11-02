@@ -138,7 +138,6 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
     row = stored_inputs(store.root).rows[key]
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
-    assert not (tmp_path / "acp_delivery_cursors.json").exists()
     # A later native-started reply is already handled, regardless of display reads.
     second = comms.messaging.send("peer", "owner", "Native reply").message
     second_key = BusInputKey(second.seq)

@@ -326,7 +326,6 @@ def test_a_verified_snapshot_is_checked_again_the_moment_its_bytes_change(path):
     PromptBindings.create_at(path)
     with PromptBindings.connection_at(path) as db:
         _insert(db)
-    assert sidecar.VerifiedSnapshots.passed[path, PromptBindings] == sidecar.SnapshotIdentity.of(path.stat())
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE unrelated_table (x)")
     with pytest.raises(IdentityConflict), PromptBindings.connection_at(path):

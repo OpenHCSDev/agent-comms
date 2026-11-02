@@ -4,7 +4,6 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.hook_forks import SessionSubagents
 from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.cli_bridges.hook_requests import ReadGateRequest, SubagentStartRequest, SubagentStopRequest
-from types import SimpleNamespace
 
 from agent_comms.team.order import Team, MessageNotification
 from agent_comms.coordination_errors import CoordinationReadUnavailable
@@ -31,7 +30,7 @@ from agent_comms.change_report import FileLine, NamedRepository
 from agent_comms.channel_targets import TeammatesTag
 from agent_comms.team.order import TeamContext, OrderFile
 from agent_comms.team.standing import Unjudged
-from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
+from agent_comms.team_heartbeat import TeamObservation
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame
 from agent_comms.ui_model.teammate_state import TeammateState
 from agent_comms.comms import Comms, wire
@@ -111,11 +110,11 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
     source.git(source.checkout, "push", "origin", "main")
     comms = wire(tmp_path / "saved-bus")
     comms.channels.create_tag("comms")
-    # Two order holders never share one worktree, so each unit has its own checkout.
-    units = tuple((name, tmp_path / f"{name}-checkout") for name in ("worker", "other", "retained"))
-    for name, worktree in units:
+    # Two order holders never share one worktree, so each teammate has its own checkout.
+    teammates = tuple((name, tmp_path / f"{name}-checkout") for name in ("worker", "other", "retained"))
+    for name, worktree in teammates:
         source.git(source.checkout, "worktree", "add", "-q", "-b", f"{name}-work", str(worktree))
-    for name, worktree in (("lead", source.checkout), *units):
+    for name, worktree in (("lead", source.checkout), *teammates):
         comms.registry.declare(
             Thread(
                 name,
@@ -160,8 +159,8 @@ def fork_bus(tmp_path, configured_repository, monkeypatch):
     copied = tmp_path / "copied-bus"
     StoreBackup.copy_tree(comms.root, copied)
     # The forks run in lead's Claude session: one no hook registered takes lead as parent.
-    WatchClaim("commander").enrol(WatchRecord("lead", str(copied), (), tmp_path / "state"))
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "commander")
+    WatchClaim("lead-session").enrol(WatchRecord("lead", str(copied), (), tmp_path / "state"))
+    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "lead-session")
     return wire(copied), source, order
 
 
@@ -252,7 +251,6 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     with store.snapshot() as db:
         incoming_for(saved).require_free(
             db, saved.held().owner_identity, comms.registry.snapshot())
-    print(f"Core send actor: {saved.held().parent}; problem teammate: {saved.creator}")
     ctx = TeamContext.read_root(comms.root).model_copy(
         update={"actor": ForkCaller(fork.name)}
     )
@@ -286,7 +284,7 @@ def test_registered_fork_sends_parent_problem_with_fork_actor(fork_bus, tmp_path
     assert retired.returncode == 0, retired.stderr
     assert not comms.registry.status("fork-one").receiving
     assert store.get("P40") == saved
-    # Ending an issuer changes neither unit occupancy nor holder consent.
+    # Ending an issuer changes neither holder occupancy nor holder consent.
     with store.snapshot() as db:
         incoming_for(saved).require_free(
             db, saved.held().owner_identity, comms.registry.snapshot())
@@ -332,7 +330,6 @@ def test_fork_and_parent_judge_show_same_unjudged_edits(fork_bus):
         assert result.returncode == 0, result.stderr
         assert result.stdout.splitlines()[-1] == "1 unjudged"
         assert "parent-edit-0" in result.stdout
-    print("judge show: 1 unjudged; judge show --fork review-fork: 1 unjudged")
 
 
 def test_unjudged_reminder_names_each_order_with_edits(fork_bus):
@@ -612,7 +609,7 @@ def test_symlink_aliases_and_foreign_escapes_cannot_mint_membership(edit_sources
     assert selected.problems_for(str(escape)) == frozenset()
 
 
-def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
+def test_open_holder_consumers_agree_on_one_assignment(fork_bus):
     comms, source, order = fork_bus
     store = comms.goals.todos
     todo = store.get("P40")
@@ -627,15 +624,10 @@ def test_open_unit_consumers_agree_on_one_assignment(fork_bus):
     incoming = incoming_for(todo)
     with store.snapshot() as db:
         incoming.require_free(db, other_birth, snapshot)
-        queries = []
-        db.set_trace_callback(queries.append)
         incoming.require_free(db, owner, snapshot)
-        db.set_trace_callback(None)
-        plan = db.execute("EXPLAIN QUERY PLAN " + queries[0]).fetchall()
-        print("Shared open-unit query plan:", [tuple(row) for row in plan])
 
 
-def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
+def test_a_sibling_fork_assigns_a_holder_whose_order_waits_on_install(fork_bus):
     """Merged work waits only on its run, so its holder is free for any assigner."""
     comms, source, order = fork_bus
     store = comms.goals.todos
@@ -652,7 +644,7 @@ def test_a_sibling_fork_assigns_a_unit_whose_order_waits_on_install(fork_bus):
 
 
 def test_a_value_error_refusal_prints_instead_of_a_traceback(fork_bus):
-    """The commander CLI fails on the comms CLI's one failure set."""
+    """The team CLI fails on the comms CLI's one failure set."""
     comms, _, _ = fork_bus
     refused = command(comms, "order", "done", "retained", "P40")
     assert refused.returncode == 1
@@ -663,10 +655,10 @@ def test_two_teammates_allocate_distinct_global_problem_ids(fork_bus, tmp_path):
     comms, source, order = fork_bus
 
     def assign(pair):
-        name, unit = pair
+        name, holder = pair
         body = document(tmp_path / f"{name}.json", replace(order, id=OrderId.mint()))
         return process_command(
-            comms, "order", "problem", body, "--to", unit, "--where", "owner.py:2", "--fork", name
+            comms, "order", "problem", body, "--to", holder, "--where", "owner.py:2", "--fork", name
         )
 
     with ThreadPoolExecutor(max_workers=2) as commands:
@@ -680,10 +672,9 @@ def test_two_teammates_allocate_distinct_global_problem_ids(fork_bus, tmp_path):
     assert {todo.id for todo in todos} == {"P41", "P42"}
     assert {todo.creator for todo in todos} == {"lead"}
     assert {todo.held().parent for todo in todos} == {"fork-a", "fork-b"}
-    print("Concurrent fork allocations:", sorted((todo.held().parent, todo.id) for todo in todos))
 
 
-def test_two_teammates_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_path):
+def test_two_teammates_cannot_assign_the_same_holder_concurrently(fork_bus, tmp_path):
     comms, source, order = fork_bus
 
     def assign(name):
@@ -715,17 +706,16 @@ def test_two_teammates_cannot_assign_the_same_unit_concurrently(fork_bus, tmp_pa
     # as other work, the same refusal the sequential sends below give.
     assert occupied("worker", held[0]) in refused.stderr
     assert "Traceback" not in refused.stderr, refused.stderr
-    print(refused.stderr.strip())
 
 
-def occupied(unit, todo):
-    """The busy-unit refusal for other work, up to its idle-unit hint."""
-    return (f"{unit} already holds orders {todo.id} (assigned by {todo.held().parent}); "
+def occupied(holder, todo):
+    """The busy-holder refusal for other work, up to its idle-teammate hint."""
+    return (f"{holder} already holds orders {todo.id} (assigned by {todo.held().parent}); "
             "running teammates holding no order:")
 
 
 def open_problem(comms, source, order, pid, owner):
-    """A problem the commander ordered to ``owner`` under its own order."""
+    """A problem the lead ordered to ``owner`` under its own order."""
     lead = comms.registry.require("lead")
     return comms.goals.todos.create(
         pid, source.github, f"Repair {pid}", creator=lead, assigner=lead.incarnation,
@@ -754,10 +744,10 @@ def test_sequential_fork_assignments_refuse_with_the_race_message(fork_bus, tmp_
 
 
 @pytest.mark.parametrize("held_first", (True, False))
-def test_one_order_takes_a_new_problem_and_one_the_unit_holds_in_either_order(
+def test_one_order_takes_a_new_problem_and_one_the_holder_holds_in_either_order(
     fork_bus, tmp_path, held_first,
 ):
-    """A group member the unit still holds under an older order is part of this order,
+    """A group member the holder still holds under an older order is part of this order,
     not other work, and every member is written by the one send."""
     comms, source, order = fork_bus
     store = comms.goals.todos
@@ -908,11 +898,6 @@ def test_created_ids_live_only_on_todos_and_allocation_uses_numeric_index(fork_b
     assert store.allocate_problem() == "P121"
     with store.snapshot() as db:
         assert [row.number for row in ProblemAllocation.select(db)] == [121]
-        plan = db.execute(
-            f"EXPLAIN QUERY PLAN SELECT max({Todo.problem_index.term_sql(Todo)}) "
-            f'FROM "{Todo.declared_name}"'
-        ).fetchall()
-    print("Numeric identity query plan:", [tuple(row) for row in plan])
     assert store.get(issued) == created
 
 
@@ -968,14 +953,14 @@ def test_fork_superseded_verdict_reads_its_teammates_orders(fork_bus):
 def subagent_bridge(durable_home: Path, fork_bus: tuple[Comms, SourceRepository, PendingProblemOrder],
                     tmp_path: Path) -> Iterator[ClaudeBridge]:
     """Own a real binding; a shell wrapper must not hide a resident callback's wrong bus."""
-    with resident_session(fork_bus[0], tmp_path / "state", "lead", "commander") as bridge:
+    with resident_session(fork_bus[0], tmp_path / "state", "lead", "lead-session") as bridge:
         yield bridge
 
 
 @pytest.fixture
 def subagent_hook(subagent_bridge: ClaudeBridge, tmp_path: Path) -> "tuple[Comms, partial[str]]":
     return subagent_bridge.comms, partial(
-        resident_stdout, subagent_bridge, transcript=tmp_path / "commander.jsonl",
+        resident_stdout, subagent_bridge, transcript=tmp_path / "lead-session.jsonl",
         agent_id="a1", agent_type="general-purpose")
 
 
@@ -1002,8 +987,8 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
 
 def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_team(
         subagent_hook, tmp_path, monkeypatch):
-    """The bus records lead as commander; a fork the hook registered under a peer commander's
-    session acts through a commander verb and stays that peer's child."""
+    """The bus records lead as the team lead; a fork the hook registered under a peer lead's
+    session acts through a team verb and stays that peer's child."""
     comms, run = subagent_hook
     comms.registry.declare(Thread("peer", frozenset({"comms", TeammatesTag.declared_name}),
                                   comms.registry.require("lead").worktree,
@@ -1051,13 +1036,13 @@ def test_a_team_session_end_ends_each_subagent_core_still_has(subagent_hook, sub
     """A subagent killed without a SubagentStop ends with its session, once."""
     comms, run = subagent_hook
     run(SubagentStartRequest)
-    subagents = tmp_path / "commander" / "subagents"
+    subagents = tmp_path / "lead-session" / "subagents"
     subagents.mkdir(parents=True)
     for agent in ("a1", "never-joined"):
         (subagents / f"agent-{agent}.jsonl").write_text("")
     session = SessionSubagents.decode({
-        "session_id": "commander", "hook_event_name": "SessionEnd",
-        "transcript_path": str(tmp_path / "commander.jsonl")})
+        "session_id": "lead-session", "hook_event_name": "SessionEnd",
+        "transcript_path": str(tmp_path / "lead-session.jsonl")})
     for _ in range(2):
         assert session.end_subagents(comms, subagent_bridge.binding) == ()
         assert isinstance(comms.registry.status("claude-a1"), ArchivedThreadStatus)
@@ -1148,11 +1133,12 @@ def test_only_a_subagent_slot_is_retired_and_a_stopped_stranger_is_no_slot(fork_
         comms.registry.claim_slot("other", SubagentRole("Explore"), comms.goals)
 
 
-def test_a_sent_message_is_not_refused_when_its_delivery_read_is_busy(monkeypatch):
+def test_a_sent_message_is_not_refused_when_its_delivery_read_is_busy(fork_bus, monkeypatch):
     def busy(*_args, **_kwargs):
         raise CoordinationReadUnavailable(CoordinationReadUnavailable.busy_message)
 
+    comms = fork_bus[0]
+    sent = comms.messaging.send("lead", "worker", "Published before its delivery read").message
     monkeypatch.setattr(MessageNotification, "references", busy)
-    comms = SimpleNamespace(root=None, registry=None, bus=SimpleNamespace(bus=None))
-    reported = Team.delivery(SimpleNamespace(comms=comms), None)
+    reported = Team.read_root(comms.root).delivery(sent.reference)
     assert reported == f"delivery unread: {CoordinationReadUnavailable.busy_message}"

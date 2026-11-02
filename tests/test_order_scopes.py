@@ -81,7 +81,7 @@ def test_held_orders_recall_holder_problem_scope_and_last_edit_from_the_store(
 ):
     assigned(private_comms, FIX_SCOPE, source_repository, 'P1',
              ('Reproduce the bounce first', 'Then stop and report; no src edit before it'))
-    # A unit holding an order takes no unrelated one, so the triage goes to its own unit.
+    # A teammate holding an order takes no unrelated one, so the triage goes to another.
     (private_comms.root / 'triager').mkdir()
     private_comms.registry.declare(
         Thread('triager', frozenset(), Checkout(private_comms.root / 'triager')))

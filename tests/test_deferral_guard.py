@@ -1,4 +1,4 @@
-"""Resident Stop evaluates actual recorded idle units, not a shell's invented answer."""
+"""Resident Stop evaluates actual recorded idle teammates, not a shell's invented answer."""
 
 import io
 import json
@@ -43,14 +43,14 @@ DEFERRING = [RESULT, assistant(text("The six failing tests have no owner. They g
 
 @pytest.fixture
 def stop_binding(durable_home: Path, team_bus: Comms, tmp_path: Path) -> Iterator[ClaudeBridge]:
-    commander = team_bus.registry.snapshot().commander_project.require().commander
-    with resident_session(team_bus, tmp_path / "state", commander.name, "s") as bridge:
+    lead = team_bus.registry.snapshot().commander_project.require().commander
+    with resident_session(team_bus, tmp_path / "state", lead.name, "s") as bridge:
         yield bridge
 
 
 def stop(bridge: ClaudeBridge, tmp_path: Path, records: list[dict[str, JsonValue]], *,
          idle: tuple[str, ...] = (), active: bool = False) -> HookReply:
-    """The real idle owner reads registered running units and their retained turns."""
+    """The real idle owner reads registered running teammates and their retained turns."""
     for name in idle:
         bridge.comms.registry.declare(Thread(
             name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution,
@@ -63,16 +63,16 @@ def stop(bridge: ClaudeBridge, tmp_path: Path, records: list[dict[str, JsonValue
     return resident_hook(bridge, StopRequest, transcript, stop_hook_active=active)
 
 
-def test_deferral_while_a_unit_is_idle_blocks_with_the_phrase_and_units(stop_binding, tmp_path):
-    result = stop(stop_binding, tmp_path, DEFERRING, idle=("pi-story-tool", "unit-hygiene"))
+def test_deferral_while_a_teammate_is_idle_blocks_with_the_phrase_and_names(stop_binding, tmp_path):
+    result = stop(stop_binding, tmp_path, DEFERRING, idle=("pi-story-tool", "store-hygiene"))
     assert result.status == 0, result.stderr
     decision = json.loads(result.stdout)
     assert decision["decision"] == "block"
     assert "go to a teammate next" in decision["reason"]
-    assert "pi-story-tool, unit-hygiene" in decision["reason"]
+    assert "pi-story-tool, store-hygiene" in decision["reason"]
 
 
-def test_deferral_with_no_idle_unit_passes(stop_binding, tmp_path):
+def test_deferral_with_no_idle_teammate_passes(stop_binding, tmp_path):
     result = stop(stop_binding, tmp_path, DEFERRING)
     assert (result.status, result.stdout) == (0, "")
 
@@ -121,8 +121,8 @@ def test_each_deferral_shape_recognises_its_phrase(shape, reply):
     assert tuple(shape.found(reply))
 
 
-def test_a_bound_unit_session_stops_freely(durable_home: Path, team_bus: Comms, tmp_path: Path):
-    with resident_session(team_bus, tmp_path / "state", "unit-x", "s") as bridge:
+def test_a_bound_teammate_session_stops_freely(durable_home: Path, team_bus: Comms, tmp_path: Path):
+    with resident_session(team_bus, tmp_path / "state", "teammate-x", "s") as bridge:
         result = stop(bridge, tmp_path, DEFERRING, idle=("pi-story-tool",))
         assert (result.status, result.stdout) == (0, "")
 
@@ -137,10 +137,10 @@ def test_an_unbound_session_stops_freely(
     assert capsys.readouterr().out == ""
 
 
-@pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
+@pytest.mark.parametrize("actor", ("claude-code", "teammate-x"))
 def test_a_stop_with_no_monitor_on_a_running_bridge_is_sent_back_once(
         durable_home: Path, team_bus: Comms, tmp_path: Path, actor: str):
-    """Every bound role keeps its Monitor; only deferral judging is commander-specific."""
+    """Every bound role keeps its Monitor; only deferral judging is specific to the project lead."""
     quiet = [RESULT, assistant(text("Ordered P362 to pi-story-tool."))]
     with resident_session(team_bus, tmp_path / "state", actor, "s") as bridge:
         claim = WatchClaim(bridge.binding.thread)

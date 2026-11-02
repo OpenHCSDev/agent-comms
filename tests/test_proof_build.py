@@ -32,7 +32,6 @@ from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repo import GitCommandError, Repo
 from agent_comms.repository_name import RepositoryName
-from agent_comms.standing_rules import StandingRule
 from agent_comms.todos import (
     CommitDelivery,
     DoneTodoState,
@@ -327,7 +326,6 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 assert missing in str(refusal.value) or str(older) in str(refusal.value)
                 assert str(installed) in str(refusal.value)
                 assert copied.goals.todos.get(problem) == delivered
-                print(f"{type(refusal.value).__name__}: {refusal.value}")
     assert not source.goals.todos.board()
 
 

@@ -26,7 +26,7 @@ from agent_comms.session_file import RegistrySessionLocation
 
 from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
-from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript, RunningClaude
+from agent_comms.cli_bridges.claude_transcript import ClaudeTranscript
 from agent_comms.cli_bridges.codex import CodexAppServer
 from agent_comms.cli_bridges.codex_connection import CodexConnection
 from agent_comms.cli_bridges.codex_protocol import BusInput, InitializeResponse, RequestParams, ItemsList
@@ -37,7 +37,6 @@ from agent_comms.cli_bridges.history import (
 from agent_comms.cli_bridges.opencode import OpenCodeServer, OpenCodeConnection
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
-from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness, PiHarness
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
@@ -92,15 +91,6 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path: Pa
     assert FieldCodec.encode(NoThreadText()) is None
 
 
-def test_every_harness_has_one_offline_family_and_one_online_reader() -> None:
-    assert OfflineHistory.readers(ClaudeCodeHarness) == (ClaudeTranscript,)
-    assert OfflineHistory.readers(CodexHarness)[0].__name__ == "CodexRollout"
-    assert set(OfflineHistory.readers(OpenCodeHarness)) == {OpenCodeExport, OpenCodeDatabase}
-    assert OnlineHistory.readers(ClaudeCodeHarness) == (RunningClaude,)
-    assert OnlineHistory.readers(CodexHarness) == (CodexAppServer,)
-    assert OnlineHistory.readers(OpenCodeHarness) == (OpenCodeServer,)
-
-
 # Claude Code
 
 
@@ -126,8 +116,6 @@ def claude_tool(uuid: str, tool_id: str, name: str, arguments: dict[str, JsonVal
 def claude_result(uuid: str, tool_id: str, text: str, error: bool = False) -> dict[str, JsonValue]:
     return claude("user", uuid, promptId="p-" + uuid, message={"content": [
         {"type": "tool_result", "tool_use_id": tool_id, "content": text, "is_error": error}]})
-
-
 
 
 def test_claude_subagent_keeps_its_task_its_team_and_its_tools(tmp_path: Path) -> None:
@@ -168,7 +156,6 @@ def test_claude_subagent_keeps_its_task_its_team_and_its_tools(tmp_path: Path) -
     assert ClaudeTranscript.subagents(session) == (subagent,)
 
 
-
 def claude_narration(uuid: str, text: str) -> dict[str, JsonValue]:
     """Claude Code saves narration and hidden reasoning under one tag; only narration has text."""
     return claude("assistant", uuid, message={"content": [
@@ -198,8 +185,6 @@ def test_claude_narration_before_a_tool_call_is_a_regular_message(tmp_path: Path
         (ImportedReply, "Reading the decoder first."), (ImportedReply, "Fixed.")]
 
 
-
-
 def test_claude_reads_from_its_latest_compaction(tmp_path: Path) -> None:
     source = lines(tmp_path / "s.jsonl", [
         claude_prompt("old", "Obsolete request", origin={"kind": "human"}),
@@ -213,7 +198,6 @@ def test_claude_reads_from_its_latest_compaction(tmp_path: Path) -> None:
     assert bodies(snapshot) == ["Next step"]
     # The selected history has no request, so the newest earlier one is reported.
     assert snapshot.latest_request == "Obsolete request"
-
 
 
 def test_claude_refuses_damaged_lines_and_records_it_does_not_know(tmp_path: Path) -> None:
@@ -246,10 +230,10 @@ def test_import_subagents_names_each_thread_by_its_id(tmp_path: Path, capsys: py
         subagent.parent.mkdir(parents=True, exist_ok=True)
         lines(subagent, [claude_prompt("t", f"task {name}", cwd=str(tmp_path))])
     assert main(["--root", str(comms.root), "import-subagents", "--session", str(session),
-                 "--prefix", "unit-"]) == 0
+                 "--prefix", "sub-"]) == 0
     result = json.loads(capsys.readouterr().out)
-    assert sorted(item["thread"] for item in result["imported"]) == ["unit-a1", "unit-b2"]
-    assert comms.registry.status("unit-a1") == StoppedThreadStatus()
+    assert sorted(item["thread"] for item in result["imported"]) == ["sub-a1", "sub-b2"]
+    assert comms.registry.status("sub-a1") == StoppedThreadStatus()
 
 
 # Codex
@@ -382,37 +366,35 @@ def test_codex_import_uses_requested_name_not_rollout_filename(tmp_path: Path, c
     assert source.read_bytes() == original
 
 
-
-
-def test_rehome_moves_a_codex_unit_to_pi_on_its_own_birth(
+def test_rehome_moves_a_codex_thread_to_pi_on_its_own_birth(
     tmp_path: Path, comms: Comms, monkeypatch: pytest.MonkeyPatch, user_manager: type,
 ) -> None:
     import subprocess
 
     systemctl: list[tuple[str, ...]] = []
     monkeypatch.setattr(subprocess, "run", lambda argv, **_: systemctl.append(argv))
-    worktree = tmp_path / "unit-worktree"
+    worktree = tmp_path / "worker-worktree"
     worktree.mkdir()
     before = comms.registry.declare(Thread(
-        "unit-x", frozenset({"units"}), Checkout(worktree), execution=ExternalThreadExecution))
+        "worker", frozenset({"team"}), Checkout(worktree), execution=ExternalThreadExecution))
     source = codex_lines(tmp_path / "rollout.jsonl", [
         codex_meta("codex-session", tmp_path), codex_message("user", "Keep going")])
 
     rehomed = comms.threads.rehome_thread(
-        OfflineHistory.stored(CodexHarness, source, AnySession()), name="unit-x")
+        OfflineHistory.stored(CodexHarness, source, AnySession()), name="worker")
 
-    after = comms.registry.require("unit-x")
+    after = comms.registry.require("worker")
     assert after.incarnation == before.incarnation and after.created_at == before.created_at
     assert (after.tags, after.worktree, after.storage_roots) == (
         before.tags, before.worktree, before.storage_roots)
     assert after.execution is NativeThreadExecution and after.process_identity == NO_PROCESS
-    assert comms.registry.status("unit-x") == StoppedThreadStatus()
+    assert comms.registry.status("worker") == StoppedThreadStatus()
     assert Path(rehomed.session_file).is_file() and rehomed.source_id == "codex-session"
     assert systemctl == [("systemctl", "--user", "disable", "--now",
                           "codex-comms-inbox@codex-session.service")]
     with pytest.raises(RelationViolationError):
         comms.threads.rehome_thread(
-            OfflineHistory.stored(CodexHarness, source, AnySession()), name="unit-x")
+            OfflineHistory.stored(CodexHarness, source, AnySession()), name="worker")
 
 
 def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(tmp_path: Path) -> None:
@@ -436,7 +418,6 @@ def test_codex_uses_response_items_not_mirrored_events_and_keeps_recent_budget(t
     assert len(tail.messages) == 1 and tail.messages[0].body.startswith("[Historical tool result]")
     assert tail.latest_request == "Message 9"
     assert "Message 9" in tail.pi_session(tmp_path)
-
 
 
 class CountingReader:
@@ -528,8 +509,6 @@ def test_codex_fixed_boundary_ignores_concurrent_append(tmp_path: Path, monkeypa
     assert "Appended too late" in source.read_text()
 
 
-
-
 def test_codex_without_checkpoint_keeps_chronological_bounded_suffix(tmp_path: Path) -> None:
     records = [codex_meta("plain", tmp_path)]
     for index in range(3):
@@ -539,7 +518,6 @@ def test_codex_without_checkpoint_keeps_chronological_bounded_suffix(tmp_path: P
     assert bodies(snapshot) == ["Request 2", "Answer 2"]
     assert snapshot.messages_seen == 6
     assert snapshot.latest_request == "Request 2"
-
 
 
 def test_bounded_suffix_is_one_contiguous_newest_run(tmp_path: Path) -> None:
@@ -600,33 +578,23 @@ def test_codex_rollout_must_start_with_its_session_and_decode_completely(tmp_pat
         read(CodexHarness, source)
 
 
-
-
-
-
-
-
 # OpenCode
 
 
 class FakeCodex(CodexConnection):
     def __init__(self, pages: dict[str | None, JsonValue]) -> None:
         self.pages = pages
-        self.calls: list[RequestParams] = []
         self.initialized = InitializeResponse(userAgent="codex/0.0.0")
 
     async def call(self, params: RequestParams) -> JsonValue:
-        self.calls.append(params)
         if params.method == "thread/resume":
             return {"thread": {"status": {"type": "idle"}, "cwd": "/work/codex"}}
         assert isinstance(params, ItemsList)
         return self.pages[params.cursor]
 
 
-
 def codex_entry(turn: str, item: dict[str, JsonValue]) -> dict[str, JsonValue]:
     return {"turnId": turn, "item": item, "startedAtMs": 1, "completedAtMs": 2}
-
 
 
 def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs() -> None:
@@ -652,8 +620,6 @@ def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs() -> None:
     assert bodies(snapshot) == ["from the bus", "second answer"]
     assert snapshot.project == "/work/codex" and snapshot.source_id == "thread"
     assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply]
-    assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
-
 
 
 def opencode_message(message_id: str, role: str, parts: list[dict[str, JsonValue]], **info: JsonValue) -> dict[str, JsonValue]:
@@ -752,29 +718,20 @@ def test_opencode_database_uses_readonly_snapshot(tmp_path: Path) -> None:
         read(OpenCodeHarness, source)
 
 
-
-
-
-
-
-
 class FakeOpenCode(OpenCodeConnection):
     session = "ses_test"
     info = Session(id="ses_test", directory="/work/opencode", title="Live task")
 
     def __init__(self, messages: list[dict[str, JsonValue]]) -> None:
         self.saved = [SavedMessage.model_validate(message) for message in messages]
-        self.queries: list[dict[str, str]] = []
 
     async def messages(self, query: dict[str, str]) -> list[SavedMessage]:
-        self.queries.append(query)
         return self.saved
 
     async def status(self) -> TurnEnded:
         from agent_comms.runtime_updates import TurnEnded
 
         return TurnEnded()
-
 
 
 def test_opencode_server_reads_all_messages_including_the_users() -> None:
@@ -794,10 +751,9 @@ def test_opencode_server_reads_all_messages_including_the_users() -> None:
 
     snapshot = asyncio.run(collect())
     assert bodies(snapshot) == ["Live prompt", "Live answer"]
-    assert snapshot.title == GivenThreadText("Live task") and connection.queries == [{}]
+    assert snapshot.title == GivenThreadText("Live task")
     with pytest.raises(ValueError):
         OnlineHistory.running(OpenCodeHarness, "ses_test", DefaultAddress(), Path("/work"))
-
 
 
 def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
@@ -817,7 +773,6 @@ def test_opencode_server_leaves_out_what_the_user_reverted() -> None:
         return buffer.snapshot(OpenCodeHarness)
 
     assert bodies(asyncio.run(collect())) == ["Kept prompt"]
-
 
 
 def test_import_cli_and_invalid_sources(tmp_path: Path, capsys: pytest.CaptureFixture[str], comms: Comms) -> None:

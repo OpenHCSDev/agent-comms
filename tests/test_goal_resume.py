@@ -262,7 +262,6 @@ def test_completed_goal_cannot_be_reactivated_by_ui_registry_action(comms, monke
 def test_terminal_goal_cannot_reactivate_through_pause(comms, monkeypatch, terminal):
     started = _goal(comms, monkeypatch)
     started_goal_id = FieldCodec.decode(GoalId, started["id"])
-    private = comms.root / "goal-private"
     store = comms.goals.open_goal_store()
     reservation = store.reserve(started_goal_id, 1)
     if terminal == "blocked":
@@ -325,8 +324,8 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
     assert (comms.root / "registry.json").read_bytes() == before
 
 
-def test_a_blocked_goal_is_retried_by_its_unit_or_team_and_authorize_retry_guards_each(comms, monkeypatch):
-    """No owner session exists: the unit retries through comms_goal, the commander retries and
+def test_a_blocked_goal_is_retried_by_its_holder_or_team_and_authorize_retry_guards_each(comms, monkeypatch):
+    """No owner session exists: the holder retries through comms_goal, a teammate retries and
     replaces through the runtime actor, and an unresolved attempt still refuses a retry."""
     goal_id = FieldCodec.decode(GoalId, _goal(comms, monkeypatch)["id"])
     store = comms.goals.open_goal_store()

@@ -31,7 +31,7 @@ def example_hud() -> TeamHud:
         RecordedThreadIncarnation("screen", 2.0), Moving, NoPendingClock(),
         (order,), 0, (), (),
     )
-    commander = RecordedThreadIncarnation("lead", 1.0)
+    lead = RecordedThreadIncarnation("lead", 1.0)
     old = replace(RulePing.capture(ServicePassFailing(watch="source", since=900, error="read refused",
                                                       failed_at=900)),
                   since=RecordedEventTime(900))
@@ -39,14 +39,14 @@ def example_hud() -> TeamHud:
                                                       failed_at=1000)),
                   since=RecordedEventTime(1000))
     return TeamHud(
-        commander=commander, units=(
+        commander=lead, units=(
             worker,
             replace(worker, unit=RecordedThreadIncarnation("blocked", 3.0), state=Stuck),
             replace(worker, unit=RecordedThreadIncarnation("run-next", 4.0), state=AwaitingApplicationRun),
             replace(worker, unit=RecordedThreadIncarnation("idle", 5.0), state=Idle, orders=()),
         ), phases=(), load=OverloadDegradation(3, 1, 2), forks=(),
         usage=CodexUsage(UnreadableUsage(reason="not requested in source example")),
-        packets=(TeamDecisions(commander, (old, new), (new,), (old,)),),
+        packets=(TeamDecisions(lead, (old, new), (new,), (old,)),),
         heartbeat=RecordedEventTime(990), open_pings=(),
     )
 
@@ -113,10 +113,8 @@ def test_disclosure_reuses_original_children_and_declared_identity() -> None:
     text = DisclosureText.describe(unit)
     assert isinstance(text, IdentifiedRecordText)
     assert text.summary == unit.unit.name
-    assert text.children is text.children
     original_unit = next(child for child in text.children if child.key == FieldKey(Teammate, "unit"))
     assert original_unit.value is text.identity_values[0]
-    assert text.sequence_key is text.sequence_key
     assert text.sequence_key == EntityKey(Teammate, (EntityKey(type(unit.unit), (unit.unit.name,)),))
     # Identity-only text still discloses every original field, including hidden HUD columns.
     assert tuple(child.key for child in text.children) == tuple(
@@ -125,15 +123,12 @@ def test_disclosure_reuses_original_children_and_declared_identity() -> None:
 
     mapping = DisclosureText.describe({"units": (unit,)})
     assert isinstance(mapping, MappingText)
-    assert mapping.children is mapping.children
     sequence = mapping.children[0].value
     assert isinstance(sequence, SequenceText)
-    assert sequence.children is sequence.children
     assert sequence.children[0].key == text.sequence_key
     assert sequence.children[0].value.value is unit
     assert sequence.summary == "1 item"
     table = ViewTable(Teammate, HudExclude, (unit,))
-    assert table.entities is table.entities
     assert table.entities[text.sequence_key] is unit
 
 

@@ -39,22 +39,9 @@ def _stub(tmp_path: Path, body: str, name: str = "pi-stub") -> str:
     return str(stub)
 
 
-
-
-
-
-
-
-
-
 class TestRpcParsing:
     def test_default_watchdog_yields_to_pi_provider_idle_authority(self):
         assert ModelWait().budget > backend._PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
-
-
-
-
-
 
     async def test_partial_large_record_survives_cancelled_read(self):
         stream = asyncio.StreamReader(limit=8)
@@ -70,9 +57,6 @@ class TestRpcParsing:
         assert await reader.readline() == b'{"text":"' + b"x" * 100 + b'"}\n'
         assert await reader.readline() == b"next\n"
         assert await reader.readline() == b""
-
-
-
 
     async def test_foreign_tool_use_before_exact_input_start_is_not_progress(self, tmp_path, pinned_native):
         # A typed prompt ACK is not a current-turn start. A previous Pi
@@ -104,37 +88,6 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         assert any(isinstance(event, ae.Done) and event.ok is False for event in events)
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Native per-input proof tests retained from the PR#1 parent.
 class TestNativeInputBinding:
     def test_only_original_response_can_promote_pending_attestation(self):
         from agent_comms.native_attestation import AttestationError, PendingAttestation
@@ -152,19 +105,5 @@ class TestNativeInputBinding:
         with pytest.raises(AttestationError):
             pending.accept(response(pending.request.require_id(), 'unsupported'))
         assert pending.accept(response(pending.request.require_id())).observed
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

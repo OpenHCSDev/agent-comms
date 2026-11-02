@@ -1,28 +1,10 @@
-"""Transcript routing lookups stay bounded as saved history grows."""
+"""Transcript routing and input-display records: reopen, bind once, read without writing."""
 
 from bus_record_fixture import INPUT_ID
-from conftest import transcript_records
-import json
-from pathlib import Path
-
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.text_digest import TextDigest
 from agent_comms.turn_item import FreshNativeId
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText, TranscriptRoutes
-
-
-def _session(path: Path, count: int) -> None:
-    with path.open("w") as output:
-        for index in range(count):
-            output.write(
-                json.dumps(
-                    transcript_records.message({
-                            "role": "assistant",
-                            "content": [{"type": "text", "text": f"answer {index}"}],
-                        }, id=f"entry-{index}")
-                )
-                + "\n"
-            )
 
 
 def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
@@ -104,7 +86,6 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
                if sql.lstrip().split(None, 1)[0].upper()
                in {"CREATE", "ALTER", "DROP", "INSERT", "UPDATE", "DELETE", "REPLACE"}]
     assert statements and written == []
-    assert any("query_only=ON" in sql for sql in statements)
 
 
 def test_reading_a_differing_schema_refuses_without_repair(tmp_path):

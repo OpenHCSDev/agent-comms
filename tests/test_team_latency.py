@@ -1,5 +1,3 @@
-
-from agent_comms.repo import Checkout
 """Team replies select metadata, not message bodies or every registry row."""
 
 import os
@@ -25,6 +23,7 @@ from agent_comms.installer.backup import StoreBackup
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message
 from agent_comms.registry_document import RegistrySnapshot
+from agent_comms.repo import Checkout
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread

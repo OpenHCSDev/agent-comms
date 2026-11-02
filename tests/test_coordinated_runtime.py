@@ -30,7 +30,7 @@ from agent_comms.notification_progress import HumanReadProgress
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.thread_text import GivenThreadText
-from agent_comms.turn_context import TurnContext, UserInputSegment
+from agent_comms.turn_context import TurnContext
 from bus_history import read_history
 from bus_record_fixture import prepare_native_comms
 from conftest import publish_initial
@@ -179,8 +179,6 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
     assert metadata is frame and frame.sources == sources
     assert tuple(reference for source in metadata.provenance
                  for reference in source.bus_references()) == ()
-    assert type(question_segment) is UserInputSegment
-    assert type(following) is UserInputSegment
     assert following.text() == question_segment.text() == question.body
     assert question_segment.manifest(0).wire_sources() == (question.reference,)
     assert peer_segment.manifest(0).wire_sources() == (peer.message.reference,)
@@ -190,8 +188,6 @@ def test_selected_and_following_use_the_original_question_contract(tmp_path: Pat
     assert f'"body":{json.dumps(peer.message.body)}' in text
     answers = FieldCodec.compact([FieldCodec.encode(peer.message.reference)], ensure_ascii=True)
     assert f"comms_send to {peer.message.exact_reply_target} with answers {answers}" in text
-    # A full selected frame still needs its real response obligation; taking
-    # its body segments grants no response or write authority.
 
 
 def test_native_runtime_schema_drift_fails_closed(private_comms) -> None:

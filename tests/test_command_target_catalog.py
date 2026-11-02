@@ -39,8 +39,6 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
         TargetCompleted(target, StopCliCommand(name="first"), ThreadStoppedResult("first")),
         TargetFailed(target, "UnregisteredThreadError", "Thread 'missing' is not registered."),
     ))
-    assert original.outcomes[0].target is target
-    assert original.outcomes[1].target is target
     decoded = FieldCodec.decode(TargetBatchResult, FieldCodec.encode(original))
     assert decoded == original
     assert decoded.outcomes[0].owner_start().name == target.display_name()

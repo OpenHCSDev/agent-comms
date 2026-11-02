@@ -45,7 +45,7 @@ from agent_comms.goals import NoGoal
 from agent_comms.pi_wire import McpLiveAcknowledgement
 from agent_comms.thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.transcripts import NativeTranscriptCursor, TranscriptPage
+from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.turn_context import ContextManifest, NextContextTurn
 from agent_comms.turn_lease import ActiveTurn, FinishedTurn, TurnState
 

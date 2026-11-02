@@ -1,4 +1,4 @@
-"""The AST's declarations and the actual commander JSON/command boundary."""
+"""The override scan and the order file at the real order CLI boundary."""
 
 from dataclasses import replace
 import json

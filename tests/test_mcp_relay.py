@@ -1,4 +1,4 @@
-"""Provider-free Pi extension UI relay controls over a real detached child pipe."""
+"""MCP live acknowledgement decoding and owner permission cancellation over a real socket."""
 
 import asyncio
 import json
@@ -14,12 +14,6 @@ from agent_comms.runtime_server import SocketClient
 pytestmark = [
     pytest.mark.skipif(sys.platform == "win32", reason="POSIX executable stub"),
 ]
-
-
-
-
-
-
 
 
 def test_live_receipt_rejects_stale_input_malformed_and_ambiguous_claims():
@@ -85,5 +79,3 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
         writer.close(); server_writer.close()
         await writer.wait_closed(); await server_writer.wait_closed()
         server.close(); await server.wait_closed()
-
-

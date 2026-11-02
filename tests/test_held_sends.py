@@ -100,4 +100,3 @@ async def test_cli_child_waits_then_publishes_once(held_bus, arguments):
     stdout, stderr = await asyncio.wait_for(completed, 15)
     assert child.returncode == 0, (stdout.decode(), stderr.decode())
     assert_published_once(comms)
-    print(f'{arguments[0]} child: held without publication; exit 0; published exactly once; no refusal')

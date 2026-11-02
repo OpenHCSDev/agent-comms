@@ -151,8 +151,10 @@ def launcher(tmp_path, monkeypatch):
     (stack / "bin").mkdir(parents=True)
     source = tmp_path / "src/agent_comms"
     source.mkdir(parents=True)
+    # The untracked src/agent_comms/node_modules install (~117 MB) is no input of the
+    # package module this fixture loads; copying it cost seconds per test.
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns('__pycache__'))
+                    ignore=shutil.ignore_patterns('__pycache__', 'node_modules'))
     WheelStamp.of_source(source.parent, STAMP.commit()).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.

@@ -80,9 +80,9 @@ def test_done_is_refused_until_the_delivered_tree_declares_the_created_line(
     assert verified(source_repository.branch_commit).commit == source_repository.branch_commit
 
 
-def test_a_fork_is_never_a_unit_that_could_take_an_order(tmp_path):
-    unit = Thread('unit-a', frozenset(), Checkout(tmp_path))
+def test_a_fork_is_never_a_teammate_that_could_take_an_order(tmp_path):
+    teammate = Thread('worker', frozenset(), Checkout(tmp_path))
     fork = replace(Thread('shape-next', frozenset(), Checkout(tmp_path)),
                    execution=ForkExecution)
-    assert unit.execution.order_candidates(unit) == (unit,)
+    assert teammate.execution.order_candidates(teammate) == (teammate,)
     assert fork.execution.order_candidates(fork) == ()

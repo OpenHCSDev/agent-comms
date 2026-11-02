@@ -22,17 +22,14 @@ def test_source_acquisitions_follow_store_tiers():
         owners[name] = vars(imported)[declaration.name]
     failures = []
     checked = 0
-    borrowed = 0
     for outer, inner, reentry in sorted(graph.pairs):
         first, second = owners[outer.store].lock_rank(), owners[inner.store].lock_rank()
         valid = first == second if reentry else first < second
         checked += 1
-        borrowed += reentry
         line = (
             f"{outer.store}({first}) -> {inner.store}({second}) "
             f"{outer.via} -> {inner.via}; locks {outer.site} -> {inner.site}"
         )
-        print(line + (" [reentry]" if reentry else ""))
         if not valid:
             failures.append(line)
     assert checked, "The acquisition census found no store pairs"
@@ -48,7 +45,6 @@ def test_source_acquisitions_follow_store_tiers():
         class ConflictingTiers(RegistryTier, CatalogTier):
             pass
 
-    print(f"{checked} store acquisition pairs checked; {borrowed} borrowed-lock reentries")
 
 
 def test_new_lock_method_and_wrapper_are_discovered(tmp_path):

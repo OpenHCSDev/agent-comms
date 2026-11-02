@@ -16,7 +16,6 @@ from conftest import installed_comms
 from agent_comms.coordination_errors import DMScopeChanged
 from agent_comms.message_page import PageBounds
 from agent_comms.read_basis import DMSelection
-from agent_comms.registration import Registration
 from agent_comms.thread_identity import UserThreadRole
 from agent_comms.threads import Thread
 from bus_record_fixture import prepare_native_comms
@@ -28,7 +27,6 @@ def installed_bus(tmp_path: Path):
 
 
 def _peer(root: Path, name: str) -> Thread:
-    thread_registration = Registration(Path(root) / "registry.json")
     return Thread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
@@ -41,7 +39,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "before rename").message.message_id
+    comms.messaging.send("peer", viewer, "before rename")
     old = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     comms.threads.rename_managed_thread("peer", "renamed", owner=ProcessIdentity.capture(os.getpid()))
     markers = tmp_path / "read_ledger.json"
@@ -57,7 +55,7 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     assert isinstance(fresh.selection, DMSelection) and fresh.selection.basis.peer == "renamed"
     _mark(comms, "peer", tmp_path, fresh)
     assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 0
-    comms.messaging.send("renamed", viewer, "after bound").message.message_id
+    comms.messaging.send("renamed", viewer, "after bound")
     assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 1
 
 
@@ -65,13 +63,13 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "old peer painted").message.message_id
+    comms.messaging.send("peer", viewer, "old peer painted")
     old = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert isinstance(old.selection, DMSelection)
     comms.registry.unregister("peer")
     comms.registry.remove("peer")
     comms.registry.declare(_peer(tmp_path, "peer"))
-    comms.messaging.send("peer", viewer, "new peer unseen").message.message_id
+    comms.messaging.send("peer", viewer, "new peer unseen")
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
@@ -89,7 +87,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "old viewer painted").message.message_id
+    comms.messaging.send("peer", viewer, "old viewer painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert isinstance(page.selection, DMSelection)
     with pytest.raises(DMScopeChanged):
@@ -97,7 +95,7 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.registry.unregister(viewer)
     comms.registry.remove(viewer)
     comms.registry.declare(Thread(viewer, frozenset(), Checkout(tmp_path), role=UserThreadRole))
-    comms.messaging.send("peer", viewer, "new viewer unseen").message.message_id
+    comms.messaging.send("peer", viewer, "new viewer unseen")
     before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
     with pytest.raises(DMScopeChanged):
@@ -109,7 +107,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms = installed_comms(tmp_path)
     comms.registry.declare(_peer(tmp_path, "peer"))
     old_viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", old_viewer, "old viewer painted").message.message_id
+    comms.messaging.send("peer", old_viewer, "old viewer painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert isinstance(page.selection, DMSelection) and page.selection.basis.viewer == old_viewer
     comms.registry.declare(Thread('new_user', frozenset(), Checkout(tmp_path), role=UserThreadRole))
@@ -118,7 +116,7 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     comms.registry.rename(old_viewer, "old_user")
     assert "old_user" in comms.registry
     assert comms.messaging.user_identity(Checkout(tmp_path)).name == "new_user"
-    comms.messaging.send("peer", "new_user", "new viewer unseen").message.message_id
+    comms.messaging.send("peer", "new_user", "new viewer unseen")
     before = comms.bus.pending_count("new_user", CommandTarget.named("peer"))
     assert before == 1
     marker_path = tmp_path / "read_ledger.json"
@@ -146,7 +144,7 @@ def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
     for name in ("peer", "other"):
         comms.registry.declare(_peer(tmp_path, name))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted").message.message_id
+    comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     with ThreadPoolExecutor(max_workers=2) as pool:
         marked = pool.submit(_mark, comms, "peer", tmp_path, page)
@@ -161,5 +159,5 @@ def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
             assert "registry changed" in str(error)
         lifecycle.result(timeout=3)
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) in {0, 1}
-    comms.messaging.send("peer", viewer, "after painted boundary").message.message_id
+    comms.messaging.send("peer", viewer, "after painted boundary")
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) >= 1

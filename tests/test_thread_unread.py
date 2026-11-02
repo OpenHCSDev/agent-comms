@@ -1,8 +1,4 @@
-"""Record-capped native reply counts and independent source preparation.
-
-The old prefix-resume/time-budget tests described deleted owners. These checks
-exercise the current suffix, read marks, per-source publication and retirement.
-"""
+"""Record-capped native reply counts, read marks, per-source publication and retirement."""
 from agent_comms.repo import Checkout
 import json
 import sqlite3

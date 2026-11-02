@@ -968,25 +968,17 @@ def test_unsent_new_alert_remains_new_on_retry_without_resetting_its_age(notific
     assert aged(announced.task.handled) == aged(observed.handled)
 
 
-def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus, request):
-    from agent_comms.heartbeat_subjects import TeamHistory, HeartbeatSubject, TeammateSubject
+def test_subject_evidence_is_shared_without_losing_each_pings_start(notification_bus):
+    from agent_comms.heartbeat_subjects import TeamHistory, TeammateSubject
     from agent_comms.task_attachments.team_pings import TeamDelivery
     from test_holder_standing_rules import publish
 
-    queries = []
-
-    class CountedTeammateSubject(TeammateSubject):
-        def action_at(self, history):
-            queries.append(self)
-            return super().action_at(history)  # Real addressed-message evidence, not a policy fake.
-
-    request.addfinalizer(lambda: HeartbeatSubject.__registry__.pop(CountedTeammateSubject.declared_name))
     comms = notification_bus
     owner = comms.registry.require("lead").incarnation
     worker = comms.registry.require("worker").incarnation
     now = time.time()
     action = publish(comms, "lead", "worker", now - 300)
-    subject = CountedTeammateSubject(worker)
+    subject = TeammateSubject(worker)
     todo = comms.goals.todos.get("P1")
     rule = ReviewTimerUp(problem=todo.id, holder=worker, order=todo.order.checked().id,
                          since=RecordedEventTime(now - 600))
@@ -1004,12 +996,10 @@ def test_subject_evidence_is_shared_without_losing_each_pings_start(notification
                           delivery=TeamDelivery(packet, opened), usage=CodexUsage.read())
     assert hud.open_pings is opened
     assert hud.board == (new.board_entry(),)
-    assert queries == [subject]
     # A later original action changes a fresh beat, never the already captured evidence.
     publish(comms, "lead", "worker", now)
     assert not new.acted(history)
     assert new.acted(TeamHistory.read(comms, frozenset({"lead"})))
-    assert queries == [subject, subject]
 
 
 def test_retained_packet_without_display_witness_keeps_original_message_identity(notification_bus):

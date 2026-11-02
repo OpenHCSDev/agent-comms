@@ -344,7 +344,6 @@ class OwnedWireText(DeclaredWireType):
         return cls(FieldCodec.decode(str, data))
 
 
-
 @dataclass(frozen=True)
 class OwnedWireRecord:
     value: OwnedWireText | None
@@ -497,8 +496,6 @@ class CountChoice(Choice):
     value: int
 
 
-
-
 @pytest.mark.parametrize(
     "annotation,data",
     [
@@ -510,7 +507,6 @@ def test_family_refusal_keeps_its_own_message_once(annotation: TypeForm[Choice |
     with pytest.raises(MalformedRecord) as refused:
         FieldCodec.decode(annotation, data)
     assert type(refused.value.__cause__) is UnknownFamilyMember
-
 
 
 @dataclass(frozen=True)
@@ -595,8 +591,6 @@ def test_tuple_shape_and_strict_bool() -> None:
         FieldCodec.decode(bool, 1)
 
 
-
-
 def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause() -> None:
     from weakref import ref
 
@@ -612,7 +606,6 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
     with pytest.raises(ValueError) as failure:
         FieldCodec.decode(str | int, None)
     assert isinstance(failure.value.__cause__, ValueError)
-
 
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts() -> None:
@@ -887,8 +880,6 @@ class FieldInlineContainer:
     pair: Annotated[Pair, WireInline()]
 
 
-
-
 @pytest.mark.parametrize(
     "value", [InlineContainer(InlinePair(7, "seven")), FieldInlineContainer(Pair(7, "seven"))]
 )
@@ -904,7 +895,6 @@ def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value: 
         FieldCodec.decode(container, {"text": "seven"})
     with pytest.raises(ValueError):
         FieldCodec.decode(container, {**wire, "other": 1})
-
 
 
 @dataclass(frozen=True)
@@ -980,10 +970,6 @@ class _SavedRow:
     count: int
 
 
-
-
-
-
 @pytest.mark.parametrize(
     "wire,refusal",
     [
@@ -1004,14 +990,12 @@ def test_refused_record_data_raises_the_declared_error(wire: dict[str, JsonValue
     assert len(raised.value.problems) == 1
 
 
-
 def test_record_reports_missing_unknown_and_malformed_siblings_together() -> None:
     from agent_comms.nominal.field_codec import RecordProblems
 
     with pytest.raises(RecordProblems) as raised:
         FieldCodec.decode(_SavedRow, {"path": 7, "at": 1.5, "extra": 0})
     assert set(raised.value.problems) == {"path", "at", "count", "extra"}
-
 
 
 def test_declaration_bug_passes_through_a_data_boundary_as_type_error() -> None:

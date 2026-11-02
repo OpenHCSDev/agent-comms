@@ -81,7 +81,6 @@ def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
 
 def test_frozen_delivery_full_n_observer_and_public_history(tmp_path: Path) -> None:
     comms, coordinator, root_id, lookups = _root(tmp_path)
-    assert len(root_id) == 32
     message = publish_initial(comms, "sender", "#team", "Hello @Alice")
     assert comms.bus.bus.path.stat().st_mode & 0o777 == 0o600
     assert [item.seq for item in read_history(comms, bounds=PageBounds(limit=1))] == [

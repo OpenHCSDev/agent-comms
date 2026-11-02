@@ -356,6 +356,5 @@ except ValueError:
     pass
 else:
     raise AssertionError("Unknown context kind must still refuse")
-print(json.dumps({"current_preview": "decoded original awareness contribution", "recorded_declarations": sorted(expected), "schema_members": len(schema["enum"])}))
 '''], input=json.dumps(payload), capture_output=True, text=True, timeout=20)
     assert result.returncode == 0, result.stderr

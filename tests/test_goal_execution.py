@@ -150,7 +150,6 @@ async def test_goal_history_shows_the_ledgers_failed_attempt_beside_active_revis
     execution_bus,
 ):
     comms = execution_bus
-    goal = comms.registry.require("worker").goal.require()
     async with turn_on(comms) as turn:
         await turn.progress.done(events.Done("backend failed", False))
         turn.finish_goals()

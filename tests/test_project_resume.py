@@ -65,8 +65,6 @@ def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     assert not current.project_resume_due and current.worktree == Checkout(new)
 
 
-
-
 async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp_path, native_runtime_package):
     """The live failure: a direct message's turn changed project, then no turn ever started."""
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:

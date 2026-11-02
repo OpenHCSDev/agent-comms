@@ -151,11 +151,6 @@ async def await_event_or_task[Result, Work](event: Awaitable[Result], task: asyn
         await asyncio.gather(observed, return_exceptions=True)
 
 
-def reader(root: Path) -> Comms:
-    """A Comms over an existing wire that makes no private write."""
-    return wire(root)
-
-
 def responder(root: Path, registry: Registration) -> MessageBus[ParticipantPublisher]:
     """The selected owner publishes replies and releases its attempt's claims."""
     return MessageBus(root, registry, ParticipantPublisher)
@@ -429,7 +424,7 @@ def root(tmp_path: Path) -> Path:
 
 @pytest.fixture
 def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *tuple[Repo, ...]], Team]:
-    """Declare the temporary commander on its bus and use its real plan-bearing checkout."""
+    """Declare the temporary lead on its bus and use its real plan-bearing checkout."""
     from agent_comms.team.order import Team
     from agent_comms.repo import Repo
 
@@ -569,17 +564,17 @@ def wired(comms: Comms) -> Comms:
 
 
 
-def declare_team(comms: Comms, commander: Thread) -> Comms:
-    """The bus's commander project, naming `commander`: the one test owner of a fleet, for a
-    test whose goals need a commander to assign them."""
-    comms.registry.declare(commander)
+def declare_team(comms: Comms, lead: Thread) -> Comms:
+    """The bus's team project, led by `lead`: the one test owner of a team, for a test whose
+    goals need a lead to assign them."""
+    comms.registry.declare(lead)
     comms.registry.set_team_project(RegisteredTeamProject(
-        comms.registry.require(commander.name).incarnation, ()))
+        comms.registry.require(lead.name).incarnation, ()))
     return comms
 
 
 def answer_rules(comms: Comms, name: str) -> None:
-    """Deal a Pi unit its fleet rules and answer them, as a unit does before its first tool:
+    """Deal a Pi teammate its team rules and answer them, as a teammate does before its first tool:
     every dealt file read in full, then an audit answering every rule and prompt."""
     deal = PiRedeal.of(comms, comms.registry.require(name))
     deal.redeal(StartedDeal())
@@ -610,7 +605,7 @@ def answer_deal(deal: PiRedeal) -> None:
 
 @pytest.fixture
 def team_bus(tmp_path):
-    """A bus whose registry names `claude-code` its commander, beside a unit `unit-x`. Its
+    """A bus whose team project `claude-code` leads, beside a teammate `unit-x`. Its
     storage rule keeps scratch under the bus root, so no deal reaches the developer's home
     whatever HOME holds when the bus is built."""
     bus = declare_team(installed_comms(tmp_path / "bus"), Thread(
@@ -624,8 +619,8 @@ def team_bus(tmp_path):
 
 @pytest.fixture
 def commanding_session(tmp_path, monkeypatch, team_bus):
-    """Claude session `s` bound to the thread the registry names commander: the only way a
-    session commands, so hooks see the same answer the registry gives."""
+    """Claude session `s` bound to the thread that leads the registry's team project: the only
+    way a session leads, so hooks see the same answer the registry gives."""
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path / "state"))
     return team_bus

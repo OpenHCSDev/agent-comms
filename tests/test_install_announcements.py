@@ -1,7 +1,6 @@
 """Typed installer results use the real publisher and retained channel history."""
 import sys
 from io import StringIO
-from dataclasses import replace
 from agent_comms.cli_bridges.shared import UnobservedBridge
 from pathlib import Path
 
@@ -10,7 +9,6 @@ import pytest
 from agent_comms.channel_targets import CommsTag
 from agent_comms.cli import build_parser
 from agent_comms.cli_commands import BusReadBack
-from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoTeamProject

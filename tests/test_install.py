@@ -124,7 +124,7 @@ def test_practice_copy_is_the_declared_files_without_its_maintenance_witnesses(p
 def test_a_message_sent_while_the_bus_is_copied_preserves_one_database_cut(
         private_directory, monkeypatch, capsys):
     # The live install of 0d81f55e2 refused its practice copy ("Private bus checkpoint
-    # root/size changed."): the commander heartbeat appended between the log's copy and
+    # root/size changed."): the team heartbeat appended between the log's copy and
     # its checkpoint's, so the copied checkpoint pointed past the end of the copied log.
     import threading
 
@@ -165,26 +165,23 @@ def test_install_report_encodes_its_registered_harnesses() -> None:
         assert FieldCodec.decode(InstallResult, FieldCodec.encode(report)) == report
 
 
-def _harnessless_home(directory: Path, monkeypatch) -> Path:
+def _harnessless_home(directory: Path, monkeypatch) -> None:
     home = directory / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("PATH", "")
-    return home
 
 
 def test_an_install_on_a_bus_with_no_team_writes_no_team_config(private_directory, monkeypatch):
-    # The laptop's install failed its last step: the flag default named this machine's commander.
+    # The laptop's install failed its last step: the flag default named this machine's lead.
     from agent_comms.cli_verbs.install import InstallCliCommand
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
     comms = wire(root)
-    home = _harnessless_home(private_directory, monkeypatch)
+    _harnessless_home(private_directory, monkeypatch)
     result = InstallCliCommand(project=private_directory).apply(comms)
     assert result.config == NoTeamProject()
-    assert not (root / "commander.json").exists()
-    assert not (home / ".config/agent-comms/commander.json").exists()
 
 
 @pytest.mark.parametrize("flags", [
@@ -198,12 +195,11 @@ def test_an_install_refuses_flags_a_bus_without_a_team_record_cannot_use(
 
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
-    home = _harnessless_home(private_directory, monkeypatch)
+    _harnessless_home(private_directory, monkeypatch)
     comms = wire(root)
     comms.registry.declare(Thread("lead", frozenset(), Checkout(private_directory)))
     with pytest.raises(UpgradeRefused):
         InstallCliCommand(project=private_directory, **flags).apply(comms)
-    assert not (root / "commander.json").exists() and not (home / ".config/agent-comms/commander.json").is_symlink()
 
 
 def test_an_install_without_flags_keeps_native_team_and_parked_state(
@@ -220,11 +216,11 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     comms = wire(root)
     comms.registry.declare(Thread("lead", frozenset(), Checkout(private_directory)))
     comms.registry.declare(Thread(
-        "parked-unit", frozenset(), Checkout(private_directory)))
-    comms.registry.set_work_state("parked-unit", ParkedThreadWorkState())
+        "parked-teammate", frozenset(), Checkout(private_directory)))
+    comms.registry.set_work_state("parked-teammate", ParkedThreadWorkState())
     recorded = RegisteredTeamProject(comms.registry.require("lead").incarnation, ())
     comms.registry.set_team_project(recorded)
-    home = _harnessless_home(private_directory, monkeypatch)
+    _harnessless_home(private_directory, monkeypatch)
     before = comms.registry.store.path.read_bytes()
     context = multiprocessing.get_context("spawn")
     locked, release = context.Event(), context.Event()
@@ -239,9 +235,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
     assert comms.registry.store.path.read_bytes() == before
     assert result.config == recorded
     assert wire(root).registry.snapshot().commander_project == recorded
-    assert not (root / "commander.json").exists()
-    assert not (home / ".config/agent-comms/commander.json").exists()
-    assert comms.registry.require("parked-unit").work_state == ParkedThreadWorkState()
+    assert comms.registry.require("parked-teammate").work_state == ParkedThreadWorkState()
     comms.registry.declare(Thread("replacement", frozenset(), Checkout(private_directory)))
     changed = InstallCliCommand(project=private_directory, commander=NamedTeam("replacement")).apply(comms)
     assert changed.config.commander == comms.registry.require("replacement").incarnation
@@ -249,7 +243,7 @@ def test_an_install_without_flags_keeps_native_team_and_parked_state(
 
 
 def test_the_team_verb_names_a_lead_and_removes_a_team_at_runtime(private_directory):
-    # Tristan 10-30: commanders are assigned at runtime, not only by a five-minute install.
+    # Tristan 10-30: leads are assigned at runtime, not only by a five-minute install.
     from agent_comms.cli_verbs.team import TeamCliCommand
     from agent_comms.errors import RelationViolationError
 

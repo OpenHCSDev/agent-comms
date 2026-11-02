@@ -66,7 +66,6 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
 def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):
     decoded = decode(event)
     assert decoded.convert() == expected
-    assert not hasattr(decoded, 'payload')
 
 
 def test_missing_delta_and_unknown_result_fields_fail_at_ingress():

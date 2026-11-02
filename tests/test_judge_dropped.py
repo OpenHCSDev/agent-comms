@@ -132,7 +132,7 @@ def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarde
     ctx = discarded_and_kept
     repo = ctx.repos[0]
     head = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
-    repo.git(repo.checkout, "update-ref", "refs/remotes/origin/unit-work", head)
+    repo.git(repo.checkout, "update-ref", "refs/remotes/origin/holder-work", head)
     main(["rewritten", "worker", "--by", head, "--why",
           "the later pushed commit replaced the formatter module entirely"], ctx)
     left = unjudged(ctx)
@@ -143,14 +143,13 @@ def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarde
     assert "kept-call" in capsys.readouterr().out.splitlines()[-1]
 
 
-def test_rewritten_refuses_an_unpushed_commit(discarded_and_kept, capsys):
+def test_rewritten_refuses_an_unpushed_commit(discarded_and_kept):
     ctx = discarded_and_kept
     repo = ctx.repos[0]
     head = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
     main(["rewritten", "worker", "--by", head, "--why",
           "the later pushed commit replaced the formatter module entirely"], ctx)
     assert {"dropped-call", "kept-call"} <= set(unjudged(ctx))
-
 
 
 def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept, proof_build_checkouts):
@@ -173,7 +172,7 @@ def test_rewritten_reads_the_repository_the_edit_was_made_in(discarded_and_kept,
     recorded_edit(ctx, ToolCallId("other-call"), str(allocated / "other_module.py"), FOREIGN)
     assert "other-call" in unjudged(ctx)
     committed(other, "other_module.py", "REPLACED_MARKER_LINE = 'what the later commit wrote'")
-    other.git(other.checkout, "push", "-q", "origin", "HEAD:refs/heads/unit-rewrite")
+    other.git(other.checkout, "push", "-q", "origin", "HEAD:refs/heads/holder-rewrite")
     head = other.git(other.checkout, "rev-parse", "HEAD").strip()
     why = "the later pushed commit replaced the marker module entirely"
     main(["rewritten", "worker", "--by", head, "--why", why], ctx)

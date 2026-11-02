@@ -1063,18 +1063,13 @@ def test_frozen_publishing_snapshot_no_nonpublication_settlement(
         assert len(obligations) == 1 and obligations[0].lifecycle.declared_name == "publishing"
 
 
-def test_concurrent_start_exactly_one_claims_pointer(db_path: Path) -> None:
-    db = ready(db_path)
-    db.close()
+def _race(target: Callable[..., None], *arguments: tuple) -> list[str]:
+    """Run one spawned process per argument tuple behind a shared gate; their sorted outcomes."""
+    # POSIX spawn avoids inheriting any open SQLite connection or lock.
     context = multiprocessing.get_context("spawn")
     gate = context.Event()
     output = context.Queue()
-    processes = [
-        context.Process(
-            target=_concurrent_start, args=(str(db_path), prepare_fence_token(), gate, output)
-        )
-        for _ in range(2)
-    ]
+    processes = [context.Process(target=target, args=(*args, gate, output)) for args in arguments]
     for process in processes:
         process.start()
     gate.set()
@@ -1082,7 +1077,18 @@ def test_concurrent_start_exactly_one_claims_pointer(db_path: Path) -> None:
     for process in processes:
         process.join(timeout=10)
         assert process.exitcode == 0
-    assert sorted(results) == ["Applied", "StaleRevision"]
+    return sorted(results)
+
+
+@pytest.mark.parametrize("shared_token, outcomes", [
+    (False, ["Applied", "StaleRevision"]),
+    (True, ["AlreadyApplied", "Applied"]),
+], ids=["distinct-tokens", "same-prepared-token"])
+def test_concurrent_start_claims_the_pointer_once(db_path: Path, shared_token, outcomes) -> None:
+    ready(db_path).close()
+    token = prepare_fence_token()
+    tokens = (token, token) if shared_token else (token, prepare_fence_token())
+    assert _race(_concurrent_start, *((str(db_path), each) for each in tokens)) == outcomes
     with store(db_path) as reopened:
         assert reopened.get("exec").is_current
         assert (
@@ -1090,49 +1096,8 @@ def test_concurrent_start_exactly_one_claims_pointer(db_path: Path) -> None:
         )
 
 
-def test_concurrent_same_prepared_token_replays_current_result(db_path: Path) -> None:
-    db = ready(db_path)
-    db.close()
-    context = multiprocessing.get_context("spawn")
-    gate = context.Event()
-    output = context.Queue()
-    token = prepare_fence_token()
-    processes = [
-        context.Process(target=_concurrent_start, args=(str(db_path), token, gate, output))
-        for _ in range(2)
-    ]
-    for process in processes:
-        process.start()
-    gate.set()
-    results = [output.get(timeout=10) for _ in processes]
-    for process in processes:
-        process.join(timeout=10)
-        assert process.exitcode == 0
-    assert sorted(results) == ["AlreadyApplied", "Applied"]
-    with store(db_path) as reopened:
-        assert reopened.get("exec").attempt is not None
-        assert (
-            reopened.session._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
-        )
-
-
 def test_concurrent_registration_one_writer_one_replay(db_path: Path) -> None:
-    # POSIX spawn avoids inheriting any open SQLite connection or lock.
-    context = multiprocessing.get_context("spawn")
-    gate = context.Event()
-    output = context.Queue()
-    processes = [
-        context.Process(target=_concurrent_registration, args=(str(db_path), gate, output))
-        for _ in range(2)
-    ]
-    for process in processes:
-        process.start()
-    gate.set()
-    results = [output.get(timeout=10) for _ in processes]
-    for process in processes:
-        process.join(timeout=10)
-        assert process.exitcode == 0
-    assert sorted(results) == ["AlreadyApplied", "Applied"]
+    assert _race(_concurrent_registration, (str(db_path),), (str(db_path),)) == ["AlreadyApplied", "Applied"]
     with store(db_path) as db:
         assert db.participants.get(SENDER_LOOKUP).owner_identity.generation == 1
         assert (

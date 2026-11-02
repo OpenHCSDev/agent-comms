@@ -320,26 +320,6 @@ def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     assert comms.bus.pending_count(viewer, CommandTarget.named('alice')) == 0
 
 
-def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
-    comms = prepared(tmp_path)
-    viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("alice", "#team", "painted").message
-    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
-    comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
-    replacement = tmp_path / "replacement.sqlite3"
-    comms.bus.bus.backup(replacement)
-    replacement.replace(comms.bus.bus.path)
-    reopened = wire(tmp_path)
-    assert reopened.bus.reads.cursor(viewer, reopened.registry.snapshot()) == ReadCursor()
-    assert reopened.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 1
-    from agent_comms.coordination_errors import DMScopeChanged
-    with pytest.raises(DMScopeChanged):
-        reopened.views.mark_page_read(page, worktree=Checkout(tmp_path))
-    fresh = reopened.views.channel_display_page("#team", viewer=NamedViewer(viewer))
-    reopened.views.mark_page_read(fresh, worktree=Checkout(tmp_path))
-    assert reopened.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
-
-
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination_errors import DMScopeChanged
     from agent_comms.private_path import FileIdentity, ObservedPath

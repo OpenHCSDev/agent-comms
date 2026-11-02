@@ -8,7 +8,7 @@ import subprocess
 import sys
 from collections.abc import Callable
 from contextlib import closing, contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from agent_comms.repo import Checkout
 
@@ -65,38 +65,44 @@ from agent_comms.typed_table import (
     WriterOwnedFile,
 )
 from bus_record_fixture import publication_processes, record_from
+from fixture_git import IDENTITY
+
+
+@dataclass(frozen=True)
+class PristineProjection:
+    """One committed copy of the source and the digest it stamps before any edit."""
+
+    checkout: Path
+    digest: str
+
+
+@pytest.fixture(scope="module")
+def pristine_projection(tmp_path_factory: pytest.TempPathFactory) -> PristineProjection:
+    checkout = tmp_path_factory.mktemp("projection") / "producer-source"
+    original = Path(__file__).resolve().parents[1] / "src"
+    # Only Python declarations feed the digest; link the large non-Python trees and the
+    # hooks package the source imports.
+    linked = ("skills", "node_modules")
+    source = checkout / "src" / "agent_comms"
+    shutil.copytree(original / "agent_comms", source, ignore=shutil.ignore_patterns(*linked))
+    for name in linked:
+        (source / name).symlink_to(original / "agent_comms" / name, target_is_directory=True)
+    (source.parent / "agent_comms_hooks").symlink_to(
+        original / "agent_comms_hooks", target_is_directory=True)
+    subprocess.run(("git", "init", "-q", str(checkout)), check=True, capture_output=True)
+    subprocess.run(
+        ("git", *IDENTITY, "-C", str(checkout), "commit", "--allow-empty", "-qm", "Source fixture"),
+        check=True, capture_output=True,
+    )
+    return PristineProjection(checkout, projection_source_digest(source))
 
 
 @pytest.fixture
-def projection_source(tmp_path: Path) -> Path:
+def projection_source(pristine_projection: PristineProjection, tmp_path: Path) -> Path:
+    """A private copy of the pristine commit, so its digest before any edit is the pristine one."""
     checkout = tmp_path / "producer-source"
-    source = checkout / "src" / "agent_comms"
-    original = Path(__file__).resolve().parents[1] / "src" / "agent_comms"
-    shutil.copytree(original, source, ignore=shutil.ignore_patterns("__pycache__", "skills"))
-    (source / "skills").symlink_to(original / "skills", target_is_directory=True)
-    subprocess.run(("git", "init", "-q", str(checkout)), check=True, capture_output=True)
-    subprocess.run(
-        (
-            "git",
-            "-C",
-            str(checkout),
-            "-c",
-            "user.name=Digest fixture",
-            "-c",
-            "user.email=digest@example.invalid",
-            "-c",
-            "commit.gpgsign=false",
-            "-c",
-            "core.hooksPath=/dev/null",
-            "commit",
-            "--allow-empty",
-            "-qm",
-            "Source fixture",
-        ),
-        check=True,
-        capture_output=True,
-    )
-    return source
+    shutil.copytree(pristine_projection.checkout, checkout, symlinks=True)
+    return checkout / "src" / "agent_comms"
 
 
 def projection_source_digest(source: Path) -> str:
@@ -174,7 +180,7 @@ STARTUPS = (
 
 
 def first_position_digest(source: Path, startup: str) -> dict:
-    """The FIRST digest a fresh process computes for the commander position, from one startup."""
+    """The FIRST digest a fresh process computes for the team position, from one startup."""
     return json.loads(subprocess.run(
         (sys.executable, "-P", "-c", FIRST_POSITION_DIGEST, startup),
         check=True, capture_output=True, text=True, timeout=120,
@@ -203,18 +209,18 @@ def test_the_first_team_position_digest_does_not_depend_on_import_order(
     (TeamUpdatePosition, "latest"),
 ))
 def test_projection_digest_ignores_reader_bodies(
-    projection_source: Path, owner: type, member: str,
+    pristine_projection: PristineProjection, projection_source: Path, owner: type, member: str,
 ) -> None:
-    before = projection_source_digest(projection_source)
+    before = pristine_projection.digest
     edit_inside(projection_source, owner, member, return_no_rows)
     assert projection_source_digest(projection_source) == before
 
 
 @pytest.mark.parametrize("owner, changes", ((MessageIdText, True), (GitCommitText, False)))
 def test_projection_digest_tracks_declared_column_spelling(
-    projection_source: Path, owner: type, changes: bool
+    pristine_projection: PristineProjection, projection_source: Path, owner: type, changes: bool
 ) -> None:
-    before = json.loads(projection_source_digest(projection_source))["message_identity_source"]
+    before = json.loads(pristine_projection.digest)["message_identity_source"]
     edit_inside(projection_source, owner, "digits", widen_spelling)
     after = json.loads(projection_source_digest(projection_source))["message_identity_source"]
     assert (after != before) == changes
@@ -236,8 +242,10 @@ def test_nominal_message_id_column_stores_plain_text() -> None:
         assert restored == row
 
 
-def test_projection_digest_tracks_actual_delivery_production(projection_source: Path) -> None:
-    before = json.loads(projection_source_digest(projection_source))
+def test_projection_digest_tracks_actual_delivery_production(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    before = json.loads(pristine_projection.digest)
     edit_inside(projection_source, Delivered, "projections", return_no_rows)
     after = json.loads(projection_source_digest(projection_source))
     affected = {row.declared_name for row in Delivered.writes}
@@ -248,25 +256,29 @@ def test_projection_digest_tracks_actual_delivery_production(projection_source: 
 
 @pytest.mark.parametrize("owner", (MessageRoutes, ClaimNoticeKind))
 def test_projection_digest_tracks_inherited_routing(
-    projection_source: Path, owner: type,
+    pristine_projection: PristineProjection, projection_source: Path, owner: type,
 ) -> None:
-    before = json.loads(projection_source_digest(projection_source))
+    before = json.loads(pristine_projection.digest)
     edit_inside(projection_source, owner, "route_rows", return_no_rows)
     after = json.loads(projection_source_digest(projection_source))
     assert after[BusRouteCounts.declared_name] != before[BusRouteCounts.declared_name]
     assert after[AnsweredSource.declared_name] == before[AnsweredSource.declared_name]
 
 
-def test_projection_digest_tracks_output_column_shape(projection_source: Path) -> None:
-    before = json.loads(projection_source_digest(projection_source))
+def test_projection_digest_tracks_output_column_shape(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    before = json.loads(pristine_projection.digest)
     edit_inside(projection_source, AnsweredSource, "original", change_column_type)
     after = json.loads(projection_source_digest(projection_source))
     assert after[AnsweredSource.declared_name] != before[AnsweredSource.declared_name]
     assert after[TeamUpdatePosition.declared_name] == before[TeamUpdatePosition.declared_name]
 
 
-def test_activity_source_changes_only_sent_activity(projection_source: Path) -> None:
-    before = json.loads(projection_source_digest(projection_source))
+def test_activity_source_changes_only_sent_activity(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    before = json.loads(pristine_projection.digest)
     path = projection_source / "messages.py"
     original = path.read_text()
     old = "return (SentActivity(message.sender, message.timestamp),)"
@@ -277,8 +289,10 @@ def test_activity_source_changes_only_sent_activity(projection_source: Path) -> 
     assert {name for name in before if before[name] != after[name]} == {"sent_activity"}
 
 
-def test_display_import_does_not_add_projection_producers(projection_source: Path) -> None:
-    before = projection_source_digest(projection_source)
+def test_display_import_does_not_add_projection_producers(
+    pristine_projection: PristineProjection, projection_source: Path,
+) -> None:
+    before = pristine_projection.digest
     path = projection_source / "producer_stamp.py"
     original = path.read_text()
     declaration = "from agent_comms.bus import Bus as Bus"
@@ -610,7 +624,7 @@ def test_unanswered_reference_selection_requires_the_recorded_original_and_exact
                         original.seq + offset, MessageId.mint("wrong-hash")),))))
     assert bus.revision() == original.seq
     bus.append(lambda seq, db: PublicRecord.from_message(
-        Message("another-unit", "#comms", "Someone else's answer", InfoKind, seq=seq,
+        Message("another-teammate", "#comms", "Someone else's answer", InfoKind, seq=seq,
                 answers=(original.reference,))))
     assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == (original.reference,)
     with bus.reading() as before_reply:
@@ -643,10 +657,10 @@ def test_answer_projection_rebuild_preserves_sequence_links_and_public_reference
     assert bus.unanswered_references((original.seq,), frozenset({"lead"})) == ()
 
 
-def team_packet(bus, commander, body):
+def team_packet(bus, holder, body):
     return bus.append(lambda seq, db: PublicRecord.from_message(Message(
-        "user", commander.name, body, InfoKind, seq=seq,
-        task=TeamUpdateNotice(commander, ()))))
+        "user", holder.name, body, InfoKind, seq=seq,
+        task=TeamUpdateNotice(holder, ()))))
 
 
 def test_team_packet_positions_append_with_their_message_and_rebuild_from_it(bus, tmp_path):
@@ -784,7 +798,6 @@ def test_sigkill_after_header_rolls_back_every_capability_table(bus):
             )
         )
         assert stored.seq == 1
-        print("SIGKILL after header: every BusTables count unchanged; next committed seq=1")
     finally:
         if process.is_alive():
             process.kill()
@@ -826,9 +839,6 @@ def test_notification_failure_carries_the_committed_message(tmp_path, bus):
     assert failed.value.record.seq == 1
     assert bus.lookup(1) == failed.value.record
     assert failed.value.record.body == "sent"
-    print(
-        "Change notification failure: committed message returned on CommittedMessageError.record"
-    )
 
 
 def test_human_programming_failure_propagates_after_rollback(tmp_path, bus):

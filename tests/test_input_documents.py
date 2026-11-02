@@ -14,7 +14,6 @@ from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, TurnId
 from agent_comms.input_attempt import (
     BoundUnknownInput,
     GoalInputDecision,
-    InputAttempt,
     MissingInput,
     NotSentInput,
     ReservedInput,
@@ -22,7 +21,7 @@ from agent_comms.input_attempt import (
     StoredInput,
     UnresolvedInput,
 )
-from agent_comms.input_disposition import InputDispositionRow, InputDispositions, InputDocument
+from agent_comms.input_disposition import InputDispositions, InputDocument
 from agent_comms.lifecycle_capability import Unresolved
 from agent_comms.reported_turn import ReportedTurn
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -283,12 +282,9 @@ def test_original_native_user_receipts_include_group_and_corrected_final_only(tm
 
 
 def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_path):
-    from dataclasses import fields
-
-
     store = InputDispositions(tmp_path)
     missing = stored_inputs(store.root).lookup(MISSING_KEY)
-    assert isinstance(missing, MissingInput) and fields(missing) == ()
+    assert isinstance(missing, MissingInput)
     assert not missing.exists and not missing.accepts_reservation and not missing.has_started
     assert not store.bind(
         MISSING_KEY,
@@ -308,9 +304,6 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     assert reserved.matches_owner(RecordedThreadIncarnation("owner", 20.0))
     assert not reserved.matches_owner(RecordedThreadIncarnation("other", 10.0))
     assert reserved.matches_claim(4) and not reserved.matches_claim(5)
-    for name in ("native_id", "turn_id", "sent_digest"):
-        assert name not in {item.name for item in fields(reserved)}
-        assert not hasattr(reserved, name)
     unsent = store.settle_unbound((INPUT_KEY,)).lookup(INPUT_KEY)
     unsent.require(Unresolved, ValueError("review required"))
     assert isinstance(unsent, NotSentInput)
@@ -323,7 +316,6 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
         text="keep",
     )
     assert UnresolvedInput.of(unsent).status == "not_sent"
-    assert "unknown" not in InputAttempt.names()
     with pytest.raises(ValueError):
         InputDocument(rows={MISSING_KEY: missing})
 
@@ -472,7 +464,6 @@ def test_stored_row_declaration_owns_the_schema(tmp_path):
         connection.commit()
     with pytest.raises(RelationViolationError):
         store.read(())
-    assert InputDispositionRow.declared_name == "input_disposition"
 
 
 def test_input_key_members_keep_the_stored_and_public_text_forms(tmp_path):

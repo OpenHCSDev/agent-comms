@@ -17,7 +17,7 @@ from agent_comms.thread_model import DeclaredModel
 from agent_comms.turn_lease import NoTurnLease
 
 
-def test_unchanged_registration_retains_creation_allocation(*, thread_registration):
+def test_unchanged_registration_retains_creation_allocation():
     incoming = Thread('fresh', frozenset(), Checkout(Path('/wt')))
     assert incoming.for_registration("fresh", None) is incoming
     renamed = incoming.for_claim("allocated")

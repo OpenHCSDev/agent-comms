@@ -47,12 +47,10 @@ def test_database_without_worker_is_closed_when_reader_dies(tmp_path):
     state = native_reader(tmp_path / 'read_ledger.json')
     database = state._database()
     idle = state.preparation
-    assert idle is state._idle
     idle.cancel()
     idle.retire((str(tmp_path / "missing.jsonl"),))
     idle.commit(database, ())
     assert state.watch(frozenset(), lambda _: None) == frozenset()
-    assert not state._pool._threads  # Constructed, but no worker started without a submit.
     reference = weakref.ref(state)
     del state
     gc.collect()

@@ -3,7 +3,6 @@
 from __future__ import annotations
 from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget, ThreadTarget
-from agent_comms.registration import Registration
 
 import os
 import shutil
@@ -20,7 +19,6 @@ from agent_comms.message_page import PageBounds
 
 
 def _thread(root: Path, name: str) -> Thread:
-    thread_registration = Registration(Path(root) / "registry.json")
     return Thread(name, frozenset({'talk'}), Checkout(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
@@ -29,7 +27,7 @@ def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: P
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     for index in range(50):
-        comms.messaging.send("peer", viewer, f"old {index}").message.message_id
+        comms.messaging.send("peer", viewer, f"old {index}")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path), bounds=PageBounds(limit=5))
     assert len(page.messages) == 5 and page.has_older
     assert isinstance(page.selection, DMSelection)
@@ -45,12 +43,12 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     for name in ("peer", "other"):
         comms.registry.declare(_thread(tmp_path, name))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_1").message.message_id
-    comms.messaging.send("peer", viewer, "PEER_PAINTED_2").message.message_id
-    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_3").message.message_id
-    comms.messaging.send("other", "#all", "OTHER_CHANNEL_4").message.message_id
-    comms.messaging.send("peer", viewer, "PEER_PAINTED_5").message.message_id
-    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_6").message.message_id
+    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_1")
+    comms.messaging.send("peer", viewer, "PEER_PAINTED_2")
+    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_3")
+    comms.messaging.send("other", "#all", "OTHER_CHANNEL_4")
+    comms.messaging.send("peer", viewer, "PEER_PAINTED_5")
+    comms.messaging.send("other", viewer, "OTHER_UNPAINTED_6")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     assert [message.body for message in page.messages] == ["PEER_PAINTED_2", "PEER_PAINTED_5"]
     assert page.newest_seq == 5 and isinstance(page.selection, DMSelection)
@@ -74,7 +72,7 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
         for name in ("peer", "other"):
             comms.registry.declare(_thread(comms.root, name))
         viewer = comms.messaging.user_identity(Checkout(comms.root)).name
-        comms.messaging.send("peer", viewer, "painted").message.message_id
+        comms.messaging.send("peer", viewer, "painted")
     page = first.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(first.root))
     assert isinstance(page.selection, DMSelection) and page.newest_seq is not None
     for comms, target, through, error in (
@@ -96,7 +94,7 @@ def test_painted_bound_uses_existing_transcript_refresh_error(tmp_path: Path):
     comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted").message.message_id
+    comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     with pytest.raises(TranscriptChanged):
         page.selection.basis.acknowledge(
@@ -110,7 +108,7 @@ def test_root_replaced_after_fetch_rejects_mark_without_reading_new_root(tmp_pat
     comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted in original root").message.message_id
+    comms.messaging.send("peer", viewer, "painted in original root")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     previous = tmp_path.with_name(tmp_path.name + "-previous")
     tmp_path.rename(previous)
@@ -124,10 +122,10 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
     comms = installed_comms(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("peer", viewer, "painted").message.message_id
+    comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page(ThreadTarget("peer"), worktree=Checkout(tmp_path))
     comms.views.mark_user_view_read("peer", worktree=Checkout(tmp_path))
-    comms.messaging.send("peer", viewer, "unpainted after explicit mark").message.message_id
+    comms.messaging.send("peer", viewer, "unpainted after explicit mark")
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
 
@@ -142,7 +140,3 @@ def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
         worktree=Checkout(tmp_path), through=0,
     )
     assert not (tmp_path / "read_ledger.json").exists()
-
-
-    # A failure at the *final* post-replace sync remains UNKNOWN: absent a
-    # separate durable marker commit witness, the row may already be visible.

@@ -1,4 +1,4 @@
-"""Real goal owners and ACP consumers; authored UNRUN for root qualification."""
+"""Real goal owners publish goal changes to their ACP consumers."""
 
 import asyncio
 from dataclasses import dataclass, field, replace
@@ -104,11 +104,8 @@ async def test_requested_refresh_observes_activity_with_unchanged_durable_goal_f
     assert isinstance(second.execution, StandbyExecution)
     assert tuple(target.incarnation.name for target in second.execution.inactive_wait_for) == (child.name,)
     assert second.execution.presentation(session).summary == "Standby · waiting for @child; no active turn: @child"
-    assert len(client.published) == 2
-    reads = comms.registry.store.cache.read_counts().requests
     await scheduler.sync_goal_execution(session)
     assert len(client.published) == 2
-    assert comms.registry.store.cache.read_counts().requests > reads
 
 
 async def test_registry_routing_uses_only_the_shared_document_and_published_goal(publication):

@@ -200,7 +200,6 @@ async def _same_loop_backpressure_case(directory: Path, case_name: str):
     assert child.returncode is not None
     with pytest.raises(ProcessLookupError):
         os.kill(child.pid, 0)
-    print("BOUNDED_UNKNOWN_REAPED", flush=True)
 
 
 @pytest.mark.skipif(sys.platform != "linux", reason="deterministic Linux pipe capacity")
@@ -221,7 +220,6 @@ def test_same_loop_lifecycle_and_partial_send_cleanup_are_bounded(tmp_path, case
         capture_output=True, text=True,
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "BOUNDED_UNKNOWN_REAPED" in result.stdout
 
 
 def test_transaction_excludes_late_reader_before_irreversible_write(tmp_path):

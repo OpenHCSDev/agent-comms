@@ -16,9 +16,9 @@ from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.locked_store import DocumentChange, LockedStore
 from agent_comms.registration import Registration
 from agent_comms.routing import NoTurnRouting
-from agent_comms.registry_document import RegistryDocument, ThreadSlice
+from agent_comms.registry_document import ThreadSlice
 from agent_comms.registry_store import RegistryStore
-from agent_comms.store_files import AtomicFile, ExclusiveLock, StoreLockContention, _store_lock
+from agent_comms.store_files import AtomicFile
 from agent_comms.threads import Thread
 from agent_comms.thread_text import GivenThreadText
 

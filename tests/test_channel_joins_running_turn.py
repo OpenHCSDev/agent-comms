@@ -47,7 +47,7 @@ async def test_agent_channel_post_joins_a_busy_turn(tmp_path):
         await agent.shutdown()
 
 
-async def test_agent_channel_post_waits_as_wake_work_for_an_idle_unit(tmp_path):
+async def test_agent_channel_post_waits_as_wake_work_for_an_idle_teammate(tmp_path):
     comms, agent, root_id, _session_id = _session(tmp_path)
     try:
         _owner, message, pending = await accepted_channel_post(comms, root_id, "wake me")

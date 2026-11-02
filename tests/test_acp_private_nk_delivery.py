@@ -1,8 +1,4 @@
-"""Explicit ACP session owner consumes ordinary private N/K without legacy ACK.
-
-Only model responses are faked; this does not prove provider delivery or
-activate private processing for existing public sessions.
-"""
+"""A private ACP owner keeps its coordination identity across rename and schema loss."""
 
 from __future__ import annotations
 

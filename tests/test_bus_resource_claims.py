@@ -333,7 +333,6 @@ def test_sigkill_after_projection_leaves_no_original_or_derived_claim(claims: Cl
             child.kill()
             child.join(10)
         child.close()
-    print("SIGKILL after original+resource+operation inserts: every table unchanged; next seq=1")
 
 
 def test_change_signal_failure_is_sent_not_a_refusal(tmp_path: Path):
@@ -360,4 +359,3 @@ def test_change_signal_failure_is_sent_not_a_refusal(tmp_path: Path):
     assert isinstance(failed.value.__cause__.__cause__, PermissionError)
     assert failed.value.record.body == "sent"
     assert bus.lookup(failed.value.record.seq) == failed.value.record
-    print("Post-COMMIT change-signal PermissionError: human outcome is sent, exact record retained")

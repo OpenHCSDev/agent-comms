@@ -6,7 +6,6 @@ from pathlib import Path
 from contextlib import AsyncExitStack, suppress
 from dataclasses import replace
 import signal
-from time import perf_counter
 
 import agent_comms.native_package as native_package
 import pytest
@@ -35,14 +34,12 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
         trace = PackageTrace(native_package.package_tree_digest.__code__)
         async with AsyncExitStack() as lifetime:
             lifetime.enter_context(trace.active())
-            started = perf_counter()
             agent, session = await lifetime.enter_async_context(
                 native.open_owner(runtime_enabled=True, auto_wake=True))
-            ready_seconds = perf_counter() - started
             comms = agent._comms
             comms.threads.claim_thread('sender', tags=frozenset(), worktree=Checkout(native.project))
             native.provider.text = 'The bus-owned native proof answered.'
-            sent = comms.messaging.send('sender', session, 'Qualify this fresh bus-owned proof turn.').message
+            comms.messaging.send('sender', session, 'Qualify this fresh bus-owned proof turn.')
             async with asyncio.timeout(60):
                 await agent.inputs.drain_inbox(session)
                 await reply_turn_finished(agent, session)
@@ -55,7 +52,6 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
             files = launch.session.files(launch.root)
             assert NativeInputProofArgument(str(files.input_proof)).argv in tuple(zip(launch.argv, launch.argv[1:]))
             assert files.input_proof.is_relative_to(native.root)
-            assert not native.session.with_name(native.session.name+'.input-proof').exists()
             with NativeContextJournal.open_evidence(files.input_proof) as db:
                 rows = NativeContextJournal.select(db)
             assert len(rows) == 1
@@ -65,10 +61,7 @@ async def test_saved_owner_dm_replies_and_core_reads_exact_native_proof(tmp_path
                                                      session_entry_start=record.start)
             assert proof.session_id == files.session_id
             assert not agent.turns.turn_state(session).active.phase.busy
-            print('SAVED_OWNER_DM_REPLY_SCOPED_PROOF_AND_NATIVE_HANDOFF=PASS', sent.seq, files.input_proof)
         assert trace.tree_hash_calls == 0
-        print('NATIVE_OWNER_READY_SECONDS', ready_seconds, 'TREE_HASH_CALLS', trace.tree_hash_calls,
-              'CORE_PACKAGE', native_package.__file__)
     assert all(child.retired for child in native.children)
 
 

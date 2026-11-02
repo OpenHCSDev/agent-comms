@@ -6,7 +6,6 @@ from agent_comms.controller import SessionUpdateSink
 import asyncio
 import json
 import os
-import shutil
 import sqlite3
 import sys
 import threading
@@ -62,7 +61,6 @@ def start_source_owner(comms, name, runtime: RestoredRuntime):
     ids=["reply", "saved-restart", "rejected-triage-continuity", "parallel-channel"],
 )
 async def test_native_channel_reply_automatically_reaches_original_sender(tmp_path, monkeypatch, restart_after_reply, reject_triage, broadcast, *, source_reads, native_runtime_package):
-    package = native_runtime_package.path
     runtime = RestoredRuntime(Path(sys.executable))
     requests = []
     failures = []
@@ -276,7 +274,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     flush=True,
                 )
             raise
-        print(description, "provider_calls", len(requests), flush=True)
 
     try:
         for name in projects:
@@ -360,10 +357,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
                     for earlier in request_inputs[:index + 1]
                 )
                 assert selection["count"] == expected_count and selection["total_ns"] > 0
-            print("Native original timing samples", len(native), "inputs", len(request_inputs),
-                  "maximum parent acknowledgement lag seconds",
-                  max((row["recorded_monotonic_ns"] - int(row["native"]["monotonicNs"])) / 1e9
-                  for row in native), flush=True)
             return
         await until(lambda: len(requests) >= seed_count + 1, "B actual native request")
         await until(
@@ -372,20 +365,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
         reply = read_history(comms, "#team")[-1]
         assert reply.sender == "answerer" and reply.body == "ROUNDTRIP_NATIVE_REPLY"
         # No user prompt, explicit inbox drain, participant insertion, or selected claim seeding.
-        try:
-            await until(lambda: len(requests) == seed_count + 2, "A automatically observed native reply")
-        except TimeoutError:
-            print(
-                "RED: native reply published but sender never automatically received it",
-                "question",
-                question.seq,
-                "reply",
-                reply.seq,
-                "facts",
-                repr(facts),
-                flush=True,
-            )
-            raise
+        await until(lambda: len(requests) == seed_count + 2, "A automatically observed native reply")
         users = [item for item in requests[seed_count + 1]["messages"] if item["role"] == "user"]
         assert reply.body in json.dumps(users[-1]["content"])
         # The same response remains available through canonical natural-turn awareness.
@@ -524,22 +504,3 @@ async def test_native_channel_reply_automatically_reaches_original_sender(tmp_pa
             server.server_close()
             serving.join(timeout=2)
         assert all(not comms.registry.require(name).process_alive for name in projects)
-        if retained_evidence := os.environ.get("AC_NATIVE_ROUNDTRIP_EVIDENCE"):
-            evidence = Path(retained_evidence)
-            evidence.mkdir(mode=0o700, parents=True, exist_ok=True)
-            shutil.copytree(tmp_path, evidence / "private-originals")
-            (evidence / "acknowledgement.json").write_text(json.dumps({
-                "original_root": str(tmp_path),
-                "wire_root_id": root_id,
-                "native_package": str(package),
-                "saved_restart": restart_after_reply,
-                "rejected_triage_continuity": reject_triage,
-                "parallel_channel": broadcast,
-                "request_monotonic_times": request_times,
-                "original_native_request_inputs": request_inputs,
-                "localhost_posts": len(requests),
-                "provider_failures": failures,
-                "owners_stopped": True,
-                "server_thread_alive": serving.is_alive(),
-                "bus_seq": comms.bus.bus.revision(),
-            }, indent=2) + "\n")

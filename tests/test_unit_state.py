@@ -1,4 +1,4 @@
-"""Unit cards from real records, with unread failures isolated to their unit."""
+"""Teammate cards from real records, with unread failures isolated to their teammate."""
 
 import asyncio
 import json
@@ -13,7 +13,7 @@ import pytest
 from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
-from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_hud import TeamFrame
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud, observe_team
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import OrderId, ToolCallId
@@ -132,20 +132,20 @@ def unread_checkout(comms, tmp_path):
 
 
 @pytest.mark.parametrize("member", TeammateState.worst_first(), ids=lambda member: member.__name__)
-def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member):
+def test_teammate_state_family_uses_real_records(held_bus, tmp_path, request, member):
     comms = held_bus
-    unit = "worker"
+    teammate = "worker"
     with LaunchRoot.from_path(comms.root).selected():
         if member is Unreadable:
             unread_checkout(comms, tmp_path)
         elif member is Idle:
-            unit = "outsider"
+            teammate = "outsider"
         elif member is Blocked:
             blocked_holder(comms)
         elif member is Detached:
-            comms.registry.register(comms.registry.require(unit), StoppedThreadStatus())
+            comms.registry.register(comms.registry.require(teammate), StoppedThreadStatus())
         elif member is AwaitingTeam:
-            publish(comms, unit, "lead", time.time() - AwaitingTeam.seconds - 1)
+            publish(comms, teammate, "lead", time.time() - AwaitingTeam.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
                 for todo in comms.goals.todos.held_orders():
@@ -199,9 +199,9 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
         frame = capture_frame(comms, "lead", ProgressRead())
         assert tuple(ReviewTimerUp.conditions(comms, frame)) == frame.review_timers
         states = TeammateState.current(comms, "lead", frame)
-        (state,) = (state for state in states if state.unit.name == unit)
+        (state,) = (state for state in states if state.unit.name == teammate)
         assert isinstance(state, member)
-        assert state.unit == comms.registry.require(unit).incarnation
+        assert state.unit == comms.registry.require(teammate).incarnation
         assert state.default_action and state.unit.name in state.line()
         assert not any(
             isinstance(state, sibling)
@@ -214,7 +214,6 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             for state in states
             if isinstance(state, expected)
         )
-        print(state.line())
 
 
 def test_started_turn_on_delivered_order_is_moving_not_stalled(held_bus):
@@ -257,9 +256,9 @@ def test_claim_is_a_team_question_not_a_verified_delivery(held_bus, claim_order)
         assert state_cards(comms, DeliveredUnclosed) == ()
 
 
-def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
-    """Being the commander's child makes nothing a unit: an order or a receiving executor does
-    (cl49, ready, drafts and fork-triage sat on the HUD as Idle units for five days)."""
+def test_a_stopped_child_holding_no_order_gets_no_card(held_bus):
+    """Being a teammate's child earns no card: an order or a receiving executor does
+    (cl49, ready, drafts and fork-triage sat on the HUD as Idle cards for five days)."""
     child = replace(held_bus.registry.require("outsider"), parent=ForkedParent("lead"))
     held_bus.registry.register(child, StoppedThreadStatus())
     with LaunchRoot.from_path(held_bus.root).selected():
@@ -268,7 +267,7 @@ def test_a_stopped_child_holding_no_order_is_no_unit(held_bus):
     assert child.incarnation not in {state.unit for state in states}
 
 
-def test_fork_gets_no_unit_card(held_bus):
+def test_fork_gets_no_teammate_card(held_bus):
     fork = held_bus.registry.register_child("judge-fork", "lead", ForkExecution, held_bus.goals)
     with LaunchRoot.from_path(held_bus.root).selected():
         states = TeammateState.current(
@@ -338,7 +337,7 @@ def test_failed_object_preparation_is_canonical_unread_progress_not_a_normal_car
     ((False, True), (True, True), (False, False)),
     ids=("home", "order", "nongit-home"),
 )
-def test_heartbeat_keeps_every_unit_when_one_checkout_is_unreadable(
+def test_heartbeat_keeps_every_teammate_when_one_checkout_is_unreadable(
     held_bus, tmp_path, primary, broken_metadata, installed_runtime
 ):
     lead = replace(held_bus.registry.require("lead"),

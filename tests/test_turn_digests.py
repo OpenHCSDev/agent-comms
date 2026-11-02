@@ -35,11 +35,6 @@ from agent_comms.watched import FileSource
 from agent_comms.threads import Thread
 
 
-def prepared(tmp_path):
-    comms = wire(tmp_path)
-    return comms
-
-
 def endpoint(comms, name, window, *, detail='activity'):
     """The comms_turns tool through the command line's dispatcher; the conftest already clears a
     managed runtime's environment, and test_cli proves the console script around it."""
@@ -74,7 +69,7 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     old_turn_id = NativeTurnId('old')
     one_turn_id = NativeTurnId('one')
     two_turn_id = NativeTurnId('two')
-    comms = prepared(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(Thread('cli', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     source = comms.transcripts.external('cli')
     for at, (turn, item, text) in enumerate([
@@ -104,7 +99,7 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
 
 
 def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
-    comms = prepared(tmp_path)
+    comms = wire(tmp_path)
     source = tmp_path / 'native.jsonl'
     evidence = 'saved evidence ' + 'x' * 49648
     rows = [
@@ -150,7 +145,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
 
 @pytest.mark.parametrize('original_in_body', (False, True))
 def test_woken_native_turn_reads_its_selected_messages_not_the_stored_frame(tmp_path, original_in_body):
-    comms = prepared(tmp_path)
+    comms = wire(tmp_path)
     source = tmp_path / 'native.jsonl'
     frame = '── comms: 1 selected ──\nselected: [...]\n── reply relevance ──\nAnswer direct requests.'
     rows = [
@@ -220,7 +215,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     undated_edge_turn_id = NativeTurnId('undated-edge')
     path, final = recorded_claude_transcript
     monkeypatch.setenv('HOME', str(tmp_path / 'home'))
-    comms = prepared(tmp_path / 'wire')
+    comms = wire(tmp_path / 'wire')
     comms.registry.declare(Thread('claude', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     state = tmp_path / 'state'
     store = Binding.open(state)
@@ -275,7 +270,6 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
     assert pages[edge // 100]['turns'][-1]['events'] == []
     sizes = [len(page['turns']) for page in pages]
     assert sizes == [100, 100, 52]
-    print(f'Claude transcript via bridge and CommsTurnsTool: pages={sizes}, unique={len(set(seen))}, empty-edge={edge + 1}')
     turn = pages[-1]['turns'][0]
     assert turn['turn_id'] == transcript_record('prompt-record-51')
     assert [event['kind'] for event in turn['events']] == ['user', 'tool_start', 'tool_end', 'assistant']
@@ -286,7 +280,7 @@ def test_recorded_claude_transcript_pages_through_tool_without_loss(tmp_path, mo
 
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
     missing_turn_id = NativeTurnId('missing')
-    comms = prepared(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(Thread('new', frozenset(), Checkout(tmp_path)))
     for window in (LastTurns(), TurnsBefore(at=1.0, count=100), TurnsSince(1.0)):
         answer = comms.transcripts.turns('new', window)
@@ -301,7 +295,7 @@ def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_p
 
 @pytest.mark.parametrize('events', ((), (AssistantTranscript('same time', position=1, timestamp=1.0),)))
 def test_undated_and_equal_time_transcripts_page_without_timestamp_assumptions(tmp_path, events):
-    comms = prepared(tmp_path)
+    comms = wire(tmp_path)
     comms.registry.declare(Thread('undated', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
     items = tuple(FinishedItem(NativeTurnId(f'undated-{index}'), NativeItemId(f'item-{index}'),
         events) for index in range(251))

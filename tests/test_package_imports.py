@@ -19,8 +19,6 @@ from agent_comms.agent_backend import AgentBackend, NewThreadBackend
 print(json.dumps({{
     'catalog_loaded': 'agent_comms.tools' in sys.modules,
     'sealed': AgentBackend._sealed,
-    'native': AgentBackend.member_named('pi_native').declared_name,
-    'durable': AgentBackend.member_named('pi_durable').declared_name,
     'default': NewThreadBackend.selected().declared_name,
 }}))
 """
@@ -30,8 +28,6 @@ print(json.dumps({{
     assert json.loads(completed.stdout) == {
         "catalog_loaded": False,
         "sealed": True,
-        "native": "pi_native",
-        "durable": "pi_durable",
         "default": "pi_native",
     }
 

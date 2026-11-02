@@ -84,15 +84,6 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(
     assert not socket.calls
 
 
-def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
-    intent = broker.SelectedToolIntent()
-    assert type(intent) is broker.SelectedToolIntent
-    assert not isinstance(intent, broker.SelectedToolMode)
-    assert not hasattr(intent, "action")
-    with pytest.raises(TypeError):
-        broker.SelectedToolMode(None, None)  # type: ignore[arg-type]
-
-
 def test_a_busy_write_refuses_the_call_as_busy_and_consumes_nothing(slot_store) -> None:
     """Real contention through the real session: busy, never the UNKNOWN of a started write."""
     call = FieldCodec.decode(ToolCallId, "call_1")

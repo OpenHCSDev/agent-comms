@@ -40,7 +40,6 @@ from agent_comms.standing_rules import (
     RepeatedTodoChange, ServicePassFailing, StaleTodoDecision, StandingRule,
 )
 from agent_comms.thread_execution import ExternalThreadExecution
-from agent_comms.thread_identity import CoreWatcherIncarnation
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
     Assignment, ExpectedProblem, PendingProblemOrder, ProgressRead, ReleaseTodo, StrikeReason,
@@ -278,9 +277,9 @@ def test_a_second_todo_conflict_is_reported_without_ending_the_pass(struck_unown
         assert RulePing.capture(following) in update.handled
 
 
-def test_unreadable_checkout_is_its_units_state_and_the_pass_carries_on(
+def test_unreadable_checkout_is_its_holders_state_and_the_pass_carries_on(
         checkout_bus: Comms, tmp_path: Path):
-    """10:08 on 2026-10-21: one unit's unreadable checkout failed the whole pass for every unit."""
+    """10:08 on 2026-10-21: one holder's unreadable checkout failed the whole pass for every teammate."""
     practice = PracticeCopy(checkout_bus.root, tmp_path / 'practice')
     practice.include(tuple(RootFile.existing_in(practice.root)))
     (root, _measurement) = practice.path, practice.measurement
@@ -318,7 +317,7 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         assert c.goals.todos.get('P1').holder is None
 
 
-def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
+def test_a_renamed_holder_keeps_its_order_checkouts(tmp_path):
     rule = StorageRule(checkout_base=tmp_path / 'checkouts',
                        scratch_base=tmp_path / 'scratch', volume=tmp_path, floor_gib=0)
     born = Thread('unit-mi', frozenset(), Checkout(tmp_path / 'home'),
@@ -336,7 +335,7 @@ def test_a_renamed_unit_keeps_its_order_checkouts(tmp_path):
 
 
 def test_fire_refuses_while_the_holders_checkout_retains_work(checkout_bus: Comms):
-    """2026-10-24: fire released P602 from a unit holding nine uncommitted edits, and the
+    """2026-10-24: fire released P602 from a holder with nine uncommitted edits, and the
     heartbeat's WORK HELD answered the same fact the other way one minute later."""
     c = checkout_bus
     holder = c.registry.require('worker').acting_identity

@@ -346,7 +346,6 @@ def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_ind
     from conftest import accept_initial, publish_initial
     from agent_comms.coordination_tables.assignments import WakeAssignment
     from agent_comms.native_runtime_input import NativeRuntimeTable
-    from agent_comms.message_notification import NotificationWindow
     from agent_comms.registry_store import RegistryStore
 
     root, root_id, comms, initial, _people = _root(tmp_path)

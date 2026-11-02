@@ -23,8 +23,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.input_disposition import InputDispositions
-from agent_comms.tools import CommsInboxTool
-from agent_comms.tool_request import ToolRequest
+from agent_comms.tools import CommsGoalTool, CommsInboxTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.read_basis import NamedViewer
 from stored_inputs import stored_inputs
@@ -58,12 +57,6 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         target="worker",
         text="An uncertain user follow-up",
     )
-    inbox = next(
-        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_inbox"
-    )
-    report = next(
-        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_goal"
-    )
     args = {
         "goal_id": goal.id,
         "status": "standby",
@@ -71,11 +64,11 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         "wait_for": ["parent"],
     }
     with pytest.raises(ValueError):
-        report.invoke(comms, args, caller=ThreadCaller("worker"))
+        CommsGoalTool.invoke(comms, args, caller=ThreadCaller("worker"))
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker").page.messages
     comms.bus.mark_read_through("worker", messages[-1].seq)
-    result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
+    result = CommsInboxTool.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
     # A human read hides nothing from the agent: only what its runtime took leaves its inbox.
     assert result["messages"] == [message.to_wire() for message in messages]
     review = result["standby_review"]
@@ -85,9 +78,9 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     keys = review["reviewed_inputs"]
     for invalid in ([str(OWNER_INPUT_KEY)], [str(BusInputKey(999999))]):
         with pytest.raises(ValueError):
-            report.invoke(comms, {**args, "reviewed_inputs": invalid}, caller=ThreadCaller("worker"))
+            CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": invalid}, caller=ThreadCaller("worker"))
     with pytest.raises(ValueError):
-        report.invoke(comms, {**args, "reviewed_inputs": keys[1:]}, caller=ThreadCaller("worker"))
+        CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": keys[1:]}, caller=ThreadCaller("worker"))
     assert ledger.path.read_bytes() == before  # Failed partial review commits nothing.
     unrelated = comms.messaging.send("other", "worker", "Not a declared dependency").message
     ledger.record(
@@ -101,8 +94,8 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     scoped = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert [str(key) for key in scoped.reviewed_inputs] == keys and len(scoped.excluded_inputs) == 2
     with pytest.raises(ValueError):
-        report.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
-    result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+        CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": [*keys, f"bus:{unrelated.seq}"]}, caller=ThreadCaller("worker"))
+    result = CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
     assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
     again = comms.goals.goal_input_review("worker", goal.id, ["parent"])
     assert again.reviewed_inputs == ()
@@ -111,8 +104,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         row = stored_inputs(ledger.root).rows[InputKeyText.from_text(key)]
         row.require(Unresolved, ValueError("review required"))
         assert row.accepts_reservation
-        assert not hasattr(row, "native_id") and not hasattr(row, "turn_id")
-        assert row.source_text == message.body and not hasattr(row, "sent_text")
+        assert row.source_text == message.body
         assert row.claim_generation == claim_scope and row.reviewed_for_goal(goal.id)
     assert not stored_inputs(ledger.root).rows[OWNER_INPUT_KEY].goal_reviews
     generation = comms.goals.open_goal_store().snapshot(goal.id)
@@ -131,7 +123,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable
     )
     with pytest.raises(ValueError):
-        report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+        CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
     assert comms.registry.require("worker").goal.state.declared_name == "paused"
 
 
@@ -200,13 +192,10 @@ def test_standby_accepts_inbox_keys_delivered_since_the_inbox_cut(tmp_path, monk
     assert ledger.bind(BusInputKey(late.seq), claim_scope=claim_scope, turn_id=turn,
                        native_id=native, text=late.body)
     assert ledger.started(BusInputKey(late.seq), turn_id=turn, native_id=native, text=late.body)
-    report = next(
-        t for t in ToolRequest.members_with(ToolRequest) if t.declared_name == "comms_goal"
-    )
     args = {"goal_id": goal.id, "status": "standby", "progress": "Waiting", "wait_for": ["parent"]}
     with pytest.raises(ValueError):
-        report.invoke(comms, {**args, "reviewed_inputs": [str(BusInputKey(999999))]},
+        CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": [str(BusInputKey(999999))]},
                       caller=ThreadCaller("worker"))
-    result = report.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
+    result = CommsGoalTool.invoke(comms, {**args, "reviewed_inputs": keys}, caller=ThreadCaller("worker"))
     assert FieldCodec.decode(GoalExecution, result["goal_execution"]).standby()
     assert stored_inputs(ledger.root).rows[BusInputKey(early.seq)].reviewed_for_goal(goal.id)

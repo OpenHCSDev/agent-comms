@@ -1,8 +1,8 @@
-
-from agent_comms.repo import Checkout
 """The model menu and the coordination footer give one answer for a running thread."""
 
 import pytest
+
+from agent_comms.repo import Checkout
 
 from agent_comms.acp import CommsAgent
 from agent_comms.agent_events import NativeMetadataObservation

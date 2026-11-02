@@ -57,7 +57,7 @@ def test_clean_transfers_keep_history_and_third_owner_requires_a_trace(tmp_path,
     problems = (ExpectedProblem('P1', second.revision),)
     with pytest.raises(ValueError):
         store.assign(problems, **kwargs)
-    # Source existence belongs to the commander boundary, not a Core record.
+    # Source existence belongs to the order author's boundary, not a Core record.
     traced = FileLine('source-not-local-to-core.py', 999999)
     third, = store.assign(problems, traced=traced, **kwargs)
     assert [old.name for old in third.assignment.previous_owners] == ['lead', 'second']

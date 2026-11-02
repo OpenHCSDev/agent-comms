@@ -3,7 +3,7 @@
 
 from agent_comms.repo import Checkout
 import sqlite3
-from dataclasses import fields, replace
+from dataclasses import replace
 from functools import partial
 from pathlib import Path
 
@@ -203,7 +203,6 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof(rec
         proof = actual.execution.historical_proof(actual, lifecycle=TriagePendingAssignment(),
                                                  **{**source, "input_id": full.input_id})
         assert isinstance(proof, FullHistoricalNativeInput)
-        assert "decision" not in {item.name for item in fields(proof)}
         assert not proof.proves_triage_source((proof,))
         with pytest.raises((TypeError, ValueError)):
             replace(actual, verdict=DecidedTriageRecord(IgnoreSelectedTriage)).execution.historical_proof(

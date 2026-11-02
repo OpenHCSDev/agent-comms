@@ -1,4 +1,4 @@
-"""The commander's first review of an order is measured from retained deliveries."""
+"""The lead's first review of an order is measured from retained deliveries."""
 
 import pytest
 from dataclasses import replace

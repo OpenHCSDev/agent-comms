@@ -1,4 +1,4 @@
-"""A commander fork answers and records for its commander (10-30: 465 owed directives
+"""A fork answers and records for the teammate it forked from (10-30: 465 owed directives
 refused every answer, and a fork that recorded only verdicts could not stop)."""
 
 from dataclasses import replace

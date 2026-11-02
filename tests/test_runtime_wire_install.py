@@ -6,7 +6,6 @@ import os
 import shlex
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 from fixture_git import IDENTITY

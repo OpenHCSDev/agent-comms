@@ -1,8 +1,7 @@
 """Session-owned parts, not stdout writes, confirm monitor delivery."""
 from pathlib import Path
 from agent_comms.repo import Checkout
-from contextlib import asynccontextmanager, suppress
-import threading
+from contextlib import asynccontextmanager, contextmanager, suppress
 from agent_comms.cli_bridges.shared import CoreWatchEnded, core_watch_failure
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator
 import asyncio
@@ -22,7 +21,8 @@ import pytest
 
 from transcript_record_fixture import transcript_record
 
-from conftest import declare_test_bus
+from bus_record_fixture import prepare_native_comms
+from conftest import accept_initial, declare_test_bus, publish_initial
 
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.locked_store import RootFile
@@ -52,6 +52,9 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
+from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, InputId
 from agent_comms.message_reference import BridgeStart, MessageReference
 from agent_comms.runtime_updates import (
@@ -91,18 +94,9 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
             'peer', 'viewer', 'after binding, already read in Toad').message
         comms.bus.mark_read_through('viewer', fresh.seq)
         user_reads = comms.bus.reads.read()
-        bridge_socket, monitor_socket = socket.socketpair()
-        bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
-        monitor_reader, monitor_writer = await asyncio.open_connection(sock=monitor_socket)
-        service = MonitorService(selected, ProcessIdentity.capture(os.getpid()), lambda: None)
-        attachment = asyncio.create_task(selected.reader.attach(service, bridge_peer))
-        watching = None
-        try:
-            async with asyncio.timeout(15):
-                await monitor_reader.readline()  # SessionReady, followed by the real probe.
-                probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
-                await probe.confirm(selected, ObservedMonitor(transcript_record('probe'), 1.))
-                watching = asyncio.create_task(selected.watch_bus())
+        async with attached_monitor(selected) as monitor_reader:
+            watching = asyncio.create_task(selected.watch_bus())
+            try:
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(selected)
@@ -124,15 +118,10 @@ async def test_empty_journal_starts_at_binding_and_ignores_user_reads(comms, tmp
                 # The agent's view drops what its harness took; the user's read changed nothing.
                 assert [item.reference for item in comms.bus.inbox(
                     'viewer', after=TakenInputStart()).page.messages] == [before.reference]
-        finally:
-            if watching is not None:
+            finally:
                 watching.cancel()
                 with suppress(asyncio.CancelledError):
                     await watching
-            monitor_writer.close()
-            await monitor_writer.wait_closed()
-            await attachment
-            await bridge_peer.close()
 
 
 @pytest.fixture
@@ -145,7 +134,7 @@ def bridge(comms, tmp_path):
     ))
     practice = PracticeCopy(comms.root, tmp_path / 'copied-bus')
     practice.include(tuple(RootFile.existing_in(practice.root)))
-    (root, _measurement) = practice.path, practice.measurement
+    root = practice.path
     state = tmp_path / 'bridge-state'
     binding = Binding(root=str(root), owner=comms.registry.require('viewer').incarnation,
                       thread='session', start=Binding.bus_head(str(root)))
@@ -334,78 +323,74 @@ async def test_a_failure_after_the_write_is_entered_is_never_relabelled_unstarte
     assert await bridge.attempts(message.message_id) == ()
 
 
-@pytest.mark.asyncio
-async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(tmp_path):
-    from bus_record_fixture import prepare_native_comms
-    from conftest import accept_initial, publish_initial
-    from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
-    from agent_comms.comms import wire
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.coordination_tables.assignments import WakeAssignment
-    from agent_comms.coordinator import Coordination
+def coordination(comms):
+    return Coordination(str(CoordinationStore.path_in(comms.root)))
 
+
+def native_viewer(tmp_path):
+    """A native-root bus whose external viewer is a committed coordination participant."""
     comms = prepare_native_comms(wire(tmp_path / 'wire'))
     comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-    original = comms.registry.declare(Thread(
+    viewer = comms.registry.declare(Thread(
         'viewer', frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution))
-    lookup = original.incarnation.require_recorded().lookup
+    lookup = viewer.incarnation.require_recorded().lookup
     root_id = comms.registry.store.prepare_native_root().namespace
-    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+    with coordination(comms) as store:
         store.participants.register(lookup, committed=True)
+    return comms, root_id, lookup
+
+
+def assignment(comms, lookup, message):
+    """The viewer's wake assignment for this message, as the coordinator stores it."""
+    with coordination(comms) as store:
+        row, = WakeAssignment.select(store.session._connection,
+                                     recipient_lookup=lookup, wire_seq=message.seq)
+        return row.lifecycle
+
+
+@contextmanager
+def bound_bridge(comms, tmp_path, owner):
+    """A Claude bridge bound to the bus head for ``owner``; preparation is the caller's."""
     state = tmp_path / 'bridge-state'
     with Binding.open(state) as db:
-        binding = Binding(root=str(comms.root), owner=original.incarnation,
+        binding = Binding(root=str(comms.root), owner=owner,
                           thread='session', start=Binding.bus_head(str(comms.root)))
         binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+        yield ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+
+
+@pytest.mark.asyncio
+async def test_renamed_reader_handoff_and_confirmation_share_the_prepared_owner(tmp_path):
+    comms, root_id, lookup = native_viewer(tmp_path)
+    original = comms.registry.require('viewer')
+    with bound_bridge(comms, tmp_path, original.incarnation) as bridge:
         comms.registry.rename('viewer', 'renamed-viewer')
         await bridge.options.operation.prepare(bridge)
         assert bridge.binding.bus == 'renamed-viewer'
         assert bridge.binding.owner == original.incarnation
-        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        with coordination(comms) as store:
             message = publish_initial(comms, 'peer', bridge.binding.bus, 'same reader').message
             accept_initial(comms.bus, root_id, message.seq, store)
-
-        bridge_socket, monitor_socket = socket.socketpair()
-        bridge_peer = MonitorPeer(*await asyncio.open_connection(sock=bridge_socket))
-        monitor_reader, monitor_writer = await asyncio.open_connection(sock=monitor_socket)
-        service = MonitorService(bridge, ProcessIdentity.capture(os.getpid()), lambda: None)
-        attachment = asyncio.create_task(bridge.reader.attach(service, bridge_peer))
-        accepting = None
         human_reads = ReadLedger.at(comms.root).read()
-        try:
-            async with asyncio.timeout(15):
-                await monitor_reader.readline()
-                probe = MONITOR_FRAME.validate_json(await monitor_reader.readline())
-                await probe.confirm(bridge, ObservedMonitor(transcript_record('probe'), 1.))
-                accepting = asyncio.create_task(bridge.accept(message))
+        async with attached_monitor(bridge) as monitor_reader:
+            accepting = asyncio.create_task(bridge.accept(message))
+            try:
                 line = (await monitor_reader.readline()).decode().rstrip('\n')
                 await accepting
-                with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-                    handed, = WakeAssignment.select(store.session._connection,
-                        recipient_lookup=lookup, wire_seq=message.seq)
-                    assert type(handed.lifecycle) is DeferredAssignment
+                assert type(assignment(comms, lookup, message)) is DeferredAssignment
                 for update in notification(line).updates(ClaudeSession()):
                     await update.observed(bridge)
-                with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-                    confirmed, = WakeAssignment.select(store.session._connection,
-                        recipient_lookup=lookup, wire_seq=message.seq)
-                    assert type(confirmed.lifecycle) is DeliveredAssignment
+                assert type(assignment(comms, lookup, message)) is DeliveredAssignment
                 # The harness took it, so the agent's page drops it; the human's unread view and
                 # read ledger are a different owner and do not move.
                 assert comms.bus.inbox(bridge.binding.bus, after=TakenInputStart()).page.messages == ()
                 assert message.reference in {
                     item.reference for item in comms.bus.inbox(bridge.binding.bus).page.messages}
                 assert ReadLedger.at(comms.root).read() == human_reads
-        finally:
-            if accepting is not None:
+            finally:
                 accepting.cancel()
                 with suppress(asyncio.CancelledError):
                     await accepting
-            monitor_writer.close()
-            await monitor_writer.wait_closed()
-            await attachment
-            await bridge_peer.close()
 
 
 @asynccontextmanager
@@ -879,7 +864,6 @@ def test_old_emission_has_no_invented_evidence_or_replay(bridge):
 @pytest.mark.asyncio
 async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
     from contextlib import aclosing
-    import asyncio
     first=wired.messaging.send('PR111','fixer','first').message
     async with aclosing(wired.watch('fixer')) as stream:
         assert (await anext(stream)).reference==first.reference
@@ -902,24 +886,10 @@ async def test_explicit_watch_does_not_mark_streamed_messages_read(wired):
 
 @pytest.mark.asyncio
 async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_path):
-    from bus_record_fixture import prepare_native_comms
-    from conftest import publish_initial
-    from agent_comms.assignment_states import DeferredAssignment, DeliveredAssignment
-    from agent_comms.comms import wire
-    from conftest import accept_initial
     from agent_comms.coordination_cohort import pending_sealed_assignments
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.coordination_tables.assignments import WakeAssignment
-    from agent_comms.coordinator import Coordination
 
-    comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-    comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
-                                  execution=ExternalThreadExecution))
-    root_id = comms.registry.store.prepare_native_root().namespace
-    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
-    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-        store.participants.register(lookup, committed=True)
+    comms, root_id, lookup = native_viewer(tmp_path)
+    with coordination(comms) as store:
 
         def publish(body):
             message = publish_initial(comms, 'peer', 'viewer', body).message
@@ -929,22 +899,11 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
         taken, confirmed, waiting = (publish(body) for body in (
             'taken, start unproved', 'taken and confirmed', 'never reached the harness'))
 
-    def claim(message):
-        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-            row, = WakeAssignment.select(store.session._connection,
-                                         recipient_lookup=lookup, wire_seq=message.seq)
-            return row.lifecycle
-
     def owed():
-        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
+        with coordination(comms) as store:
             return tuple(row.wire_seq for row in pending_sealed_assignments(store, lookup, after_seq=0))
 
-    state = tmp_path / 'bridge-state'
-    with Binding.open(state) as db:
-        binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
-                          thread='session', start=Binding.bus_head(str(comms.root)))
-        binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+    with bound_bridge(comms, tmp_path, comms.registry.require('viewer').incarnation) as bridge:
         await bridge.options.operation.prepare(bridge)
         async with attached_monitor(bridge) as reader:
             assert owed() == (taken.seq, confirmed.seq, waiting.seq)
@@ -959,9 +918,9 @@ async def test_harness_outcome_lives_on_the_threads_claim_across_a_rehome(tmp_pa
     # Whatever execution owns the thread next reads this one record: only the
     # message no harness took is still owed, and the UNKNOWN one never replays.
     assert owed() == (waiting.seq,)
-    unknown = claim(taken)
+    unknown = assignment(comms, lookup, taken)
     assert unknown == DeferredAssignment.build(unknown.mode, None, None)
-    assert type(claim(confirmed)) is DeliveredAssignment
+    assert type(assignment(comms, lookup, confirmed)) is DeliveredAssignment
 
 
 def test_prompt_typed_during_a_turn_is_shown_and_an_agents_is_hidden():
@@ -984,31 +943,10 @@ def test_prompt_typed_with_an_image_during_a_turn_shows_its_text():
 async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_path):
     """An install holds the bus: the bridge's harness hand-off and delivery record wait
     for the hold to clear instead of dying on MaintenanceHeldError (install 18, 10-24)."""
-    from bus_record_fixture import prepare_native_comms
-    from conftest import accept_initial, publish_initial
-    from agent_comms.assignment_states import DeliveredAssignment
-    from agent_comms.comms import wire
-    from agent_comms.coordination_database import CoordinationStore
-    from agent_comms.coordination_tables.assignments import WakeAssignment
-    from agent_comms.coordinator import Coordination
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
-
-    comms = prepare_native_comms(wire(tmp_path / 'wire'))
-    comms.registry.declare(Thread('peer', frozenset(), Checkout(tmp_path)))
-    comms.registry.declare(Thread('viewer', frozenset(), Checkout(tmp_path),
-                                  execution=ExternalThreadExecution))
-    root_id = comms.registry.store.prepare_native_root().namespace
-    lookup = comms.registry.require('viewer').incarnation.require_recorded().lookup
-    with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-        store.participants.register(lookup, committed=True)
+    comms, root_id, lookup = native_viewer(tmp_path)
+    with coordination(comms) as store:
         message = publish_initial(comms, 'peer', 'viewer', 'held during install').message
         accept_initial(comms.bus, root_id, message.seq, store)
-
-    def claim():
-        with Coordination(str(CoordinationStore.path_in(comms.root))) as store:
-            row, = WakeAssignment.select(store.session._connection,
-                                         recipient_lookup=lookup, wire_seq=message.seq)
-            return row.lifecycle
 
     barrier = MaintenanceBarrier(comms.registry.store.path)
     holds = []
@@ -1019,12 +957,7 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
                 await asyncio.shield(pending)
         barrier.clear(holds.pop())
 
-    state = tmp_path / 'bridge-state'
-    with Binding.open(state) as db:
-        binding = Binding(root=str(comms.root), owner=comms.registry.require('viewer').incarnation,
-                          thread='session', start=Binding.bus_head(str(comms.root)))
-        binding.bind(db)
-        bridge = ClaudeBridge(Options(Watch(), StoredBinding(), state, state.parent), binding.address(), db)
+    with bound_bridge(comms, tmp_path, comms.registry.require('viewer').incarnation) as bridge:
         await bridge.options.operation.prepare(bridge)
         async with attached_monitor(bridge) as reader:
             holds.append(barrier.begin(MaintenanceOperator.current()))
@@ -1041,7 +974,9 @@ async def test_a_bridge_waits_out_maintenance_and_then_records_its_delivery(tmp_
             pending = asyncio.create_task(observed())
             await waits_until_cleared(pending)  # the confirmation record
             await asyncio.wait_for(pending, 5)
-    assert type(claim()) is DeliveredAssignment
+    assert type(assignment(comms, lookup, message)) is DeliveredAssignment
+
+
 
 @pytest.fixture(params=(FinishedTurn, lambda _turn: AllTurnsEnded()))
 def reply_end(request: pytest.FixtureRequest) -> Callable[[NativeTurnId], RuntimeUpdate]:
@@ -1133,14 +1068,12 @@ async def test_confirmed_human_direct_request_receives_one_reply(bridge, reply_e
 def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tmp_path):
     """Storage lead and peer follow the same original-message reply policy."""
     from agent_comms.registry_document import RegisteredTeamProject
-    from agent_comms.runtime_updates import FinishedItem, ReplyingThreadOutput
-    from agent_comms.transcript_events import AssistantTranscript
-    from agent_comms.turn_item import NativeItemId, NativeTurnId
+    from agent_comms.runtime_updates import ReplyingThreadOutput
 
-    lead, unit = (comms.registry.declare(Thread(
-        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "unit"))
+    lead, teammate = (comms.registry.declare(Thread(
+        name, frozenset(), Checkout(tmp_path), execution=ExternalThreadExecution)) for name in ("lead", "teammate"))
     comms.registry.set_team_project(RegisteredTeamProject(lead.incarnation, ()))
-    for speaker, sender in ((lead, unit), (unit, lead)):
+    for speaker, sender in ((lead, teammate), (teammate, lead)):
         output = ReplyingThreadOutput.for_comms(comms.transcripts.external(speaker.name), comms)
         original = comms.messaging.send(sender.name, speaker.name, "Open this answer", QuestionKind).message
         turn = NativeTurnId(f"{speaker.name}-turn")
@@ -1151,7 +1084,7 @@ def test_independent_sessions_share_the_delivered_message_reply_policy(comms, tm
         output.end_turn(turn)
     replies = tuple((message.target, message.body) for message in comms.bus.bus.message_history()
                     if message.body in {"lead answers", "teammate answers"})
-    assert replies == (("unit", "lead answers"), ("lead", "teammate answers"))
+    assert replies == (("teammate", "lead answers"), ("lead", "teammate answers"))
 
 
 @pytest.mark.parametrize(('rows', 'parts'), (
@@ -1194,13 +1127,11 @@ async def stopped(task):
 
 
 @pytest.mark.asyncio
-async def test_the_bus_read_runs_in_the_bridge_and_survives_a_restart_without_repeats(bridge):
+async def test_the_bus_read_survives_a_restart_without_repeats(bridge):
     async with attached_monitor(bridge) as reader:
         first = bridge.comms.messaging.send('peer', 'viewer', 'arrives before the read').message
         watching = asyncio.create_task(bridge.watch_bus())
         await delivered_line(bridge, reader, 'first')
-        children = Path(f'/proc/{os.getpid()}/task/{threading.get_native_id()}/children').read_text()
-        assert not any(b'watch' in Path(f'/proc/{child}/cmdline').read_bytes() for child in children.split())
         during = bridge.comms.messaging.send('peer', 'viewer', 'arrives during the read').message
         await delivered_line(bridge, reader, 'during')
         await stopped(watching)

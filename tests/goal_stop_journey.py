@@ -3,14 +3,12 @@
 
 from agent_comms.repo import Checkout
 import asyncio
-import json
 from contextlib import closing
 import shutil
 from pathlib import Path
 
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.comms import wire
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.goal_attempts import AttemptRecord
@@ -45,14 +43,12 @@ async def stopped_goal_journey(
                                 agent_args=GivenArguments(fixture.native_arguments()))
         try:
             await wait_for(lambda: fixture.provider.posts > 0)
-            before = FieldCodec.encode(comms.registry.require("stop-copy").goal)
             store = comms.goals.open_goal_store()
             original = store.snapshot(comms.registry.require("stop-copy").goal.require().id)
             assert original is not None
             await asyncio.to_thread(StopCliCommand(name="stop-copy").apply, comms)
             stopped = comms.registry.require("stop-copy")
-            after = FieldCodec.encode(stopped.goal)
-            assert isinstance(stopped.goal.require().state, ActiveGoal), after
+            assert isinstance(stopped.goal.require().state, ActiveGoal), stopped.goal
             assert not stopped.process_alive
             ready = store.snapshot(stopped.goal.require().id)
             assert ready is not None and isinstance(ready.lifecycle, ReadyGeneration)
@@ -94,22 +90,12 @@ async def stopped_goal_journey(
             await asyncio.to_thread(StopCliCommand(name="stop-copy").apply, comms)
             with closing(comms.goals.open_goal_store()._connect()) as db:
                 failures = FailedTurnEvidence.count(db)
-            result = {
-                "before": before, "after": after,
-                "continued": FieldCodec.encode(continued.goal),
+            return {
                 "provider_posts": fixture.provider.posts,
-                "stopped_turn": FieldCodec.encode(stopped_turn),
-                "continued_turn": FieldCodec.encode(continued_turn),
+                "stopped_turn": stopped_turn,
+                "continued_turn": continued_turn,
                 "failed_turn_observations": failures,
-                "stopped_attempt_phase": FieldCodec.encode(attempt.phase),
-                "continued_attempt_phase": FieldCodec.encode(finished.phase),
-                "continued_progress_witness": finished.progress_witness,
-                "ready_generation": FieldCodec.encode(ready),
                 "child_exited": not comms.registry.require("stop-copy").process_alive,
-                "root": str(copied),
             }
-            print(json.dumps(result), flush=True)
-            (base / "stop-result.json").write_text(json.dumps(result, indent=2))
-            return result
         finally:
             await asyncio.to_thread(StopCliCommand(name="stop-copy").apply, comms)

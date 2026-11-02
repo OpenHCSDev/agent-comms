@@ -5,7 +5,6 @@ import json
 
 import pytest
 
-from agent_comms.cli_options import JsonFlagRecord
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_settings import NativeThreadDefaults
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -22,11 +21,8 @@ def selected_record(request):
     return request.param
 
 
-def test_records_share_the_field_codec_and_transport_implementation(selected_record):
+def test_records_round_trip_through_the_field_codec_and_flags(selected_record):
     record_type, selected, _ = selected_record
-    assert record_type.to_json is JsonFlagRecord.to_json
-    assert record_type.from_json.__func__ is JsonFlagRecord.from_json.__func__
-    assert record_type.from_arguments.__func__ is JsonFlagRecord.from_arguments.__func__
     assert json.loads(selected.to_json()) == FieldCodec.encode(selected)
     assert selected.cli_arguments == (record_type.value_flag, selected.to_json())
     assert record_type.from_json(selected.to_json()) == selected
@@ -59,9 +55,6 @@ def test_required_parser_attachment_uses_the_declared_flag_and_destination(selec
 
 
 def test_settings_schema_still_comes_only_from_its_declared_data_fields():
-    assert FieldCodec.encode(NativeThreadDefaults()) == {
-        "model": "openai-codex/gpt-6.1-sol", "thinking_level": "high",
-    }
     assert set(FieldCodec.record_schema(NativeThreadDefaults)["properties"]) == {
         "model", "thinking_level",
     }

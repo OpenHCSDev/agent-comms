@@ -64,12 +64,9 @@ def main(scratch: Path):
         ], env=environment, stdout=subprocess.PIPE, stderr=errors, text=True)
         try:
             readiness.wait(service, port)
-            print(f"source={Path(sys.modules['agent_comms.comms'].__file__).parent}")
-            print("entrypoint=agent-comms-connector serve --root <scratch> --port <loopback-port>")
             with store.granted("scratch curl proof") as token:
                 before = comms.bus.bus.revision()
                 output = curl_call(port, token, "Fix the candidate now")
-                print("published owner wording:\n" + output.strip())
                 response, status = output.strip().rsplit("\n", 1)
                 assert status.split()[0] == "200"
                 assert json.loads(response)["result"]["isError"] is False
@@ -87,7 +84,6 @@ def main(scratch: Path):
                     read_command, env=environment, capture_output=True, text=True)
                 assert readback.returncode == 0, readback.stdout + readback.stderr
                 assert json.loads(readback.stdout)["refusals"] == []
-                print("published owner wording: refusal rows=0")
 
                 # Unknown destinations are still genuine refused sends. Exercise
                 # the real connector path, not a fabricated refusal-table entry.
@@ -109,18 +105,15 @@ def main(scratch: Path):
                 assert rows[0]["target"] == "#missing-channel"
                 assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
                 assert rows[0]["refused_at_ms"] > 0
-                print("unknown-target refusal readback: " + json.dumps(rows[0], sort_keys=True))
                 output = curl_call(port, token, "", arguments={"unexpected": True})
                 response, status = output.strip().rsplit("\n", 1)
                 assert status.split()[0] == "200" and json.loads(response)["result"]["isError"]
                 assert "Invalid comms_send arguments" in response
-                print("invalid tool arguments: " + status)
         finally:
             service.terminate()
             service.communicate(timeout=15)
             errors.close()
             readiness.close()
-            print("connector stopped; HTTP handler tracebacks=" + str(error_path.read_text().count("Error handling request")))
 
 
 if __name__ == "__main__":

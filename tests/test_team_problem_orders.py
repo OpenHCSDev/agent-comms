@@ -1,5 +1,6 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import asyncio
+import re
 from dataclasses import replace
 
 import pytest
@@ -60,8 +61,5 @@ def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong
     if refused is None:
         CountCheckResult(1).require(ran)
     else:
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=re.escape(refused)):
             CountCheckResult(1).require(ran)
-
-
-

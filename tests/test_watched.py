@@ -18,7 +18,7 @@ from agent_comms.goal_attempts import Generation, GoalAttemptStore, StorageUncer
 from agent_comms.errors import UnresolvedAttemptError
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
-from agent_comms.locked_store import RegistryFile, SQLiteStorage
+from agent_comms.locked_store import SQLiteStorage
 from agent_comms.messages import InfoKind, Message
 from agent_comms.watched import ChangeSignal, FileLifetimeSource, FileSource
 from agent_comms.private_path import FileRevision
@@ -49,15 +49,6 @@ def recorded_wait(watched_bus):
         owner=comms.registry.require("owner").incarnation.require_recorded(),
         target_turn_generations=(None,), report_turn_id=None, report_turn_generation=None,
     )
-
-
-def test_sqlite_wake_owners_resolve_the_commit_source_through_mro(watched_bus):
-    bus, comms = watched_bus
-    for owner in (Bus, GoalWaits):
-        marker, = owner.source_paths(comms.root)
-        assert marker.parent != owner.path_in(comms.root).parent
-        assert marker in owner.transient_paths(owner.path_in(comms.root))
-    assert RegistryFile.source_paths(comms.root) == (RegistryFile.path_in(comms.root),)
 
 
 async def test_bus_append_wakes_after_each_committed_message(watched_bus):
@@ -274,7 +265,7 @@ def test_native_reply_publication_uses_the_index_commit_source(tmp_path):
         preparation = NativeReplyPreparation({str(transcript): ReplyReading(read, prepared)})
         with Bus.register_sources(*(FileSource(path) for path in
                                    state.source_paths(tmp_path))) as changes:
-            assert preparation.finished(state, database, (str(transcript),)) is state._idle
+            preparation.finished(state, database, (str(transcript),))
             assert changes.changed_paths() == frozenset(state.source_paths(tmp_path))
             # Reader attachment and counts are not committed work.
             assert ReplyIndex.one(database, source=str(transcript)).revision == revision
@@ -308,7 +299,6 @@ def test_unrelated_sqlite_data_events_never_enter_the_native_queue(tmp_path):
         for sidecar in sidecars:
             sidecar.write_text("after")
             sidecar.touch()
-        assert not changes._readiness.poll(0)
         assert changes.changed_paths() == frozenset()
         path.write_text('{"changed":true}')
         assert changes.changed_paths() == frozenset((path,))

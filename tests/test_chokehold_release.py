@@ -14,15 +14,15 @@ from agent_comms.tools import invoke_tool
 from agent_comms.threads import Thread
 
 
-def _unit(comms, monkeypatch, name):
+def _teammate(comms, monkeypatch, name):
     monkeypatch.setenv("AGENT_COMMS_THREAD", name)
     comms.registry.declare(Thread(name=name, tags=frozenset(), worktree=Checkout(Path("/wt"))))
     partial(invoke_tool, caller=ThreadCaller(name))(comms, "comms_set_goal", {"text": "work"})
 
 
 def test_only_the_teammate_a_chokehold_paused_is_held(comms, monkeypatch):
-    _unit(comms, monkeypatch, "choked")
-    _unit(comms, monkeypatch, "owner-paused")
+    _teammate(comms, monkeypatch, "choked")
+    _teammate(comms, monkeypatch, "owner-paused")
     comms.goals.update_goal("choked", ChokeholdPausedGoalAction())
     comms.goals.update_goal("owner-paused", PausedGoalAction())
 
@@ -32,8 +32,8 @@ def test_only_the_teammate_a_chokehold_paused_is_held(comms, monkeypatch):
 
 def test_a_chokehold_pauses_only_the_teammate_who_ignored_the_check(comms, monkeypatch):
     """Teammates sharing the board keep working; the one who ignored the vibe check stops."""
-    _unit(comms, monkeypatch, "ignored")
-    _unit(comms, monkeypatch, "running")
+    _teammate(comms, monkeypatch, "ignored")
+    _teammate(comms, monkeypatch, "running")
     burst = []
     monkeypatch.setattr(ChokeholdNotice, "burst_once", lambda *args: burst.append(args))
 
@@ -46,7 +46,7 @@ def test_a_chokehold_pauses_only_the_teammate_who_ignored_the_check(comms, monke
 
 def test_a_chokehold_leaves_an_owner_pause_alone(comms, monkeypatch):
     """A goal the owner paused must not kill the heartbeat before the burst goes out."""
-    _unit(comms, monkeypatch, "owner-paused")
+    _teammate(comms, monkeypatch, "owner-paused")
     comms.goals.update_goal("owner-paused", PausedGoalAction(), actor=OwnerInvocable)
     burst = []
     monkeypatch.setattr(ChokeholdNotice, "burst_once", lambda *args: burst.append(args))

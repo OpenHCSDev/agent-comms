@@ -56,7 +56,7 @@ def active(tmp_path):
         yield value
 
 
-def rejected(value, diagnostic, **changes):
+def rejected(value, **changes):
     with pytest.raises((ValueError, TypeError, IntegrityViolationError)):
         replace(value, **changes)
 
@@ -64,9 +64,9 @@ def rejected(value, diagnostic, **changes):
 @pytest.mark.parametrize("field", ["wire_seq", "revision"])
 def test_assignment_positive_numbers_and_timestamps(pending, field):
     row = pending.assignments[0]
-    rejected(row, "must be positive", **{field: 0})
-    rejected(row, "timestamps", accepted_at_ms=-1)
-    rejected(row, "timestamps", updated_at_ms=row.accepted_at_ms - 1)
+    rejected(row, **{field: 0})
+    rejected(row, accepted_at_ms=-1)
+    rejected(row, updated_at_ms=row.accepted_at_ms - 1)
     assert replace(row, updated_at_ms=row.updated_at_ms + 1).revision > 0
 
 
@@ -108,7 +108,7 @@ def test_execution_attempt_reference_and_budget(owner, pending):
     assert record.max_attempts > 1
     if state.current_attempt_ordinal is not None:
         if owner.retry:
-            rejected(record, "budget", max_attempts=1)
+            rejected(record, max_attempts=1)
         with pytest.raises(
             (ValueError, IntegrityViolationError)
         ):
@@ -118,21 +118,21 @@ def test_execution_attempt_reference_and_budget(owner, pending):
 def test_execution_numeric_time_and_route_boundaries(pending):
     row = pending.execution
     for field in ("revision", "max_attempts"):
-        rejected(row, "must be positive", **{field: 0})
-    rejected(row, "timestamps", created_at_ms=-1)
-    rejected(row, "timestamps", updated_at_ms=row.created_at_ms - 1)
+        rejected(row, **{field: 0})
+    rejected(row, created_at_ms=-1)
+    rejected(row, updated_at_ms=row.created_at_ms - 1)
     for origin in ExecutionProvenance.members_with(ExecutionProvenance):
         assert replace(row, origin=origin).origin is origin
     route = pending.obligations[0]
-    rejected(route, "exact_target", exact_target=None)
-    rejected(route, "exact_target", exact_target="")
+    rejected(route, exact_target=None)
+    rejected(route, exact_target="")
 
 
 def test_replay_bits_revision_and_ambiguity(pending):
     row = ReplayAssessments("exec", ReplayFact.NONE, True, False, 1)
-    rejected(row, "revision must be positive", revision=0)
+    rejected(row, revision=0)
     mask = sum(int(fact) for fact in ReplayFact)
-    rejected(row, "unrecognized replay fact bits", facts=mask + 1)
+    rejected(row, facts=mask + 1)
     for fact in ReplayFact:
         with pytest.raises(IntegrityViolationError):
             replace(row, facts=fact)
@@ -181,20 +181,19 @@ def test_response_receipt_and_publication_constraints(owner, pending):
                     intent if has_intent else None, acknowledgement if has_receipt else None
                 )
     row = pending.obligations[0]
-    rejected(row, "revision must be positive", revision=0)
-    rejected(row, "timestamps", created_at_ms=-1)
-    rejected(row, "timestamps", updated_at_ms=row.created_at_ms - 1)
+    rejected(row, revision=0)
+    rejected(row, created_at_ms=-1)
+    rejected(row, updated_at_ms=row.created_at_ms - 1)
 
 
 def test_snapshot_membership_order_owner_and_disposition(pending):
     rejected(
-        pending, "another execution",
+        pending,
         obligations=(replace(pending.obligations[0], execution_id="other"),)
     )
     claim = pending.assignments[0]
     rejected(
         pending,
-        "another execution",
         assignments=(
             replace(
                 claim, lifecycle=type(claim.lifecycle).build(claim.lifecycle.mode, "other", "owner")
@@ -203,36 +202,35 @@ def test_snapshot_membership_order_owner_and_disposition(pending):
     )
     link = pending.links[0]
     for changes in ({"ordinal": 1}, {"execution_id": "other"}, {"assignment_id": "other"}):
-        rejected(pending, "ordered claims", links=(replace(link, **changes),))
+        rejected(pending, links=(replace(link, **changes),))
     rejected(
-        pending, "duplicate IDs", assignments=(claim, claim), links=(link, replace(link, ordinal=1))
+        pending, assignments=(claim, claim), links=(link, replace(link, ordinal=1))
     )
-    rejected(pending, "wrong owner", assignments=(replace(claim, recipient_lookup="other"),))
+    rejected(pending, assignments=(replace(claim, recipient_lookup="other"),))
     for owner in members(ExecutionState):
         if owner.assignment_state() is not type(claim.lifecycle):
             other = owner.assignment_state().build(claim.lifecycle.mode, "exec", "owner")
-            rejected(pending, "disposition", assignments=(replace(claim, lifecycle=other),))
+            rejected(pending, assignments=(replace(claim, lifecycle=other),))
 
 
 def test_snapshot_attempt_identity_pointer_and_version(active, pending):
-    rejected(pending, "pointer_revision cannot be negative", pointer_revision=-1)
-    rejected(pending, "unsupported snapshot version", snapshot_version=pending.snapshot_version + 1)
-    rejected(active, "attempt does not match", attempt=None)
-    rejected(pending, "attempt does not match", attempt=active.attempt)
+    rejected(pending, pointer_revision=-1)
+    rejected(pending, snapshot_version=pending.snapshot_version + 1)
+    rejected(active, attempt=None)
+    rejected(pending, attempt=active.attempt)
     for changes in ({"execution_id": "other"}, {"attempt_ordinal": 2}, {"owner_lookup": "other"}):
-        rejected(active, "identity/owner mismatch", attempt=replace(active.attempt, **changes))
+        rejected(active, attempt=replace(active.attempt, **changes))
     for owner in AttemptState.members_with(LiveAttempt):
         altered = replace(active.attempt, lifecycle=owner.load(1000, False, False))
         assert replace(active, attempt=altered).is_current
     for owner in AttemptState.members_with(Terminal):
         altered = replace(active.attempt, lifecycle=owner.load(None, True, True))
-        rejected(active, "status/attempt phase mismatch", attempt=altered)
+        rejected(active, attempt=altered)
     for changes in ({"current_execution_id": NoPointedExecution()}, {"current_attempt_ordinal": NoPointedAttempt()}):
-        rejected(active, "pointer tuple is incomplete", **changes)
-    rejected(active, "pointer is inconsistent", is_current=False)
+        rejected(active, **changes)
+    rejected(active, is_current=False)
     rejected(
         active,
-        "exact owner pointer",
         current_execution_id=NoPointedExecution(),
         current_attempt_ordinal=NoPointedAttempt(),
         is_current=False,
@@ -240,22 +238,19 @@ def test_snapshot_attempt_identity_pointer_and_version(active, pending):
 
 
 def test_snapshot_wire_claimless_and_exact_routes(pending):
-    rejected(pending, "wire snapshots require original obligations", obligations=())
-    rejected(pending, "wire snapshots require original obligations", assignments=(), links=())
+    rejected(pending, obligations=())
+    rejected(pending, assignments=(), links=())
     rejected(
         pending,
-        "claimless snapshots",
         execution=replace(pending.execution, origin=AcpOrigin),
     )
     rejected(
         pending,
-        "response obligations differ from original claim routes",
         obligations=(replace(pending.obligations[0], exact_target="other"),),
     )
     claim = pending.assignments[0]
     rejected(
         pending,
-        "response obligations differ from original claim routes",
         assignments=(
             replace(
                 claim, lifecycle=type(claim.lifecycle).build(claim.lifecycle.mode, "exec", "other")
@@ -299,7 +294,7 @@ def test_snapshot_retry_terminal_coupling(active):
             # A failed terminal state is not automatically a retry predecessor.
             # Unknown outcomes remain unrunnable even with an otherwise safe ledger.
             assert value.can_retry is phase().permits_retry()
-            rejected(value, "authorized retry", replay=replace(value.replay, replay_safe=False))
+            rejected(value, replay=replace(value.replay, replay_safe=False))
             with pytest.raises(
                 IntegrityViolationError
             ):

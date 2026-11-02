@@ -32,35 +32,14 @@ def chat(comms):
 
 
 class TestChannelTargets:
-    def test_message_to_channel_is_valid(self):
-        message = Message(sender="a", target="#ci", body="x", type=InfoKind)
-        assert message.target == "#ci"
+    @pytest.mark.parametrize("target", ["#ci", AllChannel.address()])
+    def test_a_sender_may_address_a_channel(self, target):
+        assert Message(sender="a", target=target, body="x", type=InfoKind).target == target
 
-    def test_message_to_global_channel_is_valid(self):
-        message = Message(
-            sender="a", target=AllChannel.address(), body="x", type=InfoKind
-        )
-        assert message.target == "#all"
-
-    def test_rejects_bad_channel_characters(self):
+    @pytest.mark.parametrize("target", ["#bad channel!", "#", "#CI"])
+    def test_rejects_malformed_channel_names(self, target):
         with pytest.raises(ValueError):
-            Message(sender="a", target="#bad channel!", body="x", type=InfoKind)
-
-    def test_rejects_empty_tag_channel(self):
-        with pytest.raises(ValueError):
-            Message(sender="a", target="#", body="x", type=InfoKind)
-
-    def test_rejects_mixed_case_channel(self):
-        with pytest.raises(ValueError):
-            Message(sender="a", target="#CI", body="x", type=InfoKind)
-
-    def test_self_send_to_channel_allowed(self):
-        # Talking in a channel you're in is normal.
-        Message(sender="a", target="#all", body="x", type=InfoKind)
-
-    def test_self_dm_still_rejected(self):
-        with pytest.raises(Exception):
-            Message(sender="a", target="a", body="x", type=InfoKind)
+            Message(sender="a", target=target, body="x", type=InfoKind)
 
 
 class TestChannelDelivery:
@@ -151,7 +130,7 @@ class TestPresence:
 
         time.sleep(0.01)
         registry.heartbeat("a")
-        assert registry.last_seen("a") >= before
+        assert registry.last_seen("a") > before
 
     def test_last_seen_fail_closed(self, tmp_path):
         registry = Registration(tmp_path / "r.json")

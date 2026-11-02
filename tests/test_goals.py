@@ -27,6 +27,14 @@ from agent_comms.reported_turn import NoReportedTurn, ReportedTurn, ReportedTurn
 from agent_comms.goal_scope import OneGoal
 
 
+@pytest.fixture
+def comms(tmp_path):
+    """An installed root with one declared worker, the goal owner every test acts on."""
+    comms = installed_comms(tmp_path)
+    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+    return comms
+
+
 def test_reported_turn_states_preserve_existing_wire_values():
     goal_id = GoalId.mint()
     turn_id = TurnId.mint()
@@ -50,11 +58,7 @@ def test_reported_turn_states_preserve_existing_wire_values():
     assert FieldCodec.decode(Goal, FieldCodec.encode(reported)) == reported
 
 
-
-
-def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+def test_goal_survives_rename_and_reregistration(comms, tmp_path, monkeypatch):
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Verify the release"))
     comms.threads.set_thread_configuration(
             comms.registry.require('worker'), NextTurnConfiguration(model=ChosenModel('test/model')))
@@ -66,9 +70,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
     assert restored.model == DeclaredModel("test/model")
     assert restored.name == "renamed"
     comms.goals.update_goal("worker", PausedGoalAction())
-    tool = next(
-        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
-    )
+    tool = ToolRequest.member_named("comms_goal")
     with pytest.raises(ValueError):
         tool.invoke(comms, {"goal_id": goal.id, "status": "active", "progress": "late update"}, caller=ThreadCaller("worker"))
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="New objective"))
@@ -87,9 +89,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         GoalAction.member_named("nonsense")
 
 
-def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(comms, tmp_path):
 
     def stored() -> Thread:
         return wire(tmp_path).registry.require("worker")
@@ -131,17 +131,11 @@ def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path)
         scope.require_context(stored())
 
 
-def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish the release"))
     comms.goals.update_goal("worker", PausedGoalAction(progress="Paused after an uncertain turn"))
-    resume = next(
-        tool
-        for tool in ToolRequest.members_with(ToolRequest)
-        if tool.declared_name == "comms_resume_goal"
-    )
+    resume = ToolRequest.member_named("comms_resume_goal")
 
     result = resume.invoke(
         comms, {"goal_id": goal.id, "progress": "Explicitly resumed by the user"}, caller=ThreadCaller("worker")
@@ -162,20 +156,13 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
 
 
-def test_agent_can_set_its_own_persistent_goal(tmp_path, monkeypatch):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
+def test_agent_can_set_its_own_persistent_goal(comms, monkeypatch):
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    tool = next(
-        tool
-        for tool in ToolRequest.members_with(ToolRequest)
-        if tool.declared_name == "comms_set_goal"
-    )
+    tool = ToolRequest.member_named("comms_set_goal")
 
     result = tool.invoke(comms, {"text": "Verify the autonomous workflow"}, caller=ThreadCaller("worker"))
 
     goal = comms.registry.require("worker").goal
-    assert goal is not None
     assert goal.state.declared_name == "active"
     assert goal.text == "Verify the autonomous workflow"
     assert result["goal"]["id"] == goal.id

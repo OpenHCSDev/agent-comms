@@ -1,4 +1,4 @@
-"""Declared module deletions reach the real commander CLI and saved order codec."""
+"""A cited file line keeps its absolute path."""
 
 from agent_comms.change_report import FileLine
 from agent_comms.registry_document import NoTeamProject

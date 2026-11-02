@@ -1,6 +1,6 @@
-import json
 """Test inspection of every stored input row; production reads select by index."""
 
+import json
 import sqlite3
 from contextlib import closing
 from pathlib import Path

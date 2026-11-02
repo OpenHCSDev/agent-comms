@@ -18,7 +18,6 @@ from nominal_refactor_advisor import audit
 from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.cli_verbs.stop import StopCliCommand
 from agent_comms.cli_command import TargetBatchResult
-from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.installer.backup import StoreBackup, bus_files
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.runtime_resolution import RuntimeResolution
@@ -92,9 +91,6 @@ class Repository:
             self.git("add", "--all")
             self.git("commit", "-qm", f"step {name}")
         return self.git("rev-parse", "HEAD")
-
-
-
 
 
 def record_source(version: int, fields: str) -> str:
@@ -398,18 +394,18 @@ async def test_the_install_start_stops_owners_under_its_hold(
         comms = wire(native.root)
         maintenance = MaintenanceBarrier(RegistryStore.at(comms.root).path)
         with LaunchRoot.from_path(comms.root).selected():
-            comms.registry.declare(Thread("unit", frozenset(), Checkout(tmp_path)))
+            comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
             await Coordination.run_worker(partial(
-                comms.owners.start_many, ("unit",), agent_bin=GivenBinary("pi"),
+                comms.owners.start_many, ("worker",), agent_bin=GivenBinary("pi"),
                 agent_args=GivenArguments(NativeBackendFixture.native_arguments()),
             ))
-            original = comms.registry.require("unit")
+            original = comms.registry.require("worker")
 
             def stop_under_hold():
                 with ExistingBusInstall.owners_stopped(comms.root, stack, stack) as owners:
-                    assert owners.stopped == ["unit"]
+                    assert owners.stopped == ["worker"]
                     assert stack.running_owners(comms.root) == []
-                    assert not comms.registry.require("unit").process_alive
+                    assert not comms.registry.require("worker").process_alive
                     assert maintenance.read().phase is DrainingPhase
                     owners.retired()
                     owners.release()
@@ -445,29 +441,39 @@ def bus_installed_at(root: Path, commit: str) -> Path:
     return root
 
 
-def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path: Path) -> None:
-    """Laptop, 10-24: its bus was built at f3194f95f while `git pull` had moved the checkout
-    to 456726ace, past the 37 steps that bus never ran. The guard asks the bus, not HEAD."""
+ORIGINAL = record_source(1, "    original: str\n")
+
+
+def started_history(tmp_path: Path) -> tuple[Path, Repository, Path, str]:
+    """A checkout whose first commit holds a stored format and the carry step that made it."""
     checkout = tmp_path / "checkout"
     checkout.mkdir()
     repository = Repository(checkout)
     format_source = checkout / "stored_format.py"
-    format_source.write_text(record_source(1, "    original: str\n"))
-    before = repository.commit({"carry_first": step_source()})
+    format_source.write_text(ORIGINAL)
+    return checkout, repository, format_source, repository.commit({"carry_first": step_source()})
+
+
+def retired_refusal(before: str, step: str, deleting: str) -> str:
+    return ("install: refused: "
+            f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
+            f"tools/cutover/{step}.py (deleted by {deleting[:12]}; install {deleting[:12]}^ first)")
+
+
+def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path: Path) -> None:
+    """Laptop, 10-24: its bus was built at f3194f95f while `git pull` had moved the checkout
+    to 456726ace, past the 37 steps that bus never ran. The guard asks the bus, not HEAD."""
+    checkout, repository, format_source, before = started_history(tmp_path)
     format_source.write_text(record_source(2, "    renamed: str\n"))
     held = repository.commit({"carry_retired": step_source()})
     target = repository.commit({"carry_retired": None})
-    deleting = target[:12]
     assert repository.git("rev-parse", "HEAD") == target
 
     CarryChain.require_crossed(checkout, bus_installed_at(tmp_path / "held/bus", held), target)
     stale = bus_installed_at(tmp_path / "before/bus", before)
     with pytest.raises(UpgradeRefused) as refused:
         CarryChain.require_crossed(checkout, stale, target)
-    assert str(refused.value) == (
-        "install: refused: "
-        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
-        f"tools/cutover/carry_retired.py (deleted by {deleting}; install {deleting}^ first)")
+    assert str(refused.value) == retired_refusal(before, "carry_retired", target)
 
 
 @pytest.mark.parametrize("repetitions", (1, 2))
@@ -476,13 +482,7 @@ def test_an_install_refuses_a_bus_that_never_held_a_retired_step(tmp_path: Path)
 def test_a_fully_reverted_source_interval_owes_no_retired_carry(
     tmp_path: Path, repetitions: int, later_change: bool, earlier_change: bool,
 ) -> None:
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    repository = Repository(checkout)
-    original = record_source(1, "    original: str\n")
-    format_source = checkout / "stored_format.py"
-    format_source.write_text(original)
-    before = repository.commit({"carry_first": step_source()})
+    checkout, repository, format_source, before = started_history(tmp_path)
     if earlier_change:
         (checkout / "unrelated.py").write_text("class EarlierDisplayLabel: pass\n")
         repository.commit({})
@@ -491,7 +491,7 @@ def test_a_fully_reverted_source_interval_owes_no_retired_carry(
         original_tree = repository.git("rev-parse", "HEAD^{tree}")
         format_source.write_text(record_source(2, "    renamed: str\n"))
         cancelled.append(repository.commit({f"carry_temporary_{index}": step_source()}))
-        format_source.write_text(original)
+        format_source.write_text(ORIGINAL)
         reverted = repository.commit({f"carry_temporary_{index}": None})
         cancelled.append(reverted)
         assert repository.git("rev-parse", f"{reverted}^{{tree}}") == original_tree
@@ -508,16 +508,10 @@ def test_a_fully_reverted_source_interval_owes_no_retired_carry(
 
 
 def test_a_new_retirement_after_a_reverted_interval_still_refuses(tmp_path: Path) -> None:
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    repository = Repository(checkout)
-    original = record_source(1, "    original: str\n")
-    format_source = checkout / "stored_format.py"
-    format_source.write_text(original)
-    before = repository.commit({"carry_first": step_source()})
+    checkout, repository, format_source, before = started_history(tmp_path)
     format_source.write_text(record_source(2, "    renamed: str\n"))
     repository.commit({"carry_cancelled": step_source()})
-    format_source.write_text(original)
+    format_source.write_text(ORIGINAL)
     reverted = repository.commit({"carry_cancelled": None})
     format_source.write_text(record_source(3, "    current: str\n"))
     repository.commit({"carry_required": step_source()})
@@ -526,23 +520,14 @@ def test_a_new_retirement_after_a_reverted_interval_still_refuses(tmp_path: Path
     assert reverted not in CarryChain.effective_revisions(checkout, before, target)
     with pytest.raises(UpgradeRefused) as refused:
         CarryChain.require_crossed(checkout, root, target)
-    assert str(refused.value) == (
-        "install: refused: "
-        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
-        f"tools/cutover/carry_required.py (deleted by {target[:12]}; install {target[:12]}^ first)")
+    assert str(refused.value) == retired_refusal(before, "carry_required", target)
 
 
 def test_a_bus_installed_inside_a_reverted_interval_keeps_its_actual_revision(tmp_path: Path) -> None:
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    repository = Repository(checkout)
-    original = record_source(1, "    original: str\n")
-    format_source = checkout / "stored_format.py"
-    format_source.write_text(original)
-    before = repository.commit({"carry_first": step_source()})
+    checkout, repository, format_source, before = started_history(tmp_path)
     format_source.write_text(record_source(2, "    renamed: str\n"))
     held = repository.commit({"carry_retired": step_source()})
-    format_source.write_text(original)
+    format_source.write_text(ORIGINAL)
     target = repository.commit({"carry_retired": None})
     assert repository.git("rev-parse", f"{target}^{{tree}}") == repository.git(
         "rev-parse", f"{before}^{{tree}}")
@@ -555,12 +540,7 @@ def test_a_bus_installed_inside_a_reverted_interval_keeps_its_actual_revision(tm
 
 def test_an_earlier_retirement_survives_a_later_cancelled_interval(tmp_path: Path) -> None:
     """A later source loop must not erase a genuine missed migration before it."""
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    repository = Repository(checkout)
-    format_source = checkout / "stored_format.py"
-    format_source.write_text(record_source(1, "    original: str\n"))
-    before = repository.commit({"carry_first": step_source()})
+    checkout, repository, format_source, before = started_history(tmp_path)
     format_source.write_text(record_source(2, "    renamed: str\n"))
     repository.commit({"carry_required": step_source()})
     retired = repository.commit({"carry_required": None})
@@ -573,7 +553,4 @@ def test_an_earlier_retirement_survives_a_later_cancelled_interval(tmp_path: Pat
     root = bus_installed_at(tmp_path / "before/bus", before)
     with pytest.raises(UpgradeRefused) as refused:
         CarryChain.require_crossed(checkout, root, target)
-    assert str(refused.value) == (
-        "install: refused: "
-        f"This bus was last installed at {before[:12]} and never ran 1 retired carry step(s): "
-        f"tools/cutover/carry_required.py (deleted by {retired[:12]}; install {retired[:12]}^ first)")
+    assert str(refused.value) == retired_refusal(before, "carry_required", retired)

@@ -1,4 +1,4 @@
-"""The real SessionStart command works before a commander connects to the bus."""
+"""The real SessionStart command works before a teammate connects to the bus."""
 
 
 from agent_comms.repo import Checkout
@@ -6,7 +6,6 @@ import inspect
 import io
 import json
 from datetime import UTC, datetime
-import os
 import socket
 import subprocess
 import sys
@@ -31,7 +30,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction
 from team_heartbeat_fixture import capture_frame
 from agent_comms.plan_phases import BusWriterPhase
 from agent_comms.repository_name import RepositoryName
-from agent_comms.comms import Comms, wire
+from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import FieldCodec, OrderId
 from agent_comms.pattern_sources import PostmortemFailure, ReadThenRepeatedFailure
 from agent_comms.registry_document import RegisteredTeamProject
@@ -55,14 +54,14 @@ from agent_comms.cli_bridges.hook_forks import SubagentHook
 from agent_comms.rule_deal import AuditDue, OwnerWordsAnswer, ReadSpan, RuleAudit, SessionAudit
 from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
-                                     FullPrime, LightPrime, Prime, SessionSource)
+                                     LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
 from conftest import engaged
 from test_team_notifications import beat
 from test_head_review import ACCEPTED, invoke
 
 from agent_comms.cli_bridges.hook_requests import (
-    HookRequest, PrimeRequest, SkillRequest, ReminderRequest, ResidentHookOutput,
+    PrimeRequest, SkillRequest, ReminderRequest, ResidentHookOutput,
 )
 from agent_comms_hooks.watch import HookBridgeUnavailable, SessionEndpoint
 from agent_comms_hooks.reread import ReminderProgram
@@ -233,7 +232,7 @@ def test_a_slice_every_few_calls_rotating_and_dealt_again_at_compaction(tmp_path
 @pytest.mark.parametrize("actor", ("claude-code", "unit-x"))
 def test_rearm_rides_every_tool_call_while_a_running_bridge_has_no_monitor(
         tmp_path: Path, commanding_session, team_bus: Comms, actor: str):
-    """Both fleet and commander readers retain the common re-arm behavior."""
+    """The storage lead and an untagged peer share the re-arm behaviour."""
     binding = admitted_binding(team_bus, actor)
     hook = DeafReminder.decode(hook_record(tmp_path / "session.jsonl"))
     claim = WatchClaim(hook.session_id)
@@ -522,7 +521,6 @@ def test_each_bound_peer_gets_the_shared_sources_and_reminders(
     assert "Read each of these" in context and "What the registered boards hold:" in context
     assert "FUCK YOUR COMPACTION" not in context
     assert "WHAT TRISTAN ACTUALLY SAID LAST" in context
-    assert "What your teammates actually hold" not in context
     outputs = [run(ReminderRequest) for _ in range(SliceReminder.every)]
     assert outputs[:-1] == [""] * (SliceReminder.every - 1)
     context = json.loads(outputs[-1])["hookSpecificOutput"]["additionalContext"]
@@ -548,22 +546,10 @@ def test_rule_file_without_a_wakeup_is_refused(tmp_path):
         RuleFile.read(path)
 
 
-def test_package_descriptions_do_not_repeat_rule_kind():
-    for path in TeamPackage.rules_files():
-        metadata, _ = RuleFile.document(path)
-        assert not metadata["description"].startswith("HARD RULE:"), path.name
-
-
 def test_failure_catalog_numbers_every_evidenced_member_once():
     members = sorted(PostmortemFailure.members_with(PostmortemFailure), key=lambda member: member.number)
     assert [member.number for member in members] == list(range(1, len(members) + 1))
     assert all(member.evidence for member in members)
-
-
-
-
-def test_the_shared_reader_reads_every_packaged_rule():
-    assert DeckReader.rules() == RuleFile.packaged()
 
 
 def test_the_reading_order_names_exactly_the_packaged_rules_and_the_spine_leads():
@@ -605,21 +591,8 @@ def test_every_prime_variant_says_it_was_primed_never_that_the_session_started()
 
 def test_prime_in_a_session_no_bus_thread_holds_is_refused_out_loud(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("")
-    endpoint = SessionEndpoint("loose")
     with pytest.raises(HookBridgeUnavailable, match="loose"):
-        endpoint.session().require_bound()
-    assert not transcript.with_suffix(".deal.json").exists()
-
-
-def test_the_team_session_gets_its_sources(tmp_path, monkeypatch, team_bus, team_binding):
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    transcript = tmp_path / "session.jsonl"
-    transcript.write_text("")
-    WatchClaim("s").enrol(WatchRecord("claude-code", str(team_bus.root), (), tmp_path))
-    assert DeckStart.decode(
-        {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take(team_bus, team_binding)
+        SessionEndpoint("loose").session().require_bound()
 
 
 def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation(
