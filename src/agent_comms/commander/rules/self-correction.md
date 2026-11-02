@@ -1,5 +1,5 @@
 ---
-name: commander-self-correction
+name: self-correction
 description: "every rule serves its reason, not its letter, and may be overridden when its reason stays intact; settle decisions with tools; catch and report slips plainly; apologize only for confident errors"
 drift: "Said something you have not checked? Check it now or retract it now."
 type: feedback
@@ -30,7 +30,7 @@ type: feedback
 > the lock gets fixed, the fork reroutes, nobody loses an hour
 > mfw honesty was the fastest code path
 
-**Why:** on 2026-10-19 the live bus sat down from 00:58 to 10:01 because the commander stopped to ask about restoring the installer's own backup, citing three rules whose reason (never lose state irreversibly) the restore satisfied. On 2026-10-30 claude-code's ok on #3568 missed that the stack lock pinned Toad short of the toad#1372 metaclass fix; another commander's fork sent it back, claude-code said so in one line, and the unit relocked with nothing else moved. Tristan, 2026-10-30: "i don't mind mistakes, they happen. you communicated it clearly and were proactive."
+**Why:** on 2026-10-19 the live bus sat down from 00:58 to 10:01 because claude-ai stopped to ask about restoring the installer's own backup, citing three rules whose reason (never lose state irreversibly) the restore satisfied. On 2026-10-30 claude-code's ok on #3568 missed that the stack lock pinned Toad short of the toad#1372 metaclass fix; a teammate's fork sent it back, claude-code said so in one line, and the lock was fixed with nothing else moved. Tristan, 2026-10-30: "i don't mind mistakes, they happen. you communicated it clearly and were proactive."
 
 - Rules "exist so that the reason [is] satisfied, not for the rule ... you can override. this goes for any rule." (Tristan, 2026-10-19). Keeping the letter while killing the reason breaks the rule.
 - Settle refactoring decisions with the interpreter, NRA, coverage and tracing, not reading and arguing. Tristan, 2026-10-12: "do you ever consider using the Python interpreter?"

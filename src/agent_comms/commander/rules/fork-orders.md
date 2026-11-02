@@ -1,6 +1,6 @@
 ---
 name: fork-orders
-description: "every fork or unit order carries the invariant steps up front: PR at the first real commit, never an empty draft, land through the merge queue, no local NRA gate runs or full suites, delete slop instead of rewriting it, one version of each system"
+description: "every fork or teammate order carries the invariant steps up front: PR at the first real commit, never an empty draft, land through the merge queue, no local NRA gate runs or full suites, delete slop instead of rewriting it, one version of each system"
 drift: "No silent errors, no deferrals, no follow-up: done means the defect the problem names is gone."
 type: feedback
 ---
@@ -33,7 +33,7 @@ type: feedback
 > one review, one queue run, 40 minutes not spent waiting behind myself
 > mfw the supply chain was `git commit` the whole time
 
-**Why:** the commander writes orders from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; 2026-10-24: "always make a pr before starting to no allow brnches to disappear"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
+**Why:** whoever writes an order writes it from habit, and habit ends with "push, PR, merge"; on 2026-10-20 five forks held uncommitted work with no PR, a closed PR threw away two hours of good work, and orders said to run ratchets locally after the merge queue already ran them. Tristan: "branches should always have prs for them, if you don't it gets lost"; 2026-10-24: "always make a pr before starting to no allow brnches to disappear"; "don't have two versions of a system when one supersedes the other"; "no backwards compat".
 
 Every order starts with these steps, before its own:
 1. Before any work: branch from fresh main and push the branch, verify `git ls-remote` equals HEAD. Open the PR at your first real commit, with its proof in the body, and mark it ready when the work is ready; never an empty or placeholder draft PR. Every commit after that is pushed to it. Tristan, 2026-10-26: "you shouldn't tell them to open a draft empty pr then do nothing thats called being stupid"; "no open draft prs ... thats the goal"; "so we know that the pr represents work that needs to be done".
@@ -46,5 +46,5 @@ Every order starts with these steps, before its own:
 6. Report: PR, merge commit, what was deleted, and an `Assumed:` list.
 7. Done means the defect the problem names is gone, not its symptoms. Every order spells out its done list (A, B, C...); a delivery missing any item is a send-back. A narrow re-read that merges while the live failure stands, "deleted in a follow-up", and a handoff with failing verification are open ends with an owner today, never a delivery. Tristan, 2026-10-20: "dont allow half finished work. be strict and be explicit as fuck".
 
-A fork has the commander's context, so its order is a numbered task list to start now, with no time. Tristan, 2026-10-20: "stop giving it times give it tasks to do now".
-- Size never conditions a fix. No brief, order or message says "if quick", "quick fix" or "small fix": every diagnosed defect ends that tick as a draft PR or a unit order, and size only picks who types it. On 2026-10-25 a brief saying "fix it if quick, else report the fix shape" ended two forks as prose with no PR. Tristan: "nah no more fix if quick, only fix properly, who start saying we only fix if quick???????????"
+A fork has its parent's context, so its order is a numbered task list to start now, with no time. Tristan, 2026-10-20: "stop giving it times give it tasks to do now".
+- Size never conditions a fix. No brief, order or message says "if quick", "quick fix" or "small fix": every diagnosed defect ends that tick as a draft PR or a teammate's order, and size only picks who types it. On 2026-10-25 a brief saying "fix it if quick, else report the fix shape" ended two forks as prose with no PR. Tristan: "nah no more fix if quick, only fix properly, who start saying we only fix if quick???????????"

@@ -85,7 +85,7 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "send-backs-and-strikes",
         "blunt-reviews",
         "coordination",
-        "commander-self-correction",
+        "self-correction",
         "deadlines",
         "ally",
     )

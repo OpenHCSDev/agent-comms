@@ -7,10 +7,10 @@ type: hard-rule
 
 > 34 checks need passing before the switch
 > 33 have no owner
-> I finish my part and wait for the commander, like three others
+> I finish my part and wait for the lead to bless it, like three others
 > my one question waits seven hours for a one-word answer
 > I identify the problem: missing responsibility and unanswered work
-> I write the rule: only the commander may diagnose
+> I write the rule: only the lead may diagnose
 > congratulations. the bottleneck is now in the instruction manual
 > next time I have the source, the defect and the fix
 > I wait for a different model to bless the same three facts
@@ -41,6 +41,6 @@ type: hard-rule
 - When the owner states a new target, direction or rule, update the goal record the same turn. Tristan, 2026-10-09: "reflexively update your own goal whenever I say something important".
 - Link answers to the actual originals through the existing send/order operation. Native `comms_send.answers` carries the received sequence and message ID; `order say TARGET FILE --answers ID1 ID2` uses space-separated 12-hex IDs. Keep the originating conversation as TARGET. Read the sent ID and refusal outcome; never copy a different message's ID merely because its body quotes the question. A comma list records nothing (2026-10-21: 37 answers lost).
 - Every report from Tristan becomes a durable record the same turn: an order with an owner, a phase in plans/OWNER-ASKS-PLAN.md, or a bus message; never a note in context. Tristan, 2026-10-25, holding 13 asks: "damn see how fragile it is to just a 'remmeber' its importatn t put out durable ordesr".
-- Bus orders reach a Codex thread through the Codex bridge's `turn/start` (16 ms into the running turn on 2026-10-24); never `codex queue`, which delivers only at turn end (60 stale messages on 10-23). "inProgress" from a queued input is not proof the unit read it: the rollout is the evidence, and a stale rollout behind a `reasoning` record is a wedged turn, interrupted with `turn/interrupt` and re-delivered in full.
-- New units are Pi units (`agent-comms import-running-thread ... --model openai-codex/...`, then `agent-comms start`), each proven with a real message; never Codex CLI sessions (2026-10-19: their shared app-server reached 7 GB and was OOM-killed). Pi logs in with Tristan's ChatGPT Pro account and shares Codex's weekly pool. A Claude unit launched from a Claude session first clears every inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_PID` variable, or it writes no transcript and the bridge never sees it (2026-10-18).
+- Bus orders reach a Codex thread through the Codex bridge's `turn/start` (16 ms into the running turn on 2026-10-24); never `codex queue`, which delivers only at turn end (60 stale messages on 10-23). "inProgress" from a queued input is not proof the teammate read it: the rollout is the evidence, and a stale rollout behind a `reasoning` record is a wedged turn, interrupted with `turn/interrupt` and re-delivered in full.
+- New teammates are Pi teammates (`agent-comms import-running-thread ... --model openai-codex/...`, then `agent-comms start`), each proven with a real message; never Codex CLI sessions (2026-10-19: their shared app-server reached 7 GB and was OOM-killed). Pi logs in with Tristan's ChatGPT Pro account and shares Codex's weekly pool. A Claude teammate launched from a Claude session first clears every inherited `CLAUDECODE`, `CLAUDE_CODE_*` and `CLAUDE_PID` variable, or it writes no transcript and the bridge never sees it (2026-10-18).
 - `gh` in Toad worktrees passes `-R OpenHCSDev/toad`: a shared clone's gh-resolved default opened batrachianai/toad#314 upstream on 2026-10-21.

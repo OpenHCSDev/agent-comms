@@ -34,7 +34,7 @@ type: reference
 > no helper, no agreement checker, tests still pass and now they mean it
 > mfw "derived" was a git rm away
 
-**Why:** the papers are dealt immediately before the rules, so restating their results here would be slop in the rule file itself; this rule owns only the mapping from each verdict the fleet gives to the result that decides it.
+**Why:** the papers are dealt immediately before the rules, so restating their results here would be slop in the rule file itself; this rule owns only the mapping from each verdict the team gives to the result that decides it.
 
 - **Slop**, a required fact (type identity, contract membership, implementation-class pair, state value) supplied outside its declaration: paper1 §1. Bans cannot lower the minimum: Lemma 1.1.
 - **Forwarder, helper, delegate, registry or generator supplying a pair**: outside supply, its minimum fixed by paper1 Theorem 4.6; copies and replicas cannot lower it, and independently edited copies can disagree: Theorem 4.7.
