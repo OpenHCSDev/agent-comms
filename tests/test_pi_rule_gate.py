@@ -10,7 +10,8 @@ import pytest
 
 from agent_comms.rule_deal import (
     Asked, AuditDue, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
-    OwnerWordsAnswer, RuleAudit, SessionAudit, StartupDealMode, Unaudited, Unengaged, Unmeant,
+    OwnerWordsAnswer, RuleAudit, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unengaged,
+    Unmeant,
 )
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 

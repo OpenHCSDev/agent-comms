@@ -804,7 +804,7 @@ def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session, te
 
 
 @pytest.mark.parametrize("change, says", [
-    ({"quote": "no rule file holds this line"}, "not verbatim"),
+    ({"quote": "no rule file holds this line"}, "not whole consecutive greentext lines"),
     ({"quote": "   "}, "blank"),
     ({"quote": ""}, "blank"),
     ({"does": " "}, "does and why"),
