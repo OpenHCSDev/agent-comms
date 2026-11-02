@@ -49,7 +49,7 @@ from .bus_read import OwnerLiveRead, OwnerScopedRead, UiRead
 from .team_hud import TeamFrame, TeamHud, TeamLoad, TeammateDetail
 from .comms import Comms
 from .coordinator import Coordination
-from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, WireName
+from .nominal.field_codec import FieldCodec, MessageId, OrderId, RecordProblems, ToolCallId, WireName
 from .channel_targets import CommsTag
 from .goal_actions import CompliedGoalAction, CreateProblemGoalAction, OrderGoalAction, OwnerInvocable
 from .goals import Goal, OrderCheck
@@ -323,7 +323,6 @@ class CommsCorrectWordingTool(ThreadToolRequest):
     text: Annotated[str, *tool_field("The teammate's message text")]
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
-        actor = comms.registry.require(caller.name).incarnation
         orders = [todo.id for todo in comms.goals.todos.board()
                   if todo.holder == self.unit]
         if not orders:
@@ -342,11 +341,10 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsTodoListTool(BoardReadTool):
     label = "Read problems"
-    description = "Read the teammate's canonical Todo orders, review timers, strikes and hunts."
+    description = "Read the team's Todo orders, review timers, strikes and hunts."
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         snapshot = comms.registry.snapshot()
-        actor = snapshot.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.board())
         pulls = ProgressRead(listed)
         # An orphaned hold has no unit checkout to read; HolderGone reports it.
@@ -729,14 +727,40 @@ class CommsOrderWorkTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True)
+class WaivedEdits:
+    """One order's edits an emergency release took out of the unjudged count."""
+
+    problem: ProblemNumber
+    edits: tuple[ToolCallId, ...]
+
+
+@dataclass(frozen=True)
+class EmergencyRelease:
+    """Whose chokehold lifted, which edits were waived, and which orders could not be read
+    (their edits still count)."""
+
+    released: tuple[ThreadIncarnation, ...]
+    waived: tuple[WaivedEdits, ...]
+    unreadable: tuple[UnavailableOrderEdits, ...]
+
+    def text(self, puller: str) -> str:
+        """The #comms line, derived from the records it reports."""
+        held = f" ({', '.join(identity.name for identity in self.released)})" if self.released else ""
+        unreadable = (" Unreadable, still counting: "
+                      + ", ".join(str(order.problem) for order in self.unreadable)
+                      if self.unreadable else "")
+        return (f"Emergency release pulled by {puller}: every chokehold is lifted{held} and "
+                f"{sum(len(order.edits) for order in self.waived)} unjudged edits are waived as "
+                "of now. Nobody forks judges for the old pile. Waived is not approved; new edits "
+                f"count again.{unreadable}")
+
+
+@dataclass(frozen=True)
 class EmergencyReleased(ToolResult):
-    """Whose chokehold lifted and how many unjudged edits were waived, per problem."""
+    """The release and the #comms notice that reports it, which the lifted goals resume on."""
 
     notice: MessageId
-    released: tuple[str, ...]
-    waived: dict[str, int]
-    unreadable: dict[str, str]
-    """Orders whose edits could not be read, with why: their edits still count."""
+    release: EmergencyRelease
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -753,31 +777,29 @@ class CommsEmergencyReleaseTool(ThreadToolRequest, declared_name="comms_emergenc
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> EmergencyReleased:
         actor = caller.identity(comms)
+        waived: list[WaivedEdits] = []
+        unreadable: list[UnavailableOrderEdits] = []
         verdicts: list[JudgedCall] = []
-        waived: dict[str, int] = {}
-        unreadable: dict[str, str] = {}
         for read in OrderEditsRead.for_team(comms, caller.name):
             try:
                 edits = read.read()
             except (WorkBranchError, OSError) as error:
-                unreadable[read.todo.id] = str(error)
+                unreadable.append(UnavailableOrderEdits(
+                    ProblemNumber.parse(read.todo.id), read.thread.incarnation, error))
                 continue
-            for edit in edits:
-                verdicts.append(JudgedCall(edit.problem, WaivedVerdict(
-                    read.todo.revision, actor, read.todo.held(), edit.id)))
-                waived[edit.problem] = waived.get(edit.problem, 0) + 1
+            if not edits:
+                continue
+            waived.append(WaivedEdits(ProblemNumber.parse(read.todo.id),
+                                      tuple(edit.id for edit in edits)))
+            verdicts.extend(JudgedCall(read.todo.id, WaivedVerdict(
+                read.todo.revision, actor, read.todo.held(), edit.id)) for edit in edits)
         if verdicts:
             comms.goals.judge_calls(tuple(verdicts), actor)
-        snapshot = comms.registry.snapshot()
-        held = tuple(thread.name for thread in snapshot.threads.values()
+        held = tuple(thread.incarnation for thread in comms.registry.snapshot().threads.values()
                      if any(goal.state.lifts_on_compliance for goal in thread.goal))
-        notice = comms.messaging.send(caller.name, CommsTag.channel(), (
-            f"Emergency release pulled by {caller.name}: every chokehold is lifted"
-            f"{' (' + ', '.join(held) + ')' if held else ''} and {sum(waived.values())} unjudged"
-            " edits are waived as of now. Nobody forks judges for the old pile. Waived is not"
-            " approved; new edits count again."
-            f"{' Unreadable, still counting: ' + ', '.join(unreadable) if unreadable else ''}")).message
-        for name in held:
-            comms.goals.update_goal(name, CompliedGoalAction(witness=notice.message_id),
+        release = EmergencyRelease(held, tuple(waived), tuple(unreadable))
+        notice = comms.messaging.send(caller.name, CommsTag.channel(), release.text(caller.name)).message
+        for identity in held:
+            comms.goals.update_goal(identity.name, CompliedGoalAction(witness=notice.message_id),
                                     actor=OwnerInvocable)
-        return EmergencyReleased(notice.message_id, held, waived, unreadable)
+        return EmergencyReleased(notice.message_id, release)

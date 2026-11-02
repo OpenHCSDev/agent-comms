@@ -69,6 +69,6 @@ def test_any_teammate_can_pull_the_emergency_release(comms, monkeypatch):
 
     released = invoke_tool(comms, "comms_emergency_release", {}, caller=ThreadCaller("puller"))
 
-    assert released["released"] == ["choked"]
+    assert [identity["name"] for identity in released["release"]["released"]] == ["choked"]
     assert type(comms.registry.require("choked").goal.require().state) is ActiveGoal
     assert type(comms.registry.require("owner-paused").goal.require().state.pause_source) is OwnerPause
