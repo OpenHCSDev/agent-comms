@@ -6,6 +6,7 @@ from agent_comms.cli_support.importing import ImportingCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import PathText
+from agent_comms_hooks import SubagentId
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
@@ -31,5 +32,5 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
     def apply(self, ctx: Comms) -> SubagentsImportedResult:
         return SubagentsImportedResult(tuple(
-            self.imported(ctx, ClaudeTranscript(path), self.prefix + path.stem.removeprefix("agent-"))
+            self.imported(ctx, ClaudeTranscript(path), self.prefix + SubagentId.of_transcript(path))
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))

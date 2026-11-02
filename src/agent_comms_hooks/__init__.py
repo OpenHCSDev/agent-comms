@@ -62,6 +62,11 @@ class SubagentId(str):
     def fork(self) -> str:
         return f"claude-{self}"
 
+    @classmethod
+    def of_transcript(cls, transcript: Path) -> SubagentId:
+        """Claude Code names a subagent's transcript `agent-<id>.jsonl`."""
+        return cls(transcript.stem.removeprefix("agent-"))
+
 
 class LaunchedPrompt:
     """The system prompt a Core launcher gave this Claude process (claude_launch). Claude Code

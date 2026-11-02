@@ -61,7 +61,7 @@ class SessionSubagents(ClaudeTranscriptHook):
 
     def subagents(self) -> tuple[SubagentId, ...]:
         directory = Path(self.transcript_path).with_suffix("") / "subagents"
-        return tuple(SubagentId(path.stem.removeprefix("agent-"))
+        return tuple(SubagentId.of_transcript(path)
                      for path in sorted(directory.glob("agent-*.jsonl")))
 
     def end_subagents(self, comms: Comms, binding: Binding) -> tuple[str, ...]:
