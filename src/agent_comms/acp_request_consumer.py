@@ -83,9 +83,9 @@ class AcpRequestConsumer(MroDispatch):
     @handles(ClearQueueRequest)
     async def clear(self, request):
         if self.session_id in self.agent.sessions.proxies:
-            await self.agent.sessions.proxies[self.session_id].request("clear_queue")
-        else:
-            await self.agent.inputs.clear_queued_inputs(self.session_id)
+            self.response = await self.forward(request)
+            return
+        await self.agent.inputs.clear_queued_inputs(self.session_id)
         self.response = PromptResponse(stop_reason="end_turn")
 
     @handles(SendNowRequest)
