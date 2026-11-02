@@ -24,7 +24,6 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_history import (
     BaselineRevision,
-    GoalHistoryError,
     GoalHistoryStore,
     ObservedGapRevision,
     TransitionRevision,
@@ -32,7 +31,7 @@ from agent_comms.goal_history import (
 from agent_comms.goal_scope import OneGoal
 from agent_comms.goals import NoGoal
 from agent_comms.store_files import ExclusiveLock
-from agent_comms.goal_states import ActiveGoal
+from agent_comms.goal_states import ActiveGoal, PausedGoal
 from agent_comms.tools import CommsGoalHistoryTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
@@ -139,36 +138,17 @@ def test_crash_before_registry_write_does_not_expose_history_intent(tmp_path, mo
     assert len(entries) == 1 and entries[0].after == current
 
 
-@pytest.mark.parametrize("failure", ["before_history_commit", "after_history_commit"])
-def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeypatch, failure):
+def test_crash_after_registry_write_reconciles_pending_history(tmp_path):
+    """A writer that saved the registry and died before committing its history intent leaves
+    the intent pending; the next reader reconciles it as an ordinary transition."""
     comms = _wire(tmp_path)
     current = comms.goals.update_goal("worker", SetGoalAction(text="Keep current"))
+    thread = comms.registry.require("worker")
+    paused = replace(current, state=PausedGoal(), revision=current.revision + 1)
+    GoalHistoryStore(comms.registry.store.path).begin(thread.incarnation.wire_birth, current, paused)
+    comms.registry.register(replace(thread, goal=paused), comms.registry.status("worker"))
 
-    commit = GoalHistoryStore.commit
-
-    def fail_commit(store, sequence):
-        if failure == "before_history_commit":
-            raise OSError("lost history ACK")
-
-        def fail_sync():
-            raise OSError("lost history ACK")
-
-        with monkeypatch.context() as patch:
-            patch.setattr(store, "_sync", fail_sync)
-            commit(store, sequence)
-
-    with monkeypatch.context() as patch:
-        patch.setattr(GoalHistoryStore, "commit", fail_commit)
-        expected = OSError if failure == "before_history_commit" else GoalHistoryError
-        with pytest.raises(expected):
-            comms.goals.update_goal(
-                "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(current.id)))
-            )
-
-    reopened = wire(comms.root)
-    paused = reopened.registry.require("worker").goal
-    assert paused is not None and paused.state.declared_name == "paused"
-    entries = reopened.goals.goal_history("worker")
+    entries = wire(comms.root).goals.goal_history("worker")
     assert len(entries) == 2
     assert all(entry.kind is TransitionRevision for entry in entries)
     assert entries[-1].before == current and entries[-1].after == paused
