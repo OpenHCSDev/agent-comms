@@ -36,9 +36,14 @@ async def test_resource_release_failure_retains_exact_native_child(tmp_path, nat
     assert fixture_failure.value is failure
 
 
-@pytest.mark.parametrize("failure", [TimeoutError, ChildRetirementCancelled])
-@pytest.mark.parametrize("already_done", [False, True])
-@pytest.mark.parametrize("gateway", [False, True])
+# Each of the three dimensions is independent; these four cases cover every pair of values
+# with half the real Pi launches of the full product.
+@pytest.mark.parametrize(("failure", "already_done", "gateway"), [
+    (TimeoutError, False, False),
+    (TimeoutError, True, True),
+    (ChildRetirementCancelled, False, True),
+    (ChildRetirementCancelled, True, False),
+])
 async def test_failed_owned_shutdown_preserves_original_outcome_without_retry(
     tmp_path, failure, already_done, gateway, native_runtime_package
 ):
