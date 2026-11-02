@@ -51,7 +51,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.declared_verb import DeclaredOptions
-from agent_comms_hooks.watch import NoSessionBridge, SessionCommandError
+from agent_comms_hooks.watch import SessionCommandError
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.harness_deliveries import HarnessDelivery, HarnessObservedPart
 from agent_comms.coordinator import Coordination
@@ -948,6 +948,17 @@ class StoppedBridge(BridgeResume):
 
 
 @dataclass(frozen=True)
+class StartingBridge(BridgeResume):
+    """Handed its runtime and not serving yet: it resumes on its own, or at its session's next
+    start. An install never waits on a peer; the team and the bus stay behind it otherwise."""
+
+    runtime: LaunchRuntime
+
+    def lines(self) -> tuple[str, ...]:
+        return (f"Session bridge {self.name}: handed {self.runtime.prefix}; resumes on its own",)
+
+
+@dataclass(frozen=True)
 class OwnerExitedBridge(StoppedBridge):
     def lines(self) -> tuple[str, ...]:
         return (f"Session bridge {self.name}: owner exited; left stopped",)
@@ -1095,10 +1106,9 @@ class ReleasedSessionBridge(ConfirmableBridge):
         claim = self.bridge.claim
         runtime = self.runtime
         try:
-            current = InspectSession().awaited(claim, self.announce)
-        except NoSessionBridge:
-            return UnobservedBridge(
-                claim.thread, f"process exited before serving {runtime.prefix}")
+            current = InspectSession().information(claim.socket_path)
+        except (FileNotFoundError, ConnectionRefusedError):
+            return StartingBridge(claim.thread, runtime)
         except (OSError, SessionCommandError) as error:
             return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
         if current.process != observed.process or current.owner != observed.owner:
@@ -1107,10 +1117,6 @@ class ReleasedSessionBridge(ConfirmableBridge):
             return UnobservedBridge(
                 claim.thread, f"observed {current.runtime.prefix}, expected {runtime.prefix}")
         return ResumedBridge(claim.thread, observed.runtime, current.runtime)
-
-    def announce(self, claim: WatchClaim) -> None:
-        print(f"Waiting for session bridge {claim.thread} to serve {self.runtime.prefix}",
-              file=sys.stderr, flush=True)
 
 
 class Enrol(Operation):
