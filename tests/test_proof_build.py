@@ -303,13 +303,14 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                              f'{row.head}:refs/pull/{row.number}/head')
         github_cli.put(graph.repository.github, row)
     caller = ThreadCaller("lead")
+    holder = ThreadCaller("worker")
     works = "Open the installed application and confirm the copied goal keeps its source location."
     artifact = tmp_path / "proof.txt"
     artifact.write_text(works)
     source.registry.storage_rule = replace(source.registry.storage_rule, scratch_base=tmp_path)
     with CheckRoot(source, ("lead", "worker"), tmp_path / "proof" / "copied").open() as copied:
         request = copied.goals.todos.add_request(
-            copied.registry.require("lead").incarnation, "Record the copied application proof",
+            holder.identity(copied), "Record the copied application proof",
         ).id
         cases = (
             ("P1", OperationDelivery(proof_build=installed), None),
@@ -337,7 +338,9 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 report="Report the actual close result.",
                 run=ApplicationOrderRun(works),
             )
-            caller.invoke(
+            # The holder accepts each scenario; this tests proof binding, not
+            # permission for a peer to replace the preceding active goal.
+            holder.invoke(
                 CommsTodoCreateTool(
                     owner="worker",
                     order=CreateProblemGoalAction(
@@ -345,7 +348,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                         order=order,
                         request=request,
                         review_at=RecordedEventTime(4102444800),
-                        commander="lead", assigner=caller.identity(copied),
+                        commander="lead", assigner=holder.identity(copied),
                         repo=graph.repository.github,
                         text="Bind proof to its build",
                     ),
@@ -420,7 +423,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
 
     github_cli.configure(graph.repository.github)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
     due = InstallDue.due(bus, pulls)
 
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -442,7 +445,7 @@ def test_install_due_compares_fetched_main_to_installed_build(
     resolution = RuntimeResolution.at(runtime)
     resolution.model_copy(update={"core_commit": graph.newer}).save(runtime)
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
     after_install = InstallDue.due(bus, pulls)
     assert after_install == ()
     assert Repo.git(checkout, "rev-parse", "HEAD") == before
@@ -485,7 +488,7 @@ def test_a_one_minute_old_merge_is_due_and_names_its_request_without_launching(
     monkeypatch.setattr(time, "time", lambda: merged + 60)
 
     pulls = ProgressRead()
-    InstallDue.prepare(bus, "lead", HeldOrders.read(bus, "lead"), pulls)
+    InstallDue.prepare(bus, "lead", HeldOrders.read(bus), pulls)
     (due,) = InstallDue.due(bus, pulls)
     assert due.main == merge
     assert "#41 Install what merged" in due.line() and "#42 fix/next" in due.line()
