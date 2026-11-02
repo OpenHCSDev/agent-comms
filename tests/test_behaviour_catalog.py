@@ -5,8 +5,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from agent_comms.behaviour_patterns import BehaviourPattern, PatternCheck
-from agent_comms.pattern_sources import PatternSource
+from agent_comms.behaviour_patterns import BehaviourPattern
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -17,8 +16,7 @@ def test_behaviour_catalog_members_name_existing_checks_and_generate_the_file():
     for member in members:
         assert member.__dict__["signature"].strip(), member
         assert member.__dict__["checks"] and member.__dict__["sources"], member
-        assert all(isinstance(check, PatternCheck) and check.cite() for check in member.checks)
-        assert all(isinstance(source, PatternSource) and source.cite() for source in member.sources)
+        assert all(cited.cite() for cited in (*member.checks, *member.sources))
     assert (ROOT / "docs/agents/behaviour-catalog.md").read_text() == BehaviourPattern.catalog()
 
 

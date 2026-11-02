@@ -7,7 +7,7 @@ Each behaviour failure pattern is declared once in Core with its signature (what
 
 A pending check records a known gap, not enforcement. Adding a pattern means adding one `BehaviourPattern` subclass; membership and this document derive from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.
 
-The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) and October 19 commander incidents record these failures; coverage below derives from the patterns that cite them:
+The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) and October 19 teammate incidents record these failures; coverage below derives from the patterns that cite them:
 
 - Failure 1, It rewrote the framework instead of questioning its own design: no pattern cites it yet
 - Failure 2, It added states instead of removing them: no pattern cites it yet
@@ -25,12 +25,12 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - Failure 14, It ignored alarms because its board had rotted: no pattern cites it yet
 - Failure 15, It recited rules instead of following them: no pattern cites it yet
 - Failure 16, It deleted state without checking who was using it: no pattern cites it yet
-- Failure 17, It left every unit blocked with no alarm: no pattern cites it yet
+- Failure 17, It left every teammate blocked with no alarm: no pattern cites it yet
 - Failure 18, It installed a change without the cutover the change required: no pattern cites it yet
-- Failure 19, It ordered units to diagnose and choose the shape: no pattern cites it yet
-- Failure 20, Its own orders stopped the units they were sent to: no pattern cites it yet
+- Failure 19, The diagnosis rule confused responsibility with rank: no pattern cites it yet
+- Failure 20, Its own orders stopped the teammates they were sent to: no pattern cites it yet
 - Failure 21, It reported a state its evidence did not show: no pattern cites it yet
-- Failure 22, It left a unit's question unanswered for hours: no pattern cites it yet
+- Failure 22, It left a teammate's question unanswered for hours: no pattern cites it yet
 - Failure 23, It held plan work for hours while nothing reached main: `plan_stalled`
 - Failure 24, It kept a dead copy and called it a legacy case: no pattern cites it yet
 - Failure 25, It noted slop for later instead of deleting it: no pattern cites it yet
@@ -43,7 +43,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 
 ## plan_idle
 
-A plan phase whose earlier phases are all done is not done itself, and no open order held by a unit serves it.
+A plan phase whose earlier phases are all done is not done itself, and no open order held by a teammate serves it.
 
 Checked by:
 
@@ -53,7 +53,7 @@ Learned from: P83 (34ba68c81)
 
 ## plan_stalled
 
-A plan phase whose earlier phases are all done is held by a unit, and main still lacks it two hours after the phase was first ordered.
+A plan phase whose earlier phases are all done is held by a teammate, and main still lacks it two hours after the phase was first ordered.
 
 Checked by:
 
@@ -73,7 +73,7 @@ Learned from: P170 (c9c0c04db); Failure 7: October 9 postmortem: 350 commit subj
 
 ## plain_text
 
-A commander order, strike, roast or directive whose words outside cited spans match the declared jargon list in `PlainText`.
+A teammate order, strike, roast or directive whose words outside cited spans match the declared jargon list in `PlainText`.
 
 Checked by:
 
@@ -115,7 +115,7 @@ Learned from: P114 (d889df612); Failure 4: October 9 postmortem: 451 measurement
 
 ## strike_on_named_problem
 
-A strike recorded on a problem other than the one given as its argument, such as one moved by a problem number inside its reason. Hunts are commander records, not strikes on a problem.
+A strike recorded on a problem other than the one given as its argument, such as one moved by a problem number inside its reason. Hunts are teammate records, not strikes on a problem.
 
 Checked by:
 
@@ -145,7 +145,7 @@ Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); Failure 4
 
 ## commander_overloaded
 
-The commander's unread backlog is over the limit while no second commander is forked to share it.
+The teammate's unread backlog is over the limit while no second teammate is forked to share it.
 
 Checked by:
 
@@ -155,7 +155,7 @@ Learned from: seed catalog pattern 15 (claude-ai message 1c8729ba0ed7)
 
 ## dead_provider
 
-A unit's latest turn ended in a usage or credit limit on its own model and the unit still runs on that model.
+A teammate's latest turn ended in a usage or credit limit on its own model and the teammate still runs on that model.
 
 Checked by:
 
