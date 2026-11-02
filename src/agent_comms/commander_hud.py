@@ -141,7 +141,7 @@ class CommanderUnit(HudRecord):
         ) for card in self.orders)
         turns = comms.transcripts.turns(self.unit.name, LastTurns())
         snapshot = comms.registry.snapshot()
-        if turns.thread != self.unit or not self.unit.current(snapshot) or not commander.current(snapshot):
+        if turns.thread != self.unit or not self.unit.current(snapshot):
             raise ToolRefusedError("The selected incarnation changed while its details were read")
         return CommanderUnitDetail(self, details, turns.to_wire())
 

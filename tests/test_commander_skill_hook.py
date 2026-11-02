@@ -622,9 +622,9 @@ def test_the_commander_session_gets_its_sources(tmp_path, monkeypatch, commander
         {"hook_event_name": "SessionStart", "session_id": "s", "transcript_path": str(transcript)}).take(commander_bus, commander_binding)
 
 
-def test_changing_storage_lead_preserves_the_deal_without_changing_fork_registration(
+def test_changing_storage_lead_preserves_the_peer_deal_and_real_child_delegation(
         tmp_path, capsys, commanding_session, commander_bus, commander_binding):
-    """Material selection preserves context; this extraction does not change fork roles."""
+    """Moving storage ownership neither demotes a peer nor changes its retained context."""
     transcript = tmp_path / "session.jsonl"
     transcript.write_text("")
     assert DeckStart.decode(hook_record(transcript, "SessionStart")).take(commander_bus, commander_binding)
@@ -642,9 +642,10 @@ def test_changing_storage_lead_preserves_the_deal_without_changing_fork_registra
     SubagentHook.decode({"hook_event_name": "SubagentStart", "session_id": "s",
                          "transcript_path": str(transcript), "agent_id": "a9",
                          "agent_type": "Explore"}).register(commander_bus, commander_binding)
-    assert "slot claude-code-explore" in capsys.readouterr().out
-    assert "claude-a9" not in commanding_session.registry
-    commanding_session.registry.require("claude-code-explore").execution.require_subagent()
+    assert "in-turn fork claude-a9" in capsys.readouterr().out
+    child = commanding_session.registry.require("claude-a9")
+    child.execution.require_commander_fork()
+    assert tuple(child.parent.names()) == ("claude-code",)
     assert transcript.with_suffix(".deck.json").exists()
 
 
