@@ -11,12 +11,14 @@ from typing import ClassVar
 import pytest
 from multiprocessing.synchronize import Event
 
+from agent_comms import store_files
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.presentation import CountedInbox
 from agent_comms.registry_store import RegistryStore
 from agent_comms.repo import Checkout
+from agent_comms.store_files import LendingConnection
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 
@@ -43,7 +45,7 @@ class CountingProbe:
         return int(not self.acquired[-1])
 
 
-class CountingConnection(sqlite3.Connection):
+class CountingConnection(LendingConnection):
     probe: ClassVar[CountingProbe]
 
     def execute(
@@ -54,8 +56,15 @@ class CountingConnection(sqlite3.Connection):
         return super().execute(sql, parameters)
 
 
+@pytest.fixture
+def counting_connections(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every store connection is a CountingConnection: StoreContention names its factory at
+    call time, and a thread's bus reader is reused, so this precedes the first open."""
+    monkeypatch.setattr(store_files, "LendingConnection", CountingConnection)
+
+
 def test_thread_listing_counts_outside_the_registry_lock(
-    comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    counting_connections: None, comms: Comms, tmp_path: Path,
 ) -> None:
     comms.channels.create_tag("team")
     for name in ("sender", "recipient"):
@@ -66,7 +75,6 @@ def test_thread_listing_counts_outside_the_registry_lock(
     CountingConnection.probe = CountingProbe(start, done)
     writer = context.Process(target=rename_during_count, args=(comms.root, start, done))
     writer.start()
-    monkeypatch.setattr(sqlite3, "connect", partial(sqlite3.connect, factory=CountingConnection))
     try:
         listing = ThreadsCliCommand().apply(comms)
         assert CountingConnection.probe.acquired == [True]
