@@ -1,25 +1,30 @@
-"""A new extension UI request declares itself and inherits the shared reply behaviour."""
+"""Pi's extension UI requests dispatch on their declared method and share the dialog replies."""
 
-from agent_comms.pi_events import ConfirmUiRequest, ConfirmedUiChoice, PiEvent, ValueUiChoice
+from agent_comms.pi_events import (
+    ConfirmUiRequest,
+    ConfirmedUiChoice,
+    ExtensionUiRequest,
+    PiEvent,
+    ValueUiChoice,
+)
 
 
-def test_extension_ui_new_case_uses_declared_dispatch_and_shared_reply_behavior():
-    class ReviewUiRequest(ConfirmUiRequest):
-        method = "reviewFixture"
+def test_a_confirm_request_dispatches_on_its_method_and_answers_with_the_shared_replies():
+    wire = {
+        "type": "extension_ui_request",
+        "method": "confirm",
+        "id": "r1",
+        "title": "Review",
+        "message": "Once",
+    }
+    request = PiEvent.from_wire(wire)
+    assert type(request) is ConfirmUiRequest
+    assert request.to_wire() == wire
+    assert ConfirmedUiChoice(True).response(request).confirmed is True
+    assert ValueUiChoice("unrelated").response(request).cancelled is True
+    assert request.permission("turn")[0].title == "Review"
 
-    try:
-        wire = {
-            "type": "extension_ui_request",
-            "method": "reviewFixture",
-            "id": "r1",
-            "title": "Review",
-            "message": "Once",
-        }
-        request = PiEvent.from_wire(wire)
-        assert type(request) is ReviewUiRequest
-        assert request.to_wire() == wire
-        assert ConfirmedUiChoice(True).response(request).confirmed is True
-        assert ValueUiChoice("unrelated").response(request).cancelled is True
-        assert request.permission("turn")[0].title == "Review"
-    finally:
-        del PiEvent.__registry__[ReviewUiRequest.declared_name]
+
+def test_an_undeclared_method_stays_the_bare_request_without_reply_authority():
+    request = PiEvent.from_wire({"type": "extension_ui_request", "method": "nope", "id": "r2"})
+    assert type(request) is ExtensionUiRequest
