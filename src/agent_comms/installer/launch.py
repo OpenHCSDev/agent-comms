@@ -198,8 +198,7 @@ class InstallRun:
 
     def run(self, runtime: LaunchRuntime) -> RehearsedUpgrade:
         command = self.command
-        return upgrade(command.checkout, self.root, self.target, command.installer,
-                       command.mode, command.retire, command.spill_dir, self.scratch,
+        return upgrade(command, self.root, self.target, self.scratch,
                        runtime, self.harnesses, InstallReport(
                            inherited_phases=[launched.timing() for launched in self.phases]))
 

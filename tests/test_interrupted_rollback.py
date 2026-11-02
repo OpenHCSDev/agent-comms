@@ -13,10 +13,11 @@ import pytest
 
 from agent_comms.comms import Comms, wire
 from agent_comms.active_route import active_route_path
-from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
+from agent_comms.install_choices import RehearsalMode
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.installer.probes.carry import Carried, Carry
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.upgrade import upgrade
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import LiveFilesRequest, RegistryFile
@@ -99,8 +100,9 @@ class CarryingRoot:
         rollback recovery must finish before a checkout can be inspected or a stack built."""
         with pytest.raises(UpgradeRefused, match="missing-checkout"):
             upgrade(
-                self.tmp_path / "missing-checkout", self.comms.root, "HEAD", UnnamedInstaller(),
-                RehearsalMode(), False, self.spill, self.tmp_path / "install-scratch",
+                InstallRequest(checkout=self.tmp_path / "missing-checkout",
+                               mode=RehearsalMode(), spill_dir=self.spill),
+                self.comms.root, "HEAD", self.tmp_path / "install-scratch",
                 LaunchRuntime.running(), lambda: None, InstallReport(),
             )
 

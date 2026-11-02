@@ -1,10 +1,38 @@
-# Original-coordinate practice inputs — implementation checkpoint
+# Original-coordinate practice inputs — source and verification history
 
-Core #3829 remains unfinished. Entry, selected saved-context and coordinator input
-evidence now have explicit PracticeCopy consumers in source. Complete coordinator
-relations, coherent aggregate capture, bounded peak materialization, native-journal
-reading and the prepared-root application run remain unfinished.
-This document records the source decisions, not an executable selection roster.
+Core #3829 delivered the selected file/context/coordinator operation and its
+private-fixture worker controls. The sections below retain their original source
+and execution epochs; an older **UNRUN** statement describes that checkpoint,
+not a fresh result. Original-data capture, peak resources and the native/physical
+reader journey remain open under P1086.
+
+## Selected requests through the shared installer
+
+`InstallRequest.selected_inputs` accepts a JSON array of the existing encoded
+`SelectedInputsProbe` records through `--selected-inputs`. The launcher serializes
+the same typed request. `upgrade` consumes that request directly rather than
+threading each option through another signature.
+
+The operation runs on `staged.probe` after `mode.owners_stopped` enters the real
+retargeted maintenance hold and before `member.rehearsed` takes its first complete
+practice copy. Each result is retained in `RehearsedUpgrade.captured_inputs`.
+The default empty tuple performs no selected capture. A plain `--rehearse` does
+not gain a hold: an explicit selected probe still refuses at its existing
+maintenance boundary. Ordinary rehearsal and complete backup selection stay
+unchanged.
+
+A caller with an encoded probe file can form the array with
+`jq -s '.' selected-probe.json` and pass that JSON as the value of
+`--selected-inputs` to the existing `agent-comms install` operation. This is an
+explicit install request, not a standalone freezer or permission to launch native
+sessions from copied data.
+
+The CLI/launcher source check decoded the actual P1086 request, preserved its
+values through the launcher wire, kept an empty default, and round-tripped the
+returned measurements. It parsed five changed Python files. It did not run a
+probe or create the selected destination. The first check incorrectly compared
+the CLI subclass identity with the decoded base request; that failed epoch is
+retained beside the corrected declared-value check.
 
 ## Original recipient birth participates in owner matching
 

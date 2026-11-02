@@ -1,4 +1,5 @@
 """Selected capture borrows a real hold and drains real store transactions."""
+import json
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, nullcontext
@@ -9,19 +10,22 @@ import pytest
 
 from agent_comms.bus import Bus
 from agent_comms.comms import Comms, wire
+from agent_comms.cli import build_parser
 from agent_comms.context_store import ContextStore
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import TurnInputKey
 from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.launch import InstallRun
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator, NoMaintenanceHolder,
 )
-from agent_comms.nominal.field_codec import TurnId
+from agent_comms.nominal.field_codec import FieldCodec, TurnId
 from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.typed_table import WalStore
@@ -40,6 +44,21 @@ def capture_source(tmp_path: Path) -> Comms:
     with CoordinationStore(CoordinationStore.path_in(comms.root)):
         pass
     return comms
+
+
+def test_selected_capture_request_survives_cli_and_launcher_wire(tmp_path: Path) -> None:
+    probe = SelectedInputsProbe(tmp_path / 'source', tmp_path / 'selected', 3 * 1024 ** 3)
+    arguments = build_parser().parse_args((
+        'install', '--checkout', str(tmp_path),
+        '--selected-inputs', json.dumps(FieldCodec.encode((probe,))),
+    ))
+    command = arguments.command_declaration.from_arguments(arguments)
+    assert command.selected_inputs == (probe,)
+    run = InstallRun(command, probe.root, tmp_path / 'installer', 'a' * 40)
+    decoded = FieldCodec.decode(InstallRun, FieldCodec.encode(run))
+    assert decoded.command == FieldCodec.decode(InstallRequest, FieldCodec.encode(command))
+    assert decoded.command.selected_inputs == (probe,)
+    assert not probe.destination.exists()
 
 
 def test_capture_refuses_a_destination_inside_its_source(

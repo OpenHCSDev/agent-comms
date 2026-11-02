@@ -53,7 +53,7 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import PathText
 from agent_comms.typed_table import ExternalStore
 from agent_comms.host_services import HostService, RestartedService
-from agent_comms.install_choices import InstallerChoice, RunMode
+from agent_comms.install_choices import InstallerChoice
 from agent_comms.installer.backup import (
     BackupReport,
     RestoreSpace,
@@ -101,6 +101,7 @@ from agent_comms.installer.interpreter_operation import (
     TargetProgram,
 )
 from agent_comms.installer.owner_starts import OwnerStart
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.practice import (
     PracticeCopy,
     PracticeMeasurement,
@@ -421,6 +422,8 @@ class RehearsedUpgrade(Upgrade):
     rehearsal: Rehearsal
     phases: list[PhaseTiming] = field(kw_only=True)
     """Every phase shares the one clock until installation and cleanup end."""
+    captured_inputs: tuple[PracticeMeasurement, ...] = field(default=(), kw_only=True)
+    """Selected copies completed under this install's hold, before its rehearsal."""
 
     finished: ClassVar[str] = "Install rehearsed"
 
@@ -776,14 +779,13 @@ class PracticeBus:
         return self.copy.copied_names
 
 
-def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice, mode: RunMode,
-            retire: bool, spill_dir: Path, scratch: Path,
+def upgrade(command: InstallRequest, root: Path, target: str, scratch: Path,
             runtime: LaunchRuntime,
             harnesses: Callable[[Stack], InstallResult], report: InstallReport) -> RehearsedUpgrade:
     """``scratch`` holds the target's worktree the launcher runs this source from; this
     run owns it and removes it. A live run ends by registering the ``harnesses``."""
     commands = InstallCommands()
-    tree = TargetTree(scratch, target, repo=checkout)
+    tree = TargetTree(scratch, target, repo=command.checkout)
     bridges = report.bridges
     with (
         InstallRunPhase().running(commands.clock),
@@ -793,22 +795,22 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
     ):
         with PreparePhase().running(commands.clock):
             StoreBackup.complete_interrupted(
-                root, spill_dir, Stack(checkout, commands).restore_stores)
-            current = commands.git(checkout, "rev-parse", "HEAD").strip()
+                root, command.spill_dir, Stack(command.checkout, commands).restore_stores)
+            current = commands.git(command.checkout, "rev-parse", "HEAD").strip()
             with commands.timing(GitPhase(
-                checkout, ("merge-base", "--is-ancestor", current, target),
+                command.checkout, ("merge-base", "--is-ancestor", current, target),
             )):
-                follows = Repo.descends(checkout, current, target)
+                follows = Repo.descends(command.checkout, current, target)
             if not follows:
                 raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
-            if commands.git(checkout, "status", "--porcelain",
+            if commands.git(command.checkout, "status", "--porcelain",
                             "--untracked-files=no").strip():
                 raise UpgradeRefused("The checkout has local changes")
             try:
                 chain = CarryChain.at(tree.path)
             except ValueError as error:
                 raise UpgradeRefused(str(error)) from None
-            member = Install.member(root, retire)
+            member = Install.member(root, command.retire)
             installed = Stack(tree.path, commands)
             if not installed.python.exists():
                 raise UpgradeRefused(f"No installed stack at {installed.python}")
@@ -820,13 +822,16 @@ def upgrade(checkout: Path, root: Path, target: str, installer: InstallerChoice,
             raise UpgradeRefused("The prepared install must run in its built target runtime")
         staged.complete()
         with StartingReportPublicationPhase().running(commands.clock):
-            report.starting(mode.destination(member.initial_writer(root, installed)), target)
-        with mode.owners_stopped(member, root, installed, staged, bridges) as report.owners:
+            report.starting(command.mode.destination(member.initial_writer(root, installed)), target)
+        with command.mode.owners_stopped(member, root, installed, staged, bridges) as report.owners:
+            captured = tuple(staged.probe(probe) for probe in command.selected_inputs)
             with PracticePhase().running(commands.clock):
-                install, rehearsal = member.rehearsed(checkout, root, current, target, chain,
-                                                      installed, staged, tree, installer,
-                                                      spill_dir, lifetime=practice_lifetime)
-            result = report.complete(mode.finish(install, rehearsal, bridges, harnesses, report))
+                install, rehearsal = member.rehearsed(
+                    command.checkout, root, current, target, chain, installed, staged, tree,
+                    command.installer, command.spill_dir, lifetime=practice_lifetime)
+            result = report.complete(replace(
+                command.mode.finish(install, rehearsal, bridges, harnesses, report),
+                captured_inputs=captured))
     bridges.require_resumed()
     return result
 

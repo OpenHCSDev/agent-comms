@@ -19,6 +19,7 @@ from agent_comms.installer.backup import BackupReport, RestoreSpace
 from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.probes.carry import Carried
 from agent_comms.installer.launch import InstallReport
+from agent_comms.installer.request import InstallRequest
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTiming
 from agent_comms.installer.interpreter_operation import InstalledProgram
@@ -29,7 +30,7 @@ from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, F
 from agent_comms.installer.refusals import InstallRolledBack
 from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
-from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
+from agent_comms.install_choices import LiveMode, RehearsalMode
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
 from agent_comms.root_runtime import RootRuntimeStore
 from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
@@ -65,8 +66,9 @@ def test_failed_rehearsal_does_not_publish_to_the_source_bus(private_comms, tmp_
 
     with pytest.raises(UpgradeRefused, match="local changes"):
         upgrade(
-            source.checkout, private_comms.root, target, UnnamedInstaller(), RehearsalMode(), False,
-            tmp_path / "spill", tmp_path / "scratch",
+            InstallRequest(checkout=source.checkout, mode=RehearsalMode(),
+                           spill_dir=tmp_path / "spill"),
+            private_comms.root, target, tmp_path / "scratch",
             LaunchRuntime.running(),
             lambda stack: pytest.fail("A refused rehearsal cannot install harnesses"),
             InstallReport(),
