@@ -619,6 +619,35 @@ def test_only_retired_holder_or_closed_pr_allows_cross_holder_dispatch(
         assert all(c.goals.todos.get(pid).holder is None for pid in originals)
 
 
+@pytest.fixture
+def unrelated_historical_request(pr_team):
+    """Keep all local associations; only the unrelated foreign PR is unavailable."""
+    ctx = pr_team
+    original = adopt_pr(ctx, pr_order(ctx, 'P1').id, 3)
+    ctx.comms.goals.todos.apply(original.id, ReleaseTodo(
+        original.revision, original.held().owner_identity, original.held(),
+        StrikeReason('The holder releases this order while its historical PR associations remain readable.')))
+    unrelated = pr_order(ctx, 'P2')
+    unrelated = ctx.comms.goals.todos.apply(unrelated.id, RecordPullRequest(
+        unrelated.revision, unrelated.held().owner_identity,
+        PullRequestLink(unrelated.repo, 999), unrelated.held().generation))
+    return original, PullRequests((original, unrelated))
+
+
+def test_order_listing_does_not_fetch_an_unrelated_historical_pr(unrelated_historical_request):
+    original, pulls = unrelated_historical_request
+    requests = pulls.listed(original.repo, ClosedListedPullRequest, original)
+    assert len(requests) == 1
+    assert requests[0].number == 3
+    assert requests[0].problems == (original.id,)
+    assert requests[0].orders == original.held_order_ids
+
+
+def test_open_discovery_does_not_fetch_closed_historical_links(unrelated_historical_request):
+    original, pulls = unrelated_historical_request
+    assert pulls.open(original.repo) == ()
+
+
 def test_recorded_closed_request_is_not_open_or_merged(pr_team):
     ctx = pr_team
     original = pr_order(ctx, "P1")
