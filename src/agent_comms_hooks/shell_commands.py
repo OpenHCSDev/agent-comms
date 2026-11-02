@@ -14,7 +14,7 @@ from typing import ClassVar, Never, Self
 class ShellText(io.StringIO):
     """shlex skips comments with readline; the shell still needs their newline."""
 
-    def readline(self, size: int = -1) -> str:
+    def readline(self, size: int | None = -1) -> str:
         line = super().readline(size)
         if line.endswith('\n'):
             self.seek(self.tell() - 1)
