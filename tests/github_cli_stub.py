@@ -116,10 +116,10 @@ def main():
         if refusal := repositories[repository]["requests"][number].get("arm_refusal"):
             sys.exit(refusal)
     elif arguments[:2] == ["api", "graphql"]:
-        query = arguments[arguments.index("-f") + 1]
-        assert query.startswith("query=")
-        variables = dict(arguments[index + 1].split("=", 1)
-                         for index, value in enumerate(arguments) if value == "-F")
+        assert arguments[2:4] == ["--input", "-"]
+        request = json.load(sys.stdin)
+        query = request["query"]
+        variables = request["variables"]
         inline = re.search(r'repository\(owner: "([^"]+)", name: "([^"]+)"\)', query)
         repository = "/".join(inline.groups()) if inline else f"{variables['owner']}/{variables['name']}"
         data = repositories[repository]

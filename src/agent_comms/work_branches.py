@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from agent_comms.nominal.field_codec import WireExclude
 
-import subprocess
 from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -336,18 +335,6 @@ query($owner: String!, $name: String!, $after: String) {
   }
 }"""
 
-    def _gh(self, *arguments: str) -> str:
-        result = subprocess.run(
-            ("gh", *arguments),
-            cwd=self.checkout,
-            capture_output=True,
-            timeout=self.timeout,
-        )
-        if result.returncode != 0:
-            detail = result.stderr.decode(errors="replace").strip() or "gh failed"
-            raise WorkBranchError(f"gh {' '.join(arguments[:2])} in {self.checkout}: {detail}")
-        return result.stdout.decode()
-
     def _git(self, *arguments: str, input: str = "") -> str:
         return Repo.git(self.checkout, *arguments, timeout=self.timeout, input=input)
 
@@ -606,10 +593,12 @@ query($owner: String!, $name: String!, $after: String) {
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]
         for after in pages:
-            arguments = ["api", "graphql", "-f", f"query={query}"]
-            for key, value in {**variables, **dict(zip(("after",), after, strict=False))}.items():
-                arguments += ["-F", f"{key}={value}"]
-            connection = answer.model_validate_json(self._gh(*arguments)).data.repository.connection
+            result = RepositoryName(*self.repository).graphql(
+                query, **{**variables, **dict(zip(("after",), after, strict=False))})
+            if result.returncode:
+                raise WorkBranchError(
+                    f"gh api graphql in {self.checkout}: {result.stderr.strip() or 'gh failed'}")
+            connection = answer.model_validate_json(result.stdout).data.repository.connection
             yield from connection.nodes
             pages.extend(connection.page_info.following)
 
