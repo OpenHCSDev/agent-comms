@@ -203,7 +203,7 @@ class ShellLexer(shlex.shlex, ShellText):
             position += 2
         return position
 
-    def read(self, size: int = -1) -> str:
+    def read(self, size: int | None = -1) -> str:
         # Let native shlex see the joined input before it classifies words or
         # punctuation. Escaped backslashes and single-quoted text remain literal.
         if self.state not in ("'", '\\'):
@@ -223,9 +223,8 @@ class ShellLexer(shlex.shlex, ShellText):
         """Inspect active source characters, before native quote/escape removal."""
         if character == '`':
             self.target.require_expansion()
-        elif character == '$':
-            if self.read_at(self.continuation_end(following), 1) == '(':
-                self.target.require_expansion()
+        elif character == '$' and self.read_at(self.continuation_end(following), 1) == '(':
+            self.target.require_expansion()
 
     @property
     def state(self) -> str | None:
