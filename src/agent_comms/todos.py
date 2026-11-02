@@ -682,8 +682,28 @@ class MergedLink:
     sha: str
 
 
+class OrderLinks:
+    """Order membership is local metadata, independent of fetching forge status."""
+
+    problems: tuple[str, ...]
+    orders: tuple[OrderId, ...]
+
+    def belongs_to(self, todo: Todo) -> bool:
+        return (todo.id in self.problems
+                or any(identity in self.orders for identity in todo.held_order_ids))
+
+
 @dataclass(frozen=True)
-class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="PullRequest"):
+class PullRequestOrders(OrderLinks):
+    """The complete local associations for one PR, before any network read."""
+
+    number: int
+    problems: tuple[str, ...]
+    orders: tuple[OrderId, ...]
+
+
+@dataclass(frozen=True)
+class PullRequest(HeadReviewStatus, OrderLinks, DisclosedRecord, DeclaredFamily, affix="PullRequest"):
     number: int
     branch: str
     head: str
@@ -711,10 +731,6 @@ class PullRequest(HeadReviewStatus, DisclosedRecord, DeclaredFamily, affix="Pull
     def empty_changes(self, reader: WorkBranches) -> tuple[BranchComparison, ...]:
         compared = reader.pull_request_diff(self.base, self.head)
         return () if compared.paths else (compared,)
-
-    def belongs_to(self, todo: Todo) -> bool:
-        return (todo.id in self.problems
-                or any(identity in self.orders for identity in todo.held_order_ids))
 
     def merged_commits(self, since: float) -> Iterator[str]:
         return iter(())
@@ -1131,8 +1147,7 @@ class PullRequests(RepositoryReads):
                 raise TodoError(result.stderr.strip() or "Open pull requests could not be read.")
             self._open[repo] = tuple(FieldCodec.decode(int, FieldCodec.parse(line))
                                      for line in result.stdout.splitlines())
-        numbers = tuple(dict.fromkeys((*self._open[repo], *self.linked(repo))))
-        self.rows(repo, numbers)
+        self.rows(repo, self._open[repo])
         return tuple(picked for number in self._open[repo]
                      for picked in self._read[repo, number].as_unmerged())
 
@@ -1186,12 +1201,15 @@ class PullRequests(RepositoryReads):
     def listed(self, repo: RepositoryName, kind: type[ListedPullRequest],
                todo: Todo) -> tuple[PullRequest, ...]:
         self.register((todo,))
-        linked = self.linked(repo)
-        requests = tuple(picked.parsed(
-            tuple(candidate.id for candidate in linked[picked.number]),
-            tuple(dict.fromkeys(order.id for candidate in linked[picked.number]
+        associations = (PullRequestOrders(
+            number, tuple(candidate.id for candidate in candidates),
+            tuple(dict.fromkeys(order.id for candidate in candidates
                                 for order in candidate.order.declarations
-                                if PullRequestLink(repo, picked.number) in order.pull_requests)))
+                                if PullRequestLink(repo, number) in order.pull_requests)))
+            for number, candidates in self.linked(repo).items())
+        linked = {row.number: row for row in associations if row.belongs_to(todo)}
+        requests = tuple(picked.parsed(
+            linked[picked.number].problems, linked[picked.number].orders)
             for row in self.rows(repo, tuple(linked)) for picked in kind.picked(row))
         return tuple(sorted((request for request in requests if request.belongs_to(todo)),
                             key=lambda request: request.updated_at, reverse=True))
