@@ -8,10 +8,9 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
-from .coordination_errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .nominal.field_codec import RootId, ThreadLookup
+from .nominal.field_codec import RootId
 from .goals import GoalCheckpoint
 from .harness_install import HarnessSession
 from .input_key import InputKey, InputKeyText
@@ -19,7 +18,6 @@ from .message_reference import MessageReference
 from .repo import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
-from .typed_table import AttachedPracticeRebuild
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -63,11 +61,9 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
 
-    def retain_harness_rows(
-        self, original: AttachedPracticeRebuild, recipient: ThreadLookup,
-    ) -> int:
-        """An origin without a harness witness contributes no harness rows."""
-        return 0
+    def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:
+        """An origin without a harness witness contributes no harness sources."""
+        return ()
 
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
@@ -132,18 +128,8 @@ class HarnessAttemptOrigin(InputOrigin):
     bridge: type[HarnessSession]
     reference: MessageReference
 
-    def retain_harness_rows(
-        self, original: AttachedPracticeRebuild, recipient: ThreadLookup,
-    ) -> int:
-        from .coordination_tables.harness_deliveries import HarnessDelivery
-
-        key = {"bridge": self.bridge, "recipient_lookup": recipient,
-               "message_id": self.reference.message_id}
-        changed = original.retain_keys(HarnessDelivery, (key,))
-        retained = HarnessDelivery.require(original.destination, **key)
-        if retained.reference != self.reference:
-            raise IdentityConflict("Retained harness attempt names another message sequence")
-        return changed
+    def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)

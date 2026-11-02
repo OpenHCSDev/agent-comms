@@ -10,7 +10,6 @@ from agent_comms.coordination_schema import CoordinatorRow
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.participant_identity import ParticipantIdentity
 from agent_comms.typed_table import (
-    AttachedPracticeRebuild,
     Column,
     ColumnGuard,
     CounterAdvance,
@@ -20,7 +19,6 @@ from agent_comms.typed_table import (
     MonotoneColumns,
     NoDelete,
     NonDecreasing,
-    TableSchema,
 )
 
 
@@ -52,16 +50,6 @@ class Participants(MonotoneColumns, GuardedColumns, NoDelete, CoordinatorRow):
         Column(primary_key=True),
     ]
     committed: bool
-
-    @classmethod
-    def retain_required_rows(
-        cls, original: AttachedPracticeRebuild, schema: type[TableSchema],
-    ) -> int:
-        from agent_comms.participant_store import ParticipantStore
-
-        return super().retain_required_rows(original, schema) + ParticipantStore.retain_owners(
-            original, tuple(person.participant_lookup for person in cls.select(original.destination)),
-        )
 
 @dataclass(frozen=True, kw_only=True)
 class OwnerGenerations(

@@ -219,9 +219,10 @@ harness producer a second time on the same attachment, not a copied key/outcome
 or suppression algorithm. An unresolved stored ledger row can keep an additional
 original attempt witness at its key; the complete ledger still wins the read.
 The recipient lookup comes from those original source entries, not from a stored
-name/generation or a fabricated birth. `HarnessAttemptOrigin.retain_harness_rows`
-owns its bridge/reference selection and full-sequence check; origins without a
-harness witness contribute no harness rows. No synthesized reservation is stored.
+name/generation or a fabricated birth. `InputOrigin.harness_sources` exposes no
+witness by default; `HarnessAttemptOrigin` exposes itself. `HarnessDelivery.retain_attempt`
+owns keyed row retention and the full-reference refusal. No synthesized reservation
+is stored, and the provenance family imports no coordinator row.
 
 `PracticeCopy.include_inputs` runs these seeds directly through the existing
 `CoordinationStore.retaining_rows` loading/dependency/publication lifetime.
@@ -249,9 +250,10 @@ These do not cover every disposition, native association or rollback/resource fa
 
 Runtime class creation/MRO/registration, attached SQL, cross-store capture and
 complete preservation remain unqualified. The selector has no participant-wide
-reverse walk. Participant aggregates now contribute through the row's cooperative
-retention hook below; inverse native membership, serialized references and the
-remaining original recovery groups still require semantic closure. No seed-only database is a runnable root or complete backup.
+reverse walk. Participant aggregates contribute through the selected attachment's
+expansion below; inverse native membership, serialized references and the remaining
+original recovery groups still require semantic closure. No seed-only database is
+a runnable root or complete backup.
 
 ## Participant aggregate — source implementation, not acceptance
 
@@ -265,11 +267,14 @@ retention never constructs a borrowed `CoordinationSession` or another connectio
 `ParticipantStore.retain_owners` seeds selected original lookup keys, preserves an
 absent participant as absent, and refuses a present incomplete aggregate.
 `ParticipantSnapshot.retain_original` keeps its original generation/current pointer.
-`Participants.retain_required_rows` contributes the same aggregate through the
-existing cooperative hook, including participants discovered later by FK closure,
-not just the initial registry entries. This is not a reverse traversal of every
-participant execution. The current pointer's declared references retain its actual
-pointed execution/attempt; no counter, revision, commitment or lifecycle is reset.
+`ParticipantRows(AttachedPracticeRebuild)` adds that aggregate to each expansion of
+the existing selected-file closure, including participants discovered later by FK,
+not just the initial seeds. `PracticeCopy.include_inputs` selects this attachment
+through `original_type`; generic foreign-key copying alone does not claim aggregate
+completeness. The same read-only attachment and destination connection are borrowed;
+there is no second closure loop or connection, and Participants imports no reader.
+The current pointer's declared references retain its actual pointed execution/attempt;
+no counter, revision, commitment or lifecycle is reset.
 
 `TypedTable.retention_key_fields` derives the primary key once from its declared
 columns for raw-copy deduplication and held-row selection. `retain_original` gets
@@ -286,16 +291,12 @@ seed cases also require the retained aggregate. Source mapping covers 65 modules
 18 function-local test declarations remain unprojected OPEN. That is source
 coverage, not executed class/MRO/SQL behavior or complete closure.
 
-## Hook correction and SQLite allocation metadata — source only
+## SQLite allocation metadata — source only
 
-Source follow-through caught an error in the participant checkpoint: its new
-`Participants.retain_required_rows` omitted the `schema` argument that the base
-and actual `TableSchema.retain_referenced_rows` caller supply. It now accepts and
-passes that argument cooperatively. The whole declared hook family is checked at
-source; this is not runtime dispatch/MRO qualification. The active-pointer case
-also now calls the real `mark_pending` transition and expects revision 2 before
-`start`; QueuedExecution does not admit direct start. No product fallback was added
-to satisfy a faulty fixture.
+The coordinator cases share the real selected-file factory with `ParticipantRows`.
+The active-pointer case uses the real `mark_pending` transition and expects revision
+2 before `start`; QueuedExecution does not admit direct start. No product fallback
+was added to satisfy a faulty fixture. These cases still require execution.
 
 A separate preservation gap remained in the earlier rowid hook: `RecoveryAudit`,
 `SpanAnnotationsRow` and `AnnotationRequestsRow` declare AUTOINCREMENT columns but

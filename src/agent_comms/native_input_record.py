@@ -206,7 +206,7 @@ class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):
         columns = ",".join(f"c.{column}" for column in WakeAssignment.columns())
         originals = WakeAssignment.read(db.execute(
             f"SELECT {columns} FROM ({self.source_membership_sql(table_source=table_source)}) m "
-            f"LEFT JOIN {table_source.qualified(WakeAssignment.declared_name)} c "
+            f"LEFT JOIN {WakeAssignment.qualified_table(table_source)} c "
             "ON m.assignment_id=c.assignment_id "
             "WHERE m.input_id=? ORDER BY m.ordinal", (input_id,),
         ))
@@ -253,7 +253,7 @@ class TriageNativeExecution(NativeInputExecution):
         from .triage_native_sources import TriageNativeSource
 
         return (f"SELECT s.input_id, s.assignment_id, s.ordinal "
-                f"FROM {table_source.qualified(TriageNativeSource.declared_name)} s")
+                f"FROM {TriageNativeSource.qualified_table(table_source)} s")
 
     def record_sources(
         self, db: Connection, input_id: InputId, assignments: tuple[WakeAssignment, ...],
@@ -299,8 +299,8 @@ class FullNativeExecution(NativeInputExecution):
         from .native_runtime_input import NativeRuntimeInput
 
         return (f"SELECT n.input_id, c.assignment_id, c.ordinal "
-                f"FROM {table_source.qualified(NativeRuntimeInput.declared_name)} n "
-                f"JOIN {table_source.qualified(ExecutionAssignmentLink.declared_name)} c "
+                f"FROM {NativeRuntimeInput.qualified_table(table_source)} n "
+                f"JOIN {ExecutionAssignmentLink.qualified_table(table_source)} c "
                 "ON c.execution_id=n.execution_id "
                 f"WHERE n.stage={sql_literal(cls)}")
 

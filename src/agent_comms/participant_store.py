@@ -23,7 +23,7 @@ from agent_comms.coordination_tables.participants import (
 )
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.typed_table import (
-    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, RowNotFoundError, TableSource,
+    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, RowNotFoundError, TableSchema, TableSource,
 )
 
 
@@ -150,3 +150,13 @@ class ParticipantStore:
                 generation=expected_generation + 1,
             )
             return Applied(self.get(lookup))
+
+
+class ParticipantRows(AttachedPracticeRebuild):
+    """Keep whole participant answers inside the existing selected-file closure."""
+
+    def retain_referenced_rows(self, schema: type[TableSchema]) -> int:
+        changed = super().retain_referenced_rows(schema)
+        return changed + ParticipantStore.retain_owners(self, tuple(
+            person.participant_lookup for person in Participants.select(self.destination)
+        ))

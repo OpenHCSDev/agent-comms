@@ -1112,6 +1112,10 @@ class AttachedPracticeRebuild(SchemaRebuild):
     source: SQLiteDatabase
     destination: sqlite3.Connection
 
+    def retain_referenced_rows(self, schema: type[TableSchema]) -> int:
+        """Expand this attachment through its file's declared dependency groups."""
+        return schema.retain_referenced_rows(self)
+
     def retain_rows(
         self, row: type[TypedTable], *,
         where: str = "1", parameters: tuple[object, ...] = (),
@@ -2791,6 +2795,11 @@ class TypedTable(
         return item.wire_record(db, plan, cls.declared_name)
 
     @classmethod
+    def qualified_table(cls, table_source: TableSource = LOCAL_TABLE_SOURCE) -> str:
+        """Name this declared table at its SQL boundary, in the supplied database."""
+        return table_source.qualified(cls.declared_name)
+
+    @classmethod
     def qualified(cls, *names: str) -> str:
         """Columns named through this table, for one select joining tables that share names."""
         table = _identifier(cls.declared_name)
@@ -3205,6 +3214,7 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
     @contextmanager
     def retaining_rows(
         cls, source: Path, destination: Path, *, maximum_bytes: int,
+        original_type: type[AttachedPracticeRebuild] = AttachedPracticeRebuild,
     ) -> Iterator[AttachedPracticeRebuild]:
         """Publish a fresh selected store only after loading and declared closure succeed.
 
@@ -3222,11 +3232,12 @@ class ReconciledFile(SQLiteFile, StoreLockFile):
             with closing(cls.writer(staged, isolation_level=None)) as db:
                 cls.configure_connection(db)
                 SQLiteDatabase.named(db, "main").limit_bytes(db, maximum_bytes)
-                with PracticeRebuild(source).attached(db) as original:
+                with PracticeRebuild(source).attached(db) as attached:
+                    original = original_type(attached.source, attached.destination)
                     with schema.loading_rows(db):
                         original.require_schema(schema)
                         yield original
-                        while schema.retain_referenced_rows(original):
+                        while original.retain_referenced_rows(schema):
                             pass
                         original.retain_sequences()
             retained_bytes = sum(member.stat().st_size for member in cls.files(staged)

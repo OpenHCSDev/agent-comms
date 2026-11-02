@@ -21,6 +21,7 @@ from agent_comms.harness_delivery_states import (
     MonitorEvidence, Outcome, UnconfirmedOutcome, UnrecordedMonitor,
 )
 from agent_comms.harness_install import HarnessSession
+from agent_comms.input_origin import HarnessAttemptOrigin
 from agent_comms.message_reference import MessageReference
 from agent_comms.typed_table import (
     LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, Column, ForeignKey, FrozenColumn,
@@ -50,6 +51,20 @@ class HarnessDelivery(RetainsChildren, NoDelete, CoordinatorRow, declared_name="
     def references(cls) -> tuple[ForeignKey, ...]:
         return (ForeignKey(columns=("recipient_lookup",), target=Participants,
                            target_columns=("participant_lookup",)),)
+
+    @classmethod
+    def retain_attempt(
+        cls, original: AttachedPracticeRebuild, recipient: ThreadLookup,
+        attempt: HarnessAttemptOrigin,
+    ) -> int:
+        """Keep the original keyed attempt and reject a different full message reference."""
+        key = {"bridge": attempt.bridge, "recipient_lookup": recipient,
+               "message_id": attempt.reference.message_id}
+        changed = original.retain_keys(cls, (key,))
+        retained = cls.require(original.destination, table_source=LOCAL_TABLE_SOURCE, **key)
+        if retained.reference != attempt.reference:
+            raise IdentityConflict("Retained harness attempt names another message sequence")
+        return changed
 
     @classmethod
     def retain_required_rows(

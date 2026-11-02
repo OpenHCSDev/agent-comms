@@ -342,7 +342,10 @@ class StoredInput(InputAttempt):
         # The origin owns author evidence; an owned bus key additionally
         # retains its original recipient birth. Neither invents a missing birth.
         return (self.origin.matches_owner(self.owner, source_owner)
-                and self.key.matches_owner(source_owner))
+                and source_owner.recorded_or(
+                    lambda recorded: self.key.matches_recorded_owner(recorded.created_at),
+                    self.key.matches_unrecorded_owner,
+                ))
 
     def matches_claim(self, claim_scope: int) -> bool:
         return self.claim_generation == claim_scope

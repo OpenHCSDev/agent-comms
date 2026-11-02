@@ -593,7 +593,8 @@ class SnapshotInputDispositions(InputDispositions, declared_name=None):
                       for entry in entries}
         for attempted in self.harness_attempts(entries):
             if attempted.key in selected.rows:
-                attempted.origin.retain_harness_rows(
-                    self.original, recipients[attempted.owner],
-                )
+                for source in attempted.origin.harness_sources():
+                    HarnessDelivery.retain_attempt(
+                        self.original, recipients[attempted.owner], source,
+                    )
         return selected

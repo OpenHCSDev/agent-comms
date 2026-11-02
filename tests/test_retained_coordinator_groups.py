@@ -1,6 +1,6 @@
 """Original harness groups survive selected loading without replaying their lifecycle."""
-from collections.abc import Iterator
-from contextlib import closing
+from collections.abc import Callable, Iterator
+from contextlib import AbstractContextManager, closing
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -27,15 +27,24 @@ from agent_comms.native_input_record import FullNativeExecution, TriageNativeExe
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.nominal.field_codec import AssignmentId, MessageId, ThreadLookup, TranscriptRecordId
 from agent_comms.owner_fence import prepare_fence_token
-from agent_comms.participant_store import ParticipantStore
+from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.reason_codes import GivenReasonCode, NoDetail
 from agent_comms.recovery_states import ModelStalledRecovery
 from agent_comms.triage_native_sources import TriageNativeSource
-from agent_comms.typed_table import TypedTable, UnallocatedRowId
+from agent_comms.typed_table import AttachedPracticeRebuild, TypedTable, UnallocatedRowId
 from agent_comms.wake_policy import FullWake, MessageAudience
 from bus_record_fixture import (
     FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID, RECIPIENT_LOOKUP, prepare_native_comms,
 )
+
+
+def retaining_coordinator(
+    source: Path, destination: Path,
+) -> AbstractContextManager[AttachedPracticeRebuild]:
+    """Use the real coordinator expansion with one shared test-copy allowance."""
+    return CoordinationStore.retaining_rows(
+        source, destination, maximum_bytes=8 * 2**20, original_type=ParticipantRows,
+    )
 
 
 @dataclass(frozen=True)
@@ -98,9 +107,7 @@ def test_retained_harness_group_keeps_exact_parts_and_existing_claims(
     selected = harness_source.deliveries[selected_index]
     destination = tmp_path / 'retained' / 'coordination.sqlite3'
     before = CoordinationStore.digest(harness_source.path)
-    with CoordinationStore.retaining_rows(
-        harness_source.path, destination, maximum_bytes=8 * 2**20,
-    ) as original:
+    with retaining_coordinator(harness_source.path, destination) as original:
         original.retain_keys(HarnessDelivery, ({
             'bridge': selected.bridge, 'recipient_lookup': selected.recipient_lookup,
             'message_id': selected.message_id,
@@ -143,9 +150,7 @@ def test_retained_harness_conflict_refuses_without_publication(
     before = CoordinationStore.digest(harness_source.path)
     destination = tmp_path / 'retained' / 'coordination.sqlite3'
     with pytest.raises(IdentityConflict):
-        with CoordinationStore.retaining_rows(
-            harness_source.path, destination, maximum_bytes=8 * 2**20,
-        ) as original:
+        with retaining_coordinator(harness_source.path, destination) as original:
             original.retain_keys(HarnessDelivery, ({
                 'bridge': conflicting.bridge, 'recipient_lookup': conflicting.recipient_lookup,
                 'message_id': conflicting.message_id,
@@ -213,7 +218,7 @@ def test_retained_native_group_uses_original_membership_and_children(
     expected_claims = source.claims[:claim_count]
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'native-retained' / 'coordination.sqlite3'
-    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+    with retaining_coordinator(source.path, destination) as original:
         original.retain_keys(seed, (keys,))
     with closing(CoordinationStore.read_snapshot(destination)) as db:
         assert tuple(NativeRuntimeInput.select(db)) == (selected,)
@@ -244,7 +249,7 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
     expected = source.store.participants.get(RECIPIENT_LOOKUP)
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'participant-retained' / 'coordination.sqlite3'
-    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+    with retaining_coordinator(source.path, destination) as original:
         with pytest.raises(ParticipantNotRegistered):
             ParticipantStore.read_at(original.destination, RECIPIENT_LOOKUP)
         assert ParticipantStore.read_at(
@@ -270,20 +275,32 @@ def test_selected_participant_keeps_its_generation_and_current_pointer(
                       execution_id=NoPointedExecution(), attempt_ordinal=NoPointedAttempt(),
                       pointer_revision=5),
 ))
+@pytest.mark.parametrize('retain_seed', (
+    lambda original, delivery: ParticipantStore.retain_owners(
+        original, (delivery.recipient_lookup,),
+    ),
+    lambda original, delivery: delivery.retain_original(original),
+), ids=('direct-owner', 'fk-discovered-owner'))
 def test_incomplete_original_participant_refuses_selected_publication(
     native_group_source: NativeGroupSource, tmp_path: Path, surviving: TypedTable,
+    retain_seed: Callable[[AttachedPracticeRebuild, HarnessDelivery], int],
 ) -> None:
     source = native_group_source
     lookup = ThreadLookup('7' * 32)
+    delivery = HarnessDelivery(
+        ClaudeBridge, lookup, MessageId.mint('incomplete-owner-message'), 7, EmittedOutcome,
+    )
     with source.store.session.writing() as db:
         Participants(participant_lookup=lookup, committed=True).insert(db)
         surviving.insert(db)
+        delivery.insert(db)
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'incomplete-participant' / 'coordination.sqlite3'
     with pytest.raises(ParticipantNotRegistered):
-        with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
-            ParticipantStore.retain_owners(original, (lookup,))
+        with retaining_coordinator(source.path, destination) as original:
+            retain_seed(original, delivery)
     assert not destination.exists()
+    assert not tuple(destination.parent.iterdir())
     assert CoordinationStore.digest(source.path) == before
 
 
@@ -318,7 +335,7 @@ def test_selected_store_keeps_sqlite_high_water_without_rowid_mixin(
         audits = tuple(RecoveryAudit.select(source.store.session._connection, order_by=('audit_id',)))
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'sequence-retained' / 'coordination.sqlite3'
-    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+    with retaining_coordinator(source.path, destination) as original:
         original.retain_keys(ExecutionRecord, keys)
     with StandaloneCoordination(str(destination), clock_ms=lambda: 1000) as retained:
         with retained.session.read():
@@ -344,7 +361,7 @@ def test_native_membership_query_uses_the_supplied_attachment(
     selected = source.native[0]
     before = CoordinationStore.digest(source.path)
     destination = tmp_path / 'membership-query' / 'coordination.sqlite3'
-    with CoordinationStore.retaining_rows(source.path, destination, maximum_bytes=8 * 2**20) as original:
+    with retaining_coordinator(source.path, destination) as original:
         # Both table sets exist. Ordinary lookup sees the empty destination;
         # qualification must keep every join on the original attachment.
         assert selected.execution.source_assignments(original.destination, selected.input_id) == ()

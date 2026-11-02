@@ -14,7 +14,6 @@ from .nominal.field_codec import FieldCodec, InputId, MalformedRecord, TextRepre
 
 if TYPE_CHECKING:
     from .acp_extension import InputStartedUpdate
-    from .thread_identity import ThreadIncarnation
 
 
 class InputKey(DeclaredFamily):
@@ -48,8 +47,11 @@ class InputKey(DeclaredFamily):
     def identify(self, update: InputStartedUpdate) -> InputStartedUpdate:
         return update
 
-    def matches_owner(self, incarnation: ThreadIncarnation) -> bool:
+    def matches_recorded_owner(self, created_at: float) -> bool:
         """A birthless key adds no birth claim to its origin's owner check."""
+        return True
+
+    def matches_unrecorded_owner(self) -> bool:
         return True
 
 
@@ -95,11 +97,12 @@ class OwnedBusInputKey(BusInputKey):
     def text(self) -> str:
         return super().text() + ":owner:" + self.owner_created.hex()
 
-    def matches_owner(self, incarnation: ThreadIncarnation) -> bool:
+    def matches_recorded_owner(self, created_at: float) -> bool:
         """The original recipient's recorded birth must still match."""
-        return incarnation.recorded_or(
-            lambda recorded: recorded.created_at == self.owner_created, lambda: False,
-        )
+        return created_at == self.owner_created
+
+    def matches_unrecorded_owner(self) -> bool:
+        return False
 
 @dataclass(frozen=True)
 class TurnInputKey(InputKey):

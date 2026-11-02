@@ -16,7 +16,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_tables.annotations import ContextSpanRows
 from agent_comms.input_disposition import InputDispositions, InputDocument, SnapshotInputDispositions
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.participant_store import ParticipantStore
+from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.registry_document import RegistryEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.nominal.field_codec import boundary_decoder
@@ -232,6 +232,7 @@ class PracticeCopy:
         with CoordinationStore.retaining_rows(
             source, CoordinationStore.path_in(self.path),
             maximum_bytes=self.remaining_bytes(maximum_bytes),
+            original_type=ParticipantRows,
         ) as original:
             selected = SnapshotInputDispositions(self.path, original).retain_unresolved(entries)
             ParticipantStore.retain_owners(original, tuple(
