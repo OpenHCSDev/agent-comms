@@ -608,11 +608,12 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
         with comms.registry.store.current_snapshot() as cut:
             actor = cut.snapshot.require(commander).incarnation
             for holder in cut.snapshot.threads_for(self.holder.require_recorded()):
-                VerdictAudience((holder.name,)).publish(comms.goals, actor, (
-                    f"{self.branch} is {self.behind} commits behind main. Rebase your branch onto"
-                    " origin/main now, retain main's moves and deletions, resolve every conflict"
-                    " yourself, push with --force-with-lease, and keep working; a stale tree turns"
-                    " your next push into everyone's conflict."))
+                cut.snapshot.status(holder.name).publish_heartbeat(
+                    lambda name=holder.name: VerdictAudience((name,)).publish(comms.goals, actor, (
+                        f"{self.branch} is {self.behind} commits behind main. Rebase your branch"
+                        " onto origin/main now, retain main's moves and deletions, resolve every"
+                        " conflict yourself, push with --force-with-lease, and keep working; a"
+                        " stale tree turns your next push into everyone's conflict.")), None)
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:

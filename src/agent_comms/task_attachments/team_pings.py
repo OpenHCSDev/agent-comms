@@ -357,7 +357,7 @@ class TeamUpdate(OwnerNotice, declared_name=None):
         packet = replace(self, publication=publication)
         return comms.registry.status(recipient.name).publish_heartbeat(
             lambda: recipient.heartbeat_delivery.publish(lambda: packet.publish(
-                comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud))))
+                comms.messaging, ThreadTarget(packet.commander.name), packet.body(hud))), ())
 
 
 

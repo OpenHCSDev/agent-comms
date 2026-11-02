@@ -70,7 +70,7 @@ class Visible(PublishingPresence):
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         pass
 
-    def publish_heartbeat[Sent](self, publish: Callable[[], tuple[Sent, ...]]) -> tuple[Sent, ...]:
+    def publish_heartbeat[Sent](self, publish: Callable[[], Sent], unsent: Sent) -> Sent:
         return publish()
 
 
@@ -127,10 +127,11 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
         raise RelationViolationError(message)
 
-    def publish_heartbeat[Sent](self, publish: Callable[[], tuple[Sent, ...]]) -> tuple[Sent, ...]:
-        """An unaddressable thread (archived, deleting, a service) keeps its board frame and gets
-        no packet: on 2026-11-02 one such lead failed every heartbeat pass for the whole team."""
-        return ()
+    def publish_heartbeat[Sent](self, publish: Callable[[], Sent], unsent: Sent) -> Sent:
+        """Core's heartbeat never messages an unaddressable thread (archived, deleting, a service):
+        its board frame is still written. On 2026-11-02 a packet to such a lead, then a rebase
+        reminder to such a branch holder, each failed every pass for the whole team."""
+        return unsent
 
     def require_publication(self) -> None:
         raise RelationViolationError("Message sender is not permitted to publish.")
