@@ -77,6 +77,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
             now = time.time()
             snapshot = comms.registry.snapshot()
             actions = TeamHistory.read(comms, self.actors(snapshot))
+            duty = self.duty(comms.registry, comms.goals)
             for thread in self.served(comms.registry, comms.goals):
                 for update in TeamUpdate.report_failure(
                     thread.incarnation, failure,
@@ -85,10 +86,10 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 ):
                     TeamUpdateStore.record(comms.root, update)
                     sections = AlarmGroup.sections((update,), update.open_pings(actions))
-                    update.send(comms, (
+                    duty.publish(lambda update=update, sections=sections: update.send(comms, (
                         HudUnavailableGroup.heading(),
                         *TeamHud.alarm_text(sections, now),
-                    ))
+                    )))
 
     def prepare(self, comms: Comms) -> Mapping[Thread, TeamInputs]:
         pulls = ProgressRead()
@@ -106,6 +107,7 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
         huds = {}
         completed = []
         now = time.time()
+        duty = self.duty(comms.registry, comms.goals)
         try:
             for item in observed:
                 comms.goals.todos.record_merges(item.merges(comms))
@@ -119,10 +121,10 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                 previous = held[item.thread.incarnation]
                 known = frozenset(ping for packet in previous for ping in packet.handled)
                 rejected = StandingRule.enforce_all(
-                    comms, item.thread.name,
-                    (*(rule for rule in item.rules if RulePing.capture(rule) not in known),
-                     *(state for state in item.states
-                       if state.attention() and TeammatePing.capture(state) not in known)),
+                    comms, item.thread.name, duty.actionable(
+                        (*(rule for rule in item.rules if RulePing.capture(rule) not in known),
+                         *(state for state in item.states
+                           if state.attention() and TeammatePing.capture(state) not in known))),
                 )
                 usage = CodexUsage.read()
                 # Include acknowledgements committed during forge/provider reads and enforcement.
@@ -145,7 +147,8 @@ class TeamHeartbeat(ReadWork, RetainedPlanReadings, NominalPlanReadings, TeamSer
                     facts = PublishedFacts.of(hud.display_facts)
                     latest = announced[recipient]
                     if delivery.packet.should_publish(facts, latest):
-                        delivery.packet.send(comms, hud.hud_text(now), publication=facts)
+                        duty.publish(lambda packet=delivery.packet, hud=hud, facts=facts:
+                                     packet.send(comms, hud.hud_text(now), publication=facts))
                     completed.append(recipient)
         finally:
             # A later teammate's failure does not erase frames/passes already completed.
