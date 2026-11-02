@@ -16,12 +16,12 @@ from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
-from agent_comms.installer.interpreter_operation import ProbeRequest
+from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
+from agent_comms.nominal.field_codec import MessageId, TurnId
 from agent_comms.repo import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
@@ -233,13 +233,13 @@ def test_selected_annotation_materialization_writes_only_the_private_target(
     held = gate.retarget(gate.begin(MaintenanceOperator.current()), LaunchRuntime.running())
     copy = PracticeCopy(root, tmp_path / 'captured-annotations')
     try:
-        request = ProbeRequest(SelectedInputsProbe(
+        probe = SelectedInputsProbe(
             root, copy.path, 8 * 2**20, requests=(source.reference,),
-        ), str(held.nonce))
-        decoded = FieldCodec.decode(ProbeRequest, FieldCodec.encode(request))
-        with held.holding():
-            reply = decoded.answer()
-        measured = FieldCodec.decode(PracticeMeasurement, reply.answer)
+        )
+        with held.holding(), InstallCommands() as commands:
+            measured = commands.probe(
+                probe, LaunchRuntime.running().interpreter, cwd=tmp_path,
+            )
         assert measured == PracticeMeasurement.capture(copy.path)
         contexts = ContextStore(copy.path).original_segments()
         retained = WorkingMemoryAnnotations.for_segments(

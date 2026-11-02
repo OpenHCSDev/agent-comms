@@ -495,3 +495,15 @@ store's in-flight/later writer controls and the decoded selected ProbeRequest.
 Focused mypy on installer/practice.py passed. These results remain fixture/backend
 qualification, not original-data, cross-runtime, resource-peak or native/physical
 acceptance. The earlier 125-case execution belongs to the preceding source epoch.
+
+A separate candidate build completed through `RuntimeStack.build/complete`,
+including native preparation and client imports, without publishing a live route.
+The selected annotation control now uses `InstallCommands.probe` and the real
+interpreter worker pipes instead of calling `ProbeRequest.answer` in-process.
+Executed through the existing `RuntimeStack.test` owner against that installed
+candidate: one collected, one passed, 5.45 seconds, exit0. The outer command took
+70.468 seconds; this is not a 5.45-second end-to-end timing. The declared dev extra
+was installed into the existing candidate prefix by that test owner. Its package
+path, resolved lock and build phases are retained in the owning build record.
+This proves the worker transport on private fixture data, not the original-data
+capture, aggregate resource peak or native-agent/physical journey.
