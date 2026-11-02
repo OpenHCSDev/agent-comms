@@ -131,7 +131,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
 
 @dataclass(frozen=True)
 class AcquireRepositoryStorageEffect(CheckoutStorageEffect):
-    """Admit both allocations before a source can clone or fetch; donors grant no edits."""
+    """Check both allocations before a source can clone or fetch; donors grant no edits."""
 
     def check(self, projection: StorageProjection) -> None:
         super().check(projection)

@@ -14,7 +14,7 @@ from functools import cache, cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
+from pydantic import BaseModel, ConfigDict, InstanceOf, JsonValue, PlainSerializer, PlainValidator
 
 from .coordination_errors import CommandFailure
 from .nominal.declared_family import DeclaredFamily
@@ -441,7 +441,7 @@ class RepositorySource(WireValue):
         return LocalRepositorySource(Repo.from_origin(path))
 
     @classmethod
-    def schema(cls) -> dict[str, object]:
+    def schema(cls) -> dict[str, JsonValue]:
         return {"type": "string", "description": "Existing repository path or github:OWNER/REPO"}
 
     @property
