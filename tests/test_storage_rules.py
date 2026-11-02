@@ -12,7 +12,7 @@ import pytest
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
-from agent_comms.repo import Checkout, DetachedStart, Repo, RepositoryReads
+from agent_comms.repo import Checkout, DetachedStart, LocalRepositorySource, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
@@ -248,16 +248,17 @@ def test_removed_worktree_updates_membership_and_another_home_cannot_claim_its_p
     assert storage.adding(Checkout(home)) == storage
     assert rule.owns_present_checkout(thread, home, RepositoryReads())
     assert not rule.owns_present_checkout(other, old, RepositoryReads())
+    source = LocalRepositorySource(Repo.of(home))
     with pytest.raises(StorageDenied):
         StorageProjection(rule, other, comms).check((
-            CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
+            CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
     StorageProjection(rule, thread, comms).check((
-        CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
+        CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
     StorageProjection(rule, thread, comms).check((RemoveCheckoutStorageEffect(old),))
     shutil.rmtree(old)
     assert rule.checkouts_of(thread, RepositoryReads()) == (home,)
     StorageProjection(rule, thread, comms).check((
-        CreateCheckoutStorageEffect(new, Repo.of(home), DetachedStart('HEAD')),))
+        CreateCheckoutStorageEffect(new, source, DetachedStart('HEAD')),))
     assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
@@ -276,7 +277,7 @@ def test_equal_repository_spellings_allocate_one_owned_checkout(checkout_comms: 
     assert path == rule.repository_checkout(rule.roots_of(thread), 'P1', registered)
     start = DetachedStart('HEAD')
     StorageProjection(rule, thread, comms).check((
-        CreateCheckoutStorageEffect(path, Repo.of(home), start),))
+        CreateCheckoutStorageEffect(path, LocalRepositorySource(Repo.of(home)), start),))
     Checkout.add(home, path, start)
     assert rule.owns_present_checkout(thread, path, RepositoryReads())
     assert path in rule.checkouts_of(thread, RepositoryReads())
@@ -330,7 +331,7 @@ def test_three_small_checkouts_are_admitted(checkout_comms: Comms):
     for problem in ('P1', 'P2', 'P3'):
         path = rule.order_checkout(rule.roots_of(thread), problem)
         start = DetachedStart('HEAD')
-        projection.check((CreateCheckoutStorageEffect(path, Repo.of(thread.project_path), start),))
+        projection.check((CreateCheckoutStorageEffect(path, LocalRepositorySource(Repo.of(thread.project_path)), start),))
         Checkout.add(thread.project_path, path, start)
     storage = UnitStorage.read(rule, thread, RepositoryReads())
     assert len(storage.extra_checkouts) == 3

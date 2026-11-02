@@ -23,7 +23,7 @@ from agent_comms.owner_requests import NewestOpenRequest
 from .native_settings import NativeThreadDefaults
 from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
-from .repo import Checkout, CheckoutStart, Repo
+from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo
 from .repository_name import RepositoryName
 from .shell_effects import CreateCheckoutStorageEffect
 from .storage_projection import StorageProjection
@@ -73,7 +73,7 @@ class WorkDispatch:
         repository = Repo.of(self.action.order.check.directory)
         Repo.git(repository.checkout, "fetch", "origin", "main")
         start = CheckoutStart.of(repository.checkout, f"auto/{name}", "origin/main")
-        CreateCheckoutStorageEffect(checkout, repository, start).check(
+        CreateCheckoutStorageEffect(checkout, LocalRepositorySource(repository), start).check(
             StorageProjection(storage, candidate, comms)
         )
         Checkout.add(repository.checkout, checkout, start)

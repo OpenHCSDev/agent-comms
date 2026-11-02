@@ -13,7 +13,7 @@ from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.shell_commands import ShellCommand
 
 from .native_build_inputs import GitLaunch, NamedProgram
-from .repo import Checkout, CheckoutStart, Repo
+from .repo import Checkout, CheckoutStart, RepositorySource
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
 from .tool_denial import SelectedToolDenied
 
@@ -113,7 +113,7 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     """Shared checkout ownership and free-space admission."""
 
     path: Path
-    repository: Repo
+    repository: RepositorySource
 
     def project(self, storage: UnitStorage) -> UnitStorage:
         return storage.adding(Checkout(self.path))
@@ -121,11 +121,23 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, projection: StorageProjection) -> None:
         rule, thread = projection.rule, projection.thread
         rule.require_destination(thread, self.path)
+        rule.require_physical_allocation(self.path)
         if not rule.owns_checkout(thread, self.path, self.repository.github, projection.reads):
             destination = rule.order_checkout(rule.roots_of(thread), "P<number>")
             rule.deny(f'checkout destination must be {destination}')
         projection.storage = self.project(projection.storage)
         super().check(projection)
+
+
+@dataclass(frozen=True)
+class AcquireRepositoryStorageEffect(CheckoutStorageEffect):
+    """Admit both allocations before a source can clone or fetch; donors grant no edits."""
+
+    def check(self, projection: StorageProjection) -> None:
+        super().check(projection)
+        rule, thread = projection.rule, projection.thread
+        for donor in self.repository.allocations(rule, thread):
+            rule.require_repository_donor(thread, thread.goal.require().id, self.repository.github, donor)
 
 
 @dataclass(frozen=True)

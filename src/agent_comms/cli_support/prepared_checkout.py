@@ -10,7 +10,7 @@ from agent_comms.nominal.field_codec import Argument
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.nominal.field_codec import Normalize
 from agent_comms.nominal.field_codec import PathText
-from agent_comms.repo import Repo
+from agent_comms.repo import RepositorySource
 from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
@@ -42,7 +42,7 @@ class PreparedCheckoutCliCommand(CliCommand):
     @abstractmethod
     def grant(self, ctx: Comms, thread: Thread) -> CheckoutGrant: ...
 
-    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> RepositorySource:
         return grant.source()
 
     def apply(self, ctx: Comms) -> CliResult:
