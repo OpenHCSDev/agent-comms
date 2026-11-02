@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import tempfile
 from contextlib import ExitStack
+from pathlib import Path
 
 import pytest
 from xdist import is_xdist_worker
 
+from agent_comms.storage_rules import StorageRule
 from agent_comms.test_lease import (
     InheritedTestRun,
     LeaseStart,
@@ -36,6 +39,17 @@ class TestSession(ExitStack):
 
     def prepare(self) -> None:
         self.acquire()
+
+    def configure(self, config: pytest.Config) -> None:
+        self.prepare()
+        # This option is foreign pytest input. Supplied/controller-worker paths
+        # keep pytest's explicit-basetemp contract; only its absent default is ours.
+        if config.option.basetemp is None:
+            scratch = StorageRule().scratch_base
+            scratch.mkdir(mode=0o700, parents=True, exist_ok=True)
+            run = Path(tempfile.mkdtemp(prefix="pytest-", dir=scratch))
+            # Leave the factory a new child, not an existing directory to clear.
+            config.option.basetemp = str(run / "files")
 
     def confirm(self, session: pytest.Session) -> None:
         pass
@@ -72,7 +86,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
     config.stash[_SESSION] = owner
     config.add_cleanup(owner.close)
-    owner.prepare()
+    owner.configure(config)
 
 
 @pytest.hookimpl(tryfirst=True)
