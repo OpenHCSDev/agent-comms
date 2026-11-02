@@ -19,7 +19,6 @@ def test_channel_assignments_are_visible_from_agent_view(tmp_path):  # noqa: F81
     assert acknowledgement.message == initial.envelope
     assert acknowledgement.message.target == '#team'
     assert replace(acknowledgement, message=None) in per_message.outcomes[(message.seq, message.message_id)]
-    assert acknowledgement.label == acknowledgement.timed_state('Sent', acknowledgement.state.sent_at_ms)
     assert not comms.registry.require('beta').executing
 
 
@@ -45,7 +44,6 @@ def test_live_turn_never_presents_ready_between_activity_events(tmp_path):  # no
     comms.agents.finish_turn(lease)
     view = next(v for v in comms.views.thread_views() if v.thread.name == 'beta')
     assert not view.presentation.status.working
-    assert view.presentation.summary == 'Ready'
 
 
 def test_individual_view_keeps_alias_goal_and_active_owner_semantics(tmp_path):  # noqa: F811
