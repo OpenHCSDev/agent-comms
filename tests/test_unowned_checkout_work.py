@@ -139,11 +139,11 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
             'Keep changes with their author', creator=lead, assigner=lead.incarnation, owner=worker,
             generation=shared_work_goal_id, review_at=RecordedEventTime(now + 3600),
             order=order, request=request)
-    # Both current IDs change, as they do when Core hands work out again: one order, one write.
+    # The holder takes both under a new goal: one order, one write.
     c.goals.todos.assign(
         tuple(ExpectedProblem(problem, c.goals.todos.get(problem).revision)
               for problem in ('P1', 'P2')), owner=worker,
-        assigner=lead.incarnation, generation=reissued_work_goal_id,
+        assigner=worker.acting_identity, generation=reissued_work_goal_id,
         review_at=RecordedEventTime(now + 3600), order=order.reissued(now + 1),
         request=request)
     # Core now refuses unrelated work to a unit holding an order; a bus saved before that rule
@@ -335,15 +335,15 @@ def test_fire_refuses_while_the_holders_checkout_retains_work(checkout_bus: Comm
     """2026-10-24: fire released P602 from a unit holding nine uncommitted edits, and the
     heartbeat's WORK HELD answered the same fact the other way one minute later."""
     c = checkout_bus
-    lead = c.registry.require('lead').incarnation
+    holder = c.registry.require('worker').acting_identity
     rule = c.registry.storage_rule
     checkout = rule.order_checkout(rule.initial_roots('worker'), 'P1')
-    reason = StrikeReason('The unit broke the tests its order touched and claimed they passed.')
+    reason = StrikeReason('The holder broke the tests its order touched and stops this work.')
     (checkout / 'work.py').write_text('# not yet published\n')
     with pytest.raises(TodoError, match=f'worker retains work in {checkout}'):
-        c.goals.fire('worker', reason, lead)
+        c.goals.fire('worker', reason, holder)
     assert {c.goals.todos.get(problem).holder for problem in ('P1', 'P3')} == {'worker'}
     git(checkout, 'commit', '-q', '-am', 'Published before release')
     git(checkout, 'push', '-q', 'origin', 'worker-work')
-    released = c.goals.fire('worker', reason, lead)
+    released = c.goals.fire('worker', reason, holder)
     assert {todo.id for todo in released} == {'P1', 'P3'}

@@ -3993,13 +3993,13 @@ class ReleasesHold(TodoOperation, declared_name=None):
         current.current_holder.require_release(self.actor, current, snapshot)
 
 
+@dataclass(frozen=True)
 class AssignTodo(ReleasesHold):
     """The order's commander gives the problem to a unit.
 
     Its group is every problem the same order assigns in this Todo transaction; a command
     sent alone has only its own. The group is command input and is never recorded."""
 
-    actor: ThreadIncarnation
     proposed: Assignment
     review_at: EventTime
     order: PendingProblemOrder | MergedProblemOrder
@@ -4208,13 +4208,14 @@ class VerdictAudience:
         """The order records its commander; a request lookup adds no authority."""
         return cls(tuple(dict.fromkeys((unit, todo.creator))))
 
-    @property
-    def target(self) -> NamedTarget:
-        name = self.threads[0] if len(self.threads) == 1 else CommsTag.channel()
-        return CommandTarget.named(name)
+    def target_from(self, sender: str) -> NamedTarget:
+        """One other thread is addressed directly; a wider audience, or a holder taking work
+        into its own goal, is posted to the channel the team reads."""
+        direct = len(self.threads) == 1 and self.threads[0] != sender
+        return CommandTarget.named(self.threads[0] if direct else CommsTag.channel())
 
     def publish(self, goals: Goals, actor: ThreadIncarnation, text: str) -> None:
-        target = self.target
+        target = self.target_from(actor.name)
         goals.bus.publisher.publish_ordinary(
             Message(sender=actor.name, target=target.name,
                     body=target.addressed(self.threads, text), type=InfoKind),
@@ -6070,6 +6071,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         """)
         return StoryFacts.capture(db.execute(query, problems))
 
+@dataclass(frozen=True)
 class MaintainsWork(TodoOperation, declared_name=None):
     """Shared maintenance of a problem: the actor must work within the problem's request."""
 

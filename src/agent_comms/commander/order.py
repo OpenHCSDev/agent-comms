@@ -429,7 +429,7 @@ class CommanderContext(BaseModel):
 
     def published(self, audience: VerdictAudience, body: str,
                   answers: tuple[MessageReference, ...] = ()) -> Message:
-        target = audience.target
+        target = audience.target_from(self.actor_name)
         return self.comms.messaging.send(self.actor_name, target.name,
             target.addressed(audience.threads, body), answers=answers,
             answerer=self.receipts).message

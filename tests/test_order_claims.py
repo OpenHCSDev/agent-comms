@@ -487,7 +487,7 @@ def corrected_order_file(ctx, source) -> str:
 def test_corrected_order_to_the_claimant_replaces_its_claim(held_commander, cited_source):
     ctx = held_commander
     claimed = claimed_by_worker(ctx)
-    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
+    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean", "--as", "worker"], ctx)
     corrected = ctx.comms.goals.todos.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.id != claimed.order.id
@@ -554,7 +554,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     main(["say", "worker", str(reply), "--answers", ask.message_id], ctx)
     assert store.get("P1") == claims[0]
 
-    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean"], ctx)
+    main(["send", "worker", corrected_order_file(ctx, cited_source), "--clean", "--as", "worker"], ctx)
     corrected = store.get("P1")
     assert isinstance(corrected.order, PendingProblemOrder)
     assert corrected.order.commander_claims() == ()
@@ -568,7 +568,8 @@ def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_comman
     claimed = claimed_by_worker(ctx)
     with pytest.raises(TodoError, match="Only an undelivered order can change owner"):
         main(["send", "other", corrected_order_file(ctx, cited_source), "--clean", "--reassign",
-              "the claimant reported the delivery, so moving it would discard that claim"], ctx)
+              "the claimant reported the delivery, so moving it would discard that claim",
+              "--as", "worker"], ctx)
     assert ctx.comms.goals.todos.get("P1") == claimed
 
 

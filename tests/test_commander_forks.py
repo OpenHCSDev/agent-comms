@@ -811,7 +811,7 @@ def test_an_unapproved_holder_change_refuses_the_whole_group(fork_bus, tmp_path)
                       document(tmp_path / "group.json", replace(order, id=OrderId.mint()),
                                (other.id, held.id)), "--fork", "fork-two")
     assert refused.returncode != 0
-    assert "cannot release or replace that assignment" in refused.stderr
+    assert "cannot assign new work without that goal owner's approval" in refused.stderr
     assert (store.get(held.id), store.get(other.id)) == (held, other)
 
 

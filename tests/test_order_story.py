@@ -46,16 +46,14 @@ from agent_comms.todos import (
     UnorderedProblemOrder,
     WithdrawTodo,
 )
-from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_caller import CommanderPeerCaller, NoThreadCaller, ThreadCaller
 from source_revision_fixture import SourceRepository
 from test_todos import order
 
 
-def board_read(tool, comms, caller, thread="lead"):
-    """A board tool's reply names whose board it read; the rest is that board's record."""
-    reply = tool.invoke(comms, {"thread": thread}, caller=caller)
-    assert reply.pop("board") == thread
-    return reply
+def board_read(tool, comms, caller):
+    """Every reader reads the one shared board."""
+    return tool.invoke(comms, {}, caller=caller)
 
 
 def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
@@ -95,8 +93,10 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     assert comms.bus.bus.revision() == before_send_back + 1
     todo = comms.goals.todos.get("P1")
     resent_id = OrderId.mint()
-    caller.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
-        problem="P1", expected_revision=todo.revision, assigner=actor, commander="lead",
+    worker = CommanderPeerCaller("worker")
+    worker.invoke(CommsOrderTool(owner="worker", order=OrderGoalAction(
+        problem="P1", expected_revision=todo.revision,
+        assigner=comms.registry.require("worker").acting_identity, commander="lead",
         request=request, review_at=RecordedEventTime(2000),
         order=replace(order(source), id=resent_id))), comms)
     current = comms.goals.todos.get("P1")
@@ -131,7 +131,7 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     with copied.goals.todos.writing() as db:
         for problem in ("P2", "P3"):
             replace(saved, id=problem, assignment=None, order=UnorderedProblemOrder()).insert(db)
-    copied.goals.todos.link(actor, "P2", "worker", saved.id)
+    copied.goals.todos.link(copied.registry.require("worker").acting_identity, "P2", "worker", saved.id)
     linked = FieldCodec.decode(OrderStory, CommsOrderStoryTool.invoke(
         copied, {"order_id": str(resent_id)}, caller=caller))
     assert tuple(problem.problem for problem in linked.problems) == ("P1", "P2")

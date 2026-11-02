@@ -156,7 +156,7 @@ def test_clean_resend_keeps_three_strikes_and_the_existing_holder(held_commander
     )
     path = ctx.root / "order.json"
     path.write_text(json.dumps(FieldCodec.encode(document)))
-    main(["send", "worker", str(path), "--clean"], ctx)
+    main(["send", "worker", str(path), "--clean", "--as", "worker"], ctx)
     saved = ctx.comms.goals.todos.get("P1")
     assert saved.order.id != original.order.id
     assert saved.latest_message.message_id != original.latest_message.message_id

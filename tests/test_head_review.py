@@ -353,7 +353,7 @@ def test_companion_metadata_refuses_a_closed_order_without_forge_or_link_changes
     comms, github, primary = linked_head_bus
     before = comms.goals.todos.get("P2")
     comms.goals.todos.apply(before.id, WithdrawTodo(
-        before.revision, comms.registry.require("lead").incarnation,
+        before.revision, before.held().owner_identity,
         before.held(), "Close this fixture order before attempting metadata"))
     closed = comms.goals.todos.get(before.id)
     calls = github.calls()
@@ -1051,7 +1051,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     todo = comms.goals.todos.get("P2")
     action = CreateProblemGoalAction(
         problem="P3", commander="lead", request=todo.request,
-        assigner=comms.registry.require("lead").incarnation,
+        assigner=comms.registry.require("outsider").acting_identity,
         repo=todo.repo, text="Repair the next owner", order=todo.order.checked(),
         review_at=RecordedEventTime(time.time() + 3600),
     )
@@ -1075,7 +1075,7 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
     original = comms.goals.todos.get("P2")
     comms.goals.update_goal("worker", CreateProblemGoalAction(
         problem="P3", commander="lead", request=original.request,
-        assigner=comms.registry.require("lead").incarnation,
+        assigner=comms.registry.require("worker").acting_identity,
         repo=original.repo, text="Repair the overdue order", order=original.order.checked(),
         review_at=RecordedEventTime(time.time() - 1),
     ))

@@ -53,6 +53,7 @@ from agent_comms.turn_item import NativeItemId, NativeTurnId
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoConflict, TodoError
 from agent_comms.todos import (
+    StoredOrderStory,
     Assignment,
     ChangeTodoState,
     ExpectedProblem,
@@ -571,9 +572,16 @@ def released_published_orders(pr_commander, github_cli):
         row = c.goals.todos.apply(row.id, RecordPullRequest(
             row.revision, owner.incarnation, PullRequestLink(source.github, number), row.held().generation))
         originals[problem] = row
-        c.goals.todos.apply(row.id, ReleaseTodo(
-            row.revision, row.held().owner_identity, row.held(),
-            StrikeReason('The watcher released this active unit while its published work remains open.')))
+        # Holder consent leaves Core no live path to release a running holder's work; a bus
+        # saved before that rule can hold the watcher's release, so it is written as that row.
+        release = ReleaseTodo(
+            row.revision, CoreWatcherIncarnation.watcher(), row.held(),
+            StrikeReason('The watcher released this active unit while its published work remains open.'))
+        released = release.apply(row)
+        with c.goals.todos.writing() as db:
+            StoredOrderStory.archive(db, row, released.order)
+            StoredOrderStory.append(db, row.id, release)
+            released.upsert(db)
     return ctx, originals
 
 
