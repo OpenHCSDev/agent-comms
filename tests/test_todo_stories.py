@@ -1,5 +1,3 @@
-
-from agent_comms.repo import Checkout
 """History is durable, append-only, and never decoded for a board read."""
 import sqlite3
 import sys
@@ -21,6 +19,7 @@ from agent_comms.locked_store import LiveFilesRequest
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.order_story import StoryEvent
 from agent_comms.order_tools import CommsTodoListTool
+from agent_comms.repo import Checkout
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
