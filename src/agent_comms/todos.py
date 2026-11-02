@@ -166,7 +166,7 @@ from agent_comms_hooks import ToolRefusedError
 
 from .goal_scope import OneGoal
 
-from agent_comms.change_report import FetchedRevision
+from agent_comms.change_report import FetchedRevision, OrderRoots
 from agent_comms.registry_document import CommanderProject
 
 if TYPE_CHECKING:
@@ -196,35 +196,6 @@ class PullRequestHeadRevision(FetchedRevision):
     @property
     def fetch_refspec(self) -> str:
         return f'+pull/{self.link.number}/head:{self.reference}'
-
-
-@dataclass(frozen=True)
-class OrderRoots(SourceRoots):
-    """Citations from one checkout, an order's check directory or a unit's worktree:
-    unqualified ones are read there."""
-
-    checkout: Path
-    project: CommanderProject
-
-    @property
-    def order(self) -> Path:
-        return self.checkout
-
-
-@dataclass(frozen=True)
-class RegisteredRoots(SourceRoots):
-    """Citations with no order behind them: unqualified ones need exactly one registered
-    repository to name."""
-
-    project: CommanderProject
-
-    @property
-    def order(self) -> Path:
-        repositories = self.project.require().repos
-        if len(repositories) != 1:
-            raise ValueError("An unqualified FILE:LINE names no repository when several are "
-                             "registered; cite it as owner/name:FILE:LINE.")
-        return repositories[0].checkout
 
 
 @dataclass(frozen=True)
@@ -2187,8 +2158,6 @@ class DirectiveText:
     def require(cls, text: str) -> None:
         if refused := cls.refused(text):
             raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
-
-
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):

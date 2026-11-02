@@ -189,6 +189,35 @@ class SourceRoots(ABC):
         """The checkout an unqualified ``file.py:line`` is read in."""
 
 
+@dataclass(frozen=True)
+class OrderRoots(SourceRoots):
+    """Citations from one checkout, an order's check directory or a unit's worktree:
+    unqualified ones are read there."""
+
+    checkout: Path
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        return self.checkout
+
+
+@dataclass(frozen=True)
+class RegisteredRoots(SourceRoots):
+    """Citations with no order behind them: unqualified ones need exactly one registered
+    repository to name."""
+
+    project: CommanderProject
+
+    @property
+    def order(self) -> Path:
+        repositories = self.project.require().repos
+        if len(repositories) != 1:
+            raise ValueError("An unqualified FILE:LINE names no repository when several are "
+                             "registered; cite it as owner/name:FILE:LINE.")
+        return repositories[0].checkout
+
+
 class CitedRepository(DeclaredFamily, ABC, affix="Repository"):
     """The repository a file:line belongs to, carried by the citation itself; a declared
     family, so its members compare as the records they are."""

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms_hooks import ToolRefusedError
-from nominal_refactor_advisor import audit
 
 from .build_identity import RepositoryCommit
 from .nominal.declared_family import DeclaredFamily
@@ -601,20 +600,11 @@ class CombinedInput(IntegrationInput):
 
 
 class Side(DeclaredFamily, affix="Side"):
-    """One compared source cut; selection and materialized path belong to this member. The
-    revision it holds is the audit side it materializes, which owns the base/head choice."""
-
-    measures: ClassVar[type[audit.gate.Side]]
+    """One compared source cut; selection and materialized path belong to this member."""
 
     @classmethod
     def sides(cls) -> tuple[type[Side], ...]:
         return cls.members_with(cls)
-
-    @classmethod
-    def materializing(cls, measured: type[audit.gate.Side]) -> type[Side]:
-        """The one cut holding the revision an audit side measures."""
-        (cut,) = (side for side in cls.sides() if side.measures is measured)
-        return cut
 
     @classmethod
     def checkout(cls, directory: Path, repository: RepositoryName) -> Path:
@@ -636,8 +626,6 @@ class Side(DeclaredFamily, affix="Side"):
 
 
 class BaseSide(Side):
-    measures = audit.gate.BaseSide
-
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
         if Repo.git(checkout, "rev-parse", "HEAD").strip() != source.baseline.commit:
@@ -645,8 +633,6 @@ class BaseSide(Side):
 
 
 class HeadSide(Side):
-    measures = audit.gate.HeadSide
-
     @staticmethod
     def require_revision(checkout: Path, source: IntegrationSource) -> None:
         if Repo.git(checkout, "rev-parse", "HEAD^{tree}").strip() != source.candidate_tree:

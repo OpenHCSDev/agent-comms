@@ -24,7 +24,6 @@ from .nominal.field_codec import ContentExclude, FieldCodec, WireName, projected
 from .historical_views import HistorySource, HistorySourceKey
 from .message_bus import MessageBus
 from .message_reference import MessageReference
-from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
 from .native_transcript import NativeTranscript, RecordsCut, SessionCut
 from .native_output import NativeRecordLocation
@@ -62,6 +61,7 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination_database import InvalidStore, MissingStore
+    from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation

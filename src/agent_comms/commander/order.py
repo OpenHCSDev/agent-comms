@@ -31,7 +31,7 @@ from typing import Annotated, ClassVar, Self
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, PrivateAttr
 
-from agent_comms.todos import RegisteredRoots
+from agent_comms.change_report import RegisteredRoots
 from agent_comms.change_report import FileLine, MainRevision, NoSourceReference
 from agent_comms.commander.standing import (
     DeliveryAwaitingJudgement,
