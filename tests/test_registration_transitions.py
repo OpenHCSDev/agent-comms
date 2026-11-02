@@ -18,40 +18,52 @@ from agent_comms.thread_text import GivenThreadText
 from agent_comms.threads import Thread
 
 
-@pytest.mark.parametrize('transition', ['metadata', 'session', 'restart', 'stop', 'new-turn'])
-def test_registration_transition_preserves_or_revokes_exact_lease(tmp_path, transition):
+def _metadata(registry, leased, lease, tmp_path):
+    return replace(leased, title=GivenThreadText('new title'), tags=frozenset({'changed'})), {}
+
+
+def _session(registry, leased, lease, tmp_path):
+    return replace(leased, session_file=RegistrySessionLocation.from_path(str(tmp_path / 'new.jsonl'), tmp_path)), {}
+
+
+def _restart(registry, leased, lease, tmp_path):
+    return leased, {'new_owner': True}
+
+
+def _stop(registry, leased, lease, tmp_path):
+    return leased, {'status': StoppedThreadStatus()}
+
+
+def _new_turn(registry, leased, lease, tmp_path):
+    assert registry.release_turn(lease)[0]
+    return registry.lease_local_turn('owner', TurnId('5f54227b74fbba7743c47cd286b4873f'))[0], {}
+
+
+@pytest.mark.parametrize('transition, advances_owner, preserves_record', [
+    (_metadata, False, True),
+    (_session, False, True),
+    (_restart, True, True),
+    (_stop, True, True),
+    (_new_turn, False, False),
+])
+def test_registration_transition_preserves_or_revokes_exact_lease(
+    tmp_path, transition, advances_owner, preserves_record,
+):
     registry = Registration(tmp_path / 'registry.json')
     thread = Thread('owner', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     registry.register(thread)
     leased, _ = registry.lease_local_turn('owner', TurnId('9b473845f684444f80a26586ae298d2b'))
     lease = leased.require_turn_lease()
     before = registry.snapshot()
-    updated = leased
-    kwargs = {}
-    advances_owner = False
-    preserves_record = True
-    if transition == 'metadata':
-        updated = replace(leased, title=GivenThreadText('new title'), tags=frozenset({'changed'}))
-    elif transition == 'session':
-        updated = replace(leased, session_file=RegistrySessionLocation.from_path(str(tmp_path / 'new.jsonl'), tmp_path))
-    elif transition == 'restart':
-        kwargs['new_owner'] = True
-        advances_owner = True
-    elif transition == 'stop':
-        kwargs['status'] = StoppedThreadStatus()
-        advances_owner = True
-    elif transition == 'new-turn':
-        assert registry.release_turn(lease)[0]
-        updated, _ = registry.lease_local_turn('owner', TurnId('5f54227b74fbba7743c47cd286b4873f'))
-        preserves_record = False
+    updated, kwargs = transition(registry, leased, lease, tmp_path)
     registry.register(updated, **kwargs)
     after = registry.snapshot()
     assert (after.owner_generations['owner'] > before.owner_generations['owner']) == advances_owner
     assert (after.claim_generation('owner') > before.claim_generation('owner')) == advances_owner
     assert (after.threads['owner'].turn_record == lease.record) == preserves_record
     assert (after.threads['owner'].turn_lease == lease) == (preserves_record and not advances_owner)
-    # P482 (1b9feceea) lets the original lease retire a revoked record, but
-    # never attest completion after restart/stop revoked its input claim.
+    # The original lease may retire a revoked record, but never attest completion
+    # after restart/stop revoked its input claim.
     released, completion = registry.release_turn(lease)
     assert released == preserves_record
     assert (completion != NoFinishedTurn()) == (preserves_record and not advances_owner)
