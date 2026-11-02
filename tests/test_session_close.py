@@ -56,8 +56,8 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
             project.mkdir()
             thread = owner.sessions.declare_thread(str(project))
             await owner.sessions.bind_owned(thread, AcpSessionId(name))
-            await client.sessions.attach_owner(thread, name)
-        await other.sessions.attach_owner(comms.registry.require("alpha"), "alpha")
+            await client.sessions.attach_owner(thread, AcpSessionId(name))
+        await other.sessions.attach_owner(comms.registry.require("alpha"), AcpSessionId("alpha"))
         alpha = client.sessions.proxies["alpha"]
         beta = client.sessions.proxies["beta"]
         retained_owner = comms.registry.require("alpha").require_process()
@@ -93,7 +93,7 @@ async def test_close_retires_one_real_subscription_and_permission(tmp_path, monk
                           for name, update in callbacks.updates):
                 await asyncio.sleep(0)
         # Reloading the closed ID creates a new original subscription.
-        await client.sessions.attach_owner(comms.registry.require("alpha"), "alpha")
+        await client.sessions.attach_owner(comms.registry.require("alpha"), AcpSessionId("alpha"))
         assert client.sessions.proxies["alpha"] is not alpha
     finally:
         callbacks.release.set()
