@@ -35,7 +35,7 @@ async def owned_session(
     tmp_path: Path, native_runtime_package: VerifiedNativePackage,
 ) -> tuple[Comms, CommsAgent, AcpSessionId]:
     """A published native session with its real package and allocated drain owner."""
-    comms, agent, session_id = _session(tmp_path)
+    comms, agent, _, session_id = _session(tmp_path)
     agent.inputs.acquire_owner(
         session_id, agent.inputs.configuration,
         comms.registry.snapshot().owner_identity("beta"),
@@ -254,7 +254,7 @@ def test_deaf_teammate_is_dated_by_the_drain_that_cannot_read_its_inbox(
     tmp_path, monkeypatch, kind, deaf,
 ):
 
-    comms = _private_comms(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     owner = comms.registry.snapshot().owner_identity("beta")
     assert UnitDeaf.violations(comms, "lead") == ()
     diagnostic = kind(owner, "OSError", "inbox read failed", recorded_at=100.0)
