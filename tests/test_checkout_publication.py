@@ -9,7 +9,7 @@ from agent_comms.checkout_publication import PublishingCheckout
 from agent_comms.cli_verbs.publish_checkout import PublishCheckoutCliCommand
 from agent_comms.cli_verbs.sync_checkout import SyncCheckoutCliCommand
 from agent_comms.repo import Checkout, GitCommandError
-from agent_comms.shell_effects import StorageDenied
+from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread

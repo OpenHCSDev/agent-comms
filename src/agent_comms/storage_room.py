@@ -23,6 +23,7 @@ from .nominal.field_codec import RoomTicket
 from .locked_store import PublishedProperty
 from .store_files import StoreContention
 from .thread_identity import ThreadIncarnation
+from .tool_denial import StorageDenied
 from .typed_table import (
     Column,
     DurableTables,
@@ -94,6 +95,23 @@ class WaitingRoomPhase(RoomPhase):
 @dataclass(frozen=True)
 class HoldingRoomPhase(RoomPhase):
     held: RoomNeed
+
+
+@dataclass
+class RoomShortfall(Exception):  # raising sets __traceback__, so never frozen
+    """Why one admission decision did not fit, in the numbers it compared."""
+
+    need: RoomNeed
+    floor: RoomNeed
+    held: tuple[tuple[str, tuple[type[RoomWork], ...], RoomNeed], ...]
+    free: RoomNeed
+
+    def __str__(self) -> str:
+        gib = lambda need: f"{need.memory / 2**30:.1f} GiB RAM, {need.disk / 2**30:.1f} GiB disk"
+        holders = "; ".join(f"{unit} ({', '.join(kind.declared_name for kind in work)}): {gib(need)}"
+                            for unit, work, need in self.held) or "nothing"
+        return (f"needs {gib(self.need)} above the {gib(self.floor)} floor; free is {gib(self.free)};"
+                f" other runs hold: {holders}")
 
 
 class RoomLedgerRows(StoreRows):
@@ -250,6 +268,9 @@ class RoomAllocation:
     # A release wakes through inotify. The timed OS refresh also observes room
     # freed by jobs outside Core, which cannot notify this ledger.
     room_refresh_seconds = 1.0
+    room_wait_seconds = 120.0
+    """A run waits this long for room, then is refused with the numbers, never parked: on
+    2026-11-02 two teammates' turns sat an hour on test_gate, unable to receive anything."""
 
     @PublishedProperty
     def room_ledger(self) -> RoomLedger:
@@ -262,6 +283,10 @@ class RoomAllocation:
         return RoomNeed(int(self.memory_gib * 2**30), int(self.floor_gib * 2**30))
 
     def _admit(self, ticket):
+        """Reserve room for this claim, or raise RoomShortfall with the numbers that did not fit.
+        A recorded peak keeps concurrent runs from overcommitting; a run alone whose peak does
+        not fit takes the spare room above the floor, since with nothing else holding room no
+        wait frees more of it (2026-11-02: a small test waited an hour on an earlier run's peak)."""
         ledger = self.room_ledger
         # OS reads and /proc traversal never hold the writer transaction.
         free = self.free_room()
@@ -272,26 +297,25 @@ class RoomAllocation:
             claim = RoomClaim.one(db, ticket=ticket)
             if claim is None:
                 raise RuntimeError('Room waiter disappeared')
+            holders = tuple(other for other in RoomClaim.select(db) if other.phase.held != RoomNeed())
             held = RoomNeed()
-            for other in RoomClaim.select(db):
+            for other in holders:
                 held += other.phase.held
             spare = free.remaining(self.room_floor() + held)
             peaks = tuple(WorkPeak.one(db, work=work) for work in claim.work)
-            # An unmeasured run calibrates alone. It reserves the observed spare
-            # room, never a typed-in estimate and never zero alongside another run.
-            if any(peak is None for peak in peaks):
-                if held != RoomNeed() or not self.room_floor().fits(free):
-                    return False
+            need = RoomNeed()
+            for peak in peaks:
+                need += peak.need if peak is not None else RoomNeed()
+            # A measured run reserves its recorded peaks when they fit. Otherwise a run alone
+            # reserves the observed spare room (an unmeasured run calibrates the same way); beside
+            # other runs it waits, never reserving zero alongside another.
+            if any(peak is None for peak in peaks) or not (need + self.room_floor() + held).fits(free):
+                if holders or not self.room_floor().fits(free):
+                    raise RoomShortfall(need, self.room_floor(), tuple(
+                        (other.unit.name, other.work, other.phase.held) for other in holders), free)
                 need = spare
-            else:
-                need = RoomNeed()
-                for peak in peaks:
-                    need += peak.need
-                if not (need + self.room_floor() + held).fits(free):
-                    return False
             RoomClaim.update(db, where='{ticket}=?', parameters=(ticket,),
                              phase=HoldingRoomPhase(need))
-            return True
 
     async def wait_for_room(self, work, thread, root, *, process=None):
         """Wait without a registry/wire lock, atomically reserve, and measure."""
@@ -310,9 +334,18 @@ class RoomAllocation:
             async with ChangeSignal.opened(*(
                 FileSource(path) for path in ledger.source_paths(ledger.root)
             )) as changes:
+                deadline = time.monotonic() + self.room_wait_seconds
                 while True:
                     changes.prepare()
-                    if await asyncio.to_thread(self._admit, ticket):
+                    try:
+                        await asyncio.to_thread(self._admit, ticket)
+                    except RoomShortfall as shortfall:
+                        if time.monotonic() >= deadline:
+                            raise StorageDenied(
+                                f"StorageRule: no room for {', '.join(kind.declared_name for kind in work)}"
+                                f" after {self.room_wait_seconds:.0f}s: {shortfall}. Retry when a"
+                                " holder finishes, or run a smaller selection.") from None
+                    else:
                         measurement = WorkMeasurement(self, process)
                         admitted = True
                         return MeasuredRoomReservation(self, ticket, measurement)

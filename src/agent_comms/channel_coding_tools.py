@@ -39,7 +39,7 @@ from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
-from .shell_effects import StorageDenied
+from .tool_denial import StorageDenied
 from .storage_projection import StorageProjection
 from .storage_room import NoRoomNeeded, RoomReservation
 from .threads import Thread

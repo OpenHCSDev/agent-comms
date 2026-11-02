@@ -12,7 +12,8 @@ from agent_comms.goals import Goal
 from agent_comms.repo import Checkout, DetachedStart, GitHubRepositorySource, Repo, RepositoryReads, RepositorySource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_creation import RecordedCreationTime
-from agent_comms.shell_effects import AcquireRepositoryStorageEffect, StorageDenied
+from agent_comms.shell_effects import AcquireRepositoryStorageEffect
+from agent_comms.tool_denial import StorageDenied
 from agent_comms.storage_projection import StorageProjection
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.repository_name import RepositoryName

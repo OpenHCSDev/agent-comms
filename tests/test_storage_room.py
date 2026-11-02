@@ -16,6 +16,7 @@ from agent_comms.storage_room import (
     WaitingRoomPhase, WorkPeak, RoomNeed,
 )
 from agent_comms.storage_rules import StorageRule
+from agent_comms.tool_denial import StorageDenied
 from agent_comms.shell_effects import shell_storage_effects
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
@@ -102,6 +103,34 @@ async def test_committed_release_wakes_a_waiter_without_os_refresh(tmp_path):
         if not waiting.done():
             waiting.cancel()
         await asyncio.gather(waiting, return_exceptions=True)
+        await asyncio.to_thread(first.finish)
+
+
+@pytest.mark.asyncio
+async def test_a_run_alone_is_not_held_by_an_earlier_runs_peak(tmp_path):
+    """2026-11-02: teammates' test runs waited an hour for room no other run held."""
+    comms = copied_root(tmp_path)
+    rule = comms.registry.storage_rule
+    with rule.room_ledger.writing() as db:
+        WorkPeak(TestGateRoomWork, RoomNeed(memory=2**60, disk=0)).insert(db)
+    alone = await asyncio.wait_for(
+        rule.wait_for_room((TestGateRoomWork,), comms.registry.require('gate-one'), comms.root), 1)
+    await asyncio.to_thread(alone.finish)
+
+
+@pytest.mark.asyncio
+async def test_a_run_without_room_is_refused_with_the_numbers(tmp_path, monkeypatch):
+    comms = copied_root(tmp_path)
+    rule = comms.registry.storage_rule
+    monkeypatch.setattr(type(rule), 'room_wait_seconds', 0.2)
+    one, two = (comms.registry.require(name) for name in ('gate-one', 'gate-two'))
+    first = await rule.wait_for_room((BuildRoomWork,), one, comms.root)
+    try:
+        with pytest.raises(StorageDenied, match=r"no room for unit_start after 0s: .*other runs hold: gate-one \(build\)"):
+            await asyncio.wait_for(rule.wait_for_room((UnitStartRoomWork,), two, comms.root), 2)
+        with rule.room_ledger.snapshot() as db:
+            assert RoomClaim.count(db) == 1  # the refused waiter's claim is gone
+    finally:
         await asyncio.to_thread(first.finish)
 
 

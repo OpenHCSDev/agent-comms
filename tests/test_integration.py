@@ -26,7 +26,7 @@ from agent_comms.todos import (
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.test_lease import TestLease
-from agent_comms.shell_effects import StorageDenied
+from agent_comms.tool_denial import StorageDenied
 from agent_comms.errors import TodoConflict
 from agent_comms.order_tools import CommsTodoCreateTool
 from agent_comms.tool_caller import PeerCaller
