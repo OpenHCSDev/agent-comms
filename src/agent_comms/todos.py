@@ -5035,6 +5035,17 @@ class SupersededVerdict(ToolCallVerdict):
 
 
 @dataclass(frozen=True)
+class WaivedVerdict(ToolCallVerdict):
+    """Tristan's emergency release takes the edit out of the unjudged count without judging
+    it: no approval, no strike, and every later edit counts again."""
+
+    line = "Waived by Tristan's emergency release"
+
+    def judged(self, current: Todo) -> Todo:
+        return current
+
+
+@dataclass(frozen=True)
 class EditVerdict(ToolCallVerdict, declared_name=None):
     """A verdict on a file edit: the edited path names the registered repository it was made
     in, whichever repository the order's check names."""
