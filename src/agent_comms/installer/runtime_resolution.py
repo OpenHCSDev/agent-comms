@@ -868,7 +868,7 @@ class UnbuiltRuntime:
         failure leaves no prefix, so the next build syncs it afresh."""
         try:
             stack.install_native()
-            RuntimeResolution.capture(stack, core).save(self.prefix)
+            stack.observe_resolution(core).save(self.prefix)
             stack.imports()
         except BaseException:
             shutil.rmtree(self.prefix)
@@ -883,7 +883,7 @@ class RuntimeResolution(BaseModel):
     )
 
     def require_runtime(self, actual: RuntimeResolution) -> None:
-        """Admit observed inputs, never turn an old missing observation into proof."""
+        """Require recorded interpreter evidence on both sides before comparing inputs."""
         self.interpreter.require_recorded()
         actual.interpreter.require_recorded()
         if self != actual:
@@ -914,15 +914,9 @@ class RuntimeResolution(BaseModel):
 
     def complete(self, stack: RuntimeStack, core: str) -> None:
         """Completion proves recorded inputs, not eligibility for a different build."""
-        self.require_runtime(self.capture(stack, core))
+        self.require_runtime(stack.observe_resolution(core))
         stack.stage_native()
         stack.prepare_runtime()
-
-    @classmethod
-    def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:
-        from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
-
-        return stack.probe(RuntimeResolutionProbe(core, stack.wheel_inputs()))
 
     def wheel_inputs(self) -> tuple[Path, ...]:
         """Only content-qualified archive records request another wheel observation."""

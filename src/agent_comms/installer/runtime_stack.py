@@ -27,7 +27,7 @@ from agent_comms.installer.interpreter_operation import (
 from agent_comms.installer.practice import RuntimeHome
 from agent_comms.installer.probes.imports import ClientImportsProbe
 from agent_comms.installer.probes.native import PrepareNativeProbe, PrepareProducerDigestsProbe
-from agent_comms.installer.probes.packages import InstalledPackagesProbe
+from agent_comms.installer.probes.resolution import InstalledPackagesProbe, RuntimeResolutionProbe
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.runtime_resolution import (
     ConsoleScriptPackage, ProjectMetadata, ResolvedLock, RuntimePackage, RuntimeResolution,
@@ -138,7 +138,7 @@ class RuntimeStack(Extendable):
         """Finish inside this runtime, or re-observe its recorded packages and interpreter.
 
         Production-cache selection checks the source lock in build/prepare; completion
-        also admits exact explicit-wheel inputs without claiming their Git ancestry.
+        also verifies exact explicit-wheel inputs without claiming their Git ancestry.
         """
         with BuildPhase().running(self.commands.clock):
             core = self.commands.git(self.checkout, "rev-parse", "HEAD").strip()
@@ -165,6 +165,9 @@ class RuntimeStack(Extendable):
         return self.commands.probe(probe, self.python, cwd=self.home,
                                    env=self.environment(*self.program.import_roots()),
                                    program=self.program)
+
+    def observe_resolution(self, core: str) -> RuntimeResolution:
+        return self.probe(RuntimeResolutionProbe(core, self.wheel_inputs()))
 
     def imports(self) -> None:
         self.probe(ClientImportsProbe())
@@ -266,10 +269,10 @@ class WheelRuntime(RuntimeStack):
         if self.runtime.interpreter.resolve() != self.interpreter.interpreter.resolve():
             raise UpgradeRefused("Prepared target did not select the requested interpreter")
         (prefix / "inputs").mkdir(mode=0o700)
-        for artifact, selected in zip(artifacts, self.wheel_inputs(), strict=True):
-            shutil.copyfile(artifact.path, selected)
-            selected.chmod(0o400)
-            if BuildArtifact.capture(selected).sha256 != artifact.sha256:
+        for artifact, destination in zip(artifacts, self.wheel_inputs(), strict=True):
+            shutil.copyfile(artifact.path, destination)
+            destination.chmod(0o400)
+            if BuildArtifact.capture(destination).sha256 != artifact.sha256:
                 raise UpgradeRefused(f"Retained wheel differs from its input: {artifact.path}")
         shutil.copytree(self.source_runtime.purelib, self.runtime.purelib,
                         dirs_exist_ok=True, symlinks=True)

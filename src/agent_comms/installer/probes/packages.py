@@ -3,26 +3,22 @@
 from __future__ import annotations
 
 import hashlib
-import json
-import sys
 from dataclasses import dataclass
 from importlib.metadata import Distribution, distributions
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
-from zipfile import ZipFile
+from zipfile import ZipExtFile, ZipFile
 from typing import Self
 
-from packaging.version import Version
+from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, JsonValue, RootModel
 from pydantic.json_schema import DEFAULT_REF_TEMPLATE
 
-import agent_comms
 from agent_comms.build_artifact import BuildArtifact
 from agent_comms.nominal.field_codec import Sha256Text, WireValue
 from agent_comms.private_path import FileRevision
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.installer.interpreter_operation import RuntimeProbe, TargetProbe
-from agent_comms.package_stamp import STAMP
 from agent_comms.runtime_preparation import RuntimePreparation
 
 
@@ -128,10 +124,15 @@ class ArchiveRecord(SourceRecord):
                     raise ValueError("Exact runtime inputs require root-layout wheels")
                 if entry.is_dir() or entry.filename == record:
                     continue
-                installed = distribution.locate_file(entry.filename).resolve(strict=True)
+                location = distribution.locate_file(entry.filename)
+                if not isinstance(location, Path):
+                    raise ValueError(f"Installed wheel member is not a filesystem path: {location}")
+                installed = location.resolve(strict=True)
                 if not installed.is_relative_to(runtime.prefix):
                     raise ValueError(f"Installed wheel member escapes its runtime: {installed}")
                 with archive.open(entry) as source:
+                    if not isinstance(source, ZipExtFile):
+                        raise ValueError("Wheel member is not a readable ZIP entry")
                     expected = hashlib.file_digest(source, "sha256").hexdigest()
                 if BuildArtifact.capture(installed).sha256 != expected:
                     raise ValueError(f"Installed bytes differ from supplied wheel: {installed}")
@@ -191,10 +192,10 @@ class DistributionProbe(TargetProbe):
 
     @staticmethod
     def distributions() -> dict[str, Distribution]:
-        from packaging.utils import canonicalize_name
-
         installed = tuple(distributions())
-        selected = {canonicalize_name(dist.name): dist for dist in installed}
+        selected: dict[str, Distribution] = {
+            canonicalize_name(dist.name): dist for dist in installed
+        }
         if len(selected) != len(installed):
             raise ValueError("The runtime contains duplicate distribution identities")
         return selected
@@ -203,61 +204,3 @@ class DistributionProbe(TargetProbe):
 class DistributionVersionsProbe(DistributionProbe, RuntimeProbe[dict[str, str]]):
     def run(self) -> dict[str, str]:
         return {name: dist.version for name, dist in self.distributions().items()}
-
-
-@dataclass(frozen=True)
-class InstalledPackagesProbe(DistributionProbe, RuntimeProbe[dict[str, PackageRecord]]):
-    core: str
-
-    def wheel_inputs(self) -> tuple[Path, ...]:
-        """A built donor re-observes its own inputs without changing the request wire."""
-        from agent_comms.installer.runtime_resolution import RuntimeResolution
-
-        return RuntimeResolution.at(LaunchRuntime.running().prefix).wheel_inputs()
-
-    def run(self) -> dict[str, PackageRecord]:
-        if not Path(agent_comms.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()):
-            raise ValueError("Core is editable, not a built runtime package")
-        actual = STAMP.commit()
-        if actual != self.core:
-            raise ValueError(
-                "The wheel stamp does not name the selected source: "
-                f"installed {actual}, requested {self.core}"
-            )
-        selected = self.distributions()
-        records = {
-            name: PackageRecord.from_wire(
-                {
-                    "version": dist.version,
-                    "source": (
-                        json.loads(source)
-                        if (source := dist.read_text("direct_url.json"))
-                        else None
-                    ),
-                }
-            )
-            for name, dist in selected.items()
-        }
-        from agent_comms.installer.runtime_resolution import ProjectMetadata
-
-        for wheel in self.wheel_inputs():
-            metadata = ProjectMetadata.from_wheel(wheel)
-            record = records[metadata.name]
-            if Version(record.version) != metadata.version:
-                raise ValueError(f"Installed version differs from supplied wheel: {wheel}")
-            records[metadata.name] = record.model_copy(update={
-                "source": record.source.verified_wheel(
-                    wheel, selected[metadata.name], LaunchRuntime.running()
-                )
-            })
-        return records
-
-
-@dataclass(frozen=True)
-class WheelPackagesProbe(InstalledPackagesProbe):
-    """Unrecorded targets supply inputs before their first resolution can be saved."""
-
-    wheels: tuple[Path, ...]
-
-    def wheel_inputs(self) -> tuple[Path, ...]:
-        return self.wheels

@@ -244,7 +244,7 @@ class CheckerStack(Stack, StackSources):
         )
         self.commands.run(self.uv, "pip", "check", "--python", self.python)
         commit = Repo.git(self.core, "rev-parse", "HEAD").strip()
-        resolution = RuntimeResolution.capture(self, commit)
+        resolution = self.observe_resolution(commit)
         self.require_resolution(resolution)
         resolution.save(self.runtime.prefix)
         digest = hashlib.sha256(self.lock.read_bytes()).hexdigest()

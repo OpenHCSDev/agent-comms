@@ -37,6 +37,7 @@ from contextlib import (
 from contextvars import copy_context
 from dataclasses import dataclass
 from functools import cache, cached_property, partial
+from io import BufferedReader
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import IO, TYPE_CHECKING, Annotated, Any, BinaryIO, ClassVar, NoReturn, Self
@@ -540,7 +541,7 @@ class Platform(DeclaredFamily, affix="Platform"):
         )
 
     @contextmanager
-    def native_image(self, address: ctypes.c_void_p) -> Generator[BinaryIO]:
+    def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
         """Open the native file providing a symbol; the caller consumes this handle."""
         lookup = ctypes.CDLL(None).dladdr
         lookup.argtypes = (ctypes.c_void_p, ctypes.POINTER(self.NativeImage))
@@ -680,7 +681,7 @@ class LinuxProcessRecord:
 
 class LinuxPlatform(PidfdHandles, Platform):
     @contextmanager
-    def native_image(self, address: ctypes.c_void_p) -> Generator[BinaryIO]:
+    def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
         # glibc's main-image filename aliases argv[0]; setproctitle changes it.
         # Resolve the actual symbol mapping instead, including shared libpython.
         pointer = address.value

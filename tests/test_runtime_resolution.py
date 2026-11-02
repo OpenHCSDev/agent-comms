@@ -18,8 +18,9 @@ from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.probes.interpreter import InterpreterBuildProbe
 from agent_comms.installer.probes.packages import (
-    ArchivePin, ArchiveRecord, GitPin, InstalledPackagesProbe, PackageRecord,
+    ArchivePin, ArchiveRecord, GitPin, PackageRecord,
 )
+from agent_comms.installer.probes.resolution import InstalledPackagesProbe
 from agent_comms.installer.runtime_resolution import (
     CorePackage, ResolvedLock, RuntimeResolution, ToadPackage,
 )

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from io import BufferedReader
 from pathlib import Path
-from typing import Annotated, BinaryIO
+from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -32,7 +33,7 @@ class BuildArtifact(BaseModel):
             return cls.from_stream(stream)
 
     @classmethod
-    def from_stream(cls, stream: BinaryIO) -> BuildArtifact:
+    def from_stream(cls, stream: BufferedReader) -> BuildArtifact:
         """Capture the already-open file, including a platform-qualified native image."""
         path = Path(stream.name).resolve(strict=True)
         stream.seek(0)
