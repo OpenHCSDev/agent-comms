@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from agent_comms.nominal.declared_family import DeclaredFamily
@@ -101,6 +102,10 @@ class InstalledBuild(ABC):
     @abstractmethod
     def containing(self, commits: tuple[str, ...], directory: Path) -> CommitInstallation: ...
 
+    def recorded_in(self, repos: Iterable[Repo]) -> tuple[tuple[Repo, RepositoryCommit], ...]:
+        """Each given repository this build carries, with its recorded commit; none by default."""
+        return ()
+
     @classmethod
     def read(cls) -> InstalledBuild:
         """The current runtime pointer is the boundary: absent, nothing is installed."""
@@ -166,6 +171,10 @@ class RecordedBuildIdentity(BuildIdentity, InstalledBuild):
                 for member in RuntimePackage.members_with(RuntimePackage)
             )
         )
+
+    def recorded_in(self, repos: Iterable[Repo]) -> tuple[tuple[Repo, RepositoryCommit], ...]:
+        recorded = {record.repository: record for record in self.commits}
+        return tuple((repo, recorded[repo.github]) for repo in repos if repo.github in recorded)
 
     def for_repository(self, repository: Repo) -> RepositoryCommit:
         try:

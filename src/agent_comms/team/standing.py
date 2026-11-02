@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import TYPE_CHECKING, ClassVar, Self
 
-from agent_comms.build_identity import RecordedBuildIdentity
+from agent_comms.build_identity import InstalledBuild, RepositoryCommit
 from agent_comms.bus import BusReader
 from agent_comms import team
 from agent_comms.team.questions import UnansweredTeammateAsks
@@ -136,34 +136,32 @@ class InstallDue(UndatedStandingRule, FamilyScan):
         return cls.due(comms, frame.pulls)
 
     @staticmethod
-    def repositories(comms: Comms, installed: RecordedBuildIdentity) -> tuple[Repo, ...]:
+    def recorded(comms: Comms, installed: InstalledBuild) -> tuple[tuple[Repo, RepositoryCommit], ...]:
         """The configured repositories the installed build carries and that still have their
-        checkout: a repository retired between installs (refactor-audit after the NRA
-        migration) leaves the build at the next install and never needs a second list."""
-        return tuple(repo for repo in comms.registry.snapshot().commander_project.require().repos
-                     if repo.checked_out
-                     and any(repo.github == record.repository for record in installed.commits))
+        checkout, each with its installed commit: a repository retired between installs
+        (refactor-audit after the NRA migration) leaves the build at the next install and never
+        needs a second list; a home with nothing installed carries none."""
+        return installed.recorded_in(
+            repo for repo in comms.registry.snapshot().commander_project.require().repos
+            if repo.checked_out)
 
     @classmethod
     def prepare(cls, comms: Comms, commander: str, holds: HeldOrders,
                 pulls: ProgressRead) -> None:
         """Fetching changes Git state, so the heartbeat joins it before observation."""
-        for repo in cls.repositories(comms, RecordedBuildIdentity.installed()):
+        for repo, _ in cls.recorded(comms, InstalledBuild.read()):
             repo.git(repo.checkout, "fetch", "-q", repo.remote, "main")
 
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
         DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
-        installed = RecordedBuildIdentity.installed()
-        runtime_repos = cls.repositories(comms, installed)
         logs = InstallLogs(comms.root)
         due: list[InstallDue] = []
         core = {repo.github: repo for repo in repos}[CorePackage.repository]
         target = core.git(core.checkout, "rev-parse", f"{core.remote}/main").strip()
-        for repo in runtime_repos:
+        for repo, recorded in cls.recorded(comms, InstalledBuild.read()):
             main = repo.git(repo.checkout, "rev-parse", f"{repo.remote}/main").strip()
-            recorded = installed.for_repository(repo)
             # Main is in the build exactly when git logs no first-parent commit past it.
             merges = UninstalledMerge.read(repo, recorded.commit, main)
             if not merges:
