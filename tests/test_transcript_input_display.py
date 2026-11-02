@@ -14,8 +14,10 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.threads import Thread
+from agent_comms.turn_item import FreshNativeIdText
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
 from bus_record_fixture import FIRST_INPUT_ID, SECOND_INPUT_ID, THIRD_INPUT_ID
 
@@ -31,7 +33,8 @@ def saved_row(native_id, text, *, images=False, role="user"):
     if images:
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return transcript_records.message(
-        {"role": role, "inputId": str(native_id), "content": content}, id=native_id[:8]
+        {"role": role, "inputId": str(native_id), "content": content},
+        id=FreshNativeIdText.decode(native_id[:8]),
     )
 
 
@@ -109,14 +112,20 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
     agent = CommsAgent(wire(comms.root))
     updates = []
+    destinations = []
+    destination = AcpSessionId("input-display-destination")
 
     class Client(SessionUpdateSink):
-        async def publish_update(self, **kwargs):
-            updates.append(kwargs["update"])
+        async def publish_update(self, *, session_id, update):
+            destinations.append(session_id)
+            updates.append(update)
             return True
 
     try:
-        await agent.sessions.transcript.replay("worker", client=Client())
+        await agent.sessions.transcript.replay(
+            "worker", session_id=destination, client=Client(),
+        )
+        assert destinations == [destination]
         facts = decode_updates(updates[0].field_meta)
         snapshot, = (fact for fact in facts if isinstance(fact, TranscriptSnapshotUpdate))
         events = snapshot.page.events

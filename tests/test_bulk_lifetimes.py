@@ -98,7 +98,7 @@ def test_rehome_refuses_a_changed_original_before_publishing_the_staged_copy(
         rehomed = workers.submit(comms.threads.rehome_thread, paused_import, name=original.name)
         try:
             assert paused_import.snapshot.entered.wait(5)
-            moved = workers.submit(comms.threads.set_project, original.name, str(changed_project))
+            moved = workers.submit(comms.threads.set_project, original.incarnation, str(changed_project))
             moved.result(timeout=2)
         finally:
             paused_import.snapshot.proceed.set()

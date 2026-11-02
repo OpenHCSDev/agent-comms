@@ -11,7 +11,7 @@ from .agent_activity import AgentActivity, RecordedRecipientActivity
 from .read_ledger import ReadLedger
 from .frozen_recipient import FrozenRecipient
 from .channel_targets import CommandTarget
-from .nominal.field_codec import ThreadLookup
+from .nominal.field_codec import MessageId, ThreadLookup
 from .message_reference import MessageReference
 from .notification_assignment import NotificationAssignment
 from agent_comms.notification_progress import AssignmentResponse
@@ -42,7 +42,7 @@ if TYPE_CHECKING:
 class NotificationWindow(ABC):
     """One window owns its evidence, batching and change contract."""
 
-    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+    outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]]
     reads: tuple[NotificationAssignmentRead, ...]
     read_marks: tuple[NotificationReadMark, ...] = ()
 
@@ -270,7 +270,7 @@ class MessageNotification:
         if len(sources) > NotificationSelection.window_limit:
             raise ValueError("Notification reads require a bounded visible message window")
         keys = {(source.message.seq, source.message.message_id) for source in sources}
-        result: dict[tuple[int, str], list[MessageNotification]] = {key: [] for key in keys}
+        result: dict[tuple[int, MessageId], list[MessageNotification]] = {key: [] for key in keys}
         if not keys:
             return CapturedNotificationWindow({}, (assignment_read,))
         rows = NotificationAssignment.resolve(assignment_read)

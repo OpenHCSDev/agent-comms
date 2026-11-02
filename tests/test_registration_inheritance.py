@@ -93,9 +93,9 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
     first.mkdir()
     second.mkdir()
     comms = wire(tmp_path / 'wire')
-    comms.registry.declare(Thread('owner', frozenset(), Checkout(first)))
-    comms.threads.set_project('owner', str(second))
-    comms.threads.set_project('owner', str(first))
+    original = comms.registry.declare(Thread('owner', frozenset(), Checkout(first)))
+    comms.threads.set_project(original.incarnation, str(second))
+    comms.threads.set_project(original.incarnation, str(first))
     current = comms.registry.require('owner')
     assert current.worktree == Checkout(first)
     assert current.earlier_projects == (Checkout(second),)
@@ -109,7 +109,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
     comms.registry.declare(Thread('owner', frozenset(), Checkout(old), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))
     try:
-        comms.threads.set_project('owner', str(new))
+        comms.threads.set_project(original.thread.incarnation, str(new))
         with pytest.raises(StaleFence):
             original.require_snapshot(comms.registry.snapshot(), 'New input refused')
         saved = str(old / 'native.jsonl')

@@ -17,6 +17,7 @@ from .acp_extension import (
 )
 from .coordinator import Coordination
 from .nominal.declared_family import DeclaredFamily
+from .nominal.field_codec import AcpSessionId
 from .order_tools import TranscriptPageRead
 from .turn_lease import TurnState
 from .ui_model.observation import ObservationProcess, ReadTranscript, SubscribeTranscript
@@ -31,7 +32,7 @@ if TYPE_CHECKING:
 class TranscriptUpdate(DeclaredFamily, affix="TranscriptUpdate"):
     @abstractmethod
     async def publish(
-        self, session_id: str, client: SessionUpdateSink,
+        self, session_id: AcpSessionId, client: SessionUpdateSink,
     ) -> None: ...
 
 
@@ -40,7 +41,7 @@ class TurnTranscriptUpdate(TranscriptUpdate):
     state: TurnState
 
     async def publish(
-        self, session_id: str, client: SessionUpdateSink,
+        self, session_id: AcpSessionId, client: SessionUpdateSink,
     ) -> None:
         await client.publish_update(
             session_id=session_id,
@@ -74,25 +75,29 @@ class TranscriptReplay:
             if not self._subscriptions:
                 await reads.close()
 
-    async def replay(self, session_id: str, client: SessionUpdateSink) -> None:
+    async def replay(
+        self, thread: str, *, session_id: AcpSessionId, client: SessionUpdateSink,
+    ) -> None:
         async with self.observing() as reads:
             snapshot = await reads.read(
-                ReadTranscript(str(self.comms.root), TranscriptPageRead(thread=session_id)),
+                ReadTranscript(str(self.comms.root), TranscriptPageRead(thread=thread)),
             )
             await self._publish(session_id, snapshot, client)
 
     @asynccontextmanager
-    async def subscribe(self, session_id: str, client: SessionUpdateSink) -> AsyncIterator[None]:
+    async def subscribe(
+        self, thread: str, *, session_id: AcpSessionId, client: SessionUpdateSink,
+    ) -> AsyncIterator[None]:
         async with self.observing() as reads:
             snapshot = await reads.read(
-                SubscribeTranscript(str(self.comms.root), TranscriptPageRead(thread=session_id)),
+                SubscribeTranscript(str(self.comms.root), TranscriptPageRead(thread=thread)),
             )
             await self._publish(session_id, snapshot, client)
             yield
 
     async def _publish(
         self,
-        session_id: str,
+        session_id: AcpSessionId,
         snapshot: TranscriptSnapshotUpdate,
         destination: SessionUpdateSink,
     ) -> None:
