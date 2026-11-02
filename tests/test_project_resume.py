@@ -31,14 +31,14 @@ def declared_owner(tmp_path):
 
 def test_project_change_while_idle_owes_no_turn(tmp_path):
     comms, _old, new = declared_owner(tmp_path)
-    assert comms.threads.set_project("owner", str(new)).changed
+    assert comms.threads.set_project(comms.registry.require("owner").incarnation, str(new)).changed
     assert not comms.registry.require("owner").project_resume_due
 
 
 def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_path):
     comms, old, new = declared_owner(tmp_path)
     turn = comms.agents.begin_turn("owner", TurnId('1056fa0e005902e019b8d1d4fd75d3cb'))
-    comms.threads.set_project("owner", str(new))
+    comms.threads.set_project(comms.registry.require("owner").incarnation, str(new))
     assert comms.registry.require("owner").project_resume_due
     assert comms.agents.finish_turn(turn.turn_lease)
     # The turn ended and nothing ran afterwards: the registry still says so,
@@ -55,7 +55,7 @@ def test_project_change_during_turn_is_recorded_until_the_next_turn_starts(tmp_p
 def test_cancelled_turn_withdraws_the_recorded_resume(tmp_path):
     comms, _old, new = declared_owner(tmp_path)
     turn = comms.agents.begin_turn("owner", TurnId('1056fa0e005902e019b8d1d4fd75d3cb'))
-    comms.threads.set_project("owner", str(new))
+    comms.threads.set_project(comms.registry.require("owner").incarnation, str(new))
     comms.agents.transition_turn(turn.turn_lease, CancellingPhase())
     assert comms.agents.finish_turn(turn.turn_lease)
     current = comms.registry.require("owner")
@@ -80,7 +80,7 @@ async def test_message_after_project_change_starts_a_turn_in_the_new_project(tmp
                 ),)))
 
             def change_project_and_send_again():
-                changed = comms.threads.set_project(session, str(second))
+                changed = comms.threads.set_project(comms.registry.require(session).incarnation, str(second))
                 sent.append(comms.messaging.send("sender", session, "Second message").message)
                 return changed
 
