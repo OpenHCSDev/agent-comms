@@ -3979,7 +3979,7 @@ class TodoOperation(TodoCommand, declared_name=None):
 
 
 @dataclass(frozen=True)
-class ReleasesHold(TodoOperation, declared_name=None):
+class ReleasesHold(TodoCommand, declared_name=None):
     """Changing held work needs its holder's consent, decided in the write transaction against
     the registry cut it commits under."""
 
@@ -3994,7 +3994,7 @@ class ReleasesHold(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class AssignTodo(ReleasesHold):
+class AssignTodo(ReleasesHold, TodoOperation):
     """The order's teammate gives the problem to a unit.
 
     Its group is every problem the same order assigns in this Todo transaction; a command
@@ -5150,7 +5150,7 @@ class VoidStrikeTodo(TodoOperation, StoryEvent):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(ReleasesHold, StoryEvent, TodoHolder):
+class ReleaseTodo(ReleasesHold, TodoOperation, StoryEvent, TodoHolder):
     """The teammate takes an open problem off its unit; the order and its strikes stay."""
 
     def previous_assignment(self) -> Assignment:
@@ -6072,7 +6072,7 @@ class StoredOrderStory(TodoStoreRows, NoUpdate, NoDelete, TypedTable):
         return StoryFacts.capture(db.execute(query, problems))
 
 @dataclass(frozen=True)
-class MaintainsWork(TodoOperation, declared_name=None):
+class MaintainsWork(TodoCommand, declared_name=None):
     """Shared maintenance of a problem: the actor must work within the problem's request."""
 
     actor: ThreadIncarnation
