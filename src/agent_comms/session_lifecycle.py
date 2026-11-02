@@ -144,6 +144,10 @@ class SessionLifecycle:
             raise Refused.invalid_params({"reason": f"Unknown sessionId: {session_id!r}"})
         return self.published[session_id].name
 
+    def publish(self, session_id: AcpSessionId, thread: Thread) -> None:
+        """This session is now the thread's published ACP session."""
+        self.published[session_id] = PublishedSession.of(thread)
+
     def binds(self, session_id: AcpSessionId, name: object) -> bool:
         """Whether this session is published as the named thread."""
         return session_id in self.published and self.published[session_id].name == name
@@ -219,7 +223,7 @@ class SessionLifecycle:
         # Acquisition starts the authentication producer. Publish its session
         # in the same loop turn, before any await can let that producer read it.
         state = self.effects.inputs.acquire_owner(session_id, configuration, owner)
-        self.published[session_id] = PublishedSession.of(thread)
+        self.publish(session_id, thread)
         if self.runtime_enabled:
             await self.runtime.start()
         return state

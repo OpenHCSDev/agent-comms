@@ -1,6 +1,5 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.controller import SessionUpdateSink
 
 from bus_record_fixture import prepare_native_comms
@@ -31,7 +30,7 @@ async def canonical_delivery_owner(root, *, direct=False):
         runtime_enabled=True,
     )
     for person in people[1:]:
-        owner.sessions.published[AcpSessionId(person.name)] = PublishedSession.of(person)
+        owner.sessions.publish(AcpSessionId(person.name), person)
     await owner._runtime.start()
     try:
         yield comms, owner, initial.message, root_id

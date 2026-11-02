@@ -16,7 +16,6 @@ import os
 import pytest
 
 from agent_comms.nominal.field_codec import AcpSessionId
-from agent_comms.session_lifecycle import PublishedSession
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_extension import (
     CursorAdvancedUpdate,
@@ -52,7 +51,7 @@ def _session(tmp_path):
     comms, root_id = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
     session_id = AcpSessionId("beta")
-    agent.sessions.published[session_id] = PublishedSession.of(comms.registry.require("beta"))
+    agent.sessions.publish(session_id, comms.registry.require("beta"))
     return comms, agent, root_id, session_id
 
 
