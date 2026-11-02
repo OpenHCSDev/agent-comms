@@ -203,8 +203,9 @@ class OwnedTurn:
         return self.registry_owner.thread
 
     @property
-    def turn_lease(self):
-        return self.registry_owner.turn_lease
+    def turn_lease(self) -> TurnLeaseFence:
+        """Cleanup retains the acquired original; current publication still checks the registry."""
+        return self.goals.lease
 
     @property
     def backend(self):
@@ -295,7 +296,7 @@ class OwnedTurn:
         permits.callback(origin_claims.close)
         self.goals = TurnGoalAccount(
             comms=self.runner.comms, owner=self.thread, turn=self.turn_id,
-            lease=self.turn_lease, permit=self.goal_permit,
+            lease=self.registry_owner.turn_lease, permit=self.goal_permit,
             pending_origins=self.runner.goals.pending_goal_origins, claims=origin_claims,
         )
         permits.callback(self.finish_goals)

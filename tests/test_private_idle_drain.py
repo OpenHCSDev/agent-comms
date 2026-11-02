@@ -6,6 +6,7 @@ import os
 import sqlite3
 import threading
 from contextlib import AsyncExitStack
+from pathlib import Path
 
 import pytest
 
@@ -20,7 +21,7 @@ from agent_comms.threads import Thread
 from agent_comms.turn_input_source import NoTurnAcceptance
 from bus_history import read_history
 from conftest import publish_initial
-from delivery_owner_fixture import start_headless_owner
+from delivery_owner_fixture import qualified_owner_launch, start_headless_owner
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
@@ -90,8 +91,8 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
 
 @pytest.mark.asyncio
 async def test_turn_publication_joins_cancellation_before_lease_release(
-    tmp_path, native_runtime_package,
-):
+    tmp_path: Path, qualified_owner_launch: RetainedOwnerLaunch,
+) -> None:
     comms, agent, _root_id, _ = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
@@ -100,7 +101,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(
     )
     async with AsyncExitStack() as resources:
         resources.push_async_callback(agent.shutdown)
-        await start_headless_owner(agent, "beta", RetainedOwnerLaunch.configured())
+        await start_headless_owner(agent, "beta", qualified_owner_launch)
         async with AsyncExitStack() as permits:
             assert await execution.acquire(resources, permits)
             progress = execution.progress
@@ -127,6 +128,35 @@ async def test_turn_publication_joins_cancellation_before_lease_release(
             assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
             assert rows[-1].type is AlertKind
             assert comms.registry.require("beta").turn_lease == execution.turn_lease
+    assert not comms.registry.require("beta").executing
+
+
+@pytest.mark.asyncio
+async def test_original_turn_keeps_cleanup_lease_after_owner_fence(
+    tmp_path: Path, qualified_owner_launch: RetainedOwnerLaunch,
+) -> None:
+    from functools import partial
+
+    from agent_comms.coordination_errors import StaleFence
+    from agent_comms.turn_phase import CancellingPhase
+
+    comms, agent, _root_id, session_id = _session(tmp_path)
+    execution = OwnedTurn(
+        agent.turns, session_id, "beta", "fenced cleanup",
+        acceptance=NoTurnAcceptance(),
+    )
+    async with AsyncExitStack() as resources:
+        resources.push_async_callback(agent.shutdown)
+        await start_headless_owner(agent, "beta", qualified_owner_launch)
+        async with AsyncExitStack() as permits:
+            assert await execution.acquire(resources, permits)
+            original = execution.turn_lease
+            await Coordination.run_worker(partial(comms.owners.fence_stop, "beta"))
+            assert execution.turn_lease == original
+            with pytest.raises(StaleFence):
+                execution.registry_owner.require_running_turn(comms.registry)
+            await agent.turns.transition_turn(session_id, execution.turn_lease, CancellingPhase())
+            assert not comms.registry.require("beta").executing
     assert not comms.registry.require("beta").executing
 
 
