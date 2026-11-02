@@ -324,7 +324,8 @@ class SystemPromptDelivery(DealDelivery):
     @property
     def manifest(self) -> Path:
         """The reads the prompt carries, written beside it when it was prepared."""
-        return self.prompt.with_name(self.prompt.name + ".reads.json")
+        prompt = self.prompt.resolve()
+        return prompt.with_name(prompt.name + ".reads.json")
 
     def reads(self) -> tuple[DealtRead, ...]:
         return FieldCodec.decode(PromptReads, FieldCodec.parse(self.manifest.read_bytes())).reads

@@ -57,14 +57,20 @@ class DealPrompt:
 
     @classmethod
     def prepare(cls, path: Path = SYSTEM_PROMPT) -> Path:
-        """Publish the manifest, then the prompt, each atomically: a launcher reading the prompt
-        always finds the manifest of the prompt it reads, or of a newer one whose stale reads
-        simply stop matching."""
+        """Publish this deal under its own content name, its manifest beside it, then point
+        `path` at it. A launcher resolves `path`, so every session keeps the deal it launched
+        with: a later install publishes a new name instead of rewriting the old one, and a file
+        that changed since stops matching that session's manifest and is dealt to it again."""
         prompt = cls.render()
-        delivery = SystemPromptDelivery(path)
-        cls.publish(delivery.manifest, json.dumps(FieldCodec.encode(prompt.reads)))
-        cls.publish(path, prompt.text)
-        return path
+        digest = hashlib.sha256(prompt.text.encode("utf-8")).hexdigest()[:16]
+        launched = path.with_name(f"{path.stem}-{digest}{path.suffix}")
+        cls.publish(SystemPromptDelivery(launched).manifest, json.dumps(FieldCodec.encode(prompt.reads)))
+        cls.publish(launched, prompt.text)
+        link = path.with_name(f".{path.name}.link")
+        link.unlink(missing_ok=True)
+        link.symlink_to(launched.name)
+        os.replace(link, path)
+        return launched
 
     @staticmethod
     def publish(path: Path, text: str) -> None:

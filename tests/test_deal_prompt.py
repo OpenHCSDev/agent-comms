@@ -90,3 +90,18 @@ def test_the_claude_launcher_appends_the_prompt_and_never_execs_itself(monkeypat
     assert launched["path"] == real / "claude"
     assert launched["argv"][1:] == ["--append-system-prompt-file", str(prompt), "--resume", "abc"]
     assert launched["env"][LaunchedPrompt.variable] == str(prompt)
+
+
+def test_a_later_install_never_rewrites_the_deal_a_running_session_launched_with(monkeypatch, tmp_path):
+    link = tmp_path / "SYSTEM_PROMPT.md"
+    first = DealPrompt.prepare(link)
+    held = SystemPromptDelivery(first).manifest.read_bytes()
+    assert link.resolve() == first
+    rendered = DealPrompt.render()
+    monkeypatch.setattr(DealPrompt, "render", classmethod(
+        lambda cls: DealPrompt(rendered.text + "\nA rule changed.\n", PromptReads(rendered.reads.reads[1:]))))
+    second = DealPrompt.prepare(link)
+    assert second != first and link.resolve() == second
+    assert first.read_text(encoding="utf-8") == rendered.text
+    assert SystemPromptDelivery(first).manifest.read_bytes() == held
+    assert SystemPromptDelivery(link).reads() == rendered.reads.reads[1:]
