@@ -496,10 +496,8 @@ class ThreadSection:
               changed: object) -> None:
         """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
         every kept name; ``changed`` decoded only the rows that differ."""
-        kind = ThreadSlice.of(self.plan)
-        if not issubclass(kind, OwnRow):
-            raise TypeError(f"{self.plan.name} does not hold reusable rows")
-        kind.reuse(self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
+        ThreadSlice.of(self.plan).reuse(
+            self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
 
 
 class GenerationOf(ThreadSlice[GenerationCounter]):
@@ -722,9 +720,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def thread_sections(cls) -> tuple[ThreadSection, ...]:
         """The sections that hold one row per thread name."""
         return tuple(
-            ThreadSection(plan)
-            for plan in FieldCodec.field_plans(cls)
-            if plan.declared.init and plan.records and issubclass(ThreadSlice.of(plan), OwnRow)
+            ThreadSection(own)
+            for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records
+            for own in ThreadSlice.of(plan).own_row_plans(plan)
         )
 
     @classmethod

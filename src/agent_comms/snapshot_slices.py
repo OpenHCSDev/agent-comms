@@ -24,9 +24,22 @@ class ThreadSlice[Value](ABC):
     @staticmethod
     def of(plan: FieldPlan) -> type[ThreadSlice]:
         for policy in SlicePolicy.single(plan.annotation):
-            if issubclass(policy.value, ThreadSlice):
-                return policy.value
+            return policy.value
         raise TypeError(f"{plan.name} declares no thread slice")
+
+    @classmethod
+    def snapshot_value(cls, plan: FieldPlan) -> type[SnapshotValue]:
+        raise TypeError(f"{plan.name} declares no snapshot value policy")
+
+    @classmethod
+    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
+              earlier: Value, changed: Value) -> None:
+        raise TypeError(f"{cls.__name__} does not hold reusable rows")
+
+    @classmethod
+    def own_row_plans(cls, plan: FieldPlan) -> tuple[FieldPlan, ...]:
+        """The plans holding one row per thread name: none, unless the field is an own row."""
+        return ()
 
     @classmethod
     def required[Document: type](cls, document: Document) -> Document:
@@ -46,10 +59,11 @@ class SnapshotValue[Value](ThreadSlice[Value]):
 
     @staticmethod
     def of(plan: FieldPlan) -> type[SnapshotValue]:
-        policy = ThreadSlice.of(plan)
-        if not issubclass(policy, SnapshotValue):
-            raise TypeError(f"{plan.name} declares no snapshot value policy")
-        return policy
+        return ThreadSlice.of(plan).snapshot_value(plan)
+
+    @classmethod
+    def snapshot_value(cls, plan: FieldPlan) -> type[SnapshotValue]:
+        return cls
 
 
 class SnapshotRestored:
@@ -71,6 +85,10 @@ class OwnRow[Rows](SnapshotValue[Rows]):
     @abstractmethod
     def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
               earlier: Rows, changed: Rows) -> None: ...
+
+    @classmethod
+    def own_row_plans(cls, plan: FieldPlan) -> tuple[FieldPlan, ...]:
+        return (plan,)
 
 
 class MappingRowsSlice(OwnRow[MutableMapping]):
