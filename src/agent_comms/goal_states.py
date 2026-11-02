@@ -30,6 +30,12 @@ class PauseSource(DeclaredFamily, affix="Pause"):
     def protects_pause(self) -> bool:
         return self.instruction() is not None
 
+    def require_peer_change(self) -> None:
+        """A teammate may change a goal under an unprotected pause; a protected pause names
+        who lifts it, and a teammate is not that."""
+        if instruction := self.instruction():
+            raise ValueError(f"A teammate cannot change this goal while it is paused: {instruction}")
+
 
 class OwnerPause(PauseSource):
     def instruction(self) -> str:
@@ -108,6 +114,9 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     def pause_source(self) -> PauseSource | None:
         return None
 
+    def require_peer_change(self) -> None:
+        """Only a protected pause withholds a goal from its teammates."""
+
     @property
     def lifts_on_compliance(self) -> bool:
         """Held by the heartbeat until the teammate complies."""
@@ -150,6 +159,9 @@ class PausedGoal(OpenGoal, FromOpenGoal):
     @property
     def pause_source(self) -> PauseSource:
         return self.source
+
+    def require_peer_change(self) -> None:
+        self.source.require_peer_change()
 
     @property
     def lifts_on_compliance(self) -> bool:

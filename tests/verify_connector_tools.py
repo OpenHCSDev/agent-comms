@@ -181,6 +181,8 @@ def arguments(comms: Comms, name: str, project: Path, checkout: Path) -> dict:
             "progress": "Continue the authorized scratch work.",
         },
         "comms_edit_goal": {"goal_id": str(goal_id), "text": "Measure only the scratch connector."},
+        "comms_pause_goal": {"goal_id": str(goal_id), "progress": "Pause the scratch work."},
+        "comms_clear_goal": {"goal_id": str(goal_id)},
         "comms_goal_history": {},
         "comms_todo": {
             "id": "P1",

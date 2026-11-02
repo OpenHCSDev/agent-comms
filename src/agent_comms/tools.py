@@ -18,7 +18,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Type
+from typing import TYPE_CHECKING, Annotated, ClassVar, Type
 
 from pydantic import JsonValue
 
@@ -44,7 +44,11 @@ from .coordination_tables.refusals import SendRefusal
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
 from .nominal.field_codec import FieldCodec, NullMember, SingleFieldValue, SubclassUnion, WireForm, WireName, WireOmitDefault, projected, GoalId
-from .goal_actions import ActiveGoalAction, EditGoalAction, GoalAction, GoalPrecondition, ModelInvocable, SetGoalAction, TransitionGoalAction
+from .goal_actions import (
+    ActiveGoalAction, ClearGoalAction, EditGoalAction, GoalAction, GoalActor, GoalPrecondition,
+    ModelInvocable, PausedGoalAction, PeerInvocable, RuntimeInvocable, SetGoalAction,
+    TransitionGoalAction,
+)
 from .goal_history import RecordedGoalHistory
 from .goal_scope import AllGoals, OneGoal
 from .goal_presentation import GoalExecution, GoalSnapshot
@@ -164,6 +168,59 @@ class GoalProgress(OwnGoalPublication, GoalSnapshot):
 @dataclass(frozen=True)
 class GoalUpdated(OwnGoalPublication):
     goal: GoalDeclaration
+
+
+@dataclass(frozen=True)
+class TeammateGoalChanged(ToolResult):
+    """A teammate's goal as this caller left it. It is never the caller's own publication, so
+    the caller's turn permission does not take it."""
+
+    thread: str
+    goal: GoalDeclaration
+
+
+@dataclass(frozen=True, slots=True)
+class OwnGoal(NullMember):
+    """No thread was named: the caller's own goal."""
+
+    actor: ClassVar[type[GoalActor]] = RuntimeInvocable
+
+    def thread_name(self, caller: ThreadCaller) -> str:
+        return caller.name
+
+    def published(self, own: ToolResult, goal: GoalDeclaration) -> ToolResult:
+        return own
+
+
+@dataclass(frozen=True, slots=True)
+class TeammateGoal(SingleFieldValue):
+    """A teammate's goal, changed under PeerInvocable's consent rule."""
+
+    thread: str
+    actor: ClassVar[type[GoalActor]] = PeerInvocable
+
+    def thread_name(self, caller: ThreadCaller) -> str:
+        return self.thread
+
+    def published(self, own: ToolResult, goal: GoalDeclaration) -> ToolResult:
+        return TeammateGoalChanged(self.thread, goal)
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalChangeTool(ThreadToolRequest):
+    """Your own goal, or a teammate's when thread names one: responsibility for goals is
+    shared, and PeerInvocable owns what a teammate may not change."""
+
+    thread: Annotated[
+        OwnGoal | TeammateGoal, *tool_field("Teammate whose goal to change; omit for your own")
+    ] = OwnGoal()
+
+    def update(self, comms: Comms, caller: ThreadCaller, action: GoalAction) -> GoalDeclaration:
+        return comms.goals.update_goal(
+            self.thread.thread_name(caller), action, actor=self.thread.actor)
+
+    def current(self, comms: Comms, caller: ThreadCaller, goal_id: GoalId):
+        return comms.registry.require(self.thread.thread_name(caller)).goal.require().require_id(goal_id)
 
 
 @dataclass(frozen=True)
@@ -475,18 +532,19 @@ class CommsSetProjectTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSetGoalTool(ThreadToolRequest):
+class CommsSetGoalTool(GoalChangeTool):
     label = "Set persistent goal"
     description = (
-        "Set or replace your own persistent goal. Use this when the user asks you to "
-        "start, set, or pursue a goal autonomously."
+        "Set or replace your own persistent goal, or a teammate's when thread names one. "
+        "Use this when the user asks you to start, set, or pursue a goal autonomously."
     )
     text: Annotated[str, *tool_field("Persistent objective to pursue")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalSet:
-        return GoalSet(
-            comms.goals.update_goal(caller.name, SetGoalAction(text=self.text)),
-            "Persistent goal activated. Work toward it and report progress with comms_goal.")
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+        goal = self.update(comms, caller, SetGoalAction(text=self.text))
+        return self.thread.published(GoalSet(
+            goal, "Persistent goal activated. Work toward it and report progress with comms_goal."),
+            goal)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -545,23 +603,22 @@ class CommsGoalTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsResumeGoalTool(ThreadToolRequest):
+class CommsResumeGoalTool(GoalChangeTool):
     label = "Resume paused goal"
     description = (
-        "Resume your own paused goal with the same ID only after an explicit user "
+        "Resume a paused goal, your own or a teammate's, with the same ID only after an explicit "
         "request. This does not replace the goal or resume blocked/completed goals."
     )
     goal_id: Annotated[GoalId, *tool_field("Identity of the paused goal to resume")]
     progress: Annotated[str, *tool_field("Progress summary for the resumed goal")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
-        name = caller.name
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.require().require_id(goal_id)
+        current = self.current(comms, caller, goal_id)
         current.state.require_model_resume()
         progress = self.progress
-        goal = comms.goals.update_goal(
-            name,
+        goal = self.update(
+            comms, caller,
             ActiveGoalAction(
                 expect=GoalPrecondition(
                     expected_goal=current,
@@ -573,30 +630,72 @@ class CommsResumeGoalTool(ThreadToolRequest):
         goal = goal.require()
         if not goal.state.items_with(Active, goal) or goal.progress != progress:
             raise ToolRefusedError("Goal changed during resume; refresh its state.")
-        return GoalUpdated(goal)
+        return self.thread.published(GoalUpdated(goal), goal)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsEditGoalTool(ThreadToolRequest):
+class CommsEditGoalTool(GoalChangeTool):
     label = "Edit goal text"
     description = (
-        "Edit your existing goal text while keeping its identity, status, and progress."
-        " Use comms_set_goal only to replace the objective with a fresh goal ID."
+        "Edit an existing goal's text, your own or a teammate's, while keeping its identity, "
+        "status, and progress. Use comms_set_goal only to replace the objective with a fresh "
+        "goal ID."
     )
     goal_id: Annotated[GoalId, *tool_field("Identity of the existing goal to edit")]
     text: Annotated[str, *tool_field("Revised objective text, including any @mentions")]
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalUpdated:
-        name = caller.name
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.require().require_id(goal_id)
-        goal = comms.goals.update_goal(
-            name,
+        current = self.current(comms, caller, goal_id)
+        goal = self.update(
+            comms, caller,
             EditGoalAction(
                 expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(goal_id)), text=self.text
             ),
         )
-        return GoalUpdated(goal)
+        return self.thread.published(GoalUpdated(goal), goal)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsClearGoalTool(GoalChangeTool):
+    label = "Clear goal"
+    description = (
+        "Clear a goal, your own or a teammate's, leaving that thread with no goal. Held "
+        "problems must be finished or released first; a goal Tristan paused, or the chokehold "
+        "holds, cannot be cleared by a teammate."
+    )
+    goal_id: Annotated[GoalId, *tool_field("Identity of the goal to clear")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+        current = self.current(comms, caller, self.goal_id)
+        goal = self.update(
+            comms, caller,
+            ClearGoalAction(expect=GoalPrecondition(
+                expected_goal=current, goal_id=OneGoal(self.goal_id))),
+        )
+        return self.thread.published(GoalUpdated(goal), goal)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsPauseGoalTool(GoalChangeTool):
+    label = "Pause goal"
+    description = (
+        "Pause a goal, your own or a teammate's, keeping its identity; comms_resume_goal "
+        "resumes it. Pausing an already-paused goal keeps its original pause."
+    )
+    goal_id: Annotated[GoalId, *tool_field("Identity of the goal to pause")]
+    progress: Annotated[str, *tool_field("Why the goal is paused")]
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> ToolResult:
+        current = self.current(comms, caller, self.goal_id)
+        goal = self.update(
+            comms, caller,
+            PausedGoalAction(
+                expect=GoalPrecondition(expected_goal=current, goal_id=OneGoal(self.goal_id)),
+                progress=self.progress,
+            ),
+        )
+        return self.thread.published(GoalUpdated(goal), goal)
 
 
 @dataclass(frozen=True, kw_only=True)

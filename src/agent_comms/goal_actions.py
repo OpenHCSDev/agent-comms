@@ -43,8 +43,10 @@ from .goal_states import (
     ChokeholdPause,
     CompletedGoal,
     GoalState,
+    ModelPause,
     OwnerPause,
     PausedGoal,
+    PauseSource,
     RuntimePause,
 )
 from .goal_waits import GoalInputReview, GoalWaits, RecordedGoalWait
@@ -66,20 +68,58 @@ if TYPE_CHECKING:
 
 
 
-class ModelInvocable:
+class GoalActor:
+    """Who invokes a goal action. An action declares the actors it admits by inheriting them;
+    each actor owns whether it is the goal's owner, whether it reports a turn, what a pause it
+    takes records, and whose consent its change needs."""
+
+    actor_is_owner: ClassVar[bool] = False
+    actor_reports_turn: ClassVar[bool] = False
+
+    @classmethod
+    def actor_pause_source(cls) -> PauseSource:
+        return RuntimePause()
+
+    @classmethod
+    def require_actor_consent(cls, goal: GoalDeclaration) -> None:
+        """The thread itself, its owner and its runtime need no one else's consent."""
+
+
+class ModelInvocable(GoalActor):
+    actor_reports_turn = True
+
+
+class OwnerInvocable(GoalActor):
+    actor_is_owner = True
+
+    @classmethod
+    def actor_pause_source(cls) -> PauseSource:
+        return OwnerPause()
+
+
+class RuntimeInvocable(GoalActor):
     pass
 
 
-class OwnerInvocable:
+class OwnerControlInvocable(GoalActor):
     pass
 
 
-class RuntimeInvocable:
-    pass
+class PeerInvocable(GoalActor):
+    """A teammate acting on another thread's goal. Responsibility is shared and there is no
+    rank, so a teammate may set, edit, pause, resume or clear it as the thread itself could,
+    under the same order rules (held problems still refuse replacement). What it may not do is
+    change a goal under a protected pause: Tristan's pause and the chokehold lift only through
+    their own owners."""
 
+    @classmethod
+    def actor_pause_source(cls) -> PauseSource:
+        return ModelPause()
 
-class OwnerControlInvocable:
-    pass
+    @classmethod
+    def require_actor_consent(cls, goal: GoalDeclaration) -> None:
+        for current in goal:
+            current.state.require_peer_change()
 
 
 @dataclass(frozen=True)
@@ -119,7 +159,7 @@ class GoalActionContext:
 
     @property
     def model_report(self) -> bool:
-        return self.actor is ModelInvocable
+        return self.actor.actor_reports_turn
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -175,6 +215,7 @@ class GoalAction[Result: GoalDeclaration](
     def apply(self, ctx: GoalPublicationContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
+        ctx.actor.require_actor_consent(ctx.thread.goal)
         goal = ctx.thread.goal.apply_action(self, ctx)
         if goal == ctx.thread.goal:
             return goal
@@ -225,7 +266,7 @@ class TransitionGoalAction(GoalAction[Goal]):
 
     def require_transition(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
         """The goal's own state machine allows this transition."""
-        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
+        goal.state.check_transition(state, owner=ctx.actor.actor_is_owner)
 
     @classmethod
     def require_claims(cls, claims: tuple[ProgressClaim, ...]) -> None:
@@ -253,7 +294,8 @@ class GoalReportAction(TransitionGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class ActiveGoalAction(
-    GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    GoalReportAction, ModelInvocable, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable,
+    PeerInvocable,
 ):
     schedules_goal = True
 
@@ -475,12 +517,12 @@ class BlockedGoalAction(GoalReportAction, ModelInvocable, OwnerInvocable, Runtim
 
 @dataclass(frozen=True, kw_only=True)
 class PausedGoalAction(
-    TransitionGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    TransitionGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable, PeerInvocable
 ):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         current = goal.state.pause_source
         return PausedGoal(
-            current or (OwnerPause() if ctx.actor is OwnerInvocable else RuntimePause())
+            current or ctx.actor.actor_pause_source()
         )
 
 
@@ -511,7 +553,7 @@ class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocable):
+class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocable, PeerInvocable):
     text: str
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
     goal_id: GoalId = field(default_factory=GoalId.mint)
@@ -664,7 +706,8 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class ClearGoalAction(
-    ReplacementGoalAction[NoGoal], OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    ReplacementGoalAction[NoGoal], OwnerInvocable, RuntimeInvocable, OwnerControlInvocable,
+    PeerInvocable,
 ):
     def change(self, goal: Goal, ctx: GoalActionContext) -> NoGoal:
         goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
@@ -675,7 +718,7 @@ class ClearGoalAction(
 
 
 @dataclass(frozen=True, kw_only=True)
-class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable):
+class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable, PeerInvocable):
     text: str
     preserve_wait = True
 
