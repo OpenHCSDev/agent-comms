@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .child_process import ProcessIdentity, ProcessState
 from .nominal.declared_family import DeclaredFamily
-from .errors import RelationViolationError, ThreadNotStoppedError
+from .errors import RelationViolationError, ThreadNotStoppedError, ThreadNotVisibleError
 from .nominal.field_codec import FieldCodec, TextRepresentation
 from .lifecycle_capability import LifecycleCapability
 from .thread_presentation import InactiveThreadPresentationStatus, LiveThreadOwnerBinding, ThreadOwnerBinding, UnavailableThreadOwnerBinding
@@ -125,7 +125,7 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
         return self.running
 
     def require_visible(self, message: str = "Initial direct target must be visible.") -> None:
-        raise RelationViolationError(message)
+        raise ThreadNotVisibleError(message)
 
     def publish_heartbeat[Sent](self, publish: Callable[[], Sent], unsent: Sent) -> Sent:
         """Core's heartbeat never messages an unaddressable thread (archived, deleting, a service):
