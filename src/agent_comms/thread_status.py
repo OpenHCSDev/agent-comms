@@ -85,6 +85,10 @@ class ThreadStatus(LifecycleCapability, DeclaredFamily, affix="ThreadStatus"):
     # Whether this row's session still runs in its recorded process, keeping that host alive.
     holds_process: ClassVar[bool] = False
 
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        """A thread that can still act owns the work it holds: changing it needs its consent."""
+        require_consent()
+
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
@@ -430,6 +434,10 @@ class ServiceThreadStatus(PublishingPresence, ThreadStatus):
 class ArchivedThreadStatus(ThreadStatus):
     archived = True
     vacant = True
+
+    def require_hold_consent(self, require_consent: Callable[[], None]) -> None:
+        """An archived thread has retired: the work it held is orphaned, and any teammate may
+        release or withdraw it, as the REHOME line tells them to."""
 
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived
