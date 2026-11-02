@@ -3175,6 +3175,30 @@ class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
     line: ClassVar[str] = "Dropped for a newer order"
 
 
+class ClaimReviewer(DeclaredFamily, affix="ClaimReviewer"):
+    """Who receives a claim, separately from who consented to its assignment."""
+
+    @abstractmethod
+    def identity(self, todo: Todo) -> ThreadIncarnation: ...
+
+    def target(self, todo: Todo) -> IncarnationThreadTarget:
+        return IncarnationThreadTarget(self.identity(todo))
+
+
+@dataclass(frozen=True)
+class AssignedClaimReviewer(ClaimReviewer):
+    def identity(self, todo: Todo) -> ThreadIncarnation:
+        return todo.held().parent_identity
+
+
+@dataclass(frozen=True)
+class SelectedClaimReviewer(ClaimReviewer):
+    incarnation: ThreadIncarnation
+
+    def identity(self, todo: Todo) -> ThreadIncarnation:
+        return self.incarnation
+
+
 @dataclass(frozen=True)
 class OrderClaim:
     """The holder's assertion, not the teammate's verified delivery."""
@@ -3182,15 +3206,20 @@ class OrderClaim:
     pull_request: PullRequestLink
     head: Annotated[str, GitCommitText]
     message: Message
+    reviewer: Annotated[ClaimReviewer, WireOmitDefault()] = AssignedClaimReviewer()
 
     def __post_init__(self) -> None:
         GitCommitText.decode(self.head)
         if not self.message.body.strip():
             raise TodoError("A delivery claim needs its report text.")
 
-    def resumed_by(self, pull_request: PullRequestLink, head: str, report: str) -> bool:
+    def resumed_by(
+        self, pull_request: PullRequestLink, head: str, report: str,
+        reviewer: ClaimReviewer = AssignedClaimReviewer(),
+    ) -> bool:
         """Only the identical deliver call resumes this claim's publication."""
-        return (self.pull_request, self.head, self.message.body) == (pull_request, head, report)
+        return (self.pull_request, self.head, self.message.body, self.reviewer) == (
+            pull_request, head, report, reviewer)
 
     def request(self) -> PullRequestHead:
         return PullRequestHead(self.pull_request.repo, self.pull_request.number, self.head)
@@ -3198,11 +3227,13 @@ class OrderClaim:
     @classmethod
     def for_order(
         cls, todo: Todo, actor: ThreadIncarnation, pull_request: PullRequestLink, head: str,
-        report: str, answer: MessageReference,
+        report: str, answer: MessageReference, *,
+        reviewer: ClaimReviewer = AssignedClaimReviewer(),
     ) -> OrderClaim:
         return cls(
             pull_request, head,
-            Message(actor.name, todo.held().parent_identity.name, report, InfoKind, answers=(answer,)),
+            Message(actor.name, reviewer.identity(todo).name, report, InfoKind, answers=(answer,)),
+            reviewer=reviewer,
         )
 
 
@@ -5400,7 +5431,7 @@ class ClaimOrder(TodoCommand):
         """Retain the publication's actual address before saving its content identity."""
         with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
-            target = IncarnationThreadTarget(current.held().parent_identity)
+            target = self.claim.reviewer.target(current)
             target.require_publication(
                 self.claim.message, boundary.registry, goals.bus.require_channel)
             message = replace(
@@ -5424,8 +5455,7 @@ class ClaimOrder(TodoCommand):
         stays CommittedMessageError, which carries that original."""
         try:
             goals.bus.publisher.publish_ordinary(
-                self.claim.message, destination=IncarnationThreadTarget(
-                    changed.held().parent_identity),
+                self.claim.message, destination=self.claim.reviewer.target(changed),
                 origin=AgentOrigin())
         except (OSError, sqlite3.Error) as error:
             raise ClaimPublicationUnavailable(changed.id, self.claim) from error
@@ -5444,7 +5474,7 @@ class ResumeClaimOrder(ClaimOrder):
     def record(self, goals: Goals, problem: str) -> Todo:
         with NativeCapture(goals.bus) as boundary:
             current = goals.todos.get(problem)
-            target = IncarnationThreadTarget(current.held().parent_identity)
+            target = self.claim.reviewer.target(current)
             target.require_publication(
                 self.claim.message, boundary.registry, goals.bus.require_channel)
             retained = (self.claim.message.sender, self.claim.message.target)

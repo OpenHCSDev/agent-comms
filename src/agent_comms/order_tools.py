@@ -12,6 +12,8 @@ from agent_comms_hooks import ToolRefusedError
 from pydantic import JsonValue
 
 from agent_comms.todos import (
+    AssignedClaimReviewer,
+    ClaimReviewer,
     ClaimOrder,
     CorrectCheckTodo,
     CorrectRunTodo,
@@ -396,7 +398,8 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
     label = "Claim order delivery"
     description = (
         "Record the holder's delivery claim and answer its teammate. "
-        "Only the holder may claim a pending order; this does not accept its delivery."
+        "Only the holder may claim a pending order; this does not accept its delivery. "
+        "Self-assigned work selects an independent reviewer explicitly."
     )
     problem: Annotated[str, *tool_field("Held problem ID")]
     pull_request: Annotated[PullRequestLink, *tool_field(
@@ -407,6 +410,10 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         "Delivery report: the slop you killed or the broken thing you fixed, with file:line, "
         "in the owner's voice"
     )]
+    reviewer: Annotated[ClaimReviewer, *tool_field(
+        "Assignment parent by default; self-assigned work selects an independent "
+        "reviewer's exact name and birth. Saved claims retain this choice."
+    )] = AssignedClaimReviewer()
 
     def publish(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.todos.get(self.problem)
@@ -415,14 +422,14 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         todo.require_assignee(actor, generation)
         # The identical call resumes a retained claim's publication; nothing is claimed again.
         for claim in todo.order.team_claims():
-            if claim.resumed_by(self.pull_request, self.head, self.report.text):
+            if claim.resumed_by(self.pull_request, self.head, self.report.text, self.reviewer):
                 resumed = ResumeClaimOrder(todo.revision, actor, generation, claim).record(
                     comms.goals, todo.id)
                 return TodoChanged(resumed, resumed.strike_count)
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report.text,
-            original.reference,
+            original.reference, reviewer=self.reviewer,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim

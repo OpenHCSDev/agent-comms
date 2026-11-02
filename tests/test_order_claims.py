@@ -23,6 +23,7 @@ from agent_comms.errors import (
     TodoConflict,
     TodoError,
     HumanSendRefusedError,
+    RelationViolationError,
 )
 from agent_comms.nominal.field_codec import (
     FieldCodec,
@@ -51,6 +52,8 @@ from agent_comms.slop import (
 )
 from agent_comms.todos import (
     TriageScope,
+    SelectedClaimReviewer,
+    ExpectedProblem,
     CheckedProblemOrder,
     ClaimedProblemOrder,
     ClaimOrder,
@@ -215,6 +218,85 @@ def test_claim_refuses_retired_or_reborn_current_parent(held_team, parent_state)
     with pytest.raises(HumanSendRefusedError):
         ThreadCaller(original.holder).invoke(request, comms)
     assert comms.goals.todos.get(original.id) == original
+    assert comms.bus.bus.revision() == before
+
+
+def self_assigned_order(ctx: TeamContext) -> Todo:
+    """The holder accepts its existing work as itself, not as an invented peer."""
+    todo = current_parent_order(ctx)
+    holder = ctx.comms.registry.require(todo.holder)
+    request = ctx.comms.goals.todos.add_request(
+        holder.incarnation, "Deliver the self-assigned repair to an independent reviewer",
+    ).id
+    assigned, = ctx.comms.goals.todos.assign(
+        (ExpectedProblem(todo.id, todo.revision),), owner=holder, assigner=holder.incarnation,
+        generation=todo.held().generation, request=request,
+        review_at=todo.review_at, order=todo.order.checked(),
+    )
+    assert assigned.held().parent_identity == holder.incarnation
+    return assigned
+
+
+def test_self_assigned_claim_selects_a_reviewer_and_retains_its_choice(held_team):
+    ctx = held_team
+    comms = ctx.comms
+    todo = self_assigned_order(ctx)
+    request = replace(delivery(
+        ctx, "Killed the self-send slop at todos.py; the selected reviewer owns the notification."),
+        problem=todo.id,
+    )
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError, match="cannot message itself"):
+        ThreadCaller(todo.holder).invoke(request, comms)
+    assert comms.goals.todos.get(todo.id) == todo
+    assert comms.bus.bus.revision() == before
+    reviewer = SelectedClaimReviewer(comms.registry.require(ctx.commander).incarnation)
+    request = replace(request, reviewer=reviewer)
+    # The same declared request shape reaches the native boundary and the retained record.
+    request = FieldCodec.decode(CommsOrderDeliverTool, FieldCodec.encode(request))
+    ThreadCaller(todo.holder).invoke(request, comms)
+    claimed = comms.goals.todos.get(todo.id)
+    claim = claimed.order.claim
+    assert claim.reviewer == reviewer
+    assert FieldCodec.decode(Todo, FieldCodec.encode(claimed)) == claimed
+    published = comms.bus.bus.lookup_message(claim.message.message_id).message
+    assert published.target == ctx.commander
+    after = comms.bus.bus.revision()
+    ThreadCaller(todo.holder).invoke(request, comms)
+    assert comms.bus.bus.revision() == after
+    assert comms.goals.todos.get(todo.id) == claimed
+    different = replace(request, reviewer=SelectedClaimReviewer(
+        comms.registry.require("current-parent").incarnation))
+    with pytest.raises(TodoError, match="Only a pending order"):
+        ThreadCaller(todo.holder).invoke(different, comms)
+    assert comms.goals.todos.get(todo.id) == claimed
+    assert comms.bus.bus.revision() == after
+
+
+@pytest.mark.parametrize("change", ("retired", "reborn", "renamed"))
+def test_selected_reviewer_resume_preserves_original_identity_and_address(held_team, change):
+    ctx = held_team
+    comms = ctx.comms
+    todo = self_assigned_order(ctx)
+    name = "current-parent"
+    reviewer = SelectedClaimReviewer(comms.registry.require(name).incarnation)
+    request = replace(delivery(
+        ctx, "Killed the self-send slop at todos.py; the selected reviewer owns the notification."),
+        problem=todo.id, reviewer=reviewer,
+    )
+    ThreadCaller(todo.holder).invoke(request, comms)
+    claimed = comms.goals.todos.get(todo.id)
+    if change == "renamed":
+        comms.registry.rename(name, "renamed-reviewer")
+    else:
+        comms.registry.unregister(name)
+        comms.registry.remove(name)
+        if change == "reborn":
+            comms.registry.register(thread(name, ctx.root.parent / "reborn-reviewer", 15.0))
+    before = comms.bus.bus.revision()
+    with pytest.raises((TodoError, HumanSendRefusedError)):
+        ThreadCaller(todo.holder).invoke(request, comms)
+    assert comms.goals.todos.get(todo.id) == claimed
     assert comms.bus.bus.revision() == before
 
 
