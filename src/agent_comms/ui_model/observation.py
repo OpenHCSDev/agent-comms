@@ -59,6 +59,7 @@ from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
 from agent_comms.message_reference import MessageReference
+from agent_comms.nominal.field_codec import MessageId
 from agent_comms.nominal.fold import Absorbs, Accumulates, Fold
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
@@ -593,7 +594,7 @@ class ReadNotifications(ReadRequest):
         return self.operation.apply(comms, self.display)
 
     @property
-    def keys(self) -> tuple[tuple[int, str], ...]:
+    def keys(self) -> tuple[tuple[int, MessageId], ...]:
         """The outcome keys this read shows, as windows key their outcomes."""
         return tuple((reference.seq, reference.message_id) for reference in self.operation.references)
 
@@ -791,7 +792,7 @@ class NotificationBatch(BatchRead):
     observed: NotificationAnswer
 
     @cached_property
-    def keys(self) -> frozenset[tuple[int, str]]:
+    def keys(self) -> frozenset[tuple[int, MessageId]]:
         return frozenset(self.request.keys)
 
     def settled(self, family: ReadNotifications, current: list[NotificationBatch],
@@ -812,9 +813,9 @@ class NotificationReading(ReadingObservation[ObserveNotifications]):
         self.batches: tuple[NotificationBatch, ...] = ()
         self.answered: dict[ReadNotifications, tuple[NotificationBatch, ...]] = {}
 
-    def wanted(self) -> dict[ReadNotifications, frozenset[tuple[int, str]]]:
+    def wanted(self) -> dict[ReadNotifications, frozenset[tuple[int, MessageId]]]:
         """Every key some open request shows, by the request family that reads it."""
-        wanted: dict[ReadNotifications, frozenset[tuple[int, str]]] = {}
+        wanted: dict[ReadNotifications, frozenset[tuple[int, MessageId]]] = {}
         for request in self.request.reads:
             wanted[request.family] = wanted.get(request.family, frozenset()) | frozenset(request.keys)
         return wanted
@@ -1199,7 +1200,7 @@ class NotificationAnswer(Observed, Fold):
 
 @dataclass(frozen=True)
 class NotificationsObserved(Accumulates, NotificationAnswer):
-    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+    outcomes: Mapping[tuple[int, MessageId], tuple[MessageNotification, ...]]
 
     def including(self, batch: NotificationsObserved) -> NotificationsObserved:
         """This request's answer with a readable batch's outcomes for the keys it shows."""

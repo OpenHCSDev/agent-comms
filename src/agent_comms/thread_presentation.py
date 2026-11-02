@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
 
@@ -149,6 +149,12 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return False
 
+    async def reload_if_superseded(
+        self, previous: session_load.SessionLoadPlan,
+        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        """An unavailable owner cannot supply a new existing-session load."""
+
     def recipient_activity(self, activity, snapshot, thread):
         from .agent_activity import UnavailableRecipientActivity
 
@@ -185,6 +191,12 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return replacement.replaces(self)
+
+    async def reload_if_superseded(
+        self, previous: session_load.SessionLoadPlan,
+        reload: Callable[[session_load.SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        await previous.reload_if_superseded(self, reload)
 
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         # Both operands are the ORIGINAL registry owner/process witnesses.
@@ -291,4 +303,9 @@ class NoThreadPresentation(ThreadPresentation):
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
         return self
+
+
+# Session-load annotations use the module namespace. Publish these declarations
+# before loading its coordinator dependencies, which consume our status classes.
+import agent_comms.session_load as session_load
 
