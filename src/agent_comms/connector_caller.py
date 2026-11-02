@@ -70,8 +70,9 @@ class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
 
 
 @dataclass(frozen=True)
-class ScopedUiCaller(ConnectorCaller):
-    """UI authority belongs to one original native namespace, independently of writes."""
+class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
+    """A UI caller acts for the owner without a thread, inside one original native
+    namespace, whether or not it may write."""
 
     namespace: RootId
 

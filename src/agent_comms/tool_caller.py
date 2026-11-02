@@ -81,7 +81,7 @@ class ToolCaller(ReadAuthority):
         """A caller whose sends direct units refuses a body its directive checks refuse."""
 
     def require_human(self) -> None:
-        """Human input is admitted by its caller, never by a supplied sender name."""
+        """Only a caller acting for the owner may publish human input; a sender name never can."""
         raise ToolRefusedError("Only a human UI caller can publish user messages.")
 
     def origin(self) -> AgentOrigin:
@@ -125,7 +125,7 @@ class HumanCaller(NoThreadCaller):
     """An owner-operated UI has human authority without an executable thread."""
 
     def require_human(self) -> None:
-        """This principal admits the explicit human-message operation."""
+        """The owner's UI may publish human input."""
 
 
 @dataclass(frozen=True)
