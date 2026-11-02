@@ -1,5 +1,12 @@
 """Current registration declarations, incarnation and saved relationship ownership."""
+import os
 from pathlib import Path
+
+import pytest
+
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordination_errors import StaleFence
+from agent_comms.coordination_response import LiveResponseOwner
 
 from agent_comms.repo import Checkout
 from typing import Annotated
@@ -95,14 +102,6 @@ def test_project_round_trip_excludes_current_project_from_history(tmp_path):
 
 
 def test_project_change_retains_executing_source_but_refuses_another_input(tmp_path):
-    import os
-
-    import pytest
-
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.coordination_errors import StaleFence
-    from agent_comms.coordination_response import LiveResponseOwner
-
     old, new = tmp_path / 'old', tmp_path / 'new'
     old.mkdir()
     new.mkdir()
@@ -134,13 +133,6 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
 
 
 def test_source_publication_refuses_unrecorded_project_replacement(tmp_path):
-    import os
-
-    import pytest
-
-    from agent_comms.child_process import ProcessIdentity
-    from agent_comms.coordination_errors import StaleFence
-
     comms = wire(tmp_path)
     comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path / 'old'), process_identity=ProcessIdentity.capture(os.getpid())))
     original = comms.agents.begin_turn('owner', TurnId('ab87f599dc0a50a56b7c65de71c39426'))

@@ -7,9 +7,20 @@ from dataclasses import dataclass, field
 import pytest
 
 from agent_comms.channel_targets import CommandTarget, IncarnationThreadTarget, ProjectTarget
-from agent_comms.cli_command import OneTarget, TargetBatch
+from agent_comms.cli_command import (
+    CliCommand, OneTarget, TargetBatch, TargetBatchResult, TargetCompleted, TargetFailed,
+)
+from agent_comms.cli_commands import ThreadStoppedResult
 from agent_comms.cli_result import ResultShower
+from agent_comms.cli_verbs.archive import ArchiveCliCommand
+from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
+from agent_comms.cli_verbs.restart import RestartCliCommand
+from agent_comms.cli_verbs.stop import StopCliCommand
+from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.thread_status import (
+    ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus, ThreadStatus,
+)
 from agent_comms.threads import Thread
 
 
@@ -30,11 +41,6 @@ class RecordingShower(ResultShower):
     IncarnationThreadTarget(RecordedThreadIncarnation("first", 1.0)),
 ])
 def test_batch_completed_result_round_trips_with_its_command_result_type(target):
-    from agent_comms.cli_verbs.stop import StopCliCommand
-    from agent_comms.cli_commands import ThreadStoppedResult
-    from agent_comms.cli_command import TargetBatchResult, TargetCompleted, TargetFailed
-    from agent_comms.nominal.field_codec import FieldCodec
-
     original = TargetBatchResult((
         TargetCompleted(target, StopCliCommand(name="first"), ThreadStoppedResult("first")),
         TargetFailed(target, "UnregisteredThreadError", "Thread 'missing' is not registered."),
@@ -50,39 +56,38 @@ def test_batch_completed_result_round_trips_with_its_command_result_type(target)
     assert shower.errors == [(str(decoded.outcomes[1]), "Action")]
 
 
-@pytest.mark.parametrize("selection,target,resolvable", [
-    (OneTarget, (CommandTarget.named("first"),), True),
-    (OneTarget, (CommandTarget.named("ghost"),), False),
-    (TargetBatch, (CommandTarget.named("first"),), True),
-    (TargetBatch, (CommandTarget.named("ghost"),), False),
-])
-def test_each_selection_returns_its_own_result(comms, tmp_path, selection, target, resolvable):
-    from agent_comms.cli_verbs.stop import StopCliCommand
-    from agent_comms.cli_command import TargetBatchResult, TargetFailed
-    from agent_comms.thread_status import RunningThreadStatus
-
+@pytest.fixture
+def running_first(comms, tmp_path):
     comms.registry.declare(Thread("first", frozenset(), Checkout(tmp_path)), RunningThreadStatus())
-    if selection is OneTarget and not resolvable:
-        with pytest.raises(ValueError):
-            StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
-        return
-    result = StopCliCommand.execute_target(comms, selection(target), {}, project=str(tmp_path))
-    if selection is OneTarget:
-        assert result.stopped == "first"
-    else:
-        assert type(result) is TargetBatchResult and result.successful is resolvable
-        outcome, = result.outcomes
-        assert outcome.result.stopped == "first" if resolvable else type(outcome) is TargetFailed
-    assert comms.registry.status("first").stopped is resolvable
+    return comms
+
+
+def test_one_target_stops_a_registered_thread_and_refuses_an_unknown_one(running_first, tmp_path):
+    comms = running_first
+    with pytest.raises(ValueError):
+        StopCliCommand.execute_target(comms, OneTarget((CommandTarget.named("ghost"),)), {},
+                                      project=str(tmp_path))
+    assert not comms.registry.status("first").stopped
+    result = StopCliCommand.execute_target(comms, OneTarget((CommandTarget.named("first"),)), {},
+                                           project=str(tmp_path))
+    assert result.stopped == "first"
+    assert comms.registry.status("first").stopped
+
+
+def test_target_batch_reports_an_unknown_target_as_a_failed_outcome(running_first, tmp_path):
+    comms = running_first
+    missed = StopCliCommand.execute_target(comms, TargetBatch((CommandTarget.named("ghost"),)), {},
+                                           project=str(tmp_path))
+    assert type(missed) is TargetBatchResult and not missed.successful
+    assert type(missed.outcomes[0]) is TargetFailed
+    assert not comms.registry.status("first").stopped
+    stopped = StopCliCommand.execute_target(comms, TargetBatch((CommandTarget.named("first"),)), {},
+                                            project=str(tmp_path))
+    assert stopped.successful and stopped.outcomes[0].result.stopped == "first"
+    assert comms.registry.status("first").stopped
 
 
 def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
-    from agent_comms.cli_verbs.archive import ArchiveCliCommand
-    from agent_comms.cli_command import CliCommand
-    from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
-    from agent_comms.cli_verbs.restart import RestartCliCommand
-    from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
-
     names = ("first", "second")
     for name in names:
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)),
@@ -107,8 +112,6 @@ def test_batch_capability_owns_selection_catalog_and_execution(comms, tmp_path):
     ("archived", False), ("deleting", False),
 ])
 def test_channel_pin_filters_hidden_thread_presence(comms, tmp_path, presence, allowed):
-    from agent_comms.thread_status import ThreadStatus
-
     comms.registry.declare(
         Thread("first", frozenset({"team"}), Checkout(tmp_path)),
         ThreadStatus.member_named(presence)(),

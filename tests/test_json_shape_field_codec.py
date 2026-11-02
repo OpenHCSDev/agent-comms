@@ -1,7 +1,5 @@
 """External JSON shape selection belongs to the existing codec boundary."""
 
-from agent_comms.nominal.field_codec import StatusExclude
-
 from abc import abstractmethod
 from dataclasses import dataclass
 import json
@@ -11,6 +9,7 @@ import pytest
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import (
     Argument, FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, SingleFieldValue,
+    StatusExclude,
 )
 from agent_comms.launch_runtime import ImportPath, NoImportPath, SpecifiedImportPath
 from agent_comms.native_claim_epoch import NativeClaimEpoch, RecordedNativeClaim, UnrecordedNativeClaim
@@ -156,12 +155,10 @@ def test_shape_family_decodes_each_member_and_refuses_an_unowned_type(family, wi
         FieldCodec.decode(family, refused)
 
 
-@pytest.mark.parametrize(("annotations", "message"), [
-    ({"value": str}, "Two .* owners for str"),
-    ({"value": int, "other": int}, "one value field"),
-    ({"value": complex}, "Unsupported JSON shape"),
+@pytest.mark.parametrize("annotations", [
+    {"value": str}, {"value": int, "other": int}, {"value": complex},
 ])
-def test_bad_shape_declaration_fails_when_the_member_is_defined(annotations, message):
+def test_bad_shape_declaration_fails_when_the_member_is_defined(annotations):
     class Meaning(DeclaredFamily, JsonShapeFamily, affix="BadMeaning"):
         pass
 
