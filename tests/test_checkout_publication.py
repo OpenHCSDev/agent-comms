@@ -23,7 +23,7 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
         volume=tmp_path, floor_gib=0, checkout_base=tmp_path / "checkouts",
         scratch_base=tmp_path / "scratch",
     )
-    repository = SourceRepository.create(tmp_path / "git", baseline_files={Path(".gitignore"): "release/\ncurrent\n"})
+    repository = SourceRepository.create(tmp_path / "git", baseline_files={Path(".gitignore"): "release/\ncurrent\nliteral*\n"})
     checkout = PublishingCheckout(repository.checkout)
     user_file = checkout.path / "user-note"
     user_file.write_text("keep me")
@@ -38,6 +38,11 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
     with pytest.raises(StorageDenied):
         StorageProjection(rule, worker, comms).require_write(checkout.path / "owner.py")
     # A real upstream descendant is pulled, rather than locally manufacturing a ref.
+    repository.git(checkout.path, "switch", "feature")
+    (checkout.path / "literal[0]").symlink_to("release/old")
+    repository.git(checkout.path, "add", "--force", "--", "literal[0]")
+    repository.git(checkout.path, "commit", "-m", "Track a literal symlink before ignoring its namespace")
+    repository.git(checkout.path, "switch", "main")
     repository.git(checkout.path, "push", "origin", "feature:main")
     synchronized = SyncCheckoutCliCommand(caller=caller).apply(comms)
     assert synchronized.head == repository.git(checkout.path, "rev-parse", "origin/main").strip()
@@ -64,6 +69,9 @@ def test_canonical_sync_and_publication_preserve_source_and_prior_release(privat
             replace(command, destination=destination, previous=Path("release/new")).apply(comms)
     with pytest.raises(ValueError, match="Stage"):
         replace(command, source=old).apply(comms)
+    with pytest.raises(ValueError, match="tracked source"):
+        replace(command, destination=Path("release/literal"), link=Path("literal[0]")).apply(comms)
+    assert (checkout.path / "literal[0]").readlink() == Path("release/old")
     # A linked source cannot turn a read-only native/scientific original into a bundle.
     (source / "external").symlink_to(user_file)
     with pytest.raises(ValueError, match="regular files"):

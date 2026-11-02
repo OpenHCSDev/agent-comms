@@ -50,7 +50,7 @@ class PublishingCheckout(Checkout, StoreGuard):
         path = self.path / relative
         if path.parent.resolve() != path.parent:
             raise ValueError(f"Publication parent follows a symlink: {path}")
-        if Repo.git(self.path, "ls-files", "-z", "--", str(relative)):
+        if Repo.git(self.path, "--literal-pathspecs", "ls-files", "-z", "--", str(relative)):
             raise ValueError(f"Publication cannot replace tracked source: {relative}")
         if not Repo.answers(self.path, "check-ignore", "--quiet", "--no-index", "--", str(relative)):
             raise ValueError(f"Publication output must be ignored by Git: {relative}")
