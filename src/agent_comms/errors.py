@@ -57,6 +57,13 @@ class RelationViolationError(ValueError, DrainUnavailable):
     """A required relation between declarations cannot be proved."""
 
 
+class ThreadNotVisibleError(RelationViolationError, RejectedEnforcementError):
+    """A direct target refused publication before a standing-rule action could apply."""
+
+    def explanation(self) -> str:
+        return str(self)
+
+
 class GoalRefused(Refused, RelationViolationError):
     """A goal relation refused the action; preserve that refusal across owner RPC."""
 
