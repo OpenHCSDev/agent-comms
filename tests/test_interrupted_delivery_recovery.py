@@ -23,41 +23,40 @@ from test_coordinated_runtime import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
+async def reserve_one(comms, agent, root_id, owner, body):
+    """Publish one message to the owner and reserve it, as an owner that died after the
+    reservation and before the queue handoff left it: the storage operation runs without
+    its live result being placed."""
+    message = publish_initial(comms, "sender", owner.name, body)
+    store_path = comms.root / "coordination.sqlite3"
+    lookup = owner.incarnation.lookup
+    await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, owner_name=owner.name)
+    with Coordination(str(store_path)) as store:
+        assignments = pending_sealed_assignments(store, lookup)
+        deliveries = comms.bus.bus.deliveries_for_references(
+            tuple(row.source for row in assignments))
+    reserved = []
+    await Coordination.run_worker(partial(
+        DeliveredInput.reserve_pending, agent.inputs, owner.name, root_id,
+        tuple(zip(deliveries, assignments, strict=True)), (), reserved,
+    ))
+    (item, _content), = reserved
+    return message, item, assignments[0], store_path, lookup
+
+
 @pytest.mark.parametrize("native_bound", [False, True])
 async def test_interrupted_following_delivery_recovers_only_before_native_send(
     tmp_path, native_bound,
 ):
     comms, agent, root_id, session_id = _session(tmp_path)
     owner = comms.registry.require("beta")
-    message = publish_initial(comms, "sender", "beta", "must survive selection")
-    store_path = comms.root / "coordination.sqlite3"
-    lookup = owner.incarnation.lookup
-    await _accept_visible_deliveries(
-        comms.bus,
-        root_id,
-        store_path,
-        lookup,
-        owner_name=owner.name,
-    )
-
+    message, item, assignment, store_path, lookup = await reserve_one(
+        comms, agent, root_id, owner, "must survive selection")
     with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup)
-        deliveries = comms.bus.bus.deliveries_for_references(
-            tuple(row.source for row in assignments))
-    # Freeze the original storage operation without placing its live result,
-    # representing an owner that died after reservation and before queue handoff.
-    reserved = []
-    await Coordination.run_worker(partial(
-        DeliveredInput.reserve_pending, agent.inputs, owner.name, root_id,
-        tuple(zip(deliveries, assignments, strict=True)), (), reserved,
-    ))
-    assert len(reserved) == 1
-    with Coordination(str(store_path)) as store:
-        paused = store.assignments.get(assignments[0].assignment_id)
+        paused = store.assignments.get(assignment.assignment_id)
     assert isinstance(paused.lifecycle, DeferredAssignment)
     assert paused.lifecycle.execution_id is None
 
-    item, _content = reserved[0]
     row = stored_inputs(agent.inputs.dispositions.root).lookup(item.key)
     assert not row.has_native_binding
     if native_bound:
@@ -115,20 +114,8 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path):
 
     comms, agent, root_id, session_id = _session(tmp_path)
     owner = comms.registry.require("beta")
-    publish_initial(comms, "sender", "beta", "unbound recovery source")
-    store_path = comms.root / "coordination.sqlite3"
-    lookup = owner.incarnation.lookup
-    await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, owner_name="beta")
-    with Coordination(str(store_path)) as store:
-        assignments = pending_sealed_assignments(store, lookup)
-        deliveries = comms.bus.bus.deliveries_for_references(
-            tuple(row.source for row in assignments))
-    reserved = []
-    await Coordination.run_worker(partial(
-        DeliveredInput.reserve_pending, agent.inputs, "beta", root_id,
-        tuple(zip(deliveries, assignments, strict=True)), (), reserved,
-    ))
-    (item, _content), = reserved
+    _message, item, _assignment, store_path, _lookup = await reserve_one(
+        comms, agent, root_id, owner, "unbound recovery source")
     with Coordination(str(store_path)) as store:
         store.assignments.restore_unbound_delivery(item.assignment)
     path = CoordinationStore.path_in(comms.root)
