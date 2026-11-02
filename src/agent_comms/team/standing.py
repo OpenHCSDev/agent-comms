@@ -153,7 +153,7 @@ class InstallDue(UndatedStandingRule, FamilyScan):
 
     @classmethod
     def due(cls, comms: Comms, pulls: PullRequests) -> tuple[InstallDue, ...]:
-        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
+        DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         repos = comms.registry.snapshot().commander_project.require().repos
         installed = RecordedBuildIdentity.installed()
         runtime_repos = cls.repositories(comms, installed)
@@ -439,7 +439,7 @@ class DeliveryAwaitingJudgement(TeammateOwedAnswer, UndatedStandingRule, OrderHe
                 and not any(rule.asked_by(frozenset((self.unit,))) for rule in answered))
 
     def clearing_action(self) -> str:
-        DeclaredFamily.discover_package(commander)  # The verbs that clear it, for its action.
+        DeclaredFamily.discover_package(team)  # The verbs that clear it, for its action.
         return self.clearing_commands()
 
     def line(self) -> str:
