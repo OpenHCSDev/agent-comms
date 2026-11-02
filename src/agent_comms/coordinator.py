@@ -8,15 +8,15 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import AbstractContextManager, ExitStack, asynccontextmanager
-from contextvars import Context, ContextVar
+from contextvars import ContextVar
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self, TypeVar
 
 from .assignment_store import AssignmentStore
 from .attempt_store import AttemptStore
-from .child_process import AsyncWork, join_retirement
-from .native_build_inputs import GitLaunch
+from .child_process import join_retirement
+from .coordination_work import CoordinationWork
 from .coordination_session import (
     CoordinationSession,
     NativeCoordinationSession,
@@ -24,9 +24,8 @@ from .coordination_session import (
     system_clock,
 )
 from .execution_store import ExecutionStore
-from .maintenance_barrier import MaintenanceHolder
 from .participant_store import ParticipantStore
-from .store_files import DEFAULT_STORE_CONTENTION, StoreContention, StoreLock
+from .store_files import DEFAULT_STORE_CONTENTION, StoreContention
 from .working_memory_annotations import WorkingMemoryAnnotations
 
 if TYPE_CHECKING:
@@ -96,7 +95,7 @@ class StandaloneRoute(CoordinationRoute):
 STANDALONE_ROUTE: Final = StandaloneRoute()
 
 
-class Coordination(ExecutionStore, AttemptStore):
+class Coordination(CoordinationWork, ExecutionStore, AttemptStore):
     watch_period: ClassVar[float] = 60
     session_type = NativeCoordinationSession
     _worker: ContextVar[CoordinationRoute] = ContextVar(
@@ -114,20 +113,6 @@ class Coordination(ExecutionStore, AttemptStore):
                 yield worker
             finally:
                 cls._worker.reset(token)
-
-    @staticmethod
-    def worker_context() -> Context:
-        return GitLaunch.in_context(MaintenanceHolder.in_context(StoreLock.worker_context()))
-
-    @staticmethod
-    async def run_worker(operation: Callable[[], Result]) -> Result:
-        """Wait for blocking work before its caller releases the enclosing resources.
-
-        The callback owns and closes every borrowed resource it opens. This
-        scheduling seam also supports registry-only acquisition/retirement;
-        those operations must not depend on opening a coordinator connection.
-        """
-        return await AsyncWork.run_async(partial(Coordination.worker_context().run, operation))
 
     @classmethod
     async def watch_worker(
