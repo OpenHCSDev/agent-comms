@@ -41,7 +41,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.errors import (
     CommittedMessageError, HumanSendRefusedError, RelationViolationError, TodoConflict, TodoError,
 )
-from agent_comms.nominal.field_codec import FieldCodec, InputId, MessageId, OrderId, RecordProblems, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, InputId, MessageId, OrderId, RecordProblems, TurnId
 from agent_comms.goal_actions import (
     CreateProblemGoalAction,
     ReissuedOrderGoalAction,
@@ -49,7 +49,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_presentation import RunnableExecution
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from team_heartbeat_fixture import capture_frame
 from agent_comms.held_orders import HeldOrders
 from agent_comms.input_disposition import InputDispositions
@@ -136,13 +136,18 @@ def held_bus(comms, tmp_path, source_repository, configured_repository, installe
         report="Report the result", at=RecordedEventTime(now - 3600),
         first_call_deadline=RecordedEventTime(now + 3600),
     )
+    generation = GoalId.mint()
+    lead = comms.registry.require("lead")
+    worker = comms.registry.require("worker")
     for problem in ("P1", "P2"):
-        comms.goals.update_goal("worker", CreateProblemGoalAction(
-            problem=problem, commander="lead", request=request,
-            assigner=comms.registry.require('worker').acting_identity,
-            repo=RepositoryName.from_wire("OpenHCSDev/agent-comms"), text=f"Repair {problem}",
-            review_at=RecordedEventTime(now + 3600), order=order,
-        ))
+        comms.goals.todos.create(
+            problem, RepositoryName.from_wire("OpenHCSDev/agent-comms"), f"Repair {problem}",
+            creator=lead, owner=worker, assigner=lead.incarnation, generation=generation,
+            request=request, review_at=RecordedEventTime(now + 3600), order=order,
+        )
+    comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(), goal_id=generation,
+    ))
     inputs = InputDispositions(comms.root)
     inputs.record(UNRESOLVED_INPUT_KEY, seq=None, owner="worker", claim_scope=1,
                   target="worker", text="Do not replay this input")
@@ -185,8 +190,7 @@ def claim_order(held_bus, github_cli):
             reviewable_times=(),
         ))
         claimed = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, pull_request), head,
-                                      "Review the published repair", original.reference,
-                                      store=held_bus.goals.todos)
+                                      "Review the published repair", original.reference)
         claimed = replace(claimed, message=replace(
             claimed.message, timestamp=time.time() - AwaitingTeam.seconds - 1))
         ClaimOrder(todo.revision, worker, todo.held().generation, claimed).record(
@@ -217,8 +221,7 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
         todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
         todo, worker, PullRequestLink(todo.repo, 1), "a" * 40,
-        "Review this published repair with @outsider", original.reference,
-        store=comms.goals.todos)
+        "Review this published repair with @outsider", original.reference)
     if change == "rename":
         comms.registry.rename("lead", "renamed")
     elif change == "rename_holder":
@@ -349,7 +352,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
     assert frame.todos == ()
     fleet, = FieldCodec.decode(
-        TeamStory, board_read(CommsTeamStoryTool, comms, NoThreadCaller())).lines
+        TeamStory, CommsTeamStoryTool.invoke(comms, {}, caller=NoThreadCaller())).lines
     count, named = fleet.split(": ")
     assert count == "3 orders held by teammates no longer registered"
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
@@ -909,7 +912,10 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
-    SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    before = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match="not an open ask owed by lead"):
+        SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == before
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 

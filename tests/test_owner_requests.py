@@ -194,7 +194,6 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "a" * 40,
         "The request owner was inspected.",
         original.reference,
-        store=store,
     )
     assert claim.message.target == first.commander.name
     assert claim.message.answers == (original.reference,)
@@ -273,7 +272,6 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "b" * 40,
         "The request's work is ready for review.",
         original.reference,
-        store=store,
     )
     claimed = store.apply(
         awaiting_todo.id,

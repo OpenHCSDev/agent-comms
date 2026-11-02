@@ -422,7 +422,7 @@ class CommsOrderDeliverTool(PublishingToolRequest[ThreadCaller], ThreadToolReque
         original = comms.bus.bus.lookup_message(todo.latest_message.message_id)
         claim = OrderClaim.for_order(
             todo, actor, self.pull_request, self.head, self.report.text,
-            original.reference, store=comms.goals.todos,
+            original.reference,
         )
         changed = ClaimOrder(
             todo.revision, actor, generation, claim
