@@ -89,7 +89,9 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path):
+async def test_turn_publication_joins_cancellation_before_lease_release(
+    tmp_path, native_runtime_package,
+):
     comms, agent, _root_id, _ = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(

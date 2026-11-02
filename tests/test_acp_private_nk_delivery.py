@@ -102,8 +102,12 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
 
 async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):
     comms, agent, _, session_id = _session(tmp_path)
-    assert cursor_envelope(await agent.sessions.metadata("beta", session_id=session_id)) is not None
-    with Coordination(str(comms.root / "coordination.sqlite3")) as store:
-        store.session._connection.execute("DROP TABLE native_runtime_triage_members")
-    with pytest.raises(PublicationActivationBlocked):
-        await agent.sessions.metadata("beta", session_id=session_id)
+    try:
+        await agent.sessions.bind_owned(comms.registry.require("beta"), session_id)
+        assert cursor_envelope(await agent.sessions.metadata("beta", session_id=session_id)) is not None
+        with Coordination(str(comms.root / "coordination.sqlite3")) as store:
+            store.session._connection.execute("DROP TABLE native_runtime_triage_members")
+        with pytest.raises(PublicationActivationBlocked):
+            await agent.sessions.metadata("beta", session_id=session_id)
+    finally:
+        await agent.shutdown()
