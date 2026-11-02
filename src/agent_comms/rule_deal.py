@@ -22,7 +22,7 @@ import json
 import re
 from abc import ABC, abstractmethod
 from collections import Counter
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
@@ -359,12 +359,12 @@ class RuleAudit:
         """Why this entry does not answer reading `source`, or nothing when it does."""
         if not self.quote.strip():
             return "its quote is blank"
-        text = source.read_text(encoding="utf-8")
-        if self.quote not in text:
-            return f"its quote is not verbatim in {source}"
-        greentext = {line for line in text.splitlines() if line.startswith("> ")}
-        if not greentext.issuperset(self.quote.splitlines()):
-            return f"its quote must be whole greentext lines of {source}: every line starts with >"
+        greentext = "\n".join(line.removeprefix("> ") for line in
+                              source.read_text(encoding="utf-8").splitlines() if line.startswith("> "))
+        quoted = "\n".join(line.removeprefix("> ") for line in self.quote.splitlines())
+        if f"\n{quoted}\n" not in f"\n{greentext}\n":
+            return (f"its quote is not whole consecutive greentext lines of {source}, copied"
+                    " verbatim (the leading > is optional)")
         if len(self.quote.splitlines()) > self.max_quote_lines:
             return f"its quote runs past {self.max_quote_lines} lines"
         if not self.does.strip() or not self.why.strip():
@@ -505,12 +505,19 @@ class AuditDue:
             )
         )
 
-    def template(self, audit_path: Path) -> str:
-        """Render the required answers from their declarations, not another JSON schema."""
-        audit = SessionAudit(
+    def skeleton(self) -> SessionAudit:
+        """The audit owed before anything is answered: every rule and prompt, every field blank.
+        A deal writes it in place of the audit it drops, so the file a session fills always
+        exists in the right shape: on 2026-11-02 compacted sessions met a missing audit, the
+        template already scrolled away, and rebuilt the format wrong from memory."""
+        return SessionAudit(
             rules=tuple(RuleAudit(rule) for rule in sorted(self.rules)),
             owner_words=tuple(OwnerWordsAnswer(words, "") for words in self.owner_words),
         )
+
+    def template(self, audit_path: Path) -> str:
+        """Render the required answers from their declarations, not another JSON schema."""
+        audit = self.skeleton()
         return "\n\n".join(
             (
                 f"Answer each rule file you read in the audit; at most {Unengaged.batch} may stand"
@@ -521,8 +528,9 @@ class AuditDue:
                 "When a question arrives, add its exact id and your explanatory answer to meant."
                 " Each entry has this declaration-derived shape: "
                 + json.dumps(FieldCodec.record_schema(MeantAnswer), ensure_ascii=False),
-                f"Write this SessionAudit to {audit_path}. Fill quote, does, why and doing; keep"
-                " every rule name and quoted words unchanged. Doing names your current action:\n"
+                f"The deal wrote this SessionAudit blank to {audit_path}; fill quote, does, why and"
+                " doing in place (write it whole if the file is gone), keeping every rule name and"
+                " quoted words unchanged. Doing names your current action:\n"
                 + json.dumps(FieldCodec.encode(audit), ensure_ascii=False, indent=2),
             )
         )
@@ -536,15 +544,20 @@ class AuditDue:
         if missing:
             return "the audit skips the dealt rules " + ", ".join(missing)
         if idle := [answer.words for answer in audit.owner_words if not answer.acts()]:
-            return "the audit names no action for: " + " | ".join(idle)
+            return "the audit names no action for: " + self.quoted(idle)
         unanswered = Counter(self.owner_words) - Counter(
             answer.words for answer in audit.owner_words
         )
         if unanswered:
-            return "the audit does not answer the owner's prompts: " + " | ".join(
-                unanswered.elements()
-            )
+            return ("the audit does not answer the owner's prompts, each copied exactly as this"
+                    " JSON string into owner_words.words: " + self.quoted(unanswered.elements()))
         return ""
+
+    @staticmethod
+    def quoted(words: Iterable[str]) -> str:
+        """Prompts as JSON strings: the quotes bound the exact text, so punctuation a refusal
+        sentence adds after them is never copied in (2026-11-02: two sessions copied a period)."""
+        return ", ".join(json.dumps(text, ensure_ascii=False) for text in words)
 
 
 class DealtSources(ABC):
@@ -946,6 +959,8 @@ class Unmeant(Owed):
     question: Asked
     read: tuple[Path, ...]
     asking: str
+    written: tuple[str, ...]
+    """What the audit already answers under this question's id."""
 
     before: ClassVar[str] = "answering Tristan"
 
@@ -954,8 +969,9 @@ class Unmeant(Owed):
         meant = deal.meant.read()
         if not meant.open:
             return
+        audit = SessionAudit.read(deal.audit)
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
-                  SessionAudit.read(deal.audit).his_question())
+                  audit.his_question(), audit.answers_for(meant.open[0].message_id))
 
     @property
     def reason(self) -> str:
@@ -966,7 +982,15 @@ class Unmeant(Owed):
                 f" the other entries, and save {self.audit}:\n"
                 f"{json.dumps(FieldCodec.encode(entry), ensure_ascii=False)}\n"
                 f"The gate accepts an answer that opens with yes or no and runs at least"
-                f" {MeantRecord.answer_words} words.")
+                f" {MeantRecord.answer_words} words. Lines Tristan says after this question carry"
+                " their own message ids; none replaces it, so answer this id."
+                + "".join(f"\nYour answer {json.dumps(answer, ensure_ascii=False)} under this id"
+                          f" does not count: it has {len(answer.split())} words, fewer than"
+                          f" {MeantRecord.answer_words}." if
+                          MeantRecord.answer.match(answer) else
+                          f"\nYour answer {json.dumps(answer, ensure_ascii=False)} under this id"
+                          " does not count: it does not open with yes or no."
+                          for answer in self.written))
 
     def permits_read(self, path: Path) -> bool:
         return path in self.read
@@ -1174,7 +1198,7 @@ class RuleDeal(State, DealtCalls):
         """A start or compaction drops what was read: the read log resets first, to what the
         session's delivery already put in front of it (nothing, unless its launcher put the deal
         in its system prompt), then the record is published whole, so no reader sees a
-        half-written deal. The audit goes with the reads:
+        half-written deal. The audit's answers go with the reads, replaced by the blank skeleton:
         a fresh instance owes a fresh confession, never one carried over from the context it
         lost (plans/GATE-ENGAGEMENT-PLAN.md). A resume deals nothing and keeps both."""
         mode = self.current().mode
@@ -1186,17 +1210,12 @@ class RuleDeal(State, DealtCalls):
             read.line() for read in self.delivery().reads() if read.source in held
         ), encoding="utf-8")
         self.dealt_opened.replace(OpenedReads())
-        self.audit.unlink(missing_ok=True)
+        due = AuditDue(dealt.answered(), prompts)
+        AtomicFile(self.audit).write_bytes(json.dumps(
+            FieldCodec.encode(due.skeleton()), ensure_ascii=False, indent=2).encode())
         self.meant.replace(MeantRecord())
         self.template_shown.unlink(missing_ok=True)
-        self.publish(
-            DealRecord(
-                paths,
-                AuditDue(dealt.answered(), prompts),
-                trigger,
-                mode,
-            )
-        )
+        self.publish(DealRecord(paths, due, trigger, mode))
 
     def publish(self, record: DealRecord) -> None:
         AtomicFile(self.record).write_bytes(

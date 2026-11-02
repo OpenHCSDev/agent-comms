@@ -23,7 +23,7 @@ from pydantic import JsonValue
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_payloads import PiMessage
 from agent_comms.pi_rule_gate import PiRedeal, PiRuleGate
-from agent_comms.rule_deal import StartedDeal
+from agent_comms.rule_deal import RuleDeal, SessionAudit, StartedDeal
 from agent_comms.rule_deal import ReadSpan
 from agent_comms.native_entries import SessionEntry
 from agent_comms.tool_declaration import ToolDeclaration, NoToolRecord
@@ -598,6 +598,11 @@ def engaged(rule: str, source: Path) -> dict[str, str]:
     """An audit entry answering one rule file with a greentext line it really holds."""
     line = next(line for line in source.read_text(encoding="utf-8").splitlines() if line.startswith("> "))
     return {"rule": rule, "quote": line, "does": "tested", "why": "tested"}
+
+
+def fresh_confession(deal: RuleDeal) -> bool:
+    """The deal's audit holds no answer: it is the blank skeleton the deal wrote."""
+    return SessionAudit.read(deal.audit) == deal.current().due.skeleton()
 
 
 def answer_deal(deal: PiRedeal) -> None:

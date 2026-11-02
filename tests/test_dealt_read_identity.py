@@ -15,7 +15,7 @@ from agent_comms.rule_deal import (
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.pi_rule_gate import PiRedeal
 from agent_comms_hooks.skill import DeckReader
-from conftest import answer_deal
+from conftest import answer_deal, fresh_confession
 
 
 def test_identical_content_under_a_new_runtime_needs_no_reread(team_bus):
@@ -40,7 +40,7 @@ def test_answers_and_reads_outlive_everything_but_lost_context(team_bus):
     deal.audit.write_text(deal.audit.read_text(encoding="utf-8"), encoding="utf-8")
     assert deal.current().read_by(deal) == read
     deal.deal(DeckReader, (), StartedDeal())
-    assert not deal.audit.exists() and deal.current().read_by(deal) == ()  # a fresh confession
+    assert fresh_confession(deal) and deal.current().read_by(deal) == ()  # a fresh confession
 
 
 def test_a_changed_file_is_owed_again_and_only_that_file(team_bus):
@@ -66,9 +66,9 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
     dealt = deal.current().dealt
     deal.observe_context(ContextUsage(41, 100))
     assert isinstance(deal.state(), Open) and deal.current().dealt == dealt
-    assert deal.audit.exists()
+    assert not fresh_confession(deal)
     deal.observe_context(ContextUsage(70, 100))
-    assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
+    assert not isinstance(deal.state(), Open) and fresh_confession(deal)  # the refresh is answered anew
 
 
 def test_his_question_quotes_the_written_audit_statement_and_asks():
