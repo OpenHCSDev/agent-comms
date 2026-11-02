@@ -1,155 +1,119 @@
-"""Stop fences the real native GRANT without changing coordinator generations."""
+"""Stop fences the real native GRANT before retiring its logical session."""
+from __future__ import annotations
 
-import asyncio
-import multiprocessing
-import os
-import signal
-from dataclasses import dataclass
-from multiprocessing.connection import Connection
-from multiprocessing.process import BaseProcess
+from collections.abc import AsyncIterator
+from functools import partial
 from pathlib import Path
 
 import pytest
 
+from agent_comms.acp import CommsAgent
 from agent_comms.attempt_recovery import RecoveryMonitorCapability
-from agent_comms.attempt_states import AttemptFailedAttempt, UnknownOutcomeAttempt
-from agent_comms.comms import wire
+from agent_comms.attempt_states import UnknownOutcomeAttempt
 from agent_comms.coordination_errors import RecoveryBlocked, StaleFence
 from agent_comms.coordinator import Coordination
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from test_native_failure_recovery import ReleasedNativeInput, prepared_native_input
-
-
-def receive(connection):
-    if not connection.poll(30):
-        raise TimeoutError("native owner did not answer")
-    return connection.recv()
-
-
-async def grant_owner(directory, connection):
-    async with prepared_native_input(Path(directory), max_attempts=2) as claim:
-        participant = claim.selected
-        comms = participant.comms
-
-        def stopped(signum, frame):
-            connection.send(comms.registry.snapshot().claim_generation(participant.owner.thread.name))
-            os._exit(0)
-
-        signal.signal(signal.SIGTERM, stopped)
-        connection.send(ReleasedNativeInput(
-            comms.root, participant.root_id, participant.batch.execution_id,
-            claim.input_id, claim.session.identity.path,
-        ))
-        connection.recv()
-
-        def record_grant():
-            with claim(claim.session.identity):
-                pass
-
-        try:
-            await Coordination.run_worker(record_grant)
-        except StaleFence as error:
-            connection.send(error)
-        else:
-            connection.send(None)
-        connection.recv()
-
-
-def owner_process(directory, connection):
-    with connection:
-        asyncio.run(grant_owner(directory, connection))
-
-
-@dataclass(frozen=True)
-class LiveInput:
-    process: BaseProcess
-    connection: Connection
-    source: ReleasedNativeInput
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.private_send_claim import PrivateSendClaim
+from test_native_failure_recovery import prepared_native_input
 
 
 @pytest.fixture
-def live_input(private_directory):
-    context = multiprocessing.get_context("spawn")
-    parent, child = context.Pipe()
-    process = context.Process(target=owner_process, args=(str(private_directory), child))
-    process.start()
-    child.close()
-    try:
-        yield LiveInput(process, parent, receive(parent))
-    finally:
-        if process.is_alive():
-            process.kill()
-        process.join(5)
-        assert not process.is_alive()
-        process.close()
-        parent.close()
+async def live_input(
+    private_directory: Path, native_runtime_package: VerifiedNativePackage,
+) -> AsyncIterator[PrivateSendClaim]:
+    async with prepared_native_input(private_directory, max_attempts=2) as claim:
+        comms = claim.selected.comms
+        agent = CommsAgent(comms, runtime_enabled=True)
+        try:
+            # Bind the actual session/socket, but do not start its input drain:
+            # the control owns the unsent/GRANT boundary, never a model prompt.
+            await agent.sessions.bind_owned(
+                comms.registry.require("beta"), AcpSessionId("beta"),
+            )
+            yield claim
+        finally:
+            await agent.shutdown()
 
 
-@pytest.mark.parametrize(
-    ("stop_first", "outcome"),
-    ((True, AttemptFailedAttempt), (False, UnknownOutcomeAttempt)),
-    ids=("stop-first", "grant-first"),
-)
-def test_registry_stop_orders_real_native_grant_and_preserves_input(live_input, stop_first, outcome):
-    source = live_input.source
-    comms = wire(source.root)
+@pytest.mark.parametrize("stop_first", (True, False), ids=("stop-first", "grant-first"))
+async def test_registry_stop_orders_real_native_grant_and_preserves_input(
+    live_input: PrivateSendClaim, stop_first: bool,
+) -> None:
+    claim = live_input
+    participant = claim.selected
+    comms = participant.comms
     owner = comms.registry.require("beta")
     before = comms.registry.snapshot().claim_generation(owner.name)
-    owners = ((owner, before),)
-    with Coordination(source.root / "coordination.sqlite3") as store:
+    with Coordination(comms.root / "coordination.sqlite3") as store:
         coordinator_before = store.participants.get(owner.incarnation.lookup).owner_identity
-        attempt_before = store.get(source.execution_id).attempt
+        attempt_before = store.get(participant.batch.execution_id).attempt
 
-    if stop_first:
-        comms.owners._finish_stopped_owners(owners)
-    live_input.connection.send(None)
-    result = receive(live_input.connection)
-    if stop_first:
-        assert type(result) is StaleFence
-    else:
-        assert result is None
-        comms.owners._finish_stopped_owners(owners)
+    def record_grant() -> None:
+        with claim(claim.session.identity):
+            pass
 
-    after = comms.registry.snapshot().claim_generation(owner.name)
-    assert after > before
-    release = comms.owners.releases.read_many((owner.name,))[owner.name]
-    assert release.current(comms.registry.snapshot(), owner, before)
-    with Coordination(source.root / "coordination.sqlite3") as store:
-        original = NativeRuntimeInput.require(store.session._connection, input_id=source.input_id)
+    if not stop_first:
+        await Coordination.run_worker(record_grant)
+    owners = await Coordination.run_worker(partial(comms.owners.fence_stop, owner.name))
+    ((_, fenced),) = owners
+    assert fenced > before
+    if stop_first:
+        with pytest.raises(StaleFence):
+            await Coordination.run_worker(record_grant)
+
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
         assert original.sent_owner_claimed_generation.matches(before) is (not stop_first)
-        assert store.get(source.execution_id).attempt == attempt_before
+        assert store.get(participant.batch.execution_id).attempt == attempt_before
         assert store.participants.get(owner.incarnation.lookup).owner_identity == coordinator_before
-        original.sent_owner_claimed_generation.require_release(release, comms.registry.snapshot(), owner)
 
-    # The real signal guard must accept the original release after the claim moved.
-    comms.owners._stop_processes(owners)
-    assert receive(live_input.connection) == after
-    live_input.process.join(5)
-    assert not live_input.process.is_alive()
+    # The real receiver requires a fenced owner before it can retire the session.
+    await Coordination.run_worker(partial(comms.owners._stop_processes, owners))
+    snapshot = comms.registry.snapshot()
+    after = snapshot.claim_generation(owner.name)
+    assert after > fenced
+    release = comms.owners.releases.read_many((owner.name,))[owner.name]
+    assert release.current(snapshot, owner, fenced)
+    original.sent_owner_claimed_generation.require_release(release, snapshot, owner)
+    assert owner.require_process().alive()  # Logical retirement must not kill its shared host.
     comms.owners._finish_stopped_owners(owners)
     assert comms.registry.snapshot().claim_generation(owner.name) == after
+
     RecoveryMonitorCapability.settle_stopped_owners(comms.owners, (owner,))
-    with Coordination(source.root / "coordination.sqlite3") as store:
-        settled = store.get(source.execution_id)
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        settled = store.get(participant.batch.execution_id)
         assert not settled.is_current
-        assert type(settled.attempt.lifecycle) is outcome
-        assert NativeRuntimeInput.require(store.session._connection, input_id=source.input_id) == original
+        # A missing context proof cannot establish unsent input in either order.
+        assert type(settled.attempt.lifecycle) is UnknownOutcomeAttempt
+        assert NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id) == original
         assert settled.attempt.attempt_ordinal < settled.execution.max_attempts
-        if stop_first:
+        with pytest.raises(RecoveryBlocked):
             settled.attempt.require_retry(settled)
-        else:
-            with pytest.raises(RecoveryBlocked):
-                settled.attempt.require_retry(settled)
 
 
-def test_public_stop_moves_claim_before_the_real_signal(live_input):
-    comms = wire(live_input.source.root)
+async def test_public_stop_fences_grant_before_session_retirement(
+    live_input: PrivateSendClaim,
+) -> None:
+    claim = live_input
+    comms = claim.selected.comms
     owner = comms.registry.require("beta")
     before = comms.registry.snapshot().claim_generation(owner.name)
-    # Keep the original process at its pre-GRANT boundary; Stop owns every phase.
-    comms.owners.stop(owner.name)
-    observed_at_signal = receive(live_input.connection)
-    assert observed_at_signal > before
-    assert observed_at_signal == comms.registry.snapshot().claim_generation(owner.name)
-    live_input.process.join(5)
-    assert not live_input.process.is_alive()
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        original = NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id)
+
+    # Keep the original input at its pre-GRANT boundary; Stop owns every phase.
+    await Coordination.run_worker(partial(comms.owners.stop, owner.name))
+    snapshot = comms.registry.snapshot()
+    release = comms.owners.releases.read_many((owner.name,))[owner.name]
+    assert release.before > before
+    assert release.current(snapshot, owner, release.before)
+    assert owner.require_process().alive()
+    with Coordination(comms.root / "coordination.sqlite3") as store:
+        settled = store.get(claim.selected.batch.execution_id)
+        assert not settled.is_current
+        assert type(settled.attempt.lifecycle) is UnknownOutcomeAttempt
+        assert NativeRuntimeInput.require(store.session._connection, input_id=claim.input_id) == original
+        with pytest.raises(RecoveryBlocked):
+            settled.attempt.require_retry(settled)
