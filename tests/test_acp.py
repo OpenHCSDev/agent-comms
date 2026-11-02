@@ -83,6 +83,13 @@ def test_core_refusal_gets_protocol_form_at_acp_boundary(refusal):
     assert caught.value.__cause__ is refusal
 
 
+@pytest.fixture
+def session_project(tmp_path: Path) -> Path:
+    project = tmp_path / "proj"
+    project.mkdir()
+    return project
+
+
 class TestHandlers:
     def _agent(self, tmp_path: Path) -> CommsAgent:
         return canonical_agent(wire(tmp_path / "wire"))
@@ -141,14 +148,19 @@ class TestHandlers:
             )
 
     async def test_service_tier_menu_selection_and_readback(
-        self, tmp_path, native_runtime_package,
+        self, tmp_path: Path, session_project: Path, native_runtime_package,
     ):
         from agent_comms.pi_vocabulary import ServiceTier
 
         agent = self._agent(tmp_path)
         try:
-            response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-            tier = next(option for option in response.config_options
+            response = await agent.new_session(cwd=str(session_project), mcp_servers=[])
+            client = RecordingClient()
+            await agent.sessions.config.send_menu(
+                client, FieldCodec.decode(AcpSessionId, response.session_id),
+            )
+            menu, = client.updates
+            tier = next(option for option in menu.config_options
                         if option.category == "service_tier")
             assert tier.current_value == ServiceTier.STANDARD.value
             assert {choice.value for choice in tier.options} == {
@@ -245,15 +257,20 @@ class TestHandlers:
             "new message"
         ]
 
-    async def test_same_cwd_allocates_distinct_threads(self, tmp_path, native_runtime_package):
-        agent = self._agent(tmp_path)
-        await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        agent._comms.owners.stop("proj")
-        response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
-        names = list(agent._comms.registry.all_threads())
-        assert names == ["proj", "proj-2"]
-        assert response.session_id == "proj-2"
-        assert agent._comms.registry.status("proj").declared_name == "stopped"
+    async def test_same_cwd_allocates_distinct_threads(
+        self, tmp_path: Path, session_project: Path, native_runtime_package,
+    ):
+        agent = canonical_agent(wire(tmp_path / "wire"), runtime_enabled=True)
+        try:
+            await agent.new_session(cwd=str(session_project), mcp_servers=[])
+            await asyncio.to_thread(agent._comms.owners.stop, "proj")
+            response = await agent.new_session(cwd=str(session_project), mcp_servers=[])
+            names = list(agent._comms.registry.all_threads())
+            assert names == ["proj", "proj-2"]
+            assert response.session_id == "proj-2"
+            assert agent._comms.registry.status("proj").declared_name == "stopped"
+        finally:
+            await agent.shutdown()
 
     async def test_same_leaf_different_cwd_disambiguates(self, tmp_path, native_runtime_package):
         agent = self._agent(tmp_path)
