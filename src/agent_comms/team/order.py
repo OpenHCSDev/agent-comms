@@ -806,7 +806,7 @@ class Team(TeamContext):
         print(f'{unit}: {n} strike(s) on {task}; held by {after.holder or "nobody"}')
 
     def withdraw(self, pid: str, why: str, superseded_by: Successor = NoSuccessor()) -> None:
-        """Core retires an undelivered order sent in error.
+        """Core retires an open order, delivered or not, with its reason.
 
         The reason goes on the public record and to the unit that held it."""
         todo = self.comms.goals.todos.get(pid)
@@ -1094,7 +1094,7 @@ class UnstrikeVerb(Reasoned, OrderVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class WithdrawVerb(Reasoned, OrderVerb):
-    help = "retire an undelivered order sent in error; its problem closes with no strike"
+    help = "retire an open order, delivered or not, with its reason; its problem closes with no strike"
     pid: Annotated[str, Argument(flags=("pid",))]
     superseded_by: Annotated[
         Successor,

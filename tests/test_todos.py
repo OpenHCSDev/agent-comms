@@ -291,7 +291,9 @@ def test_withdrawn_order_is_not_a_recurrence(tmp_path, source_repository):
 
 
 @pytest.mark.parametrize("released", (False, True))
-def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_repository):
+def test_withdraw_retires_a_delivered_problem(tmp_path, released, source_repository):
+    """2026-11-02, Tristan: delivered orders are withdrawn like any open order; refusing them
+    left delivered orders of departed holders on the board with no honest way off it."""
     first_goal_id = GoalId.mint()
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
@@ -305,10 +307,12 @@ def test_withdraw_refuses_a_delivered_problem(tmp_path, released, source_reposit
     if released:
         delivered = store.apply(todo.id, ReleaseTodo(delivered.revision, todo.held().owner_identity,
             todo.held(), StrikeReason("The worker finished its delivery and no longer needs this assignment.")))
-    with pytest.raises(ValueError):
-        store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
-            delivered.holder_state.previous_assignment(), "This delivery must remain on record."))
-    assert store.get(todo.id) == delivered
+    withdrawn = store.apply(todo.id, WithdrawTodo(delivered.revision, lead.incarnation,
+        delivered.holder_state.previous_assignment(), "Its holder retired; no run will come."))
+    assert withdrawn.state is DoneTodoState and withdrawn.strike_count == 0
+    assert withdrawn.history.events(withdrawn.id, DeliverTodo) == delivered.history.events(
+        delivered.id, DeliverTodo)  # the delivery stays on record
+    assert store.board() == ()
 
 
 def test_two_processes_assign_one_todo_before_any_worker_is_started(tmp_path: Path, source_repository) -> None:
