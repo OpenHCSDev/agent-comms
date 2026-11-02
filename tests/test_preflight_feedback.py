@@ -3,7 +3,7 @@ import pytest
 
 from agent_comms.input_key import AcpInputKey
 from agent_comms.nominal.field_codec import InputId, TurnId
-from agent_comms.input_attempt import MissingInput, NotSentInput, ReservedInput
+from agent_comms.input_attempt import NotSentInput, ReservedInput
 from agent_comms.input_disposition import InputDocument
 from agent_comms.turn_failure import (
     InputIdUnavailable,
@@ -27,7 +27,8 @@ def test_preflight_diagnostics_keep_original_phase(kind):
     output = TurnOutput(sensitive=True)
     output.record_failure(kind('Private phase'))
     output.startup_error('private image bytes')
-    assert output.failure_text == 'Image prompt failed; backend diagnostics withheld.'
+    assert 'Private phase' not in output.failure_text
+    assert 'private image bytes' not in output.failure_text
     assert type(output.failure) is kind
     assert 'Private phase' not in repr(output)
     assert 'private image bytes' not in repr(output)

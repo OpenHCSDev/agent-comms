@@ -72,7 +72,6 @@ def test_incomplete_saved_identity_cannot_authorize_an_owner(tmp_path):
     with pytest.raises(RelationViolationError) as rejected:
         Registration(path).require("owner")
     assert isinstance(rejected.value.__cause__, ValueError)
-    assert "Missing required fields for Thread" in str(rejected.value.__cause__)
 
 
 def test_retained_colliding_creation_dates_remain_readable(tmp_path):

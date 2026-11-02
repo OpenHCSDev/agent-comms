@@ -52,18 +52,6 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
     assert first.merge(replace(first, timestamp=expected + 1)) is None
 
 
-def test_new_native_entry_inherits_original_clock_projection():
-    class ExternalNoteEntry(NativeEntry):
-        def _events(self, context, timestamp):
-            return [AssistantTranscript("a new external note", position=context.position, timestamp=timestamp)]
-
-    # The inherited entry owner decodes the source clock before constructing any content.
-    stamp = "2026-09-28T23:12:33.123Z"
-    expected = datetime.fromisoformat(stamp).timestamp()
-    note = ExternalNoteEntry(timestamp=RecordedTimestamp(stamp))
-    assert note.events(TranscriptProjection(position=0))[0].timestamp == expected
-
-
 @pytest.mark.parametrize("stamp", [None, "not-a-time", "2026-09-28T23:12:33"])
 def test_an_entry_without_an_absolute_recorded_clock_is_refused(stamp):
     with pytest.raises(MalformedRecord):

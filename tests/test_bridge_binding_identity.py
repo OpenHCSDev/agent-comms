@@ -1,6 +1,3 @@
-
-from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim, WatchRecord
-from agent_comms.repo import Checkout
 """An enrolled address becomes a registered reader without changing its journal."""
 from dataclasses import replace
 from pathlib import Path
@@ -8,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.cli_bridges.claude import ClaudeBridge
+from agent_comms.cli_bridges.session_watch import LiveWatch, WatchClaim, WatchRecord
 from agent_comms.cli_bridges.shared import (
     Binding,
     BindingAddress,
@@ -18,6 +16,7 @@ from agent_comms.cli_bridges.shared import (
     Watch,
 )
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 
 
