@@ -69,7 +69,6 @@ from .message_notification import MessageNotification
 from .presentation import ChannelView
 from .notification_evidence import RecipientLimit
 from .progress_claims import ProgressClaim
-from .read_basis import NamedViewer
 from .relationships import (
     Collaboration,
     GoalDerivedContact,
@@ -1108,7 +1107,7 @@ class CommsHistoryTool(ReadTool, ToolRequest):
         target = CommandTarget.named(self.peer)
         return HistoryCliCommand(
             target=target.canonical_name(lambda name: comms.registry.require(name).name),
-            me=NamedViewer(caller.subject(self.participant)),
+            me=caller.history_viewer(self.participant),
             limit=self.limit, before=self.before,
         ).apply(comms)
 

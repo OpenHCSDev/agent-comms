@@ -58,7 +58,6 @@ from .repo import Checkout
 from .nominal.declared_family import DeclaredFamily, UnknownFamilyMember
 from .errors import (
     RelationViolationError,
-    UnregisteredThreadError,
 )
 from .coordination_errors import CoordinationError, Refused
 from .work_branches import WorkBranchError
@@ -573,7 +572,7 @@ class Connector:
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
-        """Open data at the served root; each caller owns its principal admission."""
+        """Open data at the served root; each caller checks its own access."""
         with client_wire(self.root) as comms:
             yield comms
 
@@ -947,8 +946,9 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
 
     def apply(self, ctx: ConnectorStore) -> str:
         namespace = RegistryStore.at(self.root).privacy().namespace
-        return FieldCodec.dumps(ctx.publish_ui_profile(
-            namespace, self.endpoint, self.profile, self.seconds))
+        profile = ctx.publish_ui_profile(
+            namespace, self.endpoint, self.profile, self.seconds)
+        return FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False)
 
 
 @dataclass(frozen=True, kw_only=True)

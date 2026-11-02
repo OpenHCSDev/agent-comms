@@ -33,7 +33,7 @@ class ConnectorCaller(ToolCaller):
     """The MCP contract, independent of whether its principal is a bus thread."""
 
     def require_root(self, root: Path) -> None:
-        """Existing thread and Director grants retain their current root admission."""
+        """Existing thread and Director grants keep their current root access."""
 
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
         """A thread-free, unscoped caller has no membership to publish."""
@@ -59,7 +59,7 @@ class ThreadConnectorCaller(ConnectorCaller, ThreadCaller):
 
 @dataclass(frozen=True)
 class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
-    """A thread-free MCP principal admitted only to the declared read capability."""
+    """A thread-free MCP caller with the declared read capability."""
 
     def exposed(self) -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
         return {tool.declared_name: tool for tool in ToolRequest.members_with(ReadTool)}

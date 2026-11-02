@@ -9,7 +9,7 @@ import pytest
 
 from agent_comms.connector_caller import CALLER, ForkingCaller, GrantRefusedError
 from agent_comms.connector_store import (
-    CALLBACK, AuthorizationQuery, AuthorizationRequest, ConnectorAccess,
+    CALLBACK, AccessLabel, AuthorizationQuery, AuthorizationRequest, ConnectorAccess,
     ConnectorCredentialsFile, ConnectorGrants, ConnectorStore, ExistingDirectorAccess, IssuedCode,
     RegisteredClient, TrustedBrowser, digest,
 )
@@ -33,9 +33,9 @@ def previous_grants() -> PreviousConnectorGrants:
             query, digest("approval"), expires_at=expiry)},
         codes={digest("code"): IssuedCode("client", "challenge", expires_at=expiry)},
         access={
-            digest("oauth"): PreviousIssuedAccess("client", expires_at=expiry),
-            digest("service"): PreviousIssuedAccess("local-proof", expires_at=expiry),
-            digest("expired"): PreviousIssuedAccess("client", expires_at=1),
+            digest("oauth"): PreviousIssuedAccess(AccessLabel("client"), expires_at=expiry),
+            digest("service"): PreviousIssuedAccess(AccessLabel("local-proof"), expires_at=expiry),
+            digest("expired"): PreviousIssuedAccess(AccessLabel("client"), expires_at=1),
         },
         threads={digest("thread"): PreviousThreadGrant("reader")},
         refresh={digest("refresh"): "client"},
@@ -59,7 +59,7 @@ def test_selected_credential_carry_preserves_live_authority_and_pending_state(
 ) -> None:
     path = selected_path(selected_carry)
     PrivateDirectoryRole.make_parents(path.parent)
-    AtomicFile(path).write_text(FieldCodec.dumps(previous_grants))
+    AtomicFile(path).write_text(FieldCodec.compact(FieldCodec.encode(previous_grants)))
     before = path.read_bytes()
     # The running reader accepts only the successor format, never a legacy fallback.
     with pytest.raises(MalformedRecord):
@@ -96,12 +96,12 @@ def test_colliding_legacy_bearer_digests_refuse_without_changing_bytes(
 ) -> None:
     key = digest("colliding")
     previous = PreviousConnectorGrants(
-        access={key: PreviousIssuedAccess("client", expires_at=time.time() + 3600)},
+        access={key: PreviousIssuedAccess(AccessLabel("client"), expires_at=time.time() + 3600)},
         threads={key: PreviousThreadGrant("reader")},
     )
     path = selected_path(selected_carry)
     PrivateDirectoryRole.make_parents(path.parent)
-    AtomicFile(path).write_text(FieldCodec.dumps(previous))
+    AtomicFile(path).write_text(FieldCodec.compact(FieldCodec.encode(previous)))
     before = path.read_bytes()
     with pytest.raises(RelationViolationError, match="share a bearer digest"):
         selected_carry.carry(apply=apply)
@@ -118,7 +118,7 @@ def test_unknown_current_authority_is_not_reinterpreted_as_legacy(
             digest("foreign"): {ConnectorAccess.family_discriminator: "not_an_authority"},
         },
     }
-    AtomicFile(path).write_text(FieldCodec.dumps(document))
+    AtomicFile(path).write_text(FieldCodec.compact(document))
     before = path.read_bytes()
     for apply in (False, True):
         with pytest.raises(MalformedRecord):
@@ -142,7 +142,7 @@ def test_credential_resource_refuses_an_aliased_retained_input(
     path = selected_path(selected_carry)
     PrivateDirectoryRole.make_parents(path.parent)
     outside = tmp_path / "not-the-selected-file.json"
-    AtomicFile(outside).write_text(FieldCodec.dumps(ConnectorGrants()))
+    AtomicFile(outside).write_text(FieldCodec.compact(FieldCodec.encode(ConnectorGrants())))
     path.symlink_to(outside)
     before = outside.read_bytes()
     with pytest.raises(RelationViolationError, match="unconfined path"):
@@ -155,7 +155,7 @@ def test_selected_credential_writer_lock_lives_until_its_exit_stack_closes(
 ) -> None:
     path = selected_path(selected_carry)
     PrivateDirectoryRole.make_parents(path.parent)
-    AtomicFile(path).write_text(FieldCodec.dumps(ConnectorGrants()))
+    AtomicFile(path).write_text(FieldCodec.compact(FieldCodec.encode(ConnectorGrants())))
     before = path.read_bytes()
     with ExitStack() as lifetime:
         held, = ConnectorCredentialsFile.borrowed_locks(lifetime, selected_carry.files)

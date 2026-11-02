@@ -49,10 +49,15 @@ class HttpsMcpEndpoint(SingleFieldValue):
     url: Annotated[URL, UrlText]
 
     def __post_init__(self) -> None:
-        if (self.url.scheme != "https" or not self.url.host
-                or self.url.user is not None or self.url.query or self.url.fragment):
-            raise MalformedRecord(
-                "The remote MCP endpoint requires HTTPS and no userinfo, query or fragment.")
+        refusal = "The remote MCP endpoint requires HTTPS and no userinfo, query or fragment."
+        with MalformedRecord.refusing(refusal):
+            self.url.origin()
+            permitted = (
+                self.url.with_scheme("https").with_user(None)
+                .with_query(None).with_fragment(None)
+            )
+        if self.url != permitted:
+            raise MalformedRecord(refusal)
 
 
 @dataclass(frozen=True)
@@ -81,7 +86,7 @@ class UiConnectionProfile:
         directory = PrivateDirectoryRole.read(path.parent, refusal)
         try:
             ExclusiveDirectoryAtomicFile(path=path, directory=directory).write_text(
-                FieldCodec.dumps(self))
+                FieldCodec.compact(FieldCodec.encode(self), allow_nan=False))
         finally:
             os.close(directory)
         return path

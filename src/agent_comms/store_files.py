@@ -320,7 +320,7 @@ class StoreGuard:
 
 
 class DrainedWriters(StoreGuard):
-    """Snapshot admission shared by guarded bus files and guarded external files."""
+    """The snapshot lock shared by bus files and external files."""
 
     @classmethod
     @contextmanager

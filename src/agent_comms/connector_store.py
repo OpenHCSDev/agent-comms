@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import secrets
 import time
 from collections.abc import Iterator
@@ -16,7 +17,7 @@ from .connector_profile import (
     BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId, UiGrantSummary,
 )
 from .nominal.declared_family import DeclaredFamily
-from .nominal.field_codec import FieldCodec, RootId
+from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, RootId
 from .locked_store import DocumentChange, FilesRequest
 from .maintenance_barrier import CarriedDocument
 from .store_files import DependentStateTier, DrainedWriters, SingleFileStore
@@ -136,11 +137,20 @@ class ExpiringDirectorAccess(ExpiringGrant, ConnectorAccess, declared_name=None)
         return CALLER
 
 
+class AccessLabel(NominalText):
+    """The recorded label of a bearer with an unattributed producer."""
+
+
+class AccessLabelText(NominalSpelling[AccessLabel]):
+    # Retain every spelling the old document admitted, including an empty label.
+    spelling = re.compile(r"[\s\S]*")
+
+
 @dataclass(frozen=True)
 class ExistingDirectorAccess(ExpiringDirectorAccess):
     """A retained Director bearer whose OAuth/service producer was not recorded."""
 
-    label: str
+    label: AccessLabel
 
 
 @dataclass(frozen=True)

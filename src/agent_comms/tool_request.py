@@ -222,7 +222,7 @@ class ReadTool(ReadWork, FreshIngress):
     read_only_hint: ClassVar[bool] = True
 
     def require_read_only(self) -> None:
-        """Read capability is admission; the descriptive MCP hint is not authority."""
+        """The declared read capability controls access, independently of MCP hints."""
 
     @classmethod
     def require_entry_open(cls, root: Path) -> None:

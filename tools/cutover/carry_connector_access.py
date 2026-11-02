@@ -10,7 +10,7 @@ from typing import ClassVar
 from pydantic import JsonValue
 
 from agent_comms.connector_store import (
-    AuthorizationRequest, ConnectorAccess, ConnectorCredentialsFile, ConnectorGrants,
+    AccessLabel, AuthorizationRequest, ConnectorAccess, ConnectorCredentialsFile, ConnectorGrants,
     ExistingDirectorAccess, ExpiringGrant, IssuedCode, RegisteredClient, ThreadGrant, TrustedBrowser,
 )
 from agent_comms.errors import RelationViolationError
@@ -22,7 +22,7 @@ from agent_comms.store_files import AtomicFile
 
 @dataclass(frozen=True)
 class PreviousIssuedAccess(ExpiringGrant):
-    client_id: str
+    client_id: AccessLabel
 
     def carried(self) -> ExistingDirectorAccess:
         # OAuth and local proofs both occupied this record. Preserve its label and
