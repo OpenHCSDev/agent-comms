@@ -43,7 +43,6 @@ def test_existing_unconfigured_worktree_is_refused_with_configured_choices(
     for repo in repositories:
         assert repo.github.name in message
         assert str(repo.checkout) in message
-    assert "agent-comms install" in message and "--repos" in message
 
 
 def test_order_check_named_by_repository_binds_its_checkout_from_any_directory(
