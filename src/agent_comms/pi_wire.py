@@ -56,7 +56,7 @@ class PiPayload(ExternalField):
                     raise MalformedRecord(f"Missing required field {key}")
                 decoded.update(captured)
             except MalformedRecord as refused:
-                plan.locate(problems, refused)
+                plan.locate_all(problems, refused)
         if problems:
             raise RecordProblems(problems)
         return decoded

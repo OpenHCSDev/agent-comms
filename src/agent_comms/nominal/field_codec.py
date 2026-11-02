@@ -628,8 +628,17 @@ class FieldPlan(ViewColumn):
     def key(self) -> str:
         return WireName.read(self.annotation, self.name)
 
+    @property
+    def fix(self) -> str:
+        return f"supply {self.annotation}"
+
     def locate(self, problems: dict[str, str], refused: MalformedRecord) -> None:
-        problems.update(refused.known_located(self.key, f"supply {self.annotation}"))
+        """Known problems only; a decoder plan encloses unknown fields itself (unknown_under)."""
+        problems.update(refused.known_located(self.key, self.fix))
+
+    def locate_all(self, problems: dict[str, str], refused: MalformedRecord) -> None:
+        """Known and unknown problems together, for a decoder with no plan to enclose them."""
+        problems.update(refused.located(self.key, self.fix))
 
     def field_paths(self, key: str, seen: frozenset[type]) -> tuple[tuple[str, ...], ...]:
         direct = ((self.key,),) if self.key == key else ()
