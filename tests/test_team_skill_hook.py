@@ -37,7 +37,7 @@ from agent_comms.registry_document import RegisteredTeamProject
 from agent_comms.slop import Slop
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, ReviewTimerUp
+from agent_comms.standing_rules import DirectiveUnacted, OrderlessUnreviewedHead, RetiredStandingRule, ReviewTimerUp
 from agent_comms.text_digest import TextDigest
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.task_attachments.team_pings import TeamDecisions, TeamUpdate, RulePing
@@ -391,6 +391,18 @@ def test_the_summary_leads_with_tristans_lines_and_never_parks_on_one_row():
     assert set(minutes) == set(his)
     assert "4 unchanged, 2 from Tristan: " in BoardSummary(board, at).line()
     assert {BoardSummary((stale, other), at + 60 * step).shown for step in range(2)} == {stale, other}
+
+
+def test_a_notice_naming_a_deleted_rule_decodes_as_history():
+    """2026-11-02: deleting BlockedTalk stopped two inbox drains on old notices naming it."""
+    since = RecordedEventTime(1.0)
+    worker = TeammateSubject(RecordedThreadIncarnation("worker", 1.0))
+    stored = FieldCodec.encode(RulePing(ReviewTimerUp, TextDigest.of("t"), text="Waiting on root",
+                                        subjects=(worker,), since=since))
+    stored["rule"] = "blocked_talk"
+    ping = FieldCodec.decode(RulePing, stored)
+    assert ping.rule is RetiredStandingRule and ping.text == "Waiting on root"
+    assert not ping.urgent and not ping.team_disposes and not ping.waits_on_team(2.0)  # never on the board
 
 
 def test_rules_carrying_his_words_flag_their_board_lines():

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, ClassVar, Self, cast
 from agent_comms.nominal.declared_family import DeclaredFamily, RegisteredFamily
 from agent_comms.declared_verb import DeclaredVerb
 from agent_comms.errors import RejectedEnforcementError, RelationViolationError, TodoConflict
-from agent_comms.nominal.field_codec import FieldCodec, OrderId
+from agent_comms.nominal.field_codec import DefaultExternalName, DefaultedName, FieldCodec, OrderId
 from agent_comms.head_review import HeadReviewOrder, PullRequestHead
 from agent_comms.heartbeat_subjects import (
     AnswerSubject,
@@ -179,7 +179,7 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
         return tuple(commands)
 
 
-class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.team"):
+class StandingRule(DefaultedName, RegisteredFamily, affix="StandingRule", discovery_package="agent_comms.team"):
     @classmethod
     @abstractmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -338,6 +338,26 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         return tuple(rule for owner in cls.scan_owners()
                      for rule in owner.scan_observed(comms, commander, observed, frame)
                      if rule.attention() and rule.broke_after(after))
+
+
+@dataclass(frozen=True)
+class RetiredStandingRule(DefaultExternalName, StandingRule):
+    """The rule a delivered heartbeat notice names after its declaration was deleted. Its line
+    is history: it scans nothing, is never urgent, and no verb disposes of it, so it is never
+    on the board. Deleting a rule therefore never makes a stored notice undecodable."""
+
+    team_disposes = False
+
+    @classmethod
+    def scan_observed(cls, comms: Comms, commander: str,
+                      observed: Sequence[TeammateState], frame: HeartbeatFrame) -> tuple[Self, ...]:
+        return ()
+
+    def line(self) -> str:
+        return "A standing rule deleted since this notice was recorded."
+
+    def broke_after(self, after: float) -> bool:
+        return False
 
 
 class FamilyScan(StandingRule, declared_name=None):
