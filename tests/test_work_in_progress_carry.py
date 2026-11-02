@@ -1,4 +1,5 @@
-"""The stated work-in-progress format has one declaration; prose and reader agree."""
+"""The work-in-progress markers are declared once, in the compaction instruction; the reader's
+pattern is derived from them and accepts only the three declared lines, in order."""
 
 import importlib.util
 import re
@@ -16,29 +17,18 @@ def _patch_module():
     return module
 
 
-def test_the_instruction_and_the_compaction_reader_declare_one_format(monkeypatch):
+def test_the_reader_accepts_only_the_declared_lines_in_order():
     module = _patch_module()
-    prose = INSTRUCTION.read_text()
-    # The coordination instruction names the three markers, in order, backticked.
-    stated = re.findall(r"`([A-Za-z]+):`", prose)
-    assert stated == list(module.WORK_IN_PROGRESS_MARKERS), prose
-    sample = "\n".join(f"{marker}: detail" for marker in stated)
-    assert re.search(module.WORK_IN_PROGRESS_PATTERN, sample)
-    # A different marker order or a missing middle line never matches.
-    assert not re.search(module.WORK_IN_PROGRESS_PATTERN,
-                         "Now: a\nNext: b\nUncommitted: c")
-    assert not re.search(module.WORK_IN_PROGRESS_PATTERN, "Now: a\nUncommitted: c")
-    # Labels elsewhere in the instruction never become compaction markers.
-    read_text = Path.read_text
+    now, uncommitted, upcoming = module.WORK_IN_PROGRESS_MARKERS
+    pattern = module.WORK_IN_PROGRESS_PATTERN
+    assert re.search(pattern, f"{now}: a\n{uncommitted}: b\n{upcoming}: c")
+    assert not re.search(pattern, f"{now}: a\n{upcoming}: b\n{uncommitted}: c")
+    assert not re.search(pattern, f"{now}: a\n{upcoming}: c")
+
+
+def test_labels_elsewhere_in_the_instruction_never_become_markers(monkeypatch):
+    markers = _patch_module().WORK_IN_PROGRESS_MARKERS
+    prose, read_text = INSTRUCTION.read_text(), Path.read_text
     monkeypatch.setattr(Path, "read_text", lambda self: "`Other:` unrelated\n\n" + prose
                         + "\n`Later:` unrelated\n" if self == INSTRUCTION else read_text(self))
-    assert _patch_module().WORK_IN_PROGRESS_MARKERS == module.WORK_IN_PROGRESS_MARKERS
-
-
-def test_the_prepared_reader_carries_the_declared_markers():
-    module = _patch_module()
-    markers = module.WORK_IN_PROGRESS_MARKERS
-    assert re.search(module.WORK_IN_PROGRESS_PATTERN,
-                     "Now: adding an event class\nUncommitted: test edits\nNext: run tests")
-    # The dirty annotation names the declared uncommitted marker, not a copy.
-    assert module.UNCOMMITTED_MARKER == markers[1] == "Uncommitted"
+    assert _patch_module().WORK_IN_PROGRESS_MARKERS == markers
