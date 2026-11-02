@@ -195,10 +195,7 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
     async def reload_if_superseded(
         self, previous: SessionLoadPlan, reload: Callable[[SessionLoadPlan], Awaitable[None]],
     ) -> None:
-        from .session_load import ExistingSessionLoadPlan
-
-        if previous.superseded_by(self):
-            await reload(ExistingSessionLoadPlan(self))
+        await previous.reload_if_superseded(self, reload)
 
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         # Both operands are the ORIGINAL registry owner/process witnesses.
