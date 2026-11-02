@@ -73,8 +73,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn
     from agent_comms.nominal.field_codec import AcpSessionId
-    from agent_comms.session_lifecycle import PublishedSession
-
+    
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(
         comms,
@@ -84,7 +83,7 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
     # OwnedTurn.acquire syncs a published session's identity (owned_turn.py:515); the
     # session is published here without a native start. SessionLifecycle.publish replaces
     # this write once it lands on main.
-    agent.sessions.published[AcpSessionId("alpha")] = PublishedSession.of(comms.registry.require("alpha"))
+    agent.sessions.publish(AcpSessionId("alpha"), comms.registry.require("alpha"))
     turn = OwnedTurn(
         agent.turns, "alpha", "alpha", "Independently authorized task",
         acceptance=NoTurnAcceptance(),
