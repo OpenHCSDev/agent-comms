@@ -503,6 +503,8 @@ class OwnersStopped:
         self.stopped.extend(name for name in running if name not in self.stopped)
         for outcome in stack.owners(root, StopCliCommand, running):
             outcome.require_success(UpgradeRefused)
+        # Restart candidates do not describe the physical host's lifetime.
+        RootRuntimeStore.at(root).retire_host().require_retired(root)
 
     @contextmanager
     def given_back_on(self, stack: Stack, root: Path) -> Iterator[None]:

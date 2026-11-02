@@ -22,6 +22,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .owner_connection import socket_path
 from .private_path import FileIdentity, PrivateSocketRole
 from .recorded_bus import RecordedBus, RecordedBusIdentity
+from .registry_store import RegistryStore
 from .store_files import DependentStateTier, SingleFileStore
 
 
@@ -73,6 +74,10 @@ class RootHost(DeclaredFamily, affix="RootHost"):
 
     def retire(self, root: Path, ready: Callable[[ProcessIdentity], bool]) -> bool:
         return True
+
+    def require_retired(self, root: Path) -> None:
+        if self.observed(root).alive():
+            raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
 
 
 @dataclass(frozen=True)
@@ -145,12 +150,20 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
     def empty(self) -> RootRuntime:
         raise FileNotFoundError(self.path)
 
-    def retire_host(self, ready: Callable[[ProcessIdentity], bool]) -> None:
-        def retire(data: RootRuntime) -> DocumentChange[RootRuntime, None]:
-            if data.host.retire(self.path.parent, ready):
-                return DocumentChange(replace(data, host=NoRootHost()), None)
-            return DocumentChange(data, None)
-        self.update(retire)
+    def retire_host(self) -> RootHost:
+        """Retire this root's physical host only after its logical owners detached.
+
+        Keep the registry cut current through the host write: no new owner may
+        attach between the ownership decision and the physical retirement.
+        """
+        with RegistryStore.at(self.path.parent).current_snapshot() as cut:
+            def retire(data: RootRuntime) -> DocumentChange[RootRuntime, RootHost]:
+                if data.host.retire(
+                    self.path.parent, lambda process: not cut.snapshot.process_owners(process),
+                ):
+                    data = replace(data, host=NoRootHost())
+                return DocumentChange(data, data.host)
+            return self.update(retire)
 
     def acquire_host(
         self, runtime: LaunchRuntime, command: tuple[str, ...], *,
@@ -191,8 +204,7 @@ class RootRuntimeStore(SingleFileStore, LockedStore[RootRuntime], RollbackRetain
         def publish(current: RootRuntime) -> DocumentChange[RootRuntime, RootRuntime]:
             if current.prefix == runtime.prefix:
                 return DocumentChange.to(current)
-            if current.host.observed(self.path.parent).alive():
-                raise ForeignRuntimeError("Retire the root's worker host before changing runtime")
+            current.host.require_retired(self.path.parent)
             return DocumentChange.to(RootRuntime(runtime.prefix))
         self.update(publish)
 

@@ -318,7 +318,7 @@ class OwnerLifecycle:
         with ThreadPoolExecutor() as calls:
             tuple(calls.map(lambda request: OwnerConnection.exchange(
                 self.root, self.registry.require(request.thread).require_process(), request), requests))
-        self.retire_host()
+        RootRuntimeStore.at(self.root).retire_host()
 
     def stop_requests(self, owners: Sequence[tuple[Thread, int]]) -> tuple[StopOwnerRuntimeRequest, ...]:
         """Project the fenced originals into the one session retirement operation."""
@@ -439,12 +439,6 @@ class OwnerLifecycle:
                 edit.document.unregister(thread.name)
             edit.commit()
             self.releases.record(edit.original.snapshot, retiring)
-
-    def retire_host(self) -> None:
-        """Retire the physical host only after every logical owner detached."""
-        with self.registry.store.current_snapshot() as cut:
-            RootRuntimeStore.at(self.root).retire_host(
-                lambda process: not cut.snapshot.process_owners(process))
 
     def complete_session(
         self, owner: OwnerIdentity, expected: OwnerIdentity, process: ProcessIdentity, before: int,
