@@ -7,7 +7,8 @@ from dataclasses import dataclass, field
 
 from .bus_read import UiRead
 from .comms import Comms
-from .historical_views import HistorySource, HistorySourceKey
+from .historical_views import HistorySource
+from .page_traversal import HistorySourceKey
 from .message_reference import MessageReference
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, RecipientCursor, RecipientLimit

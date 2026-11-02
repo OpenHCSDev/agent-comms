@@ -2,19 +2,31 @@
 
 from __future__ import annotations
 
+import re
+
 from abc import ABC, abstractmethod
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .nominal.field_codec import NullMember, RecordMember, SingleFieldValue, SubclassUnion
+from .nominal.field_codec import (
+    NominalSpelling, NominalText, NullMember, RecordMember, SingleFieldValue, SubclassUnion,
+)
 
 if TYPE_CHECKING:
     from .bus import BusReader
     from .message_page import MessagePage, PageWindow
     from .messages import Message, MessageKind
     from .read_basis import MessageDisplayScope
+
+
+class HistorySourceKey(NominalText):
+    """The archive's catalogue identity, distinct from a thread or runtime key."""
+
+
+class HistorySourceKeyText(NominalSpelling[HistorySourceKey]):
+    spelling = re.compile(r"[^\x00]+")
 
 
 class PageCursor(SubclassUnion, affix=""):
@@ -27,7 +39,7 @@ class PageCursor(SubclassUnion, affix=""):
         return NewerTraversal(self)
 
     @property
-    def history_source(self) -> str | None:
+    def history_source(self) -> HistorySourceKey | None:
         return None
 
     @property
@@ -98,10 +110,10 @@ class NewestCursor(NullMember, PageCursor):
 
 @dataclass(frozen=True)
 class HistoryCursor(RecordMember, SequenceCursor):
-    source: str
+    source: HistorySourceKey
 
     @property
-    def history_source(self) -> str:
+    def history_source(self) -> HistorySourceKey:
         return self.source
 
     @property
@@ -130,7 +142,7 @@ class PageTraversal(ABC):
         return result
 
     @property
-    def source(self) -> str | None:
+    def source(self) -> HistorySourceKey | None:
         return self.cursor.history_source
 
     @property

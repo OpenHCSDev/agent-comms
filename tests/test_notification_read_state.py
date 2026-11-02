@@ -1,5 +1,5 @@
 from agent_comms.transcripts import RecordedPageSource
-from agent_comms.historical_views import HistorySourceKey
+from agent_comms.page_traversal import HistorySourceKey
 import pickle
 import sys
 from dataclasses import replace

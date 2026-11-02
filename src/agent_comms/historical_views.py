@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
@@ -23,7 +22,7 @@ from .channels import Channel
 from .child_process import Platform
 from .coordination_errors import HistoricalSourceChanged
 from .errors import UnregisteredThreadError
-from .nominal.field_codec import FieldCodec, NominalSpelling, NominalText, ScratchName
+from .nominal.field_codec import FieldCodec, ScratchName
 from .locked_store import DocumentChange, RegistryFile, RootFile
 from .maintenance_barrier import CarriedDocument
 from .message_page import (
@@ -37,7 +36,7 @@ from .message_reference import MessageReference
 from .messages import CarriesEnvelope, Message
 from agent_comms.message_notification import NotificationWindow
 from .notification_evidence import FirstRecipient, OutcomeViewer, RecipientCursor, RecipientLimit
-from .page_traversal import HistoryCursor, OlderTraversal
+from .page_traversal import HistoryCursor, HistorySourceKey, OlderTraversal
 from .message_notification import MessageNotification
 from .presentation import WireRevision
 from .private_path import FileObservation, FileRevision, ObservedPath, PrivateDirectoryRole
@@ -299,14 +298,6 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
             self.second,
             worktree=self.worktree, bounds=bounds,
         )
-
-
-class HistorySourceKey(NominalText):
-    """The archive's catalogue identity, distinct from a thread or runtime key."""
-
-
-class HistorySourceKeyText(NominalSpelling[HistorySourceKey]):
-    spelling = re.compile(r"[^\x00]+")
 
 
 @dataclass(frozen=True, slots=True)
