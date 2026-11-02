@@ -10,6 +10,7 @@ from typing import Annotated, Literal
 from agent_comms.nominal.field_codec import AbsolutePathText, Argument, FieldCodec, Normalize, WireName
 from agent_comms.install_choices import InstallerChoice, LiveMode, RehearsalMode, RunMode, UnnamedInstaller
 from agent_comms.installer.probes.harnesses import HarnessInstallation
+from agent_comms.installer.probes.inputs import SelectedInputsProbe
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -37,6 +38,16 @@ class InstallRequest(HarnessInstallation):
             "action": "store_const", "const": FieldCodec.encode(RehearsalMode()),
         }),
     ] = dataclasses.field(default_factory=LiveMode)
+    selected_inputs: Annotated[
+        tuple[SelectedInputsProbe, ...],
+        Argument(
+            flags=("--selected-inputs",),
+            options={
+                "type": FieldCodec.parse,
+                "help": "JSON array of selected-input probes run under the live install hold before rehearsal",
+            },
+        ),
+    ] = ()
     retire: Annotated[
         bool,
         Argument(
