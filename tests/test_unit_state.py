@@ -148,9 +148,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             publish(comms, unit, "lead", time.time() - AwaitingCommander.seconds - 1)
         elif member is Stuck:
             with comms.goals.todos.writing() as db:
-                for todo in comms.goals.todos.held_for_commander(
-                    comms.registry.require("lead").incarnation
-                ):
+                for todo in comms.goals.todos.held_orders():
                     replace(
                         todo,
                         order=replace(
@@ -168,9 +166,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
         elif member is StalledOnNothing:
             recorded_turn(comms, (False,))
         elif member is DeliveredUnclosed:
-            for todo in comms.goals.todos.held_for_commander(
-                comms.registry.require("lead").incarnation
-            ):
+            for todo in comms.goals.todos.held_orders():
                 comms.goals.todos.apply(
                     todo.id,
                     DeliverTodo(
@@ -184,9 +180,7 @@ def test_unit_state_family_uses_real_records(held_bus, tmp_path, request, member
             graph = next(graph for graph in request.getfixturevalue("proof_build_checkouts")
                          if graph.repository.github == CorePackage.repository)
             with comms.goals.todos.writing() as db:
-                for todo in comms.goals.todos.held_for_commander(
-                    comms.registry.require("lead").incarnation
-                ):
+                for todo in comms.goals.todos.held_orders():
                     checked = todo.order.checked()
                     replace(
                         todo,

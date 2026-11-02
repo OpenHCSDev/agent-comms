@@ -207,7 +207,7 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.scan_checks(comms, commander, HeldOrders.read(comms, commander))
+        return cls.scan_checks(comms, commander, HeldOrders.read(comms))
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,

@@ -143,6 +143,11 @@ class ClearingVerb(DeclaredVerb, declared_name=None):
             rule.cleared_by(cls)
 
     @classmethod
+    def source_review_hint(cls) -> bool:
+        """A generic source-review line may offer this action without carrier evidence."""
+        return True
+
+    @classmethod
     def review_allowed(cls, verdicts: tuple[type[HeadVerdict], ...]) -> bool:
         """Ordinary verbs do not select a head verdict."""
         return True
@@ -227,20 +232,23 @@ class StandingRule(RegisteredFamily, affix="StandingRule", discovery_package="ag
         """Whether no recorded decision answers this line; only a head verdict can."""
         return True
 
-    def clearing_commands(self) -> str:
-        """The applicable verbs, with arguments supplied by this line's observed owners."""
-        values = self.command_values()
+    def clearing_actions(self) -> tuple[type[ClearingVerb], ...]:
+        """The declared actions applicable to this rule, before presentation compacts them."""
         verbs = dict.fromkeys(member for parent in type(self).__mro__
                               for family in vars(parent).get("clearing_verbs", ())
                               for member in family.members_with(family))
+        return tuple(verb for verb in verbs if self.review_allowed(verb))
+
+    def clearing_commands(self) -> str:
+        """The applicable verbs, with arguments supplied by this line's observed owners."""
+        values = self.command_values()
         # Verbs of one tool taking the same arguments print once: `judge ok|back --pr 3 --head H`,
         # not the same arguments once per verb.
         alike: dict[tuple[str, tuple[str, ...]], list[str]] = {}
-        for verb in verbs:
-            if self.review_allowed(verb):
-                for command in verb.commands(values):
-                    tool, name, *arguments = command.split(" ")
-                    alike.setdefault((tool, tuple(arguments)), []).append(name)
+        for verb in self.clearing_actions():
+            for command in verb.commands(values):
+                tool, name, *arguments = command.split(" ")
+                alike.setdefault((tool, tuple(arguments)), []).append(name)
         return " or ".join(f"`{' '.join((tool, '|'.join(names), *arguments))}`"
                            for (tool, arguments), names in alike.items())
 
@@ -745,7 +753,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
 
     @classmethod
     def opened(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.read_scan(comms, commander, HeldOrders.read(comms, commander))
+        return cls.read_scan(comms, commander, HeldOrders.read(comms))
 
     @classmethod
     def read_scan(cls, comms: Comms, commander: str, scan: HeldOrders) -> tuple[Self, ...]:
@@ -873,6 +881,9 @@ class HeadReviewRule(StandingRule, declared_name=None):
     def undecided(self, store: TodoStore) -> bool:
         return not self.decided(store, self.request)
 
+    def review_allowed(self, verb: type[ClearingVerb]) -> bool:
+        return verb.source_review_hint()
+
 
 @dataclass(frozen=True)
 class HeadReviewCommands(HeadReviewRule, declared_name=None):
@@ -892,7 +903,8 @@ class OrderHeadReviewCommands(HeadReviewCommands, declared_name=None):
     todo: Todo = field(kw_only=True, compare=False)
 
     def review_allowed(self, verb: type[ClearingVerb]) -> bool:
-        return verb.review_allowed(self.todo.order.checked().review_verdicts())
+        return (super().review_allowed(verb)
+                and verb.review_allowed(self.todo.order.checked().review_verdicts()))
 
     def command_values(self) -> Mapping[str, str]:
         return {**super().command_values(), "problem": self.todo.id}
@@ -1005,7 +1017,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def scan_reviews(cls, goals: Goals, commander: str, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
         snapshot = goals.registry.snapshot()
-        todos = goals.todos.for_commander(snapshot.require(commander).incarnation)
+        todos = goals.todos.board()
         return tuple(
             rule
             for repo in snapshot.commander_project.repository_names()
@@ -1027,8 +1039,7 @@ class UnreviewedHead(HeadLine, HeadReviewCommands, DatedStandingRule, declared_n
     def line(self) -> str:
         return (f"JUDGE {self.request.repo.to_wire()}#{self.request.pr} {self.request.head[:9]} is sitting"
                 f" there unjudged. you read it yet?"
-                f" -> judge ok/back/reviewing/superseded " + " ".join(
-                    f"--{name} {value}" for name, value in self.command_values().items()))
+                f" -> {self.clearing_commands()}")
 
 
 @dataclass(frozen=True)
@@ -1106,7 +1117,7 @@ class IdlePullRequest(HeadLine, DatedStandingRule):
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
                       observed: Sequence[UnitState], frame: HeartbeatFrame) -> tuple[Self, ...]:
-        ordered = comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+        ordered = comms.goals.todos.board()
         return cls.scan_pulls(comms.goals, frame.pulls, frame.todos, ordered)
 
     @classmethod
@@ -1169,7 +1180,7 @@ class OrderlessPullRequest(IdlePullRequest):
     @classmethod
     def scan_orderless(cls, goals: Goals, pulls: ProgressRead) -> tuple[Self, ...]:
         now = time.time()
-        orders = goals.todos.open_orders()
+        orders = goals.todos.board()
         found = (
             cls(request=PullRequestHead(repo, row.number, row.head),
                 holders=pulls.working_on(goals, repo, row),

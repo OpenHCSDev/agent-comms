@@ -328,7 +328,7 @@ def test_installed_proof_closes_and_older_build_is_refused_on_copied_bus(
                 assert str(installed) in str(refusal.value)
                 assert copied.goals.todos.get(problem) == delivered
                 print(f"{type(refusal.value).__name__}: {refusal.value}")
-    assert not source.goals.todos.for_commander(source.registry.require("lead").incarnation)
+    assert not source.goals.todos.board()
 
 
 def test_build_containment_does_not_turn_git_failure_into_absence_or_success(proof_build_checkouts):

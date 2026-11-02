@@ -15,6 +15,7 @@ import pytest
 
 from agent_comms.commander import judge, order
 from agent_comms.comms import Comms
+from agent_comms.connector_caller import DirectorCaller
 from agent_comms.closed_pull_requests import ClosedPullRequestWatch
 from agent_comms.commander.publication_rules import ClosedUnmergedPullRequest
 from agent_comms.commander_heartbeat import CommanderHeartbeat
@@ -38,7 +39,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.errors import TodoError
 from agent_comms.nominal.field_codec import FieldCodec, GoalId, MalformedRecord, RecordProblems
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tool_caller import CommanderPeerCaller, ThreadCaller
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.work_branches import (
     SourceGrowth, ThreadBranchCheckout, UnregisteredBranchCheckout, WorkBranches,
@@ -109,9 +110,9 @@ def linked_head_bus(head_bus):
     return head_bus
 
 
-def invoke(comms, request, verdict, order=NoHeadOrder()):
+def invoke(comms, request, verdict, order=NoHeadOrder(), *, caller=ThreadCaller("lead")):
     tool = CommsHeadVerdictTool(request=request, operation=verdict, order=order)
-    return tool.invoke(comms, tool.arguments, caller=ThreadCaller("lead"))
+    return tool.invoke(comms, tool.arguments, caller=caller)
 
 
 def promote(context: order.CommanderContext, request: PullRequestHead) -> HeadReviewed:
@@ -430,18 +431,62 @@ def test_linked_qualification_requires_the_original_order_quote(linked_head_bus,
     assert not any("statuses/" in call[1] for call in github.calls())
 
 
-def test_qualification_refuses_a_noncommander_before_any_record_or_public_status(linked_head_bus):
+@pytest.mark.parametrize("caller_type", (ThreadCaller, DirectorCaller))
+def test_qualification_records_an_untagged_peer_without_transferring_order_ownership(
+    linked_head_bus, caller_type,
+):
     comms, github, request = linked_head_bus
     before = comms.goals.todos.get("P2")
     tool = CommsHeadVerdictTool(
         request=request, operation=QualifiedHeadVerdict(QUALIFIED),
         order=OrderHeadReview.for_request((before,), request,
                                         lambda linked: LinkedHeadReview.of(linked, linked.order.edits[0])))
+    tool.invoke(comms, tool.arguments, caller=caller_type("worker"))
+    recorded, = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    assert recorded.actor.name == "worker"
+    assert recorded.actor.created_at == comms.registry.require("worker").incarnation.created_at
+    after = comms.goals.todos.get(before.id)
+    assert after.creator == before.creator
+    assert after.holder_state.previous_assignment() == before.holder_state.previous_assignment()
+    assert any("statuses/" in call[1] for call in github.calls())
+
+
+def test_peer_review_keeps_the_exact_linked_order_revision(linked_head_bus):
+    comms, _, request = linked_head_bus
+    original = comms.goals.todos.get("P2")
+    relationship = OrderHeadReview(original.revision, UnquotedHeadReview.of(original))
+    caller = ThreadCaller("worker")
+    invoke(comms, request, UnderReviewHeadVerdict(), relationship, caller=caller)
+    current = comms.goals.todos.get(original.id)
+    records = StoredHeadReview.head_reviews(comms.goals.todos, request)
+    with pytest.raises(TodoError):
+        invoke(comms, request, UnderReviewHeadVerdict(), relationship, caller=caller)
+    assert comms.goals.todos.get(original.id) == current
+    assert StoredHeadReview.head_reviews(comms.goals.todos, request) == records
+
+
+@pytest.mark.parametrize("caller_type", (ThreadCaller, DirectorCaller))
+def test_every_review_caller_keeps_configured_repository_scope(head_bus, caller_type):
+    comms, github, request = head_bus
+    foreign = replace(request, repo=RepositoryName("foreign", "unconfigured"))
+    calls = github.calls()
     with pytest.raises(ToolRefusedError):
-        tool.invoke(comms, tool.arguments, caller=ThreadCaller("worker"))
-    assert comms.goals.todos.get(before.id) == before
+        invoke(comms, foreign, UnderReviewHeadVerdict(), caller=caller_type("worker"))
+    assert github.calls() == calls
+    assert not StoredHeadReview.head_reviews(comms.goals.todos, foreign)
+
+
+@pytest.mark.parametrize("caller_type", (ThreadCaller, DirectorCaller))
+def test_unresolved_order_refuses_before_external_preparation(head_bus, caller_type):
+    comms, github, request = head_bus
+    relationship = OrderHeadReview.for_request(
+        comms.goals.todos.board(), request, UnquotedHeadReview.of, problem="not-held")
+    calls = github.calls()
+    with pytest.raises(ToolRefusedError):
+        invoke(comms, request, UnderReviewHeadVerdict(), relationship,
+               caller=caller_type("worker"))
+    assert github.calls() == calls
     assert not StoredHeadReview.head_reviews(comms.goals.todos, request)
-    assert not any("statuses/" in call[1] for call in github.calls())
 
 
 def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head_bus, reviewed_source):
@@ -570,9 +615,11 @@ def test_companion_input_changes_the_identity_of_an_unchanged_local_patch(
     assert not any(HeadReview.accepted(head.repo, head.head) for head in heads)
 
 
+@pytest.mark.parametrize("actor", ("lead", "worker"))
 def test_pending_sources_can_compute_but_only_reviewed_other_heads_allow_carrier_promotion(
-        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
-    pair = mutual_sources
+        mutual_sources: MutualSources, github_cli: GitHubFixture, actor: str) -> None:
+    pair = replace(mutual_sources, context=mutual_sources.context.model_copy(
+        update={"actor": CommanderPeerCaller(actor)}))
     comms = pair.context.comms
     client = PullRequestHead(pair.client.github, pair.client.number, pair.client.branch_commit)
     invoke(comms, client, UnderReviewHeadVerdict())
@@ -781,21 +828,23 @@ def test_failed_permission_withdrawal_preserves_the_preceding_source_record(
     assert MergeHeadReview.accepted(request.repo, request.head)
 
 
+@pytest.mark.parametrize("reviewer", ("lead", "worker"))
 @pytest.mark.parametrize("state", ("accepted", "unreviewed", "rejected", "stale", "uncontained", "status-only"))
-def test_capture_derives_only_exact_saved_root_orderless_sources_in_the_actual_carrier(
-    mutual_sources: MutualSources, github_cli: GitHubFixture, state: str,
+def test_capture_derives_only_exact_saved_orderless_sources_in_the_actual_carrier(
+    mutual_sources: MutualSources, github_cli: GitHubFixture, state: str, reviewer: str,
 ) -> None:
     pair = mutual_sources
-    comms = pair.context.comms
+    context = pair.context.model_copy(update={"actor": CommanderPeerCaller("worker")})
+    comms = context.comms
     peer = SourceRepository(checkout=pair.core.checkout, github=pair.core.github, number=9)
     peer.git(peer.checkout, "switch", "-c", "orderless-source", "main")
     commit = peer.publish_change("Actual orderless source", *peer.write_files({
         Path("src/agent_comms/orderless.py"): "orderless = 1\n"}))
     request = opened(github_cli, peer, peer.number, commit)
     if state not in ("unreviewed", "status-only"):
-        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
+        invoke(comms, request, ReviewedHeadVerdict(ACCEPTED), caller=ThreadCaller(reviewer))
     if state == "rejected":
-        invoke(comms, request, RejectedHeadVerdict(REASON))
+        invoke(comms, request, RejectedHeadVerdict(REASON), caller=ThreadCaller(reviewer))
     if state == "status-only":
         ReviewedHeadVerdict(ACCEPTED).post(request.repo, request.head, "lead", "not a saved decision")
     if state == "stale":
@@ -809,16 +858,16 @@ def test_capture_derives_only_exact_saved_root_orderless_sources_in_the_actual_c
         pair.checkout.include(request)
     carrier = pair.publish_carrier(github_cli)
     inputs = IntegrationRun(pair.checkout, pair.output, "retain actual orderless source authority").qualify(
-        pair.context, ("P2", "P3"), carrier=carrier)
+        context, ("P2", "P3"), carrier=carrier)
     local = inputs.source(pair.core.github)
     expected = (primary, request) if state == "accepted" else (primary,)
     assert local.heads == expected  # The linked primary also has a NoHeadOrder review: no duplicate.
     comms.goals.todos.require_input_sources(inputs)
-    assert all(link.number != request.pr for todo in comms.goals.todos.open_orders()
+    assert all(link.number != request.pr for todo in comms.goals.todos.board()
                for link in todo.order.checked().pull_requests)
     if state == "accepted":
         record, = StoredHeadReview.head_reviews(comms.goals.todos, request)
-        assert record.order == NoHeadOrder() and record.actor == pair.context.incarnation
+        assert record.order == NoHeadOrder() and record.actor == comms.registry.require(reviewer).incarnation
     else:
         altered = replace(local, heads=(primary, request))
         forged = replace(inputs, sources=tuple(altered if source.repository == pair.core.github else source
@@ -828,7 +877,7 @@ def test_capture_derives_only_exact_saved_root_orderless_sources_in_the_actual_c
             with pytest.raises(ToolRefusedError, match="dropped a captured source parent"):
                 altered.require_ancestry(pair.core, inputs.carrier.head)
         else:
-            with pytest.raises(TodoError, match="saved root source authority"):
+            with pytest.raises(TodoError):
                 comms.goals.todos.require_input_sources(forged)
     assert not any(call[:2] == ("pr", "merge") for call in github_cli.calls())
 
@@ -1012,8 +1061,7 @@ def test_overdue_linked_head_stays_visible_without_refusing_new_orders(head_bus)
     held = todo.held()
     RecordPullRequest(todo.revision, held.owner_identity,
                       PullRequestLink(request.repo, request.pr), held.generation).record(comms.goals, todo.id)
-    held_orders = comms.goals.todos.held_for_commander(
-        comms.registry.require("lead").incarnation)
+    held_orders = comms.goals.todos.held_orders()
     assert [rule.request for rule in LinkedUnreviewedHead.scan_reviews(
         comms.goals, "lead", ProgressRead(held_orders))] == [request]
     comms.goals.update_goal("outsider", replace(action, problem="P4"))

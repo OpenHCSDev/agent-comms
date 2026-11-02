@@ -79,9 +79,9 @@ class DeckReader(DealtSources):
                      if stream)
 
     def header(self, start: DeckStart, trigger: DealTrigger, comms: Comms,
-               snapshot: RegistrySnapshot, commanders: tuple[Thread, ...]) -> str:
+               snapshot: RegistrySnapshot) -> str:
         """Retained work, not a hierarchy of which reader is permitted to judge it."""
-        return start.held(trigger, comms, snapshot, commanders)
+        return start.held(trigger, comms, snapshot)
 
     def deaf(self, session: str) -> tuple[str, ...]:
         return tuple(deaf.line() for deaf in WatchClaim(session).deaf())
@@ -310,13 +310,12 @@ class DeckStart(DealtDeck):
         system prompt already holds."""
         prompts = self.prompts()
         self.prepare(reader, prompts, trigger)
-        commanders = tuple(snapshot.commander_project.commanders(snapshot))
         return (
             trigger.reason() + " " + self.notice(snapshot.commander_project.leads(snapshot)) + " "
             + self.delivery().told(reader.sources(), self.audit),
             self.template_once(self.current().due),
             self.owner_words(prompts),
-            reader.header(self, trigger, comms, snapshot, commanders),
+            reader.header(self, trigger, comms, snapshot),
         )
 
     def owner_words(self, prompts: tuple[str, ...]) -> str:
@@ -350,13 +349,11 @@ class DeckStart(DealtDeck):
             return ClaudeJsonLines().owner_words(
                 stream, transcript.stat().st_size, self.owner_prompts)
 
-    def held(self, trigger: DealTrigger, comms: Comms, snapshot: RegistrySnapshot,
-             commanders: tuple[Thread, ...]) -> str:
-        """Held orders from the same bus and cut that selected the reader."""
+    def held(self, trigger: DealTrigger, comms: Comms, snapshot: RegistrySnapshot) -> str:
+        """The one shared board's held orders, from the same bus and cut that selected the reader."""
         return "\n".join((
             trigger.boards(),
-            *(hold.recalled() for commander in commanders
-              for hold in HeldOrders.of(comms.goals.todos, snapshot, commander.name).live),
+            *(hold.recalled() for hold in HeldOrders.of(comms.goals.todos, snapshot).live),
         ))
 
     def prepare(self, reader: DeckReader, prompts: tuple[str, ...], trigger: DealTrigger) -> None:

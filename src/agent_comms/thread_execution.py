@@ -114,9 +114,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
     @classmethod
     def order_candidates(cls, thread: Thread) -> tuple[Thread, ...]:
-        """The thread when it can hold an order: a turn executor whose work state is ready."""
+        """Ready executors with a free goal slot; idle time is not consent to replace work."""
         return tuple(candidate for executor in thread.role.executor(thread)
-                     for candidate in thread.work_state.candidates(executor))
+                     for ready in thread.work_state.candidates(executor)
+                     for candidate in ready.goal.work_candidates(ready))
 
     @classmethod
     def channel_recipients(cls, thread: Thread) -> tuple[Thread, ...]:
@@ -124,8 +125,9 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return (thread,)
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """Only an executable role contributes a work card."""
+    def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
+        """An independent session owns its actions, regardless of its fork ancestry;
+        only an executable role contributes one."""
         return thread.role.executor(thread)
 
     @classmethod
@@ -227,7 +229,7 @@ class ServiceThreadExecution(NoChannelInbox, ThreadExecution):
 
 class SubagentExecution(ExternalThreadExecution):
     """A child working inside its parent session's turn: it reads its CLI inbox, holds no
-    order and has no unit card of its own, and starts with its parent's audience."""
+    order and has no independent card, and starts with inherited channel membership."""
 
     @classmethod
     def holds_activity(cls, thread: Thread, status: ThreadStatus) -> bool:
@@ -248,8 +250,8 @@ class SubagentExecution(ExternalThreadExecution):
         return ()
 
     @classmethod
-    def commanded_units(cls, thread: Thread) -> tuple[Thread, ...]:
-        """A child acts inside its parent's turn, so the parent's own card covers it."""
+    def independent_threads(cls, thread: Thread) -> tuple[Thread, ...]:
+        """A genuine in-turn child acts through its parent, not as another session."""
         return ()
 
     @classmethod
@@ -267,7 +269,10 @@ class SubagentExecution(ExternalThreadExecution):
 
 
 class CommanderForkExecution(NoChannelInbox, SubagentExecution):
-    """A commander's child: only a commander declares one, and it starts on its own goal."""
+    """An SDK child borrows its bound parent's context and records its own fork goal.
+
+    Any independent parent can declare it; the stored execution identity stays stable.
+    """
 
     @classmethod
     def require_commander_fork(cls) -> None:

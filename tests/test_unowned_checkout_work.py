@@ -158,8 +158,8 @@ def checkout_bus(tmp_path: Path, configured_repository, installed_runtime) -> Co
     row = c.goals.todos.get('P2')
     assert {related.id for related in c.goals.todos.related_problems(row)} == {'P1', 'P2'}
     c.goals.todos.apply('P2', ReleaseTodo(
-        row.revision, CoreWatcherIncarnation.watcher(), row.held(),
-        StrikeReason('The unit stopped answering this order before its checked work was finished.')))
+        row.revision, row.held().owner_identity, row.held(),
+        StrikeReason('The holder releases this order before its checked work was finished.')))
     c.transcripts.external('idle').finish(
         turn_id=available_turn_id, item_id=NativeItemId('answer'), events=(AssistantTranscript(
             'Ready for work', position=NativeItemId('answer'), timestamp=time.time()),))
@@ -177,8 +177,8 @@ def struck_unowned_bus(checkout_bus: Comms) -> tuple[Comms, StrikeTodo]:
         evidence=(row.order.checked().owner,))
     struck = c.goals.todos.apply(row.id, strike)
     c.goals.todos.apply(row.id, ReleaseTodo(
-        struck.revision, CoreWatcherIncarnation.watcher(), struck.held(),
-        StrikeReason('The worker stopped answering before the checked work was finished.')))
+        struck.revision, struck.held().owner_identity, struck.held(),
+        StrikeReason('The holder releases this order before the checked work was finished.')))
     return c, strike
 
 
@@ -308,8 +308,8 @@ def test_order_closed_after_the_frame_read_does_not_fail_the_merge_read(
         assert 'P1' in worker.orders and not isinstance(worker, Unreadable)
         row = c.goals.todos.get('P1')
         c.goals.todos.apply('P1', ReleaseTodo(
-            row.revision, CoreWatcherIncarnation.watcher(), row.held(),
-            StrikeReason('The commander closed this order after the heartbeat frame was read.')))
+            row.revision, row.held().owner_identity, row.held(),
+            StrikeReason('The holder releases this order after the heartbeat frame was read.')))
         asyncio.run(CommanderHeartbeat().run(lambda: nullcontext(c)))
         assert c.goals.todos.get('P1').holder is None
 

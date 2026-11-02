@@ -97,7 +97,7 @@ class Goals(GoalRecords):
     def change_problem(self, problem, operation, actor: ThreadIncarnation):
         """The caller's resolved identity carries its authority; a name lookup would drop it."""
         current = self.todos.get(problem)
-        current.require_commander(actor)
+        current.require_maintainer(actor)
         return operation.prepare(self, current).record(self, problem)
 
     def judge_calls(self, verdicts: Sequence[JudgedCall],
@@ -120,7 +120,7 @@ class Goals(GoalRecords):
             elif verdict.expected_revision == read_at[problem]:
                 verdict = replace(verdict, expected_revision=states[problem].revision)
             try:
-                states[problem].require_commander(actor)
+                states[problem].require_maintainer(actor)
                 prepared = verdict.prepare(self, states[problem])
                 states[problem] = prepared.apply(states[problem])
             except TodoError as refused:
@@ -148,7 +148,7 @@ class Goals(GoalRecords):
         owner = self.registry.require(unit).incarnation
         store: TodoStore = self.todos
         rule = self.registry.storage_rule
-        held = tuple(work for todo in store.held_by(actor.commanding_identity, owner)
+        held = tuple(work for todo in store.held_by(owner)
                      for work in rule.work_for_problem(todo, self.registry, store))
         if held:
             raise TodoError("; ".join(

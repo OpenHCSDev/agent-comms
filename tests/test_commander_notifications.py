@@ -45,7 +45,7 @@ from agent_comms.standing_rules import ReviewTimerUp, ServicePassFailing, Standi
 from agent_comms.ui_model.unit_state import (
     Spinning, UnitState, UrgentGroup,
 )
-from agent_comms.cli_bridges.session_watch import RecordedWatch, WatchClaim, WatchRecord
+from agent_comms.cli_bridges.session_watch import WatchClaim, WatchRecord
 from agent_comms.wake_policy import PassiveWake
 from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.channel_targets import CommandersTag, ThreadTarget
@@ -1104,21 +1104,21 @@ def test_one_pass_gives_every_commander_its_own_packet(notification_bus):
         assert CommanderFrame.current(comms, recipient.name).packets == (quiet.task,)
 
 
-def test_fork_cli_default_inherits_audience_but_not_commander_role(notification_bus):
+def test_fork_cli_inherits_channels_without_a_rank_exception(notification_bus):
     comms = notification_bus
     parent = comms.registry.require('worker')
     tag = CommandersTag.declared_name
-    parent = comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
+    comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
+    parent = comms.registry.require(parent.name)
     command = ForkCliCommand.thread_binding(parent)
-    assert command.tags.for_new() == parent.tags - {tag}
+    assert command.tags.for_new() == parent.tags
     explicit = replace(command, tags=GivenTags(parent.tags))
     assert tag in explicit.tags.for_new()
 
 
-def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
-    """The hook's role answer reads the one derivation: a thread registered with the tag
-    commands; a fork carries its commander's tags but acts for it, and a bound unit of a
-    commander does not inherit the role."""
+def test_enrollment_and_independent_execution_not_tags_determine_shared_participation(notification_bus, tmp_path):
+    """Every registered binding participates; only real in-turn executions are excluded
+    from the independent collaborator roster. Copying channels creates no parent authority."""
     comms = notification_bus
     tag = CommandersTag.declared_name
     for name in ("lead", "worker"):
@@ -1128,18 +1128,24 @@ def test_a_commander_is_declared_never_inherited(notification_bus, tmp_path):
     comms.registry.register(replace(declared, tags=declared.tags | {tag}))
     comms.registry.register_child("copied-fork", "worker", CommanderForkExecution, comms.goals)
     worker = comms.registry.require("worker")
-    comms.registry.register_commanded_unit(
+    bound = comms.registry.register_bound_thread(
         "bound-unit", "worker", worker.worktree, ProcessIdentity.capture(os.getpid()))
+    assert tuple(bound.parent.names()) == ()
+    assert bound.acting_identity.commanding_identity == bound.incarnation
 
     def commands(name):
-        return RecordedWatch(WatchClaim(name, home=tmp_path),
-                             WatchRecord(name, str(comms.root), (), tmp_path)).commands()
+        claim = WatchClaim(name, home=tmp_path)
+        claim.enrol(WatchRecord(name, str(comms.root), (), tmp_path))
+        return claim.state().commands()
 
-    assert commands("lead") and commands("worker")
-    assert not commands("outsider")
-    assert not commands("declared-fork") and not commands("copied-fork")
-    assert not commands("bound-unit")
-    assert {"comms", tag} <= comms.registry.require("copied-fork").tags
+    assert all(commands(name) for name in (
+        "lead", "worker", "outsider", "declared-fork", "copied-fork", "bound-unit"))
+    assert not commands("never-registered")
+    snapshot = comms.registry.snapshot()
+    independent = {peer.name for peer in snapshot.commander_project.commanders(snapshot)}
+    assert {"lead", "worker", "outsider", "bound-unit"} <= independent
+    assert {"declared-fork", "copied-fork"}.isdisjoint(independent)
+    assert {"comms", tag} <= snapshot.require("copied-fork").tags
 
 
 def test_a_board_packet_files_under_heartbeats_while_the_owners_own_words_stay_inbound(notification_bus):

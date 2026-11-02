@@ -122,13 +122,12 @@ class CommanderUnit(HudRecord):
     def order_ids(self) -> tuple[OrderId, ...]:
         return tuple(dict.fromkeys(card.order for card in self.orders))
 
-    def detail(self, comms: Comms, commander: ThreadIncarnation,
-               orders: tuple[OrderId, ...]) -> CommanderUnitDetail:
+    def detail(self, comms: Comms, orders: tuple[OrderId, ...]) -> CommanderUnitDetail:
         """Expand this published selection from its original record owners."""
         if self.order_ids != orders:
             raise ToolRefusedError("The selected unit's orders changed; read its current card")
         store = comms.goals.todos
-        held = store.held_by(commander, self.unit)
+        held = store.held_by(self.unit)
         current = {todo.id: todo for todo in held}
         if {(todo.id, todo.order.checked().id) for todo in held} != {
             (card.problem, card.order) for card in self.orders

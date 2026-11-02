@@ -478,7 +478,7 @@ class HolderGone(IndependentStandingRule, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return cls.in_scan(HeldOrders.read(comms, commander))
+        return cls.in_scan(HeldOrders.read(comms))
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -505,19 +505,17 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     recent: ClassVar[int] = 10 * 60
 
     @classmethod
-    def read_idle(cls, comms: Comms, commander: ThreadIncarnation) -> list[Thread]:
+    def read_idle(cls, comms: Comms) -> list[Thread]:
         """A fresh read and an already captured frame share the same idle selection."""
-        actor = comms.registry.require_lookup(commander.require_recorded().lookup)
-        return cls.idle(comms, actor.name, HeldOrders.read(comms, actor.name))
+        return cls.idle(comms, HeldOrders.read(comms))
 
     @classmethod
-    def idle(cls, comms: Comms, commander: str, scan: HeldOrders) -> list[Thread]:
-        """Units whose registered status is running, parked threads aside."""
+    def idle(cls, comms: Comms, scan: HeldOrders) -> list[Thread]:
+        """Available independent executors, regardless of who issued the request."""
         held = {todo.holder for todo in scan.todos}
-        excluded = held | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((candidate for thread in comms.registry.active_threads().values()
-                       if thread.name not in excluded
+                       if thread.name not in held
                        for candidate in thread.execution.order_candidates(thread)
                        if TurnDigestRead(comms.root, candidate, bound).read().turns),
                       key=lambda thread: thread.name)
@@ -536,7 +534,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.scan_orders(comms, commander, HeldOrders.read(comms, commander), PullRequests())
+        return cls.scan_orders(comms, commander, HeldOrders.read(comms), PullRequests())
 
     @classmethod
     def scan_observed(cls, comms: Comms, commander: str,
@@ -546,8 +544,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
     @classmethod
     def scan_orders(cls, comms: Comms, commander: str,
                     scan: HeldOrders, pulls: PullRequests) -> tuple[UnownedWheelSpin, ...]:
-        actor = comms.registry.require(commander).incarnation
-        return cls.paired(comms, commander, comms.goals.todos.for_commander(actor), scan, pulls)
+        return cls.paired(comms, commander, comms.goals.todos.board(), scan, pulls)
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
@@ -565,7 +562,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
         owners = {rule.previous.owner_identity for rule in retained}
         unowned = tuple(todo for todo in rows if todo.id not in protected)
         # Reading every candidate's recent turns is the expensive part; no unowned row, no read.
-        idle = [unit for unit in cls.idle(comms, commander, scan)
+        idle = [unit for unit in cls.idle(comms, scan)
                 if unit.incarnation not in owners] if unowned else []
         found = []
         for todo in unowned:
@@ -578,7 +575,7 @@ class UnownedWheelSpin(IndependentStandingRule, UndatedStandingRule, FamilyScan)
                 *(WaitingUnownedWheelSpin(todo) for todo in rows if todo.id not in covered))
 
     def redecided(self, comms: Comms, commander: str, current: Todo) -> tuple[StandingRule, ...]:
-        return type(self).paired(comms, commander, (current,), HeldOrders.read(comms, commander), PullRequests())
+        return type(self).paired(comms, commander, (current,), HeldOrders.read(comms), PullRequests())
 
     def line(self) -> str:
         return (f"STAFF {self.todo.id} has no owner and waits for a new unit. who's taking it?"
@@ -640,7 +637,7 @@ class UnownedOrderWatch(WatchPass[tuple[UnownedObservation, ...]]):
             observed.extend(
                 UnownedObservation(commander, rule)
                 for rule in UnownedWheelSpin.paired(
-                    comms, name, mine, HeldOrders.read(comms, name), pulls,
+                    comms, name, mine, HeldOrders.read(comms), pulls,
                 )
             )
         return tuple(observed)
@@ -784,7 +781,7 @@ class Scrutinize(IndependentStandingRule, UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         actor = comms.registry.require(commander).incarnation
         return tuple(cls(held, todo, count)
-                     for todo in comms.goals.todos.held_for_commander(actor)
+                     for todo in comms.goals.todos.held_orders()
                      for held in todo.current_holder.current_assignments()
                      for count in (todo.strikes_against(held.owner_identity),)
                      if count >= cls.threshold)

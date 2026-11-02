@@ -582,6 +582,11 @@ class PromoteVerb(OkVerb, HeadOnlyVerb):
         "explicitly review and enqueue this captured combined carrier, never an individual source"
     )
 
+    @classmethod
+    def source_review_hint(cls) -> bool:
+        """Carrier promotion is explicit, never a generic source-review suggestion."""
+        return False
+
     def review_head(
         self, ctx: order.CommanderContext, request: PullRequestHead, linked: HeadReviewOrder
     ) -> HeadReviewed:

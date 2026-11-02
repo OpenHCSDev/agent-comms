@@ -11,7 +11,7 @@ from agent_comms.cli_bridges.claude import ClaudeBridge
 from agent_comms.cli_bridges.shared import (
     Binding,
     BindingAddress,
-    CommandedBy,
+    ChannelsFrom,
     Enrol,
     Options,
     StoredBinding,
@@ -23,7 +23,7 @@ from agent_comms.threads import Thread
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('operation,tags', [
-    (Watch(CommandedBy('commander')), frozenset({'comms'})),
+    (Watch(ChannelsFrom('commander')), frozenset({'comms'})),
     (Watch(), frozenset()),
 ])
 async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path, operation, tags):
@@ -45,6 +45,8 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         reader = comms.registry.require('new-reader')
         assert original.owner == reader.incarnation
         assert reader.tags == tags
+        assert tuple(reader.parent.names()) == ()
+        assert reader.acting_identity.commanding_identity == reader.incarnation
         assert reader.worktree == Checkout(Path.cwd())
 
         comms.registry.rename('new-reader', 'renamed-reader')

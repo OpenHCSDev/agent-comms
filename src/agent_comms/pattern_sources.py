@@ -219,10 +219,12 @@ class SkippedCutoverFailure(PostmortemFailure):
 
 class DelegatedDiagnosisFailure(PostmortemFailure):
     number = 19
-    title = "It ordered units to diagnose and choose the shape"
+    title = "The diagnosis rule confused responsibility with rank"
     evidence = (
-        "October 20: orders P362, P377, P378 and P379 asked units to find the defect and pick its "
-        "fix, against the skill's rule that units do not diagnose or choose shapes."
+        "The old lesson for October 20 orders P362, P377, P378 and P379 forbade units from "
+        "diagnosing and choosing repairs. That rank restriction is superseded by Tristan's "
+        "shared-responsibility corrections51713/53058: the context holder traces the source, "
+        "chooses the owner repair and follows it through; the evidence, not model rank, decides."
     )
 
 

@@ -665,7 +665,7 @@ def test_a_commander_fork_registers_under_the_session_that_spawned_it(
                              "transcript_path": str(transcript), "agent_id": agent,
                              "agent_type": "fork"}).register(
                                  commanding_session, admitted_binding(commanding_session, actor, session))
-        assert f"commander fork claude-{agent}" in capsys.readouterr().out
+        assert f"in-turn fork claude-{agent}" in capsys.readouterr().out
     snapshot = commanding_session.registry.snapshot()
     for agent, parent in (("a7", "claude-code"), ("a8", "claude-nra")):
         fork = snapshot.require(f"claude-{agent}")

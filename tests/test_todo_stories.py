@@ -76,8 +76,8 @@ def story_members(comms):
         strike,
         VoidStrikeTodo(todo.revision, actor, strike,
                        "The original source trace shows this strike was issued in error."),
-        ReleaseTodo(todo.revision, actor, todo.held(), StrikeReason(
-            "The commander transfers this order so its original events remain visible.")),
+        ReleaseTodo(todo.revision, todo.held().owner_identity, todo.held(), StrikeReason(
+            "The holder releases this order so its original events remain visible.")),
         AcceptedVerdict(todo.revision, actor, todo.held(), ToolCallId("accepted-call"),
                         quote="Repair the existing record owner"),
         WordingCorrection(todo.revision, MessageId.mint("wording correction"), ("custody",),

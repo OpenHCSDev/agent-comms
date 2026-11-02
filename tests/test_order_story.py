@@ -143,8 +143,8 @@ def test_order_story_copied_bus_strike_and_send_back_once(comms, tmp_path):
     current = copied.goals.todos.get(saved.id)
     previous = current.held()
     released = copied.goals.todos.apply(current.id, ReleaseTodo(
-        current.revision, actor, previous,
-        StrikeReason("The copied order is released so its original public history can be checked."),
+        current.revision, previous.owner_identity, previous,
+        StrikeReason("The copied holder releases its order so original public history can be checked."),
     ))
     withdrawn = copied.goals.todos.apply(current.id, WithdrawTodo(
         released.revision, actor, previous,

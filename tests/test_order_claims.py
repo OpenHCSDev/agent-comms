@@ -439,8 +439,8 @@ def test_unstrike_does_not_undo_an_explicit_release(held_commander):
         'The first review counted a duplicated decision that the source did not contain.',
         evidence=(todo.order.checked().owner,)))
     released = store.apply(todo.id, ReleaseTodo(
-        struck.revision, ctx.incarnation, struck.held(),
-        StrikeReason('The commander deliberately moved the problem off this unit for independent work.')))
+        struck.revision, struck.held().owner_identity, struck.held(),
+        StrikeReason('The holder deliberately releases this exact assignment for independent work.')))
     releases = released.history.events(released.id, ReleaseTodo)
     main(['unstrike', 'P1', '--why',
           'The cited duplicated decision was absent and this strike was recorded in error.'], ctx)

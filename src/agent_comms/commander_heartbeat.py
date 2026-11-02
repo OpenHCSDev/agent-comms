@@ -53,7 +53,7 @@ class CommanderObservation:
                       - {unit for state in self.states for unit in state.readable_units()})
         return tuple(
             closed
-            for todo in comms.goals.todos.for_commander(self.thread.incarnation)
+            for todo in comms.goals.todos.board()
             if not any(held.owner_identity in unreadable
                        for held in todo.current_holder.current_assignments())
             for closed in todo.order.closed_by_merge(
