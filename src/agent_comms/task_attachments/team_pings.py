@@ -398,7 +398,7 @@ class TeamUpdateStore(PatternFile, SingleFileStore, DurableFile,
     heartbeat writes it; failed publication and muted delivery do not erase observations.
     """
 
-    filename: ClassVar[str] = "team_updates/{lookup}.json"
+    filename: ClassVar[str] = "commander_updates/{lookup}.json"
     record_type = tuple[TeamUpdate, ...]
 
     @classmethod

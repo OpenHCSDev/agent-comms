@@ -5554,12 +5554,12 @@ class ChangeTodoState(TodoOperation):
 class OwnerRequest(TodoStoreRows, TypedTable, SharedFileTables, DurableTables):
     """One owner's request, independent of any current turn goal."""
 
-    indexes = (Index(("team_created_at", "state", "created_at")),)
+    indexes = (Index(("commander_created_at", "state", "created_at")),)
 
     id: Annotated[OwnerRequestId, Column(primary_key=True, storage=TextStorage)]
     commander: RecordedThreadIncarnation
-    team_created_at: ClassVar[Generated] = Generated(
-        float, Column(generated="json_extract({teammate}, '$.created_at')"),
+    commander_created_at: ClassVar[Generated] = Generated(
+        float, Column(generated="json_extract({commander}, '$.created_at')"),
     )
     text: str
     state: RequestState = OpenRequestState()

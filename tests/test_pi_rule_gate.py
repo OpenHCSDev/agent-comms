@@ -444,3 +444,16 @@ def test_audit_answers_keep_the_declared_explanatory_word_bar(opening):
     complete = short + " action"
     assert not meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, short),)))
     assert meant.answered_by(SessionAudit((), (), meant=(MeantAnswer(question, complete),)))
+
+
+def test_a_settled_meant_answer_replies_to_the_owner_on_the_real_bus(tmp_path, unit_deal, team_bus):
+    """The gate's answer resolves his question on the bus itself; a stand-in bus hid that the
+    reply path called a lookup the bus wrapper does not have, and every answer ended its turn."""
+    owner = team_bus.messaging.user_identity(Checkout(tmp_path)).name
+    voice = unit_deal  # the bus-seated gate is the voice a native transcript selects
+    asked = voice.say("You wrote that. Did you mean it?", unit_deal)
+    voice.answered(asked, "Yes. I meant it, and I am doing it now.")
+    reply = team_bus.bus.bus.lookup(team_bus.bus.bus.revision())
+    assert (reply.sender, reply.target) == ("unit-x", owner)
+    assert reply.body == "Yes. I meant it, and I am doing it now."
+    assert team_bus.bus.bus.message_reference(asked.message_id) in reply.answers

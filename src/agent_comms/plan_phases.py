@@ -654,7 +654,7 @@ class TransitionScaffoldingPhase(RemainingSlopPhase):
     after = (CutoverPhase,)
     evidence = PathsAbsent(
         (
-            "src/agent_comms/team_parity",
+            "src/agent_comms/commander_parity",
             "tools/carry_rts_orders.py",
             "tools/cutover/rts-launchers.patch",
         )
@@ -758,7 +758,7 @@ class DeadToolsPhase(RemainingSlopPhase):
     """8: unreferenced tools."""
 
     evidence = PathsAbsent(
-        ("tools/codex_duplicate_execution_hook.py", "tools/prove_team_dispatch.py")
+        ("tools/codex_duplicate_execution_hook.py", "tools/prove_commander_dispatch.py")
     )
 
 
