@@ -56,12 +56,13 @@ class ContextSpanRows(TypedTable, declared_name=None):
     def retain_segments(
         cls, original: AttachedPracticeRebuild, segments: Iterable[SegmentManifest],
     ) -> int:
-        # Both declared row members consume the same original set; their raw
-        # values and request outcomes survive, not merely an effective answer.
-        selected = tuple(segments)
+        # Restored requests may repeat large original prefixes. Consume one
+        # segment at a time, not a second materialized context corpus.
+        members = cls.members_with(cls)
         return sum(row.retain_original(original)
-                   for member in cls.members_with(cls)
-                   for row in member.for_segments(original.destination, selected,
+                   for segment in segments
+                   for member in members
+                   for row in member.for_segments(original.destination, (segment,),
                                                   table_source=original.source))
 
 
