@@ -186,6 +186,20 @@ def test_selected_context_copy_preserves_answers_versions_outcomes_and_grant_usa
     assert ContextStore(source.path.parent).path.read_bytes() == contexts_before
 
 
+def test_effective_annotations_require_an_original_allocated_row_id(
+    annotation_source: AnnotationSource,
+) -> None:
+    source = annotation_source
+    with source.store.session.read():
+        stored = SpanAnnotationsRow.select(
+            source.store.session._connection, order_by=('id',),
+        )[0]
+    assert SpanAnnotationsRow.effective((stored,)) == stored.label
+    unstored = SpanAnnotationsRow(label=stored.label, created_at_ms=stored.created_at_ms)
+    with pytest.raises(TypeError):
+        SpanAnnotationsRow.effective((unstored,))
+
+
 def test_context_selection_cannot_follow_finalized_coordinator_evidence(
     annotation_source: AnnotationSource, tmp_path: Path,
 ) -> None:

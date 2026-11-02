@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated
 
 
 from .bus_publication import HumanOrigin
+from .coordination_errors import IdentityConflict
 from .nominal.declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .nominal.field_codec import RootId, ThreadLookup
@@ -18,13 +19,13 @@ from .message_reference import MessageReference
 from .repo import Checkout
 from .thread_identity import ClaimScoped, ClaimedIdentity
 from .turn_context import Provenance
+from .typed_table import AttachedPracticeRebuild
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .input_attempt import StoredInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .typed_table import AttachedPracticeRebuild
 
 
 class InputDelivery:
@@ -131,8 +132,9 @@ class HarnessAttemptOrigin(InputOrigin):
     bridge: type[HarnessSession]
     reference: MessageReference
 
-    def retain_harness_rows(self, original, recipient):
-        from .coordination_errors import IdentityConflict
+    def retain_harness_rows(
+        self, original: AttachedPracticeRebuild, recipient: ThreadLookup,
+    ) -> int:
         from .coordination_tables.harness_deliveries import HarnessDelivery
 
         key = {"bridge": self.bridge, "recipient_lookup": recipient,

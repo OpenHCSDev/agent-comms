@@ -423,6 +423,9 @@ class Generated:
 class UnallocatedRowId(NullMember):
     """SQLite allocates this row's AUTOINCREMENT id when the row is inserted."""
 
+    def __int__(self) -> NoReturn:
+        raise TypeError("SQLite has not allocated this row id")
+
 
 RowId = int | UnallocatedRowId
 

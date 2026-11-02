@@ -89,7 +89,7 @@ class WorkingMemoryAnnotations:
         with cls.reading(source) as db:
             rows = sorted(SpanAnnotationsRow.for_segments(
                 db, segments, classifier=classifier.classifier, classifier_pin=classifier.pin,
-            ), key=lambda row: row.id)
+            ), key=lambda row: int(row.id))
         grouped = {}
         for row in rows:
             label = row.label

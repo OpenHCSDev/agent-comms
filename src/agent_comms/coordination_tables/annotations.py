@@ -125,7 +125,7 @@ class SpanAnnotationsRow(ContextSpanRows, CoordinatorRow):
         # Row ids order successive corrections from the same authority. Nominal
         # inheritance, not sequence, decides human versus model authority.
         latest = {}
-        for row in sorted(rows, key=lambda value: value.id):
+        for row in sorted(rows, key=lambda value: int(value.id)):
             latest[type(row.label)] = row.label
         return SpanLabel.effective(tuple(latest.values()))
 

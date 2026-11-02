@@ -23,7 +23,7 @@ from agent_comms.coordination_tables.participants import (
 )
 from agent_comms.nominal.field_codec import ThreadLookup
 from agent_comms.typed_table import (
-    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, TableSource,
+    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, RowNotFoundError, TableSource,
 )
 
 
@@ -61,11 +61,16 @@ class ParticipantStore:
         table_source: TableSource = LOCAL_TABLE_SOURCE,
     ) -> ParticipantSnapshot:
         """Read the same aggregate through the caller's already-owned SQL lifetime."""
-        person = Participants.one(db, participant_lookup=lookup, table_source=table_source)
-        generation = OwnerGenerations.one(db, owner_lookup=lookup, table_source=table_source)
-        pointer = CurrentExecutions.one(db, owner_lookup=lookup, table_source=table_source)
-        if person is None or generation is None or pointer is None:
-            raise ParticipantNotRegistered(f"participant {lookup!r} aggregate is not registered")
+        try:
+            person = Participants.require(db, participant_lookup=lookup, table_source=table_source)
+            generation = OwnerGenerations.require(
+                db, owner_lookup=lookup, table_source=table_source,
+            )
+            pointer = CurrentExecutions.require(db, owner_lookup=lookup, table_source=table_source)
+        except RowNotFoundError as error:
+            raise ParticipantNotRegistered(
+                f"participant {lookup!r} aggregate is not registered",
+            ) from error
         return ParticipantSnapshot(lookup, person.committed, generation, pointer)
 
     @classmethod
