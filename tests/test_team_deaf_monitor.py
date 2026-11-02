@@ -35,12 +35,12 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("HOME", "home")
     owner = ProcessIdentity.capture(os.getpid())
-    commander = replace(
+    lead = replace(
         held_bus.registry.require("lead"),
         execution=ExternalThreadExecution,
         process_identity=owner,
     )
-    held_bus.registry.register(commander)
+    held_bus.registry.register(lead)
     state = tmp_path / "bridge-state"
     binding = Binding(root=str(held_bus.root), owner=held_bus.registry.require('lead').incarnation,
                       thread='deaf-session', start=Binding.bus_head(str(held_bus.root)))
@@ -118,7 +118,7 @@ async def test_unconfirmed_monitor_reports_team_deaf_once(
             assert snapshot.status("lead").paused_since(snapshot.seen_at("lead"))
             await unready.confirm_probe(bridge, probe)
             assert not held_bus.registry.snapshot().status("lead").receiving
-            dead = replace(commander, process_identity=NoProcess())
+            dead = replace(lead, process_identity=NoProcess())
             assert (
                 snapshot.statuses["lead"].registered(dead, paused).paused_since(paused) == (paused,)
             )
