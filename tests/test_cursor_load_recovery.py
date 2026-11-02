@@ -62,6 +62,13 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
                     ):
                         return update.envelope
 
+    async def cancel_drains():
+        drains = [task for state in agent.inputs.drained.values()
+                  for task in state.observer.producers()]
+        for task in drains:
+            task.cancel()
+        await asyncio.gather(*drains, return_exceptions=True)
+
     try:
         await agent.inputs.drain_inbox(owner.name)
         before = await receive()
@@ -103,11 +110,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
         assert recovered.revision > loaded.revision
-        drains = [task for state in agent.inputs.drained.values()
-                  for task in state.observer.producers()]
-        for task in drains:
-            task.cancel()
-        await asyncio.gather(*drains, return_exceptions=True)
+        await cancel_drains()
         await agent.inputs.drain_inbox(owner.name)
         settled_revision = agent.cursors.delivery(owner.name).revision
         for _ in range(20):
@@ -115,11 +118,7 @@ async def test_trusted_load_recovers_after_real_sql_contention(tmp_path, private
         assert agent.cursors.delivery(owner.name).revision == settled_revision
         assert read_history(comms) == []  # No input submitted or replayed.
     finally:
-        drains = [task for state in agent.inputs.drained.values()
-                  for task in state.observer.producers()]
-        for task in drains:
-            task.cancel()
-        await asyncio.gather(*drains, return_exceptions=True)
+        await cancel_drains()
         server_writer.close()
         writer.close()
         await asyncio.gather(server_writer.wait_closed(), writer.wait_closed())
