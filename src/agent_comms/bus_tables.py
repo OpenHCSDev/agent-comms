@@ -202,6 +202,28 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
         return tuple(reference for reference, _ in selected)
 
 
+class RecordedAnswers:
+    """The committed answer relation, independent of the current author roster."""
+
+    def predicate(self) -> tuple[str, tuple[str, ...]]:
+        return "1", ()
+
+
+@dataclass(frozen=True)
+class AuthoredAnswers(RecordedAnswers):
+    """A query explicitly restricted to the authors the reader asks about."""
+
+    names: frozenset[str]
+
+    def predicate(self) -> tuple[str, tuple[str, ...]]:
+        marks = ",".join("?" for _ in self.names)
+        return (
+            f'EXISTS (SELECT 1 FROM "{MessageIdentitySource.declared_name}" AS author '
+            f'WHERE author.seq=answered.seq AND author.sender IN ({marks}))',
+            tuple(self.names),
+        )
+
+
 @dataclass(frozen=True)
 class AnsweredSource(messages.BusProjectionTables):
     original: Annotated[int, Column(
@@ -246,23 +268,22 @@ class AnsweredSource(messages.BusProjectionTables):
 
     @classmethod
     def unanswered_references(
-        cls, db: sqlite3.Connection, sequences: tuple[int, ...], responders: frozenset[str],
+        cls, db: sqlite3.Connection, sequences: tuple[int, ...], answers: RecordedAnswers,
     ) -> tuple[MessageReference, ...]:
-        """Select recorded originals before loading any message or reply content."""
+        """Select exact originals against the requested committed answer relation."""
         if not sequences:
             return ()
         MessageIdentitySource.require_sequences(db, sequences)
         asking = ",".join("?" for _ in sequences)
-        replying = ",".join("?" for _ in responders)
+        predicate, parameters = answers.predicate()
         identity = MessageIdentitySource.declared_name
         rows = db.execute(
             f'SELECT asked.seq, asked.message_id FROM "{identity}" AS asked '
             f'WHERE asked.seq IN ({asking}) AND NOT EXISTS ('
             f'SELECT 1 FROM "{cls.declared_name}" AS answered '
-            f'JOIN "{identity}" AS author ON author.seq=answered.seq '
             + cls._sql('WHERE answered.{original}=asked.seq ')
-            + f'AND author.sender IN ({replying})) ORDER BY asked.seq',
-            (*sequences, *responders),
+            + f'AND ({predicate})) ORDER BY asked.seq',
+            (*sequences, *parameters),
         )
         return tuple(MessageReference.iterate(rows))
 

@@ -1,4 +1,5 @@
 """A holder claims through the real tool boundary on a copied bus."""
+from agent_comms.bus_tables import AuthoredAnswers
 import json
 import shlex
 import sqlite3
@@ -113,7 +114,7 @@ def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
     assert Message.from_message(stored).to_wire() == Message.from_message(committed).to_wire()
     assert stored.type.allows_automatic_reply(stored)
     assert comms.bus.bus.unanswered_references(
-        (stored.seq,), frozenset({lead}),
+        (stored.seq,), AuthoredAnswers(frozenset({lead})),
     ) == (stored.reference,)
     assert tuple(comms.registry.require(name).goal for name in ("worker", lead)) == goals
     assert comms.goals.todos.get(original.id) == original

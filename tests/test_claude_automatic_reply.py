@@ -1,4 +1,5 @@
 """Only a turn's opening DMs receive its final; channels always require explicit sends."""
+from agent_comms.bus_tables import AuthoredAnswers
 
 import json
 import sqlite3
@@ -191,7 +192,7 @@ def assert_opening_send(comms: Comms, opening: Message, later: Message, turn_id:
     unrelated = comms.messaging.send('viewer', later.sender, 'A separate status update').message
     assert unrelated.answers == ()
     assert comms.bus.bus.unanswered_references(
-        (opening.seq, later.seq), frozenset({'viewer'})) == (later.reference,)
+        (opening.seq, later.seq), AuthoredAnswers(frozenset({'viewer'}))) == (later.reference,)
 
 
 @pytest.mark.asyncio
@@ -353,7 +354,7 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
     finish_reply(output, session)
     assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require('viewer').incarnation)} == expected
     assert comms.bus.bus.unanswered_references(
-        tuple(message.seq for message in originals), frozenset({'viewer'})) == tuple(
+        tuple(message.seq for message in originals), AuthoredAnswers(frozenset({'viewer'}))) == tuple(
             message.reference for message in originals)
 
 
@@ -402,7 +403,7 @@ async def test_same_prompt_id_wake_after_retirement_opens_a_new_turn(
     assert final.answers == (later.reference,)
     assert replies_after(bridge, later.seq) == (('peer', 'Answer to the new wake'),)
     assert comms.bus.bus.unanswered_references(
-        (first.seq, later.seq), frozenset({'viewer'})) == (first.reference,)
+        (first.seq, later.seq), AuthoredAnswers(frozenset({'viewer'}))) == (first.reference,)
     finish_reply(output, session)
     assert replies_after(bridge, later.seq) == (('peer', 'Answer to the new wake'),)
 

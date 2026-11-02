@@ -89,6 +89,8 @@ from agent_comms.todos import (
     ProgressRead,
 )
 from agent_comms.tool_caller import ForkCaller, NoThreadCaller, PeerCaller
+from agent_comms.connector import ConnectorSendTool
+from agent_comms.connector_caller import DirectorCaller
 from agent_comms.turn_digests import OrderEditCountRead
 from agent_comms.ui_model.teammate_state import AwaitingTeam, Blocked, Detached, TeammateState
 from cli_command import commander
@@ -820,6 +822,9 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
     reply.write_text("The real child answers its actual parent's directive.")
     # The raw child identity has no parent authority merely from its provenance.
     SayVerb(acting_as=PeerCaller(child.name), units="#comms", body_file=str(reply)).apply(ctx)
+    with pytest.raises(RecordProblems, match="not an open ask owed by answer-child"):
+        SayVerb(acting_as=PeerCaller(child.name), units="outsider", body_file=str(reply),
+                answers=(directive.message_id,)).apply(ctx)
     with pytest.raises(RecordProblems, match=directive.message_id) as refused:
         SayVerb(fork=child, units="#comms", body_file=str(reply)).apply(ctx)
     assert str(foreign.message_id) not in str(refused.value)
@@ -831,6 +836,27 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
         held_bus, held_bus.registry.require("lead").incarnation)}
     assert not any(rule.message.reference == directive.reference
                    for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
+    held_bus.registry.unregister(child.name)
+    held_bus.registry.remove(child.name)
+    assert not any(rule.message.reference == directive.reference
+                   for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
+    assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
+        held_bus, held_bus.registry.require("lead").incarnation)}
+
+
+def test_shared_request_directive_is_owed_only_by_its_frozen_recipient(held_bus):
+    request = held_bus.goals.todos.add_request(
+        held_bus.registry.require("lead").incarnation, "A shared task with a private instruction.")
+    ConnectorSendTool(target="worker", request=request.id,
+                      body="Read the shared task and report the result.").apply(
+                          held_bus, DirectorCaller("outsider"))
+    recorded = held_bus.goals.todos.owner_request(request.id)
+    directive, = recorded.directives
+    worker = held_bus.registry.require("worker").incarnation
+    lead = held_bus.registry.require("lead").incarnation
+    assert {rule.message.seq for rule in OwedAnswer.opened(held_bus, worker)} == {directive.seq}
+    assert directive.seq not in {rule.message.seq for rule in OwedAnswer.opened(held_bus, lead)}
+    assert recorded.commander == lead
 
 
 def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held_bus):

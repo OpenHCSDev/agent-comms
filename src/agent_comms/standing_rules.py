@@ -774,7 +774,7 @@ class OwedAnswer(IndependentStandingRule, FamilyScan, declared_name=None):
                 f"Answer owner {owner.name} changed incarnation; read the current owner before retrying")
         commander = thread.name
         # Maintaining another owner's work does not make its private directives ours.
-        requests = comms.goals.todos.open_requests(thread.incarnation)
+        requests = comms.goals.todos.open_requests(thread.acting_identity)
         held = scan.holders
         with comms.bus.bus.reading() as source:
             opened = tuple(rule for member in cls.members_with(cls)
@@ -1293,17 +1293,16 @@ class DirectiveUnacted(OwedAnswer, DatedStandingRule):
     def read_open(cls, source: BusReader, snapshot: RegistrySnapshot,
                   held: Mapping[ThreadIncarnation, Sequence[Todo]], commander: str,
                   requests: Sequence[OwnerRequest]) -> tuple[Self, ...]:
-        """The request owner answers its directive; a bound child reads that owner's slice.
-        Shared request maintenance alone does not transfer this obligation."""
+        """The frozen recipient owes the private directive, not every request maintainer.
+        Stored request associations cannot substitute a different mailbox or birth.
+        """
         reader = snapshot.require(commander)
-        names = snapshot.names_for(commander) | frozenset(
-            thread.name for thread in snapshot.teammates_channel())
         return tuple(
             cls(message=original, request=request.id, directive=directive,
-                answerer=snapshot.participant(request.commander.name).answering_thread(reader))
+                answerer=reader)
             for request in requests
             for directive, original in request.directive_messages(
-                source, names | snapshot.names_for(request.commander.name))
+                source, reader.incarnation.require_recorded().lookup)
         )
 
     def answered_in(self) -> tuple[str, ...]:

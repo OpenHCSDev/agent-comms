@@ -208,7 +208,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     renamed = replace(first, commander=lead.incarnation.renamed("lead-renamed"))
     with comms.bus.bus.reading() as source:
-        assert not renamed.directive_messages(source, comms.registry.snapshot().names_for(lead.name))
+        assert not renamed.directive_messages(source, lead.incarnation.require_recorded().lookup)
 
     CommsSendTool(
         target="lead",
