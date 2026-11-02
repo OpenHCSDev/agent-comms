@@ -19,7 +19,7 @@ from agent_comms.threads import Thread
 from agent_comms.goal_scope import OneGoal
 
 
-def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, monkeypatch):
+def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
@@ -31,7 +31,6 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert paused.state.declared_name == "paused"
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
     assert reopened.views.list_threads()[0].thread.goal.state.pause_source.declared_name == "owner"
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError):
         CommsGoalTool.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
     with pytest.raises(ValueError):
@@ -44,11 +43,10 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     assert reopened.registry.require('worker').goal.state.pause_source is None
 
 
-def test_model_cannot_pause(tmp_path, monkeypatch):
+def test_model_cannot_pause(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(Thread(name='worker', tags=frozenset(), worktree=Checkout(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Read fifty files"))
-    monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
     with pytest.raises(ValueError):
         comms.goals.update_goal(
             "worker",
