@@ -15,7 +15,7 @@ from typing_extensions import TypeForm
 
 from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldPlan, PathText
+from agent_comms.nominal.field_codec import BoundedText, FieldPlan, PathText, SingleFieldValue
 from agent_comms.installer.interpreter_operation import (
     InstallClock,
     InterpreterOperation,
@@ -152,15 +152,26 @@ class CarryPhase(SubjectPhase):
         return self.operation.declared_name
 
 
+@dataclass(frozen=True)
+class CarryLabel(SingleFieldValue):
+    """A recorded timing label, not authority to import or execute a migration."""
+
+    value: Annotated[str, BoundedText]
+
+
 @dataclass(frozen=True, kw_only=True)
 class CarryStepPhase(SubjectPhase):
     """One carry step inside its operation's worker pass."""
 
-    step: type[Carry]
+    step: CarryLabel
+
+    @classmethod
+    def of(cls, step: Carry) -> CarryStepPhase:
+        return cls(step=CarryLabel(step.declared_name))
 
     @property
     def subject(self) -> str:
-        return self.step.declared_name
+        return self.step.value
 
 
 class CarriedOperation(CarryOperation[Carried]):
@@ -170,7 +181,7 @@ class CarriedOperation(CarryOperation[Carried]):
     def run(self, steps: tuple[Carry, ...]) -> tuple[Carried, ...]:
         answers = []
         for step in steps:
-            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
+            with CarryStepPhase.of(step).running(InstallClock.current.get()):
                 answers.append(self.answer(step).for_step(step))
         return tuple(answers)
 
@@ -189,7 +200,7 @@ class FirstPendingOperation(CarryOperation[int]):
 
     def run(self, steps: tuple[Carry, ...]) -> tuple[int, ...]:
         for position, step in enumerate(steps):
-            with CarryStepPhase(step=type(step)).running(InstallClock.current.get()):
+            with CarryStepPhase.of(step).running(InstallClock.current.get()):
                 changed_count = step.carry(apply=False).changed
             if changed_count:
                 return (position,)
