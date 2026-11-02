@@ -684,8 +684,9 @@ class LinuxPlatform(PidfdHandles, Platform):
     def native_image(self, address: ctypes.c_void_p) -> Generator[BufferedReader]:
         # glibc's main-image filename aliases argv[0]; setproctitle changes it.
         # Resolve the actual symbol mapping instead, including shared libpython.
-        pointer = address.value
-        if pointer is None:
+        # ctypes represents C null as None; kernel mapping addresses are integers.
+        pointer = address.value or 0
+        if pointer == 0:
             raise ValueError("A null address has no native image")
         with Path("/proc/self/maps").open() as mappings:
             for line in mappings:

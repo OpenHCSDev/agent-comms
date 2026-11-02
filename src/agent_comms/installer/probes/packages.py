@@ -76,6 +76,14 @@ class ArchiveInfo(BaseModel):
 
     hashes: dict[str, str] = Field(default_factory=dict)
 
+    def verified(self, artifact: BuildArtifact) -> Self:
+        """A missing PEP610 hash supplies no constraint; an existing one must match."""
+        if self.hashes.get("sha256", artifact.sha256) != artifact.sha256:
+            raise ValueError(f"Archive content differs from its recorded hash: {artifact.path}")
+        verified = self.model_copy()
+        verified.hashes = {**self.hashes, "sha256": artifact.sha256}
+        return verified
+
     def wheel_inputs(self, url: str) -> tuple[Path, ...]:
         if "sha256" not in self.hashes:
             return ()
@@ -138,12 +146,9 @@ class ArchiveRecord(SourceRecord):
                     raise ValueError(f"Installed bytes differ from supplied wheel: {installed}")
         if FileRevision.capture(artifact.path) != artifact.revision:
             raise ValueError(f"Supplied wheel changed during verification: {wheel}")
-        known = self.archive_info.hashes
-        if "sha256" in known and known["sha256"] != artifact.sha256:
-            raise ValueError(f"Archive content differs from its recorded hash: {wheel}")
-        return self.model_copy(update={"archive_info": ArchiveInfo(
-            hashes={**known, "sha256": artifact.sha256}
-        )})
+        verified = self.model_copy()
+        verified.archive_info = self.archive_info.verified(artifact)
+        return verified
 
 
 class GitRecord(SourceRecord):
