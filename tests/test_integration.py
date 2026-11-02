@@ -458,6 +458,29 @@ def test_selection_uses_the_project_declaration_and_unions_existing_files(tmp_pa
                                       Path("checks/spec_missing.py"))) == (str(selected),)
 
 
+@pytest.mark.parametrize("configuration", (
+    'testpaths = ["checks"]\n',
+    '',
+))
+def test_selection_uses_pytest_defaults_without_loading_project_code(
+    tmp_path: Path, configuration: str,
+):
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.pytest.ini_options]\n' + configuration
+    )
+    (tmp_path / "conftest.py").write_text(
+        'raise RuntimeError("selection must not execute project code")\n'
+    )
+    selected = Path("checks/test_owner.py")
+    ignored = Path("checks/owner.py")
+    for path in (selected, ignored):
+        (tmp_path / path).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / path).write_text("def test_ok(): pass\n")
+    assert integration.TestSelection.read(tmp_path).files(
+        tmp_path, (selected, ignored, selected),
+    ) == (str(selected),)
+
+
 def test_only_accepted_ready_members_are_selected(github_cli, tmp_path: Path):
     source = SourceRepository.create(tmp_path / "integration-source")
     github_cli.configure(source.github)

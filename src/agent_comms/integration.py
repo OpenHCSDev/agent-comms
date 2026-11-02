@@ -13,6 +13,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
+from _pytest.config import get_config
+
 from .active_route import resolve_comms_route
 from .build_identity import RepositoryCommit
 from .child_process import STOP_GRACE_SECONDS, ResidentManager, SpawnedProcess
@@ -62,16 +64,19 @@ class TestSelection:
 
     @classmethod
     def read(cls, checkout: Path) -> TestSelection:
-        # Decode only this consumer's declared fields; pytest owns the other options.
+        # Register pytest's built-in declarations without loading project plugins,
+        # conftests or collection. Missing options belong to those declarations.
+        defaults = get_config()
         with (checkout / "pyproject.toml").open("rb") as source:
             match tomllib.load(source):
                 case {"tool": {"pytest": {"ini_options": {**configuration}}}}:
                     return FieldCodec.decode(
                         cls,
                         {
-                            entry.key: configuration[entry.key]
+                            entry.key: configuration.get(
+                                entry.key, defaults.getini(entry.key)
+                            )
                             for entry in FieldCodec.argument_fields(cls)
-                            if entry.key in configuration
                         },
                     )
         raise IntegrationFailed("pyproject.toml requires [tool.pytest.ini_options]")
@@ -82,7 +87,7 @@ class TestSelection:
                 {
                     str(path)
                     for path in changed
-                    if any(path.is_relative_to(root) for root in self.directories)
+                    if any(path.is_relative_to(root) for root in self.directories or (".",))
                     and any(path.match(pattern) for pattern in self.patterns)
                     and (checkout / path).is_file()
                 }
