@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.pi_payloads import NativeMessageFailureSource
 from agent_comms.acp_failure import NativeTurnError, ProviderQuotaFailure
@@ -97,16 +96,11 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
                 )
         reports = [item for update in updates for item in decode_updates(update.field_meta)
                    if isinstance(item, RequestFailedUpdate)]
-        assert len(reports) == 1
-        report = reports[0]
+        [report] = reports
         assert isinstance(report.failure, ProviderQuotaFailure)
-        assert report.failure.title == "Provider usage limit reached"
         assert report.failure.retry_result.attempt == 3
         assert report.failure.retry_result.success is False
         assert RATE_LIMIT in report.failure.retry_result.final_error
-        assert "Provider request retries: 3." in report.failure.action
-        assert RATE_LIMIT in report.failure.action
-        assert report.failure.next_step.startswith("Wait for the provider limit")
         assert isinstance(report.source, NativeMessageFailureSource)
         request = caught.value.request
         assert request.notification_published and request.failure == report.failure

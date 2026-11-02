@@ -2,28 +2,22 @@
 
 from __future__ import annotations
 
-
-from agent_comms.repo import Checkout
-from bus_record_fixture import prepare_native_comms
-
-
 import os
 
 import pytest
 
-from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.acp import CommsAgent
-from agent_comms.acp_extension import (
-    CursorAdvancedUpdate,
-    decode_updates,
-)
+from agent_comms.acp_extension import CursorAdvancedUpdate, decode_updates
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from test_coordinated_runtime import tmp_path as private_root_fixture
+from agent_comms.nominal.field_codec import AcpSessionId
+from agent_comms.repo import Checkout
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
+from bus_record_fixture import prepare_native_comms
+from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
 
@@ -35,32 +29,25 @@ def _private_comms(tmp_path):
         Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
-    root_id = comms.registry.store.prepare_native_root().namespace
+    comms.registry.store.prepare_native_root()
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             owner.incarnation.lookup, committed=True
         )
-    return comms, root_id
+    return comms
 
 
 def _session(tmp_path):
-    comms, root_id = _private_comms(tmp_path)
+    comms = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
     session_id = AcpSessionId("beta")
     agent.sessions.publish(session_id, comms.registry.require("beta"))
-    return comms, agent, root_id, session_id
-
-
-def cursor_fact(metadata):
-    return next(
-        (update for update in decode_updates(metadata) if isinstance(update, CursorAdvancedUpdate)),
-        None,
-    )
+    return comms, agent, session_id
 
 
 def cursor_envelope(metadata):
-    fact = cursor_fact(metadata)
-    assert fact is not None
+    """The decoded cursor-advanced update's envelope; the metadata is foreign until decoded."""
+    [fact] = [update for update in decode_updates(metadata) if isinstance(update, CursorAdvancedUpdate)]
     return fact.envelope
 
 
@@ -72,7 +59,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
-    comms, _ = _private_comms(tmp_path)
+    comms = _private_comms(tmp_path)
     lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
@@ -102,7 +89,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
 
 
 def test_private_rename_preserves_independent_sql_generation(tmp_path):
-    comms, _ = _private_comms(tmp_path)
+    comms = _private_comms(tmp_path)
     lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, expected_generation=1)
@@ -114,8 +101,8 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
 
 
 async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):
-    comms, agent, _, session_id = _session(tmp_path)
-    assert cursor_envelope((await agent.sessions.metadata("beta", session_id=session_id))) is not None
+    comms, agent, session_id = _session(tmp_path)
+    assert cursor_envelope(await agent.sessions.metadata("beta", session_id=session_id)) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_triage_members")
     with pytest.raises(PublicationActivationBlocked):

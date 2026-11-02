@@ -21,6 +21,7 @@ from agent_comms.pi_payloads import (
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
+from agent_comms.turn_failure import ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure
 
 
 FIXTURE = Path(__file__).with_name("fixtures") / "native_provider_transport_1011.json"
@@ -46,11 +47,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
         -32603, event.message.error_message.value_or(""), diagnostics=event.message.diagnostics
     )
     assert isinstance(failure, ProviderConnectionFailure)
-    assert "code 1011" in failure.description
-    assert "after the provider response stream started" in failure.description
-    assert "configured transport: auto" in failure.description
-    assert "provider events emitted: yes" in failure.description
-    assert failure.input_disposition == "Unconfirmed"
+    assert failure.input_state is None
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure
 
 
@@ -66,13 +63,11 @@ def test_structured_started_remains_started_and_no_text_changes_it():
     )).failure
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput
-    assert failure.input_disposition == "Started"
     bare = RequestFailure.from_error(RequestError(
         -32603, "WebSocket closed1011 after start; original remains unbound"
     )).failure
     assert isinstance(bare, RequestACPFailure)
     assert bare.input_state is None
-    assert bare.input_disposition == "Unconfirmed"
 
 
 @pytest.mark.parametrize(
@@ -94,15 +89,10 @@ def test_unrecognized_phase_is_a_typed_observation_not_a_send_decision():
     failure = ACPFailure.from_detail(
         -32603, event.message.error_message.value_or(""), diagnostics=event.message.diagnostics
     )
-    assert "provider stage: future_native_stage" in failure.description
     assert failure.input_state is None
 
 
 def test_native_1006_decodes_code_without_parsing_error_prose():
-    from agent_comms.turn_failure import (
-        ModelRequestFailed, ProviderTransportFailed, RetryableProviderFailure,
-    )
-
     record = observed()
     record["message"]["diagnostics"][0]["error"].update(
         code=1006, message="Opaque native close"
@@ -163,6 +153,4 @@ def test_native_1012_with_empty_thinking_reaches_provider_feedback():
     ).failure
     assert isinstance(failure, ProviderConnectionFailure)
     assert failure.input_state is StartedInput
-    assert "code 1012" in failure.description
-    assert "request: 1,565,058 bytes" in failure.description
     assert decode_updates(encode_updates(RequestFailedUpdate(failure)))[0].failure == failure

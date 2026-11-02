@@ -15,7 +15,7 @@ from agent_comms.storage_projection import StorageProjection
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.threads import Thread
-from agent_comms.todos import Assignment, SharedWorktreeRefusal
+from agent_comms.todos import Assignment, IncomingWork, SharedWorktreeRefusal
 from agent_comms.tool_caller import ThreadCaller
 
 pytest_plugins = ('test_forks',)
@@ -102,7 +102,6 @@ def test_prepared_cut_refuses_a_replaced_assignment_generation(allocation_bus):
     store = comms.goals.todos
     prepared = store.preparing_edits((proposed,))
     other_generation = replace(proposed.held(), generation=GoalId.mint())
-    from agent_comms.todos import IncomingWork
     with prepared.writing() as db:
         with pytest.raises(TodoConflict):
             other_generation.require_available_in(
@@ -113,7 +112,6 @@ def test_prepared_cut_refuses_a_replaced_assignment_generation(allocation_bus):
 
 
 def test_same_owner_incoming_group_can_share_its_own_physical_allocation(allocation_bus):
-    from agent_comms.todos import IncomingWork
     comms, source, template = allocation_bus
     first = issue(comms, source, template, 'first', 'P41')
     second = issue(comms, source, template, 'second', 'P42')
@@ -134,7 +132,6 @@ def test_same_owner_incoming_group_can_share_its_own_physical_allocation(allocat
 
 
 def test_recreated_holder_cannot_use_the_prepared_birth(allocation_bus):
-    from agent_comms.todos import IncomingWork
     comms, source, template = allocation_bus
     current = issue(comms, source, template, 'first', 'P41')
     old = comms.registry.require('second')

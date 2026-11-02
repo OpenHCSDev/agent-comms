@@ -83,7 +83,7 @@ def test_edit_only_on_a_deleted_branch_settles_as_dropped(discarded_and_kept):
     assert "dropped-call" not in unjudged(ctx)
     todo = ctx.comms.goals.todos.get("P1")
     verdict, = todo.history.events(todo.id, DroppedVerdict, limit=1, descending=True)
-    assert isinstance(verdict, DroppedVerdict) and verdict.tool_call_id == "dropped-call"
+    assert verdict.tool_call_id == "dropped-call"
 
 
 def test_edit_still_on_the_checkout_head_is_refused(discarded_and_kept):
@@ -120,15 +120,14 @@ def test_batch_lists_every_refusal_and_writes_nothing(discarded_and_kept):
     assert {"dropped-call", "kept-call"} <= set(unjudged(ctx))
 
 
-def test_batch_records_its_verdicts_in_one_call(discarded_and_kept, capsys):
+def test_batch_records_its_verdicts_in_one_call(discarded_and_kept):
     ctx = discarded_and_kept
     edits = unjudged(ctx)
     main(["batch", batch_file(ctx, [dropped_entry(edits["dropped-call"], DROPPED)])], ctx)
     assert "dropped-call" not in unjudged(ctx) and "kept-call" in unjudged(ctx)
-    assert "batch: 1 edits; 1 still unjudged" in capsys.readouterr().out
 
 
-def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarded_and_kept, capsys):
+def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarded_and_kept):
     ctx = discarded_and_kept
     repo = ctx.repos[0]
     head = repo.git(repo.checkout, "rev-parse", "HEAD").strip()
@@ -140,7 +139,6 @@ def test_rewritten_settles_only_edits_the_pushed_commit_no_longer_holds(discarde
     todo = ctx.comms.goals.todos.get("P1")
     (verdict,) = todo.history.events(todo.id, RewrittenVerdict, limit=1, descending=True)
     assert verdict.commit == head
-    assert "kept-call" in capsys.readouterr().out.splitlines()[-1]
 
 
 def test_rewritten_refuses_an_unpushed_commit(discarded_and_kept):

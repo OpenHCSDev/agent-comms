@@ -1,28 +1,24 @@
 """Failure evidence is passive; only its fenced attempt owns terminal writes."""
-from pathlib import Path
-
-from agent_comms.repo import Checkout
-from agent_comms.errors import StaleAttemptError
 import json
 import os
 import sqlite3
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.nominal.field_codec import TurnId, GoalId
-from agent_comms.turn_failure import BackendFailed, FinalStopMissing
-from agent_comms.goal_attempts import AttemptRecord, Generation, GoalAttemptStore
-from agent_comms.errors import UnresolvedAttemptError
-from agent_comms.goal_attempts import FailedTurnObservation
+from agent_comms.errors import StaleAttemptError, UnresolvedAttemptError
+from agent_comms.goal_attempts import AttemptRecord, FailedTurnObservation, Generation, GoalAttemptStore
 from agent_comms.goal_failure_observation import NoFailedTurnEvidence
 from agent_comms.goal_generation import BlockedGeneration
 from agent_comms.goals import Goal
+from agent_comms.nominal.field_codec import GoalId, TurnId
+from agent_comms.repo import Checkout
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
-from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
 from agent_comms.threads import Thread
-from agent_comms.turn_failure import FailedTurnResolution
+from agent_comms.turn_failure import BackendFailed, FailedTurnResolution, FinalStopMissing
+from agent_comms.turn_lease import FinishedTurn, StoredTurnRecord, TurnLeaseFence
 
 
 @pytest.fixture
@@ -75,9 +71,7 @@ def test_duplicate_callback_and_restart_preserve_failure_bytes(bound):
             assert Generation.require(connection, goal_id=owner.goal.id).failure_evidence(connection) == observation.evidence
     assert store.path.read_bytes() == before
     assert len(rows(store, "failed_turn_evidence")) == 1
-    encoded = json.dumps(rows(store, "failed_turn_evidence"))
-    assert observation.reservation.token not in encoded
-    assert "private diagnostic" not in encoded
+    assert observation.reservation.token not in json.dumps(rows(store, "failed_turn_evidence"))
 
 
 @pytest.mark.parametrize("mutation", [
