@@ -1,5 +1,10 @@
 """Transcript routing and input-display records: reopen, bind once, read without writing."""
 
+import sqlite3
+
+import pytest
+
+from agent_comms.errors import RelationViolationError
 from bus_record_fixture import INPUT_ID
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.text_digest import TextDigest
@@ -8,8 +13,6 @@ from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayTe
 
 
 def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
-    from agent_comms.transcript_routes import TranscriptRoutes
-
     path = tmp_path / "annotations"
     owner = TranscriptRoutes(path)
     first_id, second_id, absent_id = (FreshNativeId.fresh() for _ in range(3))
@@ -27,11 +30,6 @@ def test_current_annotations_reopen_and_replace_only_addressed_entry(tmp_path):
 
 
 def test_binding_preserves_first_display_and_rejects_different_input(tmp_path):
-    import pytest
-
-    from agent_comms.errors import RelationViolationError
-    from agent_comms.transcript_routes import TranscriptRoutes
-
     owner = TranscriptRoutes(tmp_path)
     owner.record_input_display(INPUT_ID, DisplayText("human display"))
     owner.record_input_display(INPUT_ID, DisplayText("wrapped display"), sent_text=SentInputText("exact sent text"))
@@ -61,10 +59,6 @@ def test_empty_display_is_present_and_internal_display_remains_absent(tmp_path):
 
 
 def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
-    import sqlite3
-
-    from agent_comms.transcript_routes import TranscriptRoutes
-
     routing = TurnRouting(reply=MessageRoute("worker", ("#first",)))
     entry_id = FreshNativeId.fresh()
     TranscriptRoutes(tmp_path).record("session", (entry_id,), routing)
@@ -89,12 +83,6 @@ def test_reading_an_installed_store_writes_nothing(tmp_path, monkeypatch):
 
 
 def test_reading_a_differing_schema_refuses_without_repair(tmp_path):
-    import sqlite3
-
-    import pytest
-
-    from agent_comms.transcript_routes import TranscriptRoutes
-
     TranscriptRoutes(tmp_path).record_input_display(INPUT_ID, DisplayText("shown"))
     path = TranscriptRoutes(tmp_path).path
     with sqlite3.connect(path) as connection:
