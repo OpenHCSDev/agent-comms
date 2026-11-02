@@ -33,6 +33,15 @@ class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan')
         return (EnsuringSessionLoadPlan() if witness is None
                 else FieldCodec.decode(ExistingSessionLoadPlan, witness))
 
+    @classmethod
+    def from_failure(cls, data: object) -> SessionLoadPlan:
+        """Decode foreign failure metadata into a plan with its own reload behavior."""
+        if not isinstance(data, dict):
+            return EnsuringSessionLoadPlan()
+        witness = data.get("agentCommsLoadFailure")
+        return (EnsuringSessionLoadPlan() if witness is None
+                else FieldCodec.decode(FailedSessionLoadPlan, witness))
+
     def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
         return False
 
@@ -92,13 +101,6 @@ class ExistingSessionLoadPlan(WitnessedSessionLoadPlan):
 @dataclass(frozen=True, slots=True)
 class FailedSessionLoadPlan(WitnessedSessionLoadPlan):
     """The original failed load command's witness; never an input permission."""
-
-    @classmethod
-    def from_failure(cls, data: object) -> FailedSessionLoadPlan | None:
-        if not isinstance(data, dict):
-            return None
-        witness = data.get("agentCommsLoadFailure")
-        return None if witness is None else FieldCodec.decode(cls, witness)
 
     def failure_metadata(self) -> dict:
         return {"agentCommsLoadFailure": FieldCodec.encode(self)}

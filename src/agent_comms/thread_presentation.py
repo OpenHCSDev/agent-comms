@@ -14,6 +14,7 @@ from .thread_identity import OwnerIdentity
 from .child_process import ProcessIdentity
 
 from .message_reference import MessageReference
+import agent_comms.session_load as session_load
 
 if TYPE_CHECKING:
     from .presentation import MessageNotification
@@ -303,9 +304,4 @@ class NoThreadPresentation(ThreadPresentation):
     def read_sources(self, transcripts: Transcripts, snapshot: RegistrySnapshot,
                      name: str, sent_source_limit: int) -> ThreadPresentation:
         return self
-
-
-# Session-load annotations use the module namespace. Publish these declarations
-# before loading its coordinator dependencies, which consume our status classes.
-import agent_comms.session_load as session_load
 

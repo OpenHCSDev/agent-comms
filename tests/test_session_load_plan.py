@@ -39,7 +39,7 @@ def test_witnessed_load_and_failure_metadata_keep_original_tags():
     assert error == {
         "agentCommsLoadFailure": {"kind": "failed", "binding": FieldCodec.encode(binding)}
     }
-    assert FailedSessionLoadPlan.from_failure(error) == failed
+    assert SessionLoadPlan.from_failure(error) == failed
 
 
 @pytest.mark.parametrize("plan_type", (ExistingSessionLoadPlan, FailedSessionLoadPlan))
@@ -71,7 +71,8 @@ async def test_only_a_superseding_live_owner_supplies_an_existing_load(plan_type
     assert previous.binding == original
 
 
-async def test_an_ensuring_load_is_not_an_old_owner_witness():
+@pytest.mark.parametrize("metadata", (None, {}, {"agentCommsLoadFailure": None}))
+async def test_an_ensuring_load_is_not_an_old_owner_witness(metadata):
     binding = LiveThreadOwnerBinding(
         OwnerIdentity(RecordedThreadIncarnation("source", 123.0), 2),
         ProcessIdentity(1, 1),
@@ -81,5 +82,7 @@ async def test_an_ensuring_load_is_not_an_old_owner_witness():
     async def reload(plan: SessionLoadPlan) -> None:
         loads.append(plan)
 
-    await binding.reload_if_superseded(EnsuringSessionLoadPlan(), reload)
+    plan = SessionLoadPlan.from_failure(metadata)
+    assert plan == EnsuringSessionLoadPlan()
+    await binding.reload_if_superseded(plan, reload)
     assert not loads
