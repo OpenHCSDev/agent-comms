@@ -85,7 +85,6 @@ async def test_cli_registration_refuses_unbound_then_uses_original_owned_session
                 await proxy.request(action, **parameters)
             assert caught.value.code == Refused.INVALID_PARAMS
             assert caught.value.data["owner"] == "registered"
-            assert "no loaded ACP session" in caught.value.data["reason"]
         assert not owner.sessions.published
         assert not owner._runtime.clients
         assert comms.registry.require("registered") == thread

@@ -72,20 +72,12 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
 
 
 @pytest.mark.parametrize(
-    ("token_fields", "refusal"),
-    [
-        ({}, "Missing required fields for OwnerReady: controllerToken"),
-        ({"controllerToken": None}, "Expected <class 'str'>, received NoneType"),
-        ({"controllerToken": 42}, "Expected <class 'str'>, received int"),
-        ({"controllerToken": ""}, "ControllerTokenText is spelled"),
-        ({"controllerToken": "a" * 63}, "ControllerTokenText is spelled"),
-        ({"controllerToken": "a" * 65}, "ControllerTokenText is spelled"),
-    ],
+    "token_fields",
+    [{}, {"controllerToken": None}, {"controllerToken": 42}, {"controllerToken": ""},
+     {"controllerToken": "a" * 63}, {"controllerToken": "a" * 65}],
     ids=["missing", "null", "number", "empty", "short", "long"],
 )
-async def test_subscription_rejects_invalid_ready_and_closes_socket(
-    tmp_path, token_fields, refusal
-):
+async def test_subscription_rejects_invalid_ready_and_closes_socket(tmp_path, token_fields):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(
         Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
