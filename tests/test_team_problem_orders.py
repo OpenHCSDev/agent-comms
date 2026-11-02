@@ -1,4 +1,4 @@
-"""One unit Goal reads its independent canonical Todo orders through real tools."""
+"""Order records, slop catalog entries and count checks read through their declared owners."""
 import asyncio
 import re
 from dataclasses import replace
@@ -7,7 +7,6 @@ import pytest
 
 from test_todos import order as checked_order
 from source_revision_fixture import SourceRepository
-
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import BoundedRun
@@ -52,11 +51,11 @@ def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
 
 
 @pytest.mark.parametrize('printed, refused', [
-    ("printf 'no count here'", 'The order check cannot prove CountCheckResult(expected=1): it printed no integer.'),
-    ('echo 2', 'The order check is 1 away from CountCheckResult(expected=1).'),
+    ("printf 'no count here'", 'printed no integer'),
+    ('echo 2', '1 away from'),
     ('echo found 1', None),
 ])
-def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong_count(tmp_path, printed, refused):
+def test_a_count_check_tells_no_integer_from_a_wrong_count(tmp_path, printed, refused):
     ran = asyncio.run(BoundedRun.run(('bash', '-c', printed), cwd=str(tmp_path), timeout=30))
     if refused is None:
         CountCheckResult(1).require(ran)

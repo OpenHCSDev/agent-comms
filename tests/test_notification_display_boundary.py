@@ -1,7 +1,4 @@
-"""The combined P883 UI envelope retains display scope without granting tool authority.
-
-These controls require the matched producer plus the two-file fc311cd64 boundary patch.
-"""
+"""A notification request keeps its display scope as UI envelope data, never as tool authority."""
 
 from dataclasses import replace
 
