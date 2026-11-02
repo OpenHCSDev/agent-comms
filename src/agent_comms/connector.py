@@ -75,7 +75,7 @@ from .connector_store import (
     CODE_SECONDS, ApprovalQueueFull, ApprovalRefused, AuthorizationQuery,
     AuthorizationRequest, ClaudeCallback,
     ConnectorGrants, ConnectorStore, IssuedTokens,
-    RegisteredClient, TrustedBrowser, UiReadAccess, digest,
+    RegisteredClient, TrustedBrowser, UiGrantAccess, UiReadAccess, digest,
 )
 from .locked_store import DocumentChange
 from .messages import QuestionKind
@@ -929,7 +929,7 @@ class ServeVerb(ConnectorOptions):
 
 @dataclass(frozen=True, kw_only=True)
 class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
-    help = "Provision a private, expiring read-only UI profile for this original native root"
+    help = "Provision a private, expiring UI profile with the selected server authority"
 
     endpoint: Annotated[
         HttpsMcpEndpoint,
@@ -941,13 +941,17 @@ class GrantUiVerb(ConnectorRootOptions, declared_name="grant-ui"):
     ]
     seconds: Annotated[
         int, Argument(flags=("--seconds",), options={
-            "help": f"Lifetime, at most {UiReadAccess.maximum_seconds} seconds"}),
-    ] = UiReadAccess.maximum_seconds
+            "help": f"Lifetime, at most {UiGrantAccess.maximum_seconds} seconds"}),
+    ] = UiGrantAccess.maximum_seconds
+    access: Annotated[
+        type[UiGrantAccess],
+        Argument(flags=("--access",), options={"help": "Declared UI grant capability"}),
+    ] = UiReadAccess
 
     def apply(self, ctx: ConnectorStore) -> str:
         namespace = RegistryStore.at(self.root).privacy().namespace
         profile = ctx.publish_ui_profile(
-            namespace, self.endpoint, self.profile, self.seconds)
+            namespace, self.endpoint, self.profile, self.seconds, self.access)
         return FieldCodec.compact(FieldCodec.encode(profile), allow_nan=False)
 
 

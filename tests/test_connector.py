@@ -45,11 +45,11 @@ from agent_comms.connector import (
     ToolsCallReply,
     ToolsCallResult,
 )
-from agent_comms.connector_caller import CALLER, GrantRefusedError, UiReadCaller
+from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiReadCaller
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
-    IssuedCode, TrustedBrowser, UiReadAccess, digest,
+    IssuedCode, TrustedBrowser, UiAccess, UiGrantAccess, UiReadAccess, digest,
 )
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.coordinator import Coordination
@@ -883,15 +883,17 @@ async def test_a_revoked_token_is_refused(client, store, comms):
     assert refused.status == 401
 
 
+@pytest.mark.parametrize("grant_type", UiGrantAccess.members_with(UiGrantAccess))
 def test_ui_profile_publication_is_private_exclusive_and_independently_revocable(
     store: ConnectorStore, comms: Comms, tmp_path: Path,
+    grant_type: type[UiGrantAccess],
 ) -> None:
     prepare_native_comms(comms)
     destination = tmp_path / "private-ui" / "connection.json"
     command = GrantUiVerb.parse([
         "grant-ui", "--root", str(comms.root),
         "--endpoint", "https://core.example/mcp", "--profile", str(destination),
-        "--seconds", "60",
+        "--seconds", "60", "--access", grant_type.declared_name,
     ])
     reply = command.apply(store)
     receipt = FieldCodec.decode(UiGrantSummary, FieldCodec.parse(reply))
@@ -901,7 +903,7 @@ def test_ui_profile_publication_is_private_exclusive_and_independently_revocable
     assert profile.credential.token not in reply
     assert destination.stat().st_mode & 0o777 == 0o600
     assert destination.parent.stat().st_mode & 0o777 == 0o700
-    assert store.read().caller_for(profile.credential.token) == UiReadCaller(receipt.namespace)
+    assert store.read().caller_for(profile.credential.token) == grant_type.caller_type(receipt.namespace)
     before = destination.read_bytes(), store.read()
     with pytest.raises(FileExistsError):
         command.apply(store)
@@ -926,15 +928,18 @@ def test_ui_profile_publication_is_private_exclusive_and_independently_revocable
         UiConnectionProfile.read(destination)
 
 
+@pytest.mark.parametrize("caller_type", [
+    member.caller_type for member in UiGrantAccess.members_with(UiGrantAccess)
+])
 def test_ui_grant_expiry_scope_and_direct_mutation_admission(
-    store: ConnectorStore, comms: Comms,
+    store: ConnectorStore, comms: Comms, caller_type: type[ScopedUiCaller],
 ) -> None:
     prepare_native_comms(comms)
     namespace = comms.registry.store.privacy().namespace
     expired = UiReadAccess(UiGrantId.mint(), namespace, expires_at=time.time() - 1)
     with pytest.raises(GrantRefusedError):
         expired.caller()
-    foreign = UiReadCaller(RootId.mint())
+    foreign = caller_type(RootId.mint())
     with pytest.raises(GrantRefusedError):
         foreign.require_root(comms.root)
     with pytest.raises(GrantRefusedError):
@@ -959,8 +964,12 @@ def test_remote_ui_endpoint_refuses_insecure_or_credential_urls(endpoint: str) -
         HttpsMcpEndpoint(URL(endpoint))
 
 
-async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
+@pytest.mark.parametrize(("grant_type", "can_write"), [
+    (UiReadAccess, False), (UiAccess, True),
+])
+async def test_ui_mcp_uses_granted_capability_without_an_agent(
     store: ConnectorStore, comms: Comms,
+    grant_type: type[UiGrantAccess], can_write: bool,
 ) -> None:
     prepare_native_comms(comms)
     comms.channels.create_tag("remote-ui")
@@ -968,7 +977,7 @@ async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
     expected = CommsChannelsTool().apply(comms, NoThreadCaller())
     before = comms.bus.bus.revision(), comms.registry.snapshot()
     connector = Connector(store, "http://127.0.0.1:18766", comms.root)
-    credential = store.update(lambda grants: grants.ui_issued(namespace, 60))
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, grant_type))
     headers = {"Authorization": f"Bearer {credential.token}"}
     async with TestServer(connector.application()) as server:
         async with TestClient(server) as client:
@@ -984,8 +993,11 @@ async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
             call = ToolsCallMessage(jsonrpc="2.0", id=3, params=ToolCall(
                 write.declared_name, FieldCodec.encode_fields(write)))
             response = await client.post("/mcp", json=FieldCodec.encode(call), headers=headers)
-            denied = FieldCodec.decode(ToolsCallReply, await response.json()).result
-            assert denied.is_error is True
+            written = FieldCodec.decode(ToolsCallReply, await response.json()).result
+            assert written.is_error is not can_write
+            selected, = (row.channel for row in CommsChannelsTool().apply(
+                comms, NoThreadCaller()).channels if row.channel.name == "#remote-ui")
+            assert selected.pinned is can_write
             store.revoke_ui(credential.grant_id)
             revoked = await client.post("/mcp", json=LIST, headers=headers)
             assert revoked.status == 401
