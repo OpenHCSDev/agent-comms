@@ -1,0 +1,45 @@
+name: NRA gate findings on the pull request
+description: >-
+  Hosted annotations stop at ten per step and the job log runs to hundreds of KB, so a red gate
+  says why on its pull request: one comment per gate kind, replaced on every run. It carries the
+  blocking verdict lines, then the warn-only ones apart. A passing run only rewrites a comment an
+  earlier red run left. Agent-comms uses it beside its tree; a client such as Toad uses it from
+  the Core checkout its gate runs from.
+inputs:
+  findings:
+    description: The gate's captured stderr
+    required: true
+  kind:
+    description: The gate kind; it names the comment's marker, <!-- KIND findings -->
+    required: true
+  outcome:
+    description: The gate step's outcome (success or failure)
+    required: true
+  token:
+    description: A token that may write pull request comments
+    required: false
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        PR: ${{ github.event.pull_request.number }}
+        SHA: ${{ github.event.pull_request.head.sha }}
+        FINDINGS: ${{ inputs.findings }}
+        KIND: ${{ inputs.kind }}
+        OUTCOME: ${{ inputs.outcome }}
+      run: |
+        [ -n "$PR" ] || exit 0
+        marker="<!-- $KIND findings -->"
+        old=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate \
+              --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
+        [ "$OUTCOME" = failure ] || [ -n "$old" ] || exit 0
+        body="$RUNNER_TEMP/$KIND-findings.md"
+        python -I "$GITHUB_ACTION_PATH/render.py" "$FINDINGS" "$marker" "$KIND" "${SHA:0:7}" "$OUTCOME" > "$body"
+        if [ -n "$old" ]; then
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$old" -F body=@"$body" --jq .html_url
+        else
+          gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@"$body" --jq .html_url
+        fi
