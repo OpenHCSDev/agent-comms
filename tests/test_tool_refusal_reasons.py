@@ -4,9 +4,6 @@ import sqlite3
 import pytest
 
 from agent_comms_hooks import ToolRefusedError
-from agent_comms.envelope_claim_transitions import FileClaimDenied
-from agent_comms.maintenance_barrier import MaintenanceHeldError
-
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
@@ -51,47 +48,45 @@ def test_busy_coordination_database_is_reported_as_busy(tmp_path, private_comms)
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("denial", (
-    ToolRefusedError, SelectedToolDenied, FileClaimDenied, MaintenanceHeldError,
-))
-async def test_declared_refusal_returns_a_socket_answer(
-        tmp_path, tool_listener, undealt_gate, denial):
-    """The transport must answer a declared refusal, rather than lose the connection."""
+async def test_owned_native_edit_of_a_missing_file_returns_the_refusal(
+        tmp_path, native_runtime_package):
+    """An acquired native owner returns admission's error through its actual socket."""
     import asyncio
     import json
-    import os
 
-    from agent_comms.pi_payloads import AssistantMessage, ReportedParts, ReportedText, ToolCallContent
-    from agent_comms.pi_events import ToolExecutionStart
+    from agent_comms.queued_input import InitialInput
+    from conftest import answer_rules
+    from native_backend_fixture import native_backend_fixture
 
-    class RefusingOwner:
-        async def allow(self, turn, round_number, call):
-            raise denial("Admission refused before execution")
-
-    tmp_path.chmod(0o700)
-    socket = CodingToolSocket(
-        tool_listener(tmp_path, "b" * 64), RefusingOwner(), undealt_gate, pid=os.getpid())
-    socket.turn = object()
-    args = {"path": "absent.py", "edits": [{"oldText": "1", "newText": "2"}]}
-    socket.announce(AssistantMessage(content=ReportedParts((
-        ToolCallContent(id="denied", name="edit", arguments=args),
-    ))))
-    socket.tool_started(ToolExecutionStart(
-        tool_call_id=ReportedText("denied"), tool_name=ReportedText("edit"), args=args,
-    ))
-    await socket.start()
-    try:
-        reader, writer = await asyncio.open_unix_connection(str(socket.listener.address))
-        try:
-            request = {"token": socket.listener.token, "call_id": "denied",
-                       "name": "edit", "arguments": args}
-            writer.write((json.dumps(request) + "\n").encode())
-            await writer.drain()
-            async with asyncio.timeout(5):
-                response = json.loads(await reader.readline())
-            assert response == {"ok": False, "error": "Admission refused before execution"}
-        finally:
-            writer.close()
-            await writer.wait_closed()
-    finally:
-        await socket.close()
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as saved:
+        await saved.author_history()
+        async with saved.open_owner(native_options=()) as (agent, session_id):
+            worker = agent.sessions.require(session_id)
+            registry = agent._comms.registry
+            owner = registry.require(worker)
+            missing = registry.storage_rule.roots_of(owner).scratch / "absent.py"
+            assert not missing.exists()
+            saved.provider.tool_call = (
+                "edit", {"path": str(missing), "edits": [{"oldText": "1", "newText": "2"}]},
+            )
+            answer_rules(agent._comms, worker)
+            async with asyncio.timeout(40):
+                await InitialInput.run(
+                    agent.inputs, session_id, worker, "Exercise the missing-file edit",
+                    display_text="Exercise the missing-file edit", input_id=InputId.mint(),
+                )
+            # Pi's own session writer records the real tool result; no policy,
+            # turn, permission token or tool-execution event is fabricated here.
+            messages = (json.loads(line) for line in saved.session.read_text().splitlines())
+            results = [row["message"] for row in messages
+                       if row.get("type") == "message"
+                       and row["message"].get("role") == "toolResult"]
+            assert len(results) == 1
+            result = results[0]
+            assert result["toolName"] == "edit"
+            assert result["isError"] is True
+            assert f"File does not exist: {missing}" in "\n".join(
+                part["text"] for part in result["content"] if part["type"] == "text"
+            )
+            assert saved.provider.posts == 2, "The native turn must resume after its refusal"
+            assert not missing.exists()
