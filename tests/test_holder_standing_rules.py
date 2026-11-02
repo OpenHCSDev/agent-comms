@@ -867,8 +867,11 @@ def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held
     parent = held_bus.registry.require("worker")
     assert represented[1] == parent.incarnation
     held_bus.registry.unregister(parent.name)
+    held_bus.registry.remove(parent.name)
     replacement = replace(parent, created_at=parent.created_at + 1)
     held_bus.registry.register(replacement)
+    assert held_bus.registry.require(parent.name).incarnation == replacement.incarnation
+    assert held_bus.registry.require(parent.name).incarnation != parent.incarnation
     directive = publish(held_bus, "outsider", replacement.name, time.time() - 3600)
     store = held_bus.goals.todos
     request = store.add_request(replacement.incarnation, "The replacement's private request.")
