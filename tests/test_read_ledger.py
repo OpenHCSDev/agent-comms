@@ -213,9 +213,12 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
             "import os, sys\n"
             "from agent_comms.channel_targets import ThreadTarget\n"
             "from agent_comms.comms import wire\n"
+            "from pathlib import Path\n"
+            "from agent_comms.repo import Checkout\n"
             "comms = wire(sys.argv[1])\n"
-            "page = comms.views.dm_display_page(ThreadTarget('alice'), worktree=sys.argv[1])\n"
-            "comms.views.mark_page_read(page, worktree=sys.argv[1])\n"
+            "worktree = Checkout(Path(sys.argv[1]))\n"
+            "page = comms.views.dm_display_page(ThreadTarget('alice'), worktree=worktree)\n"
+            "comms.views.mark_page_read(page, worktree=worktree)\n"
             "os._exit(9)\n",
             str(tmp_path),
         ],

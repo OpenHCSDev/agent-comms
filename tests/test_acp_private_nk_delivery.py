@@ -29,20 +29,20 @@ def _private_comms(tmp_path):
         Thread('sender', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     owner = comms.registry.declare(Thread('beta', frozenset({'team'}), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model=DeclaredModel('test/model')))
-    comms.registry.store.prepare_native_root()
+    root_id = comms.registry.store.prepare_native_root().namespace
     with Coordination(str(root / "coordination.sqlite3")) as store:
         store.participants.register(
             owner.incarnation.lookup, committed=True
         )
-    return comms
+    return comms, root_id
 
 
 def _session(tmp_path):
-    comms = _private_comms(tmp_path)
+    comms, root_id = _private_comms(tmp_path)
     agent = CommsAgent(comms, runtime_enabled=True)
     session_id = AcpSessionId("beta")
     agent.sessions.publish(session_id, comms.registry.require("beta"))
-    return comms, agent, session_id
+    return comms, agent, root_id, session_id
 
 
 def cursor_envelope(metadata):
@@ -59,7 +59,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
     from agent_comms.owner_fence import prepare_fence_token
     from test_coordination_store import final_evidence
 
-    comms = _private_comms(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         before = store.participants.get(lookup)
@@ -89,7 +89,7 @@ def test_private_owner_rename_during_active_attempt_can_complete(tmp_path, manag
 
 
 def test_private_rename_preserves_independent_sql_generation(tmp_path):
-    comms = _private_comms(tmp_path)
+    comms, _ = _private_comms(tmp_path)
     lookup = comms.registry.require("beta").incarnation.lookup
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.participants.advance_generation(lookup, expected_generation=1)
@@ -101,7 +101,7 @@ def test_private_rename_preserves_independent_sql_generation(tmp_path):
 
 
 async def test_missing_native_schema_refuses_cursor_metadata(tmp_path, native_runtime_package):
-    comms, agent, session_id = _session(tmp_path)
+    comms, agent, _, session_id = _session(tmp_path)
     assert cursor_envelope(await agent.sessions.metadata("beta", session_id=session_id)) is not None
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         store.session._connection.execute("DROP TABLE native_runtime_triage_members")

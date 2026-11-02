@@ -112,7 +112,10 @@ def test_mark_read_reads_the_marked_messages_not_the_whole_log(tmp_path):
     comms.views.presentation.channel_page("#ci", viewer=NamedViewer(viewer))
     comms.messaging.send("sender", viewer, "Later human DM")
     comms.messaging.send("sender", "#ci", "Later channel message")
-    log_size = comms.bus.bus.path.stat().st_size
+    bus = comms.bus.bus
+    # The log is the bus file and its WAL: recent writes live in the WAL until a checkpoint.
+    log_size = sum(path.stat().st_size for path in (bus.path, type(bus).wal_path(bus.path))
+                   if path.exists())
     assert log_size > 4_000_000
 
     for target in ("sender", "#ci"):

@@ -31,7 +31,7 @@ async def test_begin_callback_and_native_attachment_share_original_owner(tmp_pat
     comms = installed_comms(tmp_path)
     comms.registry.declare(Thread('owner', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     agent = CommsAgent(comms, auto_wake=False)
-    agent.sessions.publish(AcpSessionId("owner-session"), comms.registry.require("owner"))
+    await agent.sessions.bind_owned(comms.registry.require("owner"), AcpSessionId("owner-session"))
     turn = OwnedTurn(
         agent.turns, "owner-session", "owner", "new original input", acceptance=NoTurnAcceptance(),
     )

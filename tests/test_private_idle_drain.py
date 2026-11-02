@@ -27,7 +27,7 @@ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 
 @pytest.mark.asyncio
 async def test_observation_waits_for_the_held_coordinator_snapshot(tmp_path):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, _ = _session(tmp_path)
     held, release = threading.Event(), threading.Event()
 
     def holder():
@@ -90,7 +90,7 @@ async def test_empty_delivery_recovery_does_not_wait_for_wire_writer(tmp_path):
 
 @pytest.mark.asyncio
 async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path):
-    comms, agent, _root_id = _session(tmp_path)
+    comms, agent, _root_id, _ = _session(tmp_path)
     origin = Message("user", "#team", "publication ownership", InfoKind)
     execution = OwnedTurn(
         agent.turns, "beta", "beta", "publication ownership", origins=(origin,),
@@ -129,7 +129,7 @@ async def test_turn_publication_joins_cancellation_before_lease_release(tmp_path
 
 
 def _covered_session(tmp_path):
-    comms, agent, root_id = _session(tmp_path)
+    comms, agent, root_id, _ = _session(tmp_path)
     other = Thread('alpha', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     comms.registry.declare(other)
     with Coordination(comms.root / "coordination.sqlite3") as store:

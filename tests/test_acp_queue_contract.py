@@ -40,6 +40,8 @@ from agent_comms.transcript_routes import NoDisplayText
 from bus_record_fixture import prepare_native_comms
 from stored_inputs import stored_inputs
 
+BETA = AcpSessionId("beta")
+
 def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation, int]:
     comms = prepare_native_comms(wire(tmp_path / "wire"))
     thread = Thread('beta', frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -54,7 +56,7 @@ def held_owner(tmp_path: Path):
     """The owner's agent in a held native turn, with the inbox its inputs reach."""
     comms, agent, _, _ = _owner(tmp_path)
     comms.agents.begin_turn("beta", TurnId.mint(), "Held native fixture")
-    return agent, agent.inputs.state("beta").open_inbox()
+    return agent, agent.inputs.state(BETA).open_inbox()
 
 
 async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
@@ -68,7 +70,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     assert any(
         isinstance(f, InputDeliveryChangedUpdate) for f in decode_updates(response.field_meta)
     )
-    assert exact in agent.inputs.state("beta").queued
+    assert exact in agent.inputs.state(BETA).queued
     assert (type(stored_inputs(agent.inputs.dispositions.root).rows[AcpInputKey(exact)])
             is ReservedInput)
     state = next(
@@ -78,7 +80,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
     )
     assert state.scope.claimed_identity.incarnation.name == "beta"
     assert isinstance(state.projection, UnavailableQueueProjection)
-    assert exact in agent.inputs.state("beta").queued
+    assert exact in agent.inputs.state(BETA).queued
 
 
 async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
@@ -91,7 +93,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
         acknowledgement = next(f for f in decode_updates(response.field_meta) if isinstance(f, InputDeliveryChangedUpdate))
         assert acknowledgement == InputDeliveryChangedUpdate()
     assert requests[0].input_id != requests[1].input_id
-    state = await agent.inputs.queue_state("beta")
+    state = await agent.inputs.queue_state(BETA)
     assert [item.input_id for item in state.projection.items] == [request.input_id for request in requests]
     assert all(row.public_status == "unknown" for row in stored_inputs(agent.inputs.dispositions.root).rows.values())
     before = inbox.qsize()
@@ -104,16 +106,16 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
     assert inbox.qsize() == before
     assert len(stored_inputs(agent.inputs.dispositions.root).rows) == 2
     sources = frozenset(AcpInputKey(request.input_id) for request in requests)
-    assert agent.inputs.input_keys("beta") == sources
+    assert agent.inputs.input_keys(BETA) == sources
     receipts = stored_inputs(agent.inputs.dispositions.root)
     cleared = receipts.transition(tuple(sources), lambda row: row.clear_unbound())
     assert all(row.public_status == "cleared" for row in cleared.rows.values())
-    await agent.inputs.clear_queued_inputs("beta")
-    assert not agent.inputs.state("beta").queued
-    assert agent.inputs.input_keys("beta") == sources
+    await agent.inputs.clear_queued_inputs(BETA)
+    assert not agent.inputs.state(BETA).queued
+    assert agent.inputs.input_keys(BETA) == sources
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
-    await agent.inputs.input_refused("beta", requests[0].input_id)
-    assert agent.inputs.input_keys("beta") == frozenset((AcpInputKey(requests[1].input_id),))
+    await agent.inputs.input_refused(BETA, requests[0].input_id)
+    assert agent.inputs.input_keys(BETA) == frozenset((AcpInputKey(requests[1].input_id),))
     assert stored_inputs(agent.inputs.dispositions.root) == cleared
 
 
@@ -128,7 +130,7 @@ async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tm
         )
     assert error.value.code == -32602
     assert inbox.empty()
-    assert not agent.inputs.state("beta").queued
+    assert not agent.inputs.state(BETA).queued
     assert not stored_inputs(agent.inputs.dispositions.root).rows
 
 
@@ -149,23 +151,23 @@ async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_
         native = inbox.get_nowait()
         assert native.input_id == request.input_id
         assert native.content.text == "User follow-up:\n" + text
-    state = await agent.inputs.queue_state("beta")
+    state = await agent.inputs.queue_state(BETA)
     (received,) = decode_updates(encode_updates(state))
     assert isinstance(received.projection, AvailableQueueProjection)
     assert [item.input_id for item in received.projection.items] == [r.input_id for r in requests]
     assert all(item.preview == QueueItem.summarize(text) for item in received.projection.items)
-    assert all(item.text == text for item in agent.inputs.state("beta").queued.values())
-    await agent.inputs.send_now("beta")
+    assert all(item.text == text for item in agent.inputs.state(BETA).queued.values())
+    await agent.inputs.send_now(BETA)
     assert inbox.get_nowait() == SendNow(tuple(r.input_id for r in requests))
-    await agent.inputs.clear_queued_inputs("beta")
+    await agent.inputs.clear_queued_inputs(BETA)
     assert inbox.get_nowait() == ClearQueue(tuple(r.input_id for r in requests))
-    assert not agent.inputs.state("beta").queued
-    assert (await agent.inputs.queue_state("beta")).projection.status == "available"
+    assert not agent.inputs.state(BETA).queued
+    assert (await agent.inputs.queue_state(BETA)).projection.status == "available"
 
 
 async def test_alias_maps_only_attachment_session_id(tmp_path):
     comms, agent, _, _ = _owner(tmp_path)
-    state = await agent.inputs.queue_state(AcpSessionId("beta"))
+    state = await agent.inputs.queue_state(BETA)
     (rebased,) = decode_updates(present_session(encode_updates(state), AcpSessionId("alias")))
     assert rebased.scope.session_id == "alias"
     assert rebased.scope.claimed_identity == state.scope.claimed_identity
@@ -200,14 +202,14 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
 
 async def test_ending_a_drained_session_leaves_no_state_for_it(tmp_path):
     comms, agent, _incarnation, _generation = _owner(tmp_path)
-    await agent.inputs.queue_state("beta")
-    agent.inputs.bind_native_turn("beta", comms.registry.require("beta"))
-    agent.inputs.ensure_live_drain("beta")
-    drained = agent.inputs.drained["beta"]
+    await agent.inputs.queue_state(BETA)
+    agent.inputs.bind_native_turn(BETA, comms.registry.require("beta"))
+    agent.inputs.ensure_live_drain(BETA)
+    drained = agent.inputs.drained[BETA]
     drain = drained.observer
     assert drained.queue_revision == 1 and drained.turn_open() and drain.busy
     await agent.shutdown()
-    assert "beta" not in agent.inputs.drained
+    assert BETA not in agent.inputs.drained
     assert not drain.busy
 
 
@@ -226,7 +228,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
         AcpInputKey(input_id), None, "beta", generation, "beta", "original",
         turn_id=TurnId.mint(), native_id=native_id, sent_digest=TextDigest.of("original"),
     )
-    scope = (await agent.inputs.queue_state("beta")).scope
+    scope = (await agent.inputs.queue_state(BETA)).scope
     original = OwnerOriginalInput(
         acceptance=NoTurnAcceptance(),
         goal_permission=TurnGoalPermission(InactiveGoalPermission()),
@@ -238,7 +240,7 @@ async def test_original_queued_and_routed_starts_own_their_input_identity(tmp_pa
     assert started.input_id == input_id and started.native_id == native_id
 
     queued_id = InputId.mint()
-    agent.inputs.state("beta").queued[queued_id] = QueuedInput(
+    agent.inputs.state(BETA).queued[queued_id] = QueuedInput(
         "queued text", True, QueuedInputContext(ClaimedIdentity(incarnation, generation)),
         queued_id, "queued text",
     )
