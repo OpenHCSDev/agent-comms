@@ -90,8 +90,8 @@ class RuleFile(DeclaredFamily, affix="RuleFile"):
         "ally",
     )
     closing: ClassVar[frozenset[str]] = frozenset({"ally"})
-    """The rules a deal holds back until everything else is read, the indictment included: read
-    after the record of every failure, they say how to work with him once it lands."""
+    """The rules a deal holds back until everything else is read, the pattern catalog included:
+    read last, they say how to work with him once the rest lands."""
     """The one declaration of the order every deal and unit prompt presents the rules in. The
     papers are dealt before all of them; the spine comes next and kills the hedge on what they
     proved, then the price of calling an abstraction unnecessary; each rule after it is set up by

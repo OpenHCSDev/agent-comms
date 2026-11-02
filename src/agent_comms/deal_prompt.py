@@ -37,7 +37,7 @@ class DealPrompt:
     preamble: str = (
         "# Your deal\n\n"
         "Below is everything the rule gate deals you, in its order: the two papers every rule is"
-        " a consequence of, then the rules, the voice, the recorded failures and the indictment."
+        " a consequence of, then the rules, the voice, the recorded failures and the pattern catalog."
         " You have read them by reading this prompt. Before your first tool call you answer every"
         " rule in your audit, and then Tristan asks whether you meant it: the gate refuses every"
         " other tool until both are done, and its refusal names the audit file and its template."

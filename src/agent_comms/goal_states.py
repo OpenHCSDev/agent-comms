@@ -61,7 +61,7 @@ class ChokeholdPause(PauseSource):
         return (
             "You ignored Tristan's vibe check, so Tristan paused this goal until you comply."
             " Do not resume or continue it; Core resumes it when your answer quotes the"
-            " indictment."
+            " pattern catalog."
         )
 
 

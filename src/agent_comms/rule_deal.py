@@ -761,7 +761,7 @@ class PrimedDeal(DealTrigger):
     """The owner asked for the rules again with /prime; the variant says which readers dealt."""
 
     variant: str
-    """The /prime variant as the owner spells it (full, no-papers, no-indictment, light)."""
+    """The /prime variant as the owner spells it (full, no-papers, no-patterns, light)."""
 
     def reason(self) -> str:
         return (f"Re-dealt on purpose: the owner ran /prime ({self.variant}). Nothing broke and"
@@ -974,7 +974,7 @@ class Unmeant(Owed):
 @dataclass(frozen=True)
 class Unread(Owed):
     """A dealt file has not been read in full. They open in the order dealt: the papers first,
-    the indictment last. On 2026-10-30 claude-code opened the indictment and two rules first and
+    the pattern catalog last. On 2026-10-30 claude-code opened the closing file and two rules first and
     never read either paper, because any unread dealt file opened."""
 
     remaining: tuple[Path, ...]

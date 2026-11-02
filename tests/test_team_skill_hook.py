@@ -164,7 +164,7 @@ def test_the_team_session_start_reads_all_package_files(tmp_path, source, comman
     expected = (
         *TeamPackage.paper(),
         TeamPackage.voice(),
-        TeamPackage.indictment(),
+        TeamPackage.patterns(),
         Path(inspect.getfile(PostmortemFailure)),
         TeamPackage.skill(),
         *(rule.path for rule in RuleFile.packaged()),
@@ -464,9 +464,9 @@ def test_the_board_prints_changes_once_then_an_unchanged_count(notification_bus,
 def test_the_deck_carries_the_voice_every_fourth_slice_every_rule_reminder_and_every_failure():
     slices = DeckReader.slices()
     voice = DeckReader.paragraphs(TeamPackage.voice().read_text())
-    indictment = DeckReader.paragraphs(TeamPackage.indictment().read_text())
+    patterns = DeckReader.paragraphs(TeamPackage.patterns().read_text())
     assert set(slices[0::4]) == set(voice)
-    assert set(slices[1::4]) == set(indictment)
+    assert set(slices[1::4]) == set(patterns)
     assert set(slices[2::4]) == {rule.reminder for rule in RuleFile.packaged()}
     assert set(slices[3::4]) == {
         f"Recorded failure {line}" for line in PostmortemFailure.catalog().splitlines()}
@@ -566,18 +566,18 @@ def test_every_full_deal_reads_the_paper_before_any_rule():
     assert sources[len(paper)] == RuleFile.packaged()[0].path
 
 
-def test_the_prime_variants_cover_papers_and_indictment_once_each_with_the_indictment_last():
+def test_the_prime_variants_cover_papers_and_patterns_once_each_with_the_patterns_last():
     """/prime deals a selection of the one reader list: each variant keeps or drops the papers
-    and the commander's indictment, every rule stays, and a kept indictment stays last."""
+    and the pattern catalog, every rule stays, and a kept catalog stays last."""
     paper = set(TeamPackage.paper())
-    indictment = TeamPackage.indictment()
+    patterns = TeamPackage.patterns()
     kept = set()
     for prime in Prime.members_with(Prime):
         sources = prime.reader.sources()
         assert all(rule.path in sources for rule in DeckReader.rules())
-        kept.add((paper <= set(sources), indictment in sources))
-        if indictment in sources:
-            assert prime.reader.leading()[-1] == indictment
+        kept.add((paper <= set(sources), patterns in sources))
+        if patterns in sources:
+            assert prime.reader.leading()[-1] == patterns
         assert prime.reader.slices()
     assert kept == {(True, True), (True, False), (False, True), (False, False)}
 
@@ -756,15 +756,15 @@ def test_a_whole_paper_opens_in_one_parallel_batch(capsys, dealt_session, team_b
     assert refused(capsys, gated(transcript, "Read", {"file_path": str(rules[Unengaged.batch].path)}, comms=team_bus, binding=team_binding))
 
 
-def test_dealt_files_open_in_order_with_the_indictment_last(capsys, dealt_session, team_bus, team_binding):
-    """On 2026-10-30 a session opened the indictment and two rules first and never read the
+def test_dealt_files_open_in_order_with_the_patterns_last(capsys, dealt_session, team_bus, team_binding):
+    """On 2026-10-30 a session opened the closing file and two rules first and never read the
     papers: the next batch of dealt files opens, any later one is refused and named the next."""
     transcript, _ = dealt_session
     dealt = DeckReader.sources()
-    assert [path.stem for path in dealt[-2:]] == ["indictment", "ally"]
+    assert [path.stem for path in dealt[-2:]] == ["patterns", "ally"]
     papers = TeamPackage.paper()
     past_batch = papers[Unengaged.batch]
-    for later in (TeamPackage.indictment(), DeckReader.rules()[0].path, past_batch):
+    for later in (TeamPackage.patterns(), DeckReader.rules()[0].path, past_batch):
         call = gated(transcript, "Read", {"file_path": str(later.resolve())}, comms=team_bus, binding=team_binding)
         call.judge()
         reason = json.loads(capsys.readouterr().out)["hookSpecificOutput"]

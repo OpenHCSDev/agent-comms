@@ -3,7 +3,7 @@
 "hey guys do /prime, you're all misaligned" (Tristan, 2026-10-30). A paste of the rules can be
 skimmed; a deal cannot, because the gate refuses every other tool until each dealt file is read
 and answered in a fresh audit. The variant picks which readers deal (full, no-papers,
-no-indictment, light), so a mid-context prime need not fill the window.
+no-patterns, light), so a mid-context prime need not fill the window.
 
 Run with no target in a Claude session, it deals that session. With `--to`, it deals each named
 thread whose deal Core holds (a native Pi thread); a Claude session's deal lives beside its own

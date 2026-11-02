@@ -62,9 +62,10 @@ class DeckReader(DealtSources):
         return TeamPackage.paper()
 
     @classmethod
-    def indictment(cls) -> tuple[Path, ...]:
-        """The failure record every collaborator reads after the proofs and rules."""
-        return (TeamPackage.indictment(),)
+    def patterns(cls) -> tuple[Path, ...]:
+        """The pattern catalog every collaborator reads after the proofs and rules: each copy
+        it is about to write, and its inheritance repair."""
+        return (TeamPackage.patterns(),)
 
     @classmethod
     def rules(cls) -> tuple[RuleFile, ...]:
@@ -72,10 +73,10 @@ class DeckReader(DealtSources):
 
     @classmethod
     def streams(cls) -> tuple[tuple[str, ...], ...]:
-        """Interleave the shared voice, failure record, rules and failure catalog."""
-        indictment = tuple(paragraph for path in cls.indictment()
+        """Interleave the shared voice, pattern catalog, rules and failure catalog."""
+        patterns = tuple(paragraph for path in cls.patterns()
                            for paragraph in cls.paragraphs(path.read_text(encoding="utf-8")))
-        return tuple(stream for stream in (cls.voice(), indictment, cls.tells(), cls.failures())
+        return tuple(stream for stream in (cls.voice(), patterns, cls.tells(), cls.failures())
                      if stream)
 
     def header(self, start: DeckStart, trigger: DealTrigger, comms: Comms,
@@ -126,7 +127,7 @@ class DeckReader(DealtSources):
             Path(inspect.getfile(PostmortemFailure)),
             TeamPackage.skill(),
             Slop.catalog() / "README.md",
-            *cls.indictment(),
+            *cls.patterns(),
         )
 
     @classmethod
@@ -169,16 +170,16 @@ class RulesOnly(DeckReader):
         return ()
 
 
-class IndictmentFree(DeckReader):
-    """A prime asked for mid-context without the indictment, so it does not fill the window."""
+class PatternFree(DeckReader):
+    """A prime asked for mid-context without the pattern catalog, so it does not fill the window."""
 
     @classmethod
-    def indictment(cls) -> tuple[Path, ...]:
+    def patterns(cls) -> tuple[Path, ...]:
         return ()
 
 
-class LightReader(RulesOnly, IndictmentFree):
-    """Explicitly reread rules without papers or indictment, independent of authority."""
+class LightReader(RulesOnly, PatternFree):
+    """Explicitly reread rules without papers or pattern catalog, independent of authority."""
 
 
 class Prime(DeclaredFamily):
@@ -202,8 +203,8 @@ class PaperlessPrime(Prime, declared_name="no-papers"):
     reader = RulesOnly
 
 
-class IndictmentlessPrime(Prime, declared_name="no-indictment"):
-    reader = IndictmentFree
+class PatternlessPrime(Prime, declared_name="no-patterns"):
+    reader = PatternFree
 
 
 class LightPrime(Prime, declared_name="light"):

@@ -27,7 +27,7 @@ The trail interleaves CALL (what it ran), OUT (what it saw) and SAY (what it tol
 
 ## 2. Check every suspicion in the code before saying it
 
-Read the owner it should have used (`sed -n` the fixture, class or function) and diff the commit against `origin/main`. Never send a correction from a guess (indictment failure 27). If the owner turns out not to exist, there's no finding.
+Read the owner it should have used (`sed -n` the fixture, class or function) and diff the commit against `origin/main`. Never send a correction from a guess (recorded failure 27). If the owner turns out not to exist, there's no finding.
 
 ## 3. Send one message
 

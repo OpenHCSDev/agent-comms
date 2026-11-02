@@ -37,8 +37,8 @@ class TeamPackage:
         return Path(str(files("agent_comms.skills") / "comms-commander/SKILL.md"))
 
     @classmethod
-    def indictment(cls) -> Path:
-        return Path(str(files(__package__) / "indictment.md"))
+    def patterns(cls) -> Path:
+        return Path(str(files(__package__) / "patterns.md"))
 
     @classmethod
     def voice(cls) -> Path:

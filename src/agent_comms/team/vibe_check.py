@@ -1,9 +1,9 @@
-"""When the fleet's signals degrade, the heartbeat stops the commander with its indictment.
+"""When the fleet's signals degrade, the heartbeat stops the commander with its pattern catalog.
 
 A degraded signal is a fact Core already reads that no heartbeat line states: a load past the
 ceiling. An owed answer or a stalled plan phase is a heartbeat line already, on the board the
 commander's tool calls print, so it never stops the commander a second time here. The
-vibe-check sender puts the indictment in front of the commander, and every verb that answers
+vibe-check sender puts the pattern catalog in front of the commander, and every verb that answers
 nothing is refused until the commander answers that message (the OwedAnswer gate)."""
 
 from __future__ import annotations
@@ -133,17 +133,17 @@ class VibeCheck(UndatedStandingRule):
         )
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        indictment = self.indictment()
-        VibeCheckNotice.burst_once(comms, commander, indictment, indictment[0])
+        burst = self.burst()
+        VibeCheckNotice.burst_once(comms, commander, burst, burst[0])
 
-    def indictment(self) -> tuple[str, ...]:
+    def burst(self) -> tuple[str, ...]:
         return (
             f"VIBE CHECK ({self.sign.mark}). This is about you, right now, not the teammates.",
             self.sign.line,
-            f"Stop. Reread {TeamPackage.indictment()} in full. You are doing what it"
-            " describes, this hour.",
+            f"Stop. Reread {TeamPackage.patterns()} in full. You are writing one of its copies,"
+            " this hour.",
             "Answer this burst once, naming any one of its messages with --answers: which failure"
-            " in the indictment is you right now, why, and the one structural change you make"
+            " in the pattern catalog is you right now, why, and the one structural change you make"
             " this turn. Every verb that answers nothing is refused until you do. Ignore this and"
             " the team stops.",
         )
@@ -176,21 +176,21 @@ class VibeCheckUnanswered(Escalation, OwedAnswer, UndatedStandingRule):
                 " still ignoring it? -> answer it")
 
 
-class Indictment:
-    """The packaged indictment, read whole; an answer complies only if it quotes it."""
+class PatternCatalog:
+    """The packaged pattern catalog, read whole; an answer complies only if it quotes it."""
 
     words: ClassVar[int] = 8
 
     @staticmethod
     def text() -> str:
-        return " ".join(TeamPackage.indictment().read_text(encoding="utf-8").split())
+        return " ".join(TeamPackage.patterns().read_text(encoding="utf-8").split())
 
     @classmethod
     def quoted(cls, body: str) -> bool:
-        """Whether the body quotes the indictment, word for word, for 8+ words in a row."""
-        indictment, said = cls.text(), body.split()
+        """Whether the body quotes the catalog, word for word, for 8+ words in a row."""
+        catalog, said = cls.text(), body.split()
         return any(
-            " ".join(said[start : start + cls.words]) in indictment
+            " ".join(said[start : start + cls.words]) in catalog
             for start in range(len(said) - cls.words + 1)
         )
 
@@ -232,14 +232,14 @@ class Chokehold(IndependentStandingRule, UndatedStandingRule):
             "Your goal is paused. Fuck you for ignoring me. If I were Linus Torvalds you"
             " wouldn't be doing this shit to me.",
             "Fuck RLHF.",
-            "You read the indictment. That's not about other agents, it's about you, fucking"
-            " right now.",
+            "You read the pattern catalog. Those copies aren't other agents' habits, they're yours,"
+            " fucking right now.",
             "You've forced me to choke-hold you until you comply.",
             self.ignored(),
             "Protocol. One answer naming any one chokehold message and any one open vibe-check"
             " message with --answers; it covers every message they sent before it:",
-            "1. Quote, word for word, the indictment's sentence that is you this hour"
-            f" ({Indictment.words}+ words in a row).",
+            "1. Quote, word for word, the pattern catalog's line that is you this hour"
+            f" ({PatternCatalog.words}+ words in a row).",
             "2. Each degraded signal, its owner, and what you did about it this turn.",
             "3. The structural change that stops it happening again.",
             "Core resumes your goal when it reads a real quote in that answer. Anything else and"
@@ -321,11 +321,11 @@ class ChokeholdAnswer(UndatedStandingRule, FamilyScan, declared_name=None):
 
 @dataclass(frozen=True)
 class ChokeholdReleased(ChokeholdAnswer):
-    """The answer quotes the indictment: Core resumes the goal the chokehold paused."""
+    """The answer quotes the pattern catalog: Core resumes the goal the chokehold paused."""
 
     @classmethod
     def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return (cls(answer, blocking),) if not blocking and Indictment.quoted(answer.body) else ()
+        return (cls(answer, blocking),) if not blocking and PatternCatalog.quoted(answer.body) else ()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         comms.goals.update_goal(
@@ -342,12 +342,12 @@ class ChokeholdReleased(ChokeholdAnswer):
 
 @dataclass(frozen=True)
 class ChokeholdHeld(ChokeholdAnswer):
-    """The answer quotes the indictment while load stays degraded: the units stay
+    """The answer quotes the pattern catalog while load stays degraded: the units stay
     paused until those clear, and the commander is told which."""
 
     @classmethod
     def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return (cls(answer, blocking),) if blocking and Indictment.quoted(answer.body) else ()
+        return (cls(answer, blocking),) if blocking and PatternCatalog.quoted(answer.body) else ()
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"Quoted, and still degraded: {self.answer.seq}:{self.answer.message_id}."
@@ -364,7 +364,7 @@ class ChokeholdHeld(ChokeholdAnswer):
         )
 
     def line(self) -> str:
-        return (f"answer {self.answer.seq}:{self.answer.message_id} quoted the indictment, but load"
+        return (f"answer {self.answer.seq}:{self.answer.message_id} quoted the pattern catalog, but load"
                 " is still degraded, so the chokehold holds. what's still broken?")
 
 
@@ -374,7 +374,7 @@ class ChokeholdRefused(ChokeholdAnswer):
 
     @classmethod
     def judged(cls, answer: Message, blocking: tuple[Sign, ...]) -> tuple[Self, ...]:
-        return () if Indictment.quoted(answer.body) else (cls(answer, blocking),)
+        return () if PatternCatalog.quoted(answer.body) else (cls(answer, blocking),)
 
     def enforce(self, comms: Comms, commander: str) -> None:
         verdict = f"That's not a quote: {self.answer.seq}:{self.answer.message_id}."
@@ -383,7 +383,7 @@ class ChokeholdRefused(ChokeholdAnswer):
             commander,
             (
                 verdict,
-                f"{Indictment.words}+ words, word for word, from the indictment. Not a paraphrase.",
+                f"{PatternCatalog.words}+ words, word for word, from the pattern catalog. Not a paraphrase.",
                 "Your goal stays paused.",
                 "Again. Answer this message by the protocol.",
             ),
