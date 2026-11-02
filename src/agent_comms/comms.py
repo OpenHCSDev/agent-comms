@@ -48,7 +48,7 @@ class Comms(ActivityClient):
         self.ledger = CollaborationLedger.at(self.root, self.registry)
         self.contexts = ContextStore(self.root)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus, self.goals, self.messaging)
-        self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
+        self.transcripts = Transcripts(self.root, self.registry, self.bus)
         self.threads = ThreadManagement(
             self.root, self.registry, self.bus,
             ChannelCatalog.at(self.root), self.agents, self.owners, self.ledger

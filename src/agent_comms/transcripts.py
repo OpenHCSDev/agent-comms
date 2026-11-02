@@ -61,7 +61,6 @@ if TYPE_CHECKING:
     from sqlite3 import Connection
 
     from .coordination_database import InvalidStore, MissingStore
-    from .messaging import Messaging
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
@@ -735,11 +734,10 @@ class AcquiredThreadPresentation(NotifiedThreadPresentation):
 
 
 class Transcripts:
-    def __init__(self, root: Path, registry: Registration, bus: MessageBus, messaging: Messaging):
+    def __init__(self, root: Path, registry: Registration, bus: MessageBus):
         self.root = root
         self.registry = registry
         self.bus = bus
-        self.messaging = messaging
         self.routes = TranscriptRoutes(root)
         self.page_reads = 0
 
