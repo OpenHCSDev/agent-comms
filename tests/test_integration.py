@@ -23,6 +23,8 @@ from agent_comms.todos import (
 )
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
+from agent_comms.order_tools import CommsTodoCreateTool
+from agent_comms.tool_caller import PeerCaller
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.installer.runtime_resolution import PrivateUvProject, StackSources
 from github_fixture import GitHubFixture
@@ -42,13 +44,14 @@ def heads() -> tuple[PullRequestHead, ...]:
     return (PullRequestHead(repo, 7, "a" * 40), PullRequestHead(repo, 8, "b" * 40))
 
 
+@pytest.mark.parametrize("problems", (("P2", "P3"), ("P3",)))
 @pytest.mark.parametrize(("event", "moved_main_refuses"), (("pull_request", False), ("merge_group", True)))
 def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidates(
     mutual_sources: MutualSources, github_cli: GitHubFixture,
-    tmp_path: Path, event: str, moved_main_refuses: bool,
+    tmp_path: Path, event: str, moved_main_refuses: bool, problems: tuple[str, ...],
 ) -> None:
     pair = mutual_sources
-    inputs = pair.capture(("P2", "P3"), "CI source graph")
+    inputs = pair.capture(problems, "CI source graph")
     carrier = pair.publish_carrier(github_cli)
     local = inputs.source(pair.core.github)
     # Actual synthetic merge: its own message deliberately has no source metadata.
@@ -83,7 +86,13 @@ def test_actual_ci_cli_uses_verified_carrier_not_synthetic_message_and_revalidat
     assert IntegrationInput.at(output) == inputs
     assert inputs.carrier.pr == carrier.pr != pair.core.number
     assert inputs.pinned_sources(pair.core.github) == inputs.sources
-    assert local.heads == (PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit),)
+    expected_local = tuple(
+        PullRequestHead(pair.core.github, pair.core.number, pair.core.branch_commit)
+        for problem in problems if problem == "P2"
+    )
+    assert local.heads == expected_local
+    assert local.has_changes(pair.core) == ("P2" in problems)
+    assert inputs.source(pair.client.github).has_changes(pair.client)
     assert pair.core.git(pair.checkout.path, "rev-parse", "HEAD^").strip() == inputs.carrier.head
     for source in inputs.sources:
         for side in (BaseSide, HeadSide):
@@ -497,6 +506,40 @@ def test_qualification_captures_actual_orders_without_reviewing_or_arming_source
     assert not any(call[:2] == ("pr", "merge") or "POST" in call for call in github_cli.calls())
 
 
+def test_companion_only_capture_preserves_native_review_and_empty_test_selection(
+    mutual_sources: MutualSources, github_cli: GitHubFixture,
+) -> None:
+    pair = mutual_sources
+    inputs = pair.capture(("P3",), "client-only change without a ceremonial Core patch")
+    carrier = pair.publish_carrier(github_cli)
+    inputs.validate(pair.context.repos, carrier)
+    assert inputs.local.heads == ()
+    assert not inputs.local.has_changes(pair.core)
+    with pytest.raises(ToolRefusedError, match="no accepted exact-head source review"):
+        MergeHeadReview.require_combined(carrier, pair.context.repos)
+    assert pair.checkout.test_files(inputs.local.baseline.commit, inputs.local.heads) == ()
+
+
+def test_qualification_refuses_an_entirely_unchanged_source_set(
+    mutual_sources: MutualSources,
+) -> None:
+    pair = mutual_sources
+    primary = pair.context.comms.goals.todos.get("P2")
+    creation = CreateProblemGoalAction(
+        problem="P4", commander="lead", request=primary.request,
+        assigner=pair.context.comms.registry.require("lead").incarnation,
+        repo=pair.core.github, text="Check a source selection without changed members",
+        order=replace(primary.order.checked(), pull_requests=()),
+        review_at=RecordedEventTime(9999999999.0))
+    PeerCaller("worker").as_thread("lead").invoke(
+        CommsTodoCreateTool(owner="worker", order=creation), pair.context.comms)
+    with pytest.raises(ToolRefusedError, match="captured sources have no substantive change"):
+        pair.capture(("P4",), "unchanged sources must not acquire a capture")
+    assert not (pair.output / IntegrationInput.filename).exists()
+    assert IntegrationInput.from_message(Repo.git(
+        pair.checkout.path, "show", "--format=%B", "--no-patch", "HEAD")) == ()
+
+
 def test_real_mutual_imports_work_for_both_matched_cuts_and_fail_for_both_mixed_cuts(
         mutual_sources: MutualSources) -> None:
     import sys
@@ -523,11 +566,13 @@ def test_real_mutual_imports_work_for_both_matched_cuts_and_fail_for_both_mixed_
     assert results[HeadSide, BaseSide].returncode != 0
 
 
+@pytest.mark.parametrize("problems", (("P2", "P3"), ("P3",)))
 def test_changed_main_during_source_review_refuses_the_frozen_input(
-        mutual_sources: MutualSources, github_cli: GitHubFixture) -> None:
+        mutual_sources: MutualSources, github_cli: GitHubFixture,
+        problems: tuple[str, ...]) -> None:
     pair = mutual_sources
     run = integration.IntegrationRun(pair.checkout, pair.output, "stale baseline must refuse")
-    inputs = pair.capture(("P2", "P3"), run.risk)
+    inputs = pair.capture(problems, run.risk)
     carrier = pair.publish_carrier(github_cli)
     pair.client.git(pair.client.checkout, "checkout", "main")
     pair.client.commit_change("Advance client main", *pair.client.write_files({Path("main-only.py"): "advanced = True\n"}))

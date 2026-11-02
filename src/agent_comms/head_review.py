@@ -205,6 +205,14 @@ class IntegrationSource(DeclaredFamily, affix="Source"):
             raise ToolRefusedError("Remote main did not resolve to a full Git identity")
         return commit
 
+    def has_changes(self, repository: Repo) -> bool:
+        """Compare this captured tree with its own repository's baseline, not Core's."""
+        self.require_origin(repository)
+        baseline_tree = Repo.git(
+            repository.checkout, "rev-parse", f"{self.baseline.commit}^{{tree}}"
+        ).strip()
+        return self.candidate_tree != baseline_tree
+
     @property
     def local_sources(self) -> tuple[LocalIntegrationSource, ...]:
         return ()
@@ -449,6 +457,10 @@ class IntegrationInput(DeclaredFamily, affix="Input"):
             raise ToolRefusedError(f"{core.github.to_wire()} main moved; recapture inputs")
         for entry in self.companions:
             entry.validate(Repo.selected(repositories, entry.repository.to_wire()), carrier)
+        self.require_substantive(repositories)
+
+    def require_substantive(self, repositories: tuple[Repo, ...]) -> None:
+        """Ordinary source comparisons do not require a combined change."""
 
     def require_source_reviews(self) -> None:
         """Native promotion and the hosted gate require these same exact source decisions."""
@@ -540,6 +552,14 @@ class CombinedInput(IntegrationInput):
     """The actual separate carrier before publication of this immutable source capture."""
 
     carrier: PullRequestHead
+
+    def require_substantive(self, repositories: tuple[Repo, ...]) -> None:
+        """Any captured repository may supply the change; none may fabricate one."""
+        if not any(
+            source.has_changes(Repo.selected(repositories, source.repository.to_wire()))
+            for source in self.sources
+        ):
+            raise ToolRefusedError("The captured sources have no substantive change")
 
     @property
     def combined(self) -> bool:
