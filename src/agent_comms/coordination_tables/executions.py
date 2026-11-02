@@ -55,6 +55,7 @@ from agent_comms.typed_table import (
     NonDecreasing,
     NonIncreasing,
     OrdinalTransitions,
+    RetainsChildren,
     TextStorage,
 )
 from agent_comms.wake_candidate_index import ProjectionUnavailableError
@@ -275,6 +276,7 @@ FROM executions e"""
 
 @dataclass(frozen=True, slots=True)
 class ExecutionRecord(
+    RetainsChildren,
     LifecycleTransitions,
     OrdinalTransitions,
     IncrementingColumn,

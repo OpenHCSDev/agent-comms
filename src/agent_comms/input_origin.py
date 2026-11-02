@@ -61,6 +61,10 @@ class InputOrigin(DeclaredFamily, affix="InputOrigin"):
     def require_human(self) -> HumanInputOrigin:
         raise RelationViolationError("Input lacks an original human author witness")
 
+    def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:
+        """An origin without a harness witness contributes no harness sources."""
+        return ()
+
     def matches_owner(self, recorded_name, incarnation):
         return recorded_name == incarnation.name
 
@@ -123,6 +127,9 @@ class HarnessAttemptOrigin(InputOrigin):
 
     bridge: type[HarnessSession]
     reference: MessageReference
+
+    def harness_sources(self) -> tuple[HarnessAttemptOrigin, ...]:
+        return (self,)
 
 
 @dataclass(frozen=True)

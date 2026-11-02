@@ -339,9 +339,13 @@ class StoredInput(InputAttempt):
         return TextDigest.of(self.source_text)
 
     def matches_owner(self, source_owner: ThreadIncarnation) -> bool:
-        # Input with a recorded author uses that author's creation time. Older
-        # rows with only a name do not get an inferred thread identity.
-        return self.origin.matches_owner(self.owner, source_owner)
+        # The origin owns author evidence; an owned bus key additionally
+        # retains its original recipient birth. Neither invents a missing birth.
+        return (self.origin.matches_owner(self.owner, source_owner)
+                and source_owner.recorded_or(
+                    lambda recorded: self.key.matches_recorded_owner(recorded.created_at),
+                    self.key.matches_unrecorded_owner,
+                ))
 
     def matches_claim(self, claim_scope: int) -> bool:
         return self.claim_generation == claim_scope

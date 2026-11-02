@@ -206,7 +206,8 @@ class ReadNativeCoordinationSession(NativeCoordinationSession):
     def _open_connection(self, contention: StoreContention) -> sqlite3.Connection:
         return self._open_reader(self.path, contention)
 
-    def _configure_connection(self) -> None:
+    @classmethod
+    def configure_connection(cls, connection: sqlite3.Connection) -> None:
         pass  # _open_reader configured query-only behavior before publication.
 
     def _initialize_schema(self) -> None:

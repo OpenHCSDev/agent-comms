@@ -252,12 +252,13 @@ def test_rename_and_stopped_same_pid_cannot_reactivate_under_gate(tmp_path: Path
     comms.registry.declare(owner)
     comms.registry.rename("owner", "renamed")
     comms.registry.unregister("renamed")
+    stopped = comms.registry.snapshot().entry("renamed")
     comms.owners.maintenance.begin(MaintenanceOperator.current())
     with pytest.raises(RelationViolationError):
         comms.owners.start_many(("owner",))
     with pytest.raises(RelationViolationError):
         comms.registry.register(comms.registry.require("renamed"), new_owner=True)
-    assert comms.registry.require("renamed").same_local_process(owner.require_process())
+    assert comms.registry.snapshot().entry("renamed") == stopped
 
 
 def test_cross_process_claim_races_pause_at_registry_lock(tmp_path: Path) -> None:

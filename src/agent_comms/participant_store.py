@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import dataclass
 
 from agent_comms.coordination_errors import (
@@ -21,6 +22,9 @@ from agent_comms.coordination_tables.participants import (
     Participants,
 )
 from agent_comms.nominal.field_codec import ThreadLookup
+from agent_comms.typed_table import (
+    LOCAL_TABLE_SOURCE, AttachedPracticeRebuild, RowNotFoundError, TableSchema, TableSource,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,6 +41,11 @@ class ParticipantSnapshot:
     owner_identity: OwnerGenerations
     pointer: CurrentExecutions
 
+    def retain_original(self, original: AttachedPracticeRebuild) -> int:
+        """The generation and pointer are both required parts of this recorded answer."""
+        return (self.owner_identity.retain_original(original)
+                + self.pointer.retain_original(original))
+
 
 class ParticipantStore:
     def __init__(self, session: CoordinationSession) -> None:
@@ -44,17 +53,45 @@ class ParticipantStore:
 
     def get(self, lookup: ThreadLookup) -> ParticipantSnapshot:
         with self.session.read():
-            person = Participants.one(self.session._connection, participant_lookup=lookup)
-            generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
-            pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
-            if person is None or generation is None or pointer is None:
-                raise ParticipantNotRegistered(f"participant {lookup!r} aggregate is not registered")
-            return ParticipantSnapshot(
-                lookup,
-                person.committed,
-                generation,
-                pointer,
+            return self.read_at(self.session._connection, lookup)
+
+    @staticmethod
+    def read_at(
+        db: sqlite3.Connection, lookup: ThreadLookup, *,
+        table_source: TableSource = LOCAL_TABLE_SOURCE,
+    ) -> ParticipantSnapshot:
+        """Read the same aggregate through the caller's already-owned SQL lifetime."""
+        try:
+            person = Participants.require(db, participant_lookup=lookup, table_source=table_source)
+            generation = OwnerGenerations.require(
+                db, owner_lookup=lookup, table_source=table_source,
             )
+            pointer = CurrentExecutions.require(db, owner_lookup=lookup, table_source=table_source)
+        except RowNotFoundError as error:
+            raise ParticipantNotRegistered(
+                f"participant {lookup!r} aggregate is not registered",
+            ) from error
+        return ParticipantSnapshot(lookup, person.committed, generation, pointer)
+
+    @classmethod
+    def retain_owners(
+        cls, original: AttachedPracticeRebuild, lookups: tuple[ThreadLookup, ...],
+    ) -> int:
+        """Keep selected original aggregates, not every participant's execution history.
+
+        An absent participant remains absent. A present but incomplete aggregate
+        follows the ordinary reader's refusal before any file can be published.
+        """
+        changed = 0
+        for person in Participants.select_keys(
+            original.destination, tuple({"participant_lookup": lookup} for lookup in lookups),
+            table_source=original.source,
+        ):
+            snapshot = cls.read_at(original.destination, person.participant_lookup,
+                                   table_source=original.source)
+            changed += person.retain_original(original)
+            changed += snapshot.retain_original(original)
+        return changed
 
     def register(
         self,
@@ -113,3 +150,13 @@ class ParticipantStore:
                 generation=expected_generation + 1,
             )
             return Applied(self.get(lookup))
+
+
+class ParticipantRows(AttachedPracticeRebuild):
+    """Keep whole participant answers inside the existing selected-file closure."""
+
+    def retain_referenced_rows(self, schema: type[TableSchema]) -> int:
+        changed = super().retain_referenced_rows(schema)
+        return changed + ParticipantStore.retain_owners(self, tuple(
+            person.participant_lookup for person in Participants.select(self.destination)
+        ))

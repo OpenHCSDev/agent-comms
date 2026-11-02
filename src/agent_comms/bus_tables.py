@@ -20,6 +20,7 @@ from agent_comms.typed_table import (
     ProjectionProducerTables,
     RowNotFoundError,
     TableReference,
+    TableSource,
     TypedRow,
 )
 
@@ -112,10 +113,10 @@ class MessageIdentitySource(MessageReference, messages.BusProjectionTables):
     """A record's existing reference, searchable without recomputing its content hash."""
 
     @classmethod
-    def practice_sequence(cls, db: sqlite3.Connection, source: sqlite3.Connection) -> int:
-        through = messages.BusRow.last_seq(source)
+    def practice_sequence(cls, db: sqlite3.Connection, source: TableSource) -> int:
+        through = messages.BusRow.last_seq(db, table_source=source)
         if through:
-            expected = cls.require(source, seq=through)
+            expected = cls.require(db, table_source=source, seq=through)
             if cls.require(db, seq=through) != expected:
                 raise RelationViolationError("Practice bus identity differs at its last sequence")
         return through

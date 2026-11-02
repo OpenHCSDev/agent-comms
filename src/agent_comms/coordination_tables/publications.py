@@ -28,6 +28,7 @@ from agent_comms.typed_table import (
     Generated,
     GuardedInserts,
     ImmutableRows,
+    RetainsChildren,
     ValidatedInserts,
 )
 
@@ -37,7 +38,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(
-    ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorRow
+    RetainsChildren, ValidatedInserts, GuardedInserts, ImmutableRows, CoordinatorRow
 ):
     """One obligation route's frozen response: the exact Message it publishes."""
 
