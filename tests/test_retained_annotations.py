@@ -15,9 +15,13 @@ from agent_comms.coordination_tables.annotations import AnnotationRequestsRow, S
 from agent_comms.coordinator import StandaloneCoordination
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.installer.refusals import UpgradeRefused
-from agent_comms.installer.practice import PracticeCopy
+from agent_comms.installer.practice import PracticeCopy, PracticeMeasurement
+from agent_comms.installer.interpreter_operation import ProbeRequest
+from agent_comms.installer.probes.inputs import SelectedInputsProbe
+from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.message_reference import MessageReference
-from agent_comms.nominal.field_codec import MessageId, TurnId
+from agent_comms.nominal.field_codec import FieldCodec, MessageId, TurnId
 from agent_comms.repo import Checkout
 from agent_comms.task_sources import AnnotationDisclosureGrant, ProjectTaskScope
 from agent_comms.thread_identity import RecordedThreadIncarnation, TurnIdentity
@@ -212,3 +216,37 @@ def test_context_selection_cannot_follow_finalized_coordinator_evidence(
         copy.include_contexts((), requests=(source.reference,), maximum_bytes=8 * 2**20)
     assert not ContextStore(copy.path).path.exists()
     assert CoordinationStore.digest(source.path) == before
+
+
+def test_selected_annotation_materialization_writes_only_the_private_target(
+    annotation_source: AnnotationSource, tmp_path: Path,
+) -> None:
+    source = annotation_source
+    root = source.path.parent
+    before = CoordinationStore.digest(source.path)
+    contexts_before = ContextStore.digest(ContextStore.path_in(root))
+    expected = WorkingMemoryAnnotations.for_context(
+        ReadableStore(source.path), (source.context.value,), JevClassifier.version(),
+    )
+    comms = wire(root)
+    gate = MaintenanceBarrier(comms.registry.store.path)
+    held = gate.retarget(gate.begin(MaintenanceOperator.current()), LaunchRuntime.running())
+    copy = PracticeCopy(root, tmp_path / 'captured-annotations')
+    try:
+        request = ProbeRequest(SelectedInputsProbe(
+            root, copy.path, 8 * 2**20, requests=(source.reference,),
+        ), str(held.nonce))
+        decoded = FieldCodec.decode(ProbeRequest, FieldCodec.encode(request))
+        with held.holding():
+            reply = decoded.answer()
+        measured = FieldCodec.decode(PracticeMeasurement, reply.answer)
+        assert measured == PracticeMeasurement.capture(copy.path)
+        contexts = ContextStore(copy.path).original_segments()
+        retained = WorkingMemoryAnnotations.for_segments(
+            ReadableStore(CoordinationStore.path_in(copy.path)), contexts, JevClassifier.version(),
+        )
+        assert retained == expected
+        assert CoordinationStore.digest(source.path) == before
+        assert ContextStore.digest(ContextStore.path_in(root)) == contexts_before
+    finally:
+        gate.clear(held)

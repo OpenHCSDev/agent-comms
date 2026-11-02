@@ -16,6 +16,7 @@ from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_key import TurnInputKey
 from agent_comms.installer.practice import PracticeCopy
 from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.probes.inputs import SelectedInputsProbe
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.maintenance_barrier import (
     MaintenanceBarrier, MaintenanceNotHeldError, MaintenanceOperator, NoMaintenanceHolder,
@@ -39,6 +40,31 @@ def capture_source(tmp_path: Path) -> Comms:
     with CoordinationStore(CoordinationStore.path_in(comms.root)):
         pass
     return comms
+
+
+def test_capture_refuses_a_destination_inside_its_source(
+    capture_source: Comms,
+) -> None:
+    copy = PracticeCopy(capture_source.root, capture_source.root / 'nested-copy')
+    with pytest.raises(UpgradeRefused, match='separate destination'), copy.capturing_inputs():
+        pytest.fail('capture accepted a destination inside its donor')
+    assert not copy.path.exists()
+
+
+def test_selected_probe_refuses_oversized_complete_readers_before_copying(
+    capture_source: Comms, tmp_path: Path,
+) -> None:
+    source = capture_source
+    gate = MaintenanceBarrier(source.registry.store.path)
+    held = gate.retarget(gate.begin(MaintenanceOperator.current()), LaunchRuntime.running())
+    destination = tmp_path / 'too-small'
+    try:
+        with held.holding(), pytest.raises(UpgradeRefused, match='Complete input readers'):
+            SelectedInputsProbe(source.root, destination, 1).run()
+        assert not Bus.path_in(destination).exists()
+        assert not InputDispositions.path_in(destination).exists()
+    finally:
+        gate.clear(held)
 
 
 stores = pytest.mark.parametrize('opening', (
@@ -174,12 +200,12 @@ def test_capture_rejects_a_holder_side_effect_instead_of_accepting_mixed_sources
     key = TurnInputKey(TurnId('a' * 32))
     copy = PracticeCopy(source.root, tmp_path / 'selected')
     try:
-        with held.holding(), pytest.raises(UpgradeRefused, match='Source stores changed'):
+        with held.holding(), pytest.raises(RelationViolationError):
             with copy.capturing_inputs():
                 copy.include((ledger.path,))
                 ledger.record(key, seq=None, owner='capture-owner', claim_scope=1,
                               target='capture-owner', text='holder wrote after copying')
-        assert key in ledger.read((key,)).rows
+        assert key not in ledger.read((key,)).rows
         assert key not in InputDispositions(copy.path).read((key,)).rows
     finally:
         gate.clear(held)

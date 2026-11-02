@@ -10,6 +10,7 @@ from pathlib import Path
 from math import ceil
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+from typing import ClassVar
 
 from agent_comms.bus import Bus
 from agent_comms.context_store import ContextManifestReference, ContextStore
@@ -20,7 +21,7 @@ from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantRows, ParticipantStore
 from agent_comms.registry_document import RegistryEntry
 from agent_comms.native_session_reopen import NativeSessionIdentity
-from agent_comms.nominal.field_codec import boundary_decoder
+from agent_comms.nominal.field_codec import ThreadLookup, boundary_decoder
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.backup import pinned_bus_files, saved_bus_files
 from agent_comms.registry_store import RegistryCut, RegistryStore
@@ -29,7 +30,7 @@ from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.locked_store import (
     DeclaredFile, LiveFilesRequest, RegistryFile, RetainedCopyRequest, RootFile, UndeclaredFile,
 )
-from agent_comms.maintenance_barrier import MaintenanceBarrier
+from agent_comms.maintenance_barrier import MaintenanceBarrier, NoMaintenanceHolder
 from agent_comms.storage_rules import StorageRule
 from agent_comms.private_path import PrivateDirectoryRole
 
@@ -148,6 +149,7 @@ class PracticeCopy:
     root: Path
     path: Path
     copied: dict[Path, DeclaredFile | UndeclaredFile] = field(default_factory=dict)
+    input_readers: ClassVar[tuple[type[RootFile], ...]] = (Bus, InputDispositions)
 
     @property
     def request(self) -> RetainedCopyRequest:
@@ -188,21 +190,26 @@ class PracticeCopy:
     def capturing_inputs(self) -> Iterator[RegistryCut]:
         """Enclose the first and every subsequent selected-input materialization.
 
-        The caller already owns the install's retargeted hold and does no source
-        writes here. Pins prevent last-close WAL checkpoints, not writers. Drain
+        The caller already owns the install's retargeted hold. Materialization
+        drops its claim, including the exported claim inherited by new children,
+        so ordinary source writers refuse while the private target stays writable.
+        Pins prevent last-close WAL checkpoints, not writers. Drain
         admitted transactions separately, releasing each SQL lock before seeking
         another or the registry. The hold excludes later non-holder transactions;
-        source observations reject holder-side writes during the materialization.
+        source observations additionally reject changes outside that writer path.
         Ordinary whole-file include() and complete backups keep their own lifetime.
         This supplies a recorded cut, not native launch or write authority.
         """
-        if self.copied or self.path.exists():
+        if self.copied or self.path.exists() or self.path.is_symlink():
             raise UpgradeRefused("Selected input capture must start before materialization")
+        source, target = self.root.resolve(), self.path.resolve()
+        if target.is_relative_to(source) or source.is_relative_to(target):
+            raise UpgradeRefused("Selected input capture requires a separate destination")
         barrier = MaintenanceBarrier(RegistryFile.path_in(self.root))
         files = LiveFilesRequest(self.root)
         resources = RootFile.owned_files(files, tuple(
             owner.path_in(self.root)
-            for owner in (Bus, InputDispositions, ContextStore, CoordinationStore)
+            for owner in (*self.input_readers, ContextStore, CoordinationStore)
         ))
         present = tuple(resource for resource in resources if files.location(resource).exists())
         with (barrier.capturing(LaunchRuntime.running()),
@@ -212,11 +219,41 @@ class PracticeCopy:
                     pass
             with RegistryStore.at(self.root).current_snapshot() as original:
                 before = saved_bus_files(files, resources)
-                yield original
+                with NoMaintenanceHolder().acting():
+                    yield original
                 if not original.matches_current():
                     raise UpgradeRefused("Registry changed during selected input capture")
                 if saved_bus_files(files, resources) != before:
                     raise UpgradeRefused("Source stores changed during selected input capture")
+
+    def capture_inputs(
+        self, owners: tuple[ThreadLookup, ...], *, maximum_bytes: int,
+        identities: tuple[NativeSessionIdentity, ...] = (),
+        requests: tuple[ContextManifestReference, ...] = (),
+    ) -> PracticeMeasurement:
+        """The selected operation, including its first complete reader copy.
+
+        Resolve births from the original cut, not caller-supplied name/generation
+        records. No selection callback runs before or outside this lifetime.
+        The returned measurement describes data, never native launch authority.
+        """
+        with self.capturing_inputs() as original:
+            entries = tuple(original.snapshot.entry(original.snapshot.born(owner).name)
+                            for owner in owners)
+            self.prepare()
+            paths = tuple(owner.path_in(self.root) for owner in self.input_readers)
+            files = LiveFilesRequest(self.root)
+            readers = saved_bus_files(files, RootFile.owned_files(files, paths))
+            required = sum(member.size for group in readers.values() for member in group.values())
+            if required > self.remaining_bytes(maximum_bytes):
+                raise UpgradeRefused("Complete input readers exceed the selected copy allowance")
+            self.include(paths)
+            self.remaining_bytes(maximum_bytes)
+            self.include_contexts(identities, maximum_bytes=maximum_bytes, requests=requests)
+            self.include_inputs(entries, maximum_bytes=maximum_bytes, identities=identities)
+            measured = PracticeMeasurement.capture(self.path)
+            measured.remaining(maximum_bytes)
+            return measured
 
     def include_contexts(
         self, identities: Iterable[NativeSessionIdentity], *, maximum_bytes: int,
@@ -252,7 +289,7 @@ class PracticeCopy:
         one consistent cut and serial materialization, not native launch authority.
         """
         self.prepare()
-        for owner in (Bus, InputDispositions):
+        for owner in self.input_readers:
             source = owner.path_in(self.root)
             if source.exists():
                 if source not in self.copied:
