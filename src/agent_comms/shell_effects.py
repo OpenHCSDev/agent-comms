@@ -9,13 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms_hooks import ToolRefusedError
 from agent_comms_hooks.shell_commands import ShellCommand
 
 from .native_build_inputs import GitLaunch, NamedProgram
 from .repo import Checkout, CheckoutStart, RepositorySource
 from .storage_room import AllocationRoomWork, BuildRoomWork, RoomWork, TestGateRoomWork
-from .tool_denial import SelectedToolDenied
+from .tool_denial import SelectedToolDenied, StorageDenied
 
 if TYPE_CHECKING:
     from .storage_projection import StorageProjection
@@ -52,10 +51,6 @@ class ShellProgram(NamedProgram):
     def effects(self, args: list[str], cwd: Path) -> tuple[StorageEffect, ...]:
         """Unknown programs have no declared effects; capabilities compose through super()."""
         return ()
-
-
-class StorageDenied(SelectedToolDenied, ToolRefusedError):  # noqa: N818 - existing nominal refusal
-    """The storage preflight refused an operation before it executed."""
 
 
 class StorageEffect(ABC):

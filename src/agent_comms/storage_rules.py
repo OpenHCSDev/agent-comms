@@ -28,7 +28,7 @@ from agent_comms.storage_room import RoomAllocation
 from agent_comms.thread_identity import ThreadIncarnation
 from agent_comms.work_branches import WorkBranches
 
-from .shell_effects import StorageDenied
+from .tool_denial import StorageDenied
 from .thread_storage import (
     StoragePath,
     StorageRoots,
