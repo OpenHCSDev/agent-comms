@@ -126,6 +126,44 @@ def test_a_new_revision_decodes_only_the_threads_that_changed(tmp_path):
     assert list(document.threads) == list(raw["threads"])
 
 
+@pytest.fixture
+def thread_rows_wire(tmp_path):
+    registry = Registration(tmp_path / "registry.json")
+    for name in ("first", "second"):
+        registry.register(Thread(name, frozenset(), Checkout(tmp_path)))
+    return registry.store.read().threads.to_wire()
+
+
+@pytest.mark.parametrize("view", [lambda rows: rows, lambda rows: rows.copy(), lambda rows: rows.freeze()])
+def test_reading_thread_rows_reuses_their_existing_wire_values(thread_rows_wire, view):
+    from agent_comms.registry_document import ThreadRows
+
+    wire = thread_rows_wire
+    rows = view(ThreadRows.from_wire(wire))
+    for name in rows:
+        assert rows[name].name == name
+    encoded = rows.to_wire()
+    assert encoded == wire
+    assert all(encoded[name] is wire[name] for name in rows)
+
+
+def test_assigning_and_removing_thread_rows_changes_only_the_written_rows(thread_rows_wire):
+    from dataclasses import replace
+    from agent_comms.nominal.field_codec import FieldCodec
+    from agent_comms.registry_document import ThreadRows
+    from agent_comms.thread_text import GivenThreadText
+
+    wire = thread_rows_wire
+    rows = ThreadRows.from_wire(wire)
+    changed = replace(rows["second"], task=GivenThreadText("updated"))
+    rows["second"] = changed
+    encoded = rows.to_wire()
+    assert encoded["first"] is wire["first"]
+    assert FieldCodec.decode(Thread, encoded["second"]) == changed
+    del rows["second"]
+    assert rows.to_wire() == {"first": wire["first"]}
+
+
 def test_a_changed_revision_is_checked_as_a_whole(tmp_path):
     from agent_comms.errors import RelationViolationError
 
