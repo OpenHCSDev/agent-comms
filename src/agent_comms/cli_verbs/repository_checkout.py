@@ -4,7 +4,7 @@ from agent_comms.cli_commands import CheckoutGrant
 from agent_comms.cli_verbs.checkout import CheckoutCliCommand
 from agent_comms.comms import Comms
 from agent_comms.nominal.field_codec import Argument
-from agent_comms.repo import Repo
+from agent_comms.repo import LocalRepositorySource, RepositorySource
 from agent_comms.repository_name import RepositoryName
 from agent_comms.storage_rules import RepositoryCheckoutAllocation
 from agent_comms.storage_rules import StorageRule
@@ -23,11 +23,11 @@ class RepositoryCheckoutCliCommand(CheckoutCliCommand,
     def destination(self, rule: StorageRule, thread: Thread) -> Path:
         return rule.repository_checkout(rule.roots_of(thread), self.problem, self.repository)
 
-    def source(self, ctx: Comms, grant: CheckoutGrant) -> Repo:
+    def source(self, ctx: Comms, grant: CheckoutGrant) -> RepositorySource:
         repositories = ctx.registry.snapshot().commander_project.require().repos
         selected = [repository for repository in repositories
                     if repository.github == self.repository]
         if not selected:
             raise ValueError(f'{self.repository.to_wire()} is not a registered repository.')
         repository, = selected
-        return repository
+        return LocalRepositorySource(repository)

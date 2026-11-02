@@ -407,6 +407,24 @@ class StorageRule(RoomAllocation, DurableFile):
         _, name = repository.key
         return checkout.with_name(f'{checkout.name}{self.checkout_separator}{name}')
 
+    def repository_donor(self, owner: Thread, goal: GoalId,
+                         repository: RepositoryName) -> Path:
+        """Noneditable acquisition storage, owned by this birth and goal, never a registry row."""
+        return self.checkout_base / '.sources' / owner.incarnation.require_recorded().lookup / goal / Path(*repository.key)
+
+    def require_physical_allocation(self, path: Path) -> None:
+        """Never follow an occupied symlink or discover a different allocation through it."""
+        if (not path.is_absolute() or path != path.resolve()
+                or path == self.checkout_base or not path.is_relative_to(self.checkout_base)):
+            self.deny(f'{path} is not a physical allocation under {self.checkout_base}')
+
+    def require_repository_donor(self, owner: Thread, goal: GoalId,
+                                 repository: RepositoryName, path: Path) -> None:
+        self.require_destination(owner, path)
+        self.require_physical_allocation(path)
+        if path != self.repository_donor(owner, goal, repository):
+            self.deny(f'{path} is not the repository donor of this goal and incarnation')
+
     def edit_boundaries(self, owner: Thread, problem: str, primary: RepositoryName,
                         companions: tuple[RepositoryName, ...], generation: GoalId) -> frozenset[Path]:
         """Physical editable roots follow declared allocations, even before materialization."""

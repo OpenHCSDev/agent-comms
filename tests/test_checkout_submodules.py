@@ -16,6 +16,7 @@ from agent_comms.errors import TodoConflict
 from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import FieldCodec, GoalId
 from agent_comms.goals import OrderCheck
+from agent_comms.goal_actions import SetGoalAction
 from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registry_document import RegisteredCommanderProject
@@ -141,6 +142,47 @@ def test_empty_project_does_not_become_the_callers_checkout(tmp_path, monkeypatc
     assert result.returncode != 0
     assert 'Project path must not be empty' in result.stdout + result.stderr
     assert 'empty-project' not in comms.registry.snapshot().threads
+
+
+def test_remote_goal_checkout_uses_the_existing_submodule_prepare_and_retire_owner(
+    private_comms, repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    name = RepositoryName('OpenHCSDev', 'remote-pinned')
+    remote = SourceRepository.remote_for(tmp_path, name)
+    git(repository, 'branch', '-M', 'master')
+    git(repository, 'remote', 'add', 'origin', str(remote))
+    git(repository, 'push', 'origin', 'master')
+    git(remote, 'symbolic-ref', 'HEAD', 'refs/heads/master')
+    for key, value in SourceRepository.of(repository).github_transport_environment().items():
+        monkeypatch.setenv(key, value)
+    monkeypatch.delenv('AGENT_COMMS_THREAD', raising=False)
+    monkeypatch.delenv('PI_WORKTREE', raising=False)
+    comms = private_comms
+    rule = StorageRule(checkout_base=tmp_path / 'checkouts',
+                       scratch_base=tmp_path / 'scratch', floor_gib=0)
+    StorageRule.path_in(comms.root).write_text(FieldCodec.compact(FieldCodec.encode(rule)))
+    worker = comms.registry.declare(Thread(
+        'remote-worker', frozenset(), Checkout(repository), execution=ExternalThreadExecution,
+    ))
+    goal = comms.goals.update_goal(worker.name, SetGoalAction(text='Prepare remote pinned source'))
+    worker = comms.registry.require(worker.name)
+    command = ('--root', str(comms.root), 'goal-checkout', '--from', worker.name)
+    source = f'github:{name.to_wire()}'
+    added = core_process(*command, 'add', source)
+    assert added.returncode == 0, added.stdout + added.stderr
+    path = rule.repository_checkout(rule.roots_of(worker), goal.id, name)
+    checkout = Checkout(path)
+    assert (path / 'pinned' / 'catalog.md').read_text() == 'patterns\n'
+    pointer_without_store(checkout)
+    repaired = core_process(*command, 'add', source)
+    assert repaired.returncode == 0, repaired.stdout + repaired.stderr
+    module, = checkout.submodules()
+    assert module.usable()
+    retired = core_process(*command, 'remove', source)
+    assert retired.returncode == 0, retired.stdout + retired.stderr
+    assert not path.exists()
+    donor = rule.repository_donor(worker, goal.id, name)
+    assert Repo.qualified_github(donor, name).default_branch() == 'master'
 
 
 def test_checkout_add_prepares_the_order_repository_submodule(checkout_command_bus):

@@ -1,5 +1,6 @@
 """One real Git source/remote owner for citation tests; no source checkout is required."""
 import ast
+import os
 from collections.abc import Mapping
 from pathlib import Path
 import subprocess
@@ -26,6 +27,15 @@ class SourceRepository(Repo):
     @property
     def remote_path(self) -> Path:
         return Path(self.git(self.checkout, 'remote', 'get-url', self.remote).strip())
+
+    def github_transport_environment(self) -> dict[str, str]:
+        """Serve the declared GitHub URL through this actual fixture remote, using Git config."""
+        count = int(os.environ.get('GIT_CONFIG_COUNT', '0'))
+        return {
+            'GIT_CONFIG_COUNT': str(count + 1),
+            f'GIT_CONFIG_KEY_{count}': f'url.{self.remote_path}.insteadOf',
+            f'GIT_CONFIG_VALUE_{count}': self.github_url(self.github),
+        }
 
     @property
     def main_commit(self) -> str:

@@ -35,9 +35,9 @@ from .message_reference import MessageReference
 from .owner_lifecycle import OwnerRestartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .presentation import ThreadRecord, ThreadView
-from .repo import Checkout, CheckoutStart, Repo
+from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo, RepositorySource
 from .storage_projection import StorageProjection
-from .shell_effects import CheckoutStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
+from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect, RemoveCheckoutStorageEffect
 from .thread_model import ThreadModel
 from .threads import Thread
 from .todos import Todo
@@ -422,7 +422,14 @@ class CheckoutGrant(DeclaredFamily, affix="CheckoutGrant"):
     def require(self) -> None: ...
 
     @abstractmethod
-    def source(self) -> Repo: ...
+    def source(self) -> RepositorySource: ...
+
+    def revalidate(self, ctx: Comms) -> None:
+        """A long acquisition cannot spend a retired caller or a changed goal."""
+        current = ctx.registry.require(self.thread.name)
+        if current.incarnation != self.thread.incarnation:
+            raise ValueError('The checkout caller incarnation changed during acquisition')
+        dataclasses.replace(self, thread=current).require()
 
     def require_transfer(self, ctx: Comms, repository: Repo) -> None:
         raise ValueError('Checkout transfer requires a current held problem')
@@ -435,8 +442,13 @@ class OrderCheckoutGrant(CheckoutGrant):
     def require(self) -> None:
         self.todo.require_assignee(self.thread.incarnation, self.todo.held().generation)
 
-    def source(self) -> Repo:
-        return self.todo.repository
+    def source(self) -> RepositorySource:
+        return LocalRepositorySource(self.todo.repository)
+
+    def revalidate(self, ctx: Comms) -> None:
+        super().revalidate(ctx)
+        ctx.goals.todos.get(self.todo.id).require_assignee(
+            self.thread.incarnation, self.todo.held().generation)
 
     def require_transfer(self, ctx: Comms, repository: Repo) -> None:
         current = ctx.goals.todos.get(self.todo.id)
@@ -451,14 +463,14 @@ class OrderCheckoutGrant(CheckoutGrant):
 @dataclass(frozen=True)
 class GoalCheckoutGrant(CheckoutGrant):
     goal: Goal
-    repository: Repo
+    repository: RepositorySource
 
     def require(self) -> None:
-        self.thread.goal.require().require_id(self.goal.id)
-        if self.goal.state.items_with(Complete, self.goal):
+        current = self.thread.goal.require().require_id(self.goal.id)
+        if current.state.items_with(Complete, current):
             raise ValueError("A completed goal cannot allocate a checkout.")
 
-    def source(self) -> Repo:
+    def source(self) -> RepositorySource:
         return self.repository
 
 
@@ -481,18 +493,26 @@ class AddCheckoutOperation(CheckoutOperation):
     def apply(cls, command: PreparedCheckoutCliCommand, ctx: Comms, thread: Thread,
               destination: Path) -> CheckoutResult:
         grant = command.grant(ctx, thread)
-        grant.require()
-        repository = command.source(ctx, grant)
-        projection = StorageProjection(ctx.registry.storage_rule, thread, ctx)
+        grant.revalidate(ctx)
+        source = command.source(ctx, grant)
+        rule = ctx.registry.storage_rule
+        projection = StorageProjection(rule, thread, ctx)
+        AcquireRepositoryStorageEffect(destination, source).check(projection)
         if destination.exists():
-            CheckoutStorageEffect(destination, repository).check(projection)
+            source.qualify(destination, rule, thread)
             Checkout(destination).prepare()
         else:
+            repository = source.acquire(rule, thread)
+            grant.revalidate(ctx)
             branch = repository.default_branch()
-            Repo.git(repository.checkout, "fetch", "origin", branch)
+            with repository.acquiring():
+                Repo.git(repository.checkout, "fetch", "origin", branch)
+            grant.revalidate(ctx)
             start = CheckoutStart.of(repository.checkout, f"work/{destination.name}", f"origin/{branch}")
-            CreateCheckoutStorageEffect(destination, repository, start).check(projection)
+            CreateCheckoutStorageEffect(destination, source, start).check(projection)
             Checkout.add(repository.checkout, destination, start)
+        source.qualify(destination, rule, thread)
+        grant.revalidate(ctx)
         return CheckoutResult(destination)
 
 

@@ -12,9 +12,9 @@ from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import cache, cached_property
 from pathlib import Path
-from typing import Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
-from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
+from pydantic import BaseModel, ConfigDict, InstanceOf, JsonValue, PlainSerializer, PlainValidator
 
 from .coordination_errors import CommandFailure
 from .nominal.declared_family import DeclaredFamily
@@ -22,6 +22,10 @@ from .errors import MissingSourceLine
 from .nominal.field_codec import FieldCodec, GitCommitText, PresentMember, SingleFieldValue, WireValue
 from .native_build_inputs import GitLaunch
 from .repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from .storage_rules import StorageRule
+    from .threads import Thread
 
 
 class RepositorySelection(ABC):
@@ -357,14 +361,151 @@ class Repo(GitLaunch, BaseModel, WireValue):
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote, which does not move while
         a process runs: installs restart the connector."""
+        return cls.from_origin(checkout)
+
+    @classmethod
+    def from_origin(cls, checkout: Path) -> Repo:
+        """Read this path's current origin, including across acquisition and repair."""
         url = cls.git(checkout, "remote", "get-url", cls.remote).strip()
         return cls(checkout=checkout, github=cls.repository_url(url))
+
+    @classmethod
+    def qualified_github(cls, checkout: Path, expected: RepositoryName) -> Repo:
+        """A complete donor or linked tree of the explicitly requested GitHub origin.
+
+        Read the configured origin, not a cached Repo or Git's insteadOf transport
+        rewrite. Authentication/transport configuration still belongs to Git.
+        """
+        origin = cls.git(checkout, "config", "--get", f"remote.{cls.remote}.url").strip()
+        match = re.fullmatch(
+            r"(?:https://github\.com/|ssh://git@github\.com/|git@github\.com:)([^/]+/[^/]+?)(?:\.git)?",
+            origin, flags=re.IGNORECASE,
+        )
+        if match is None or RepositoryName.from_wire(match[1]) != expected:
+            raise ValueError(f"Repository {checkout} does not have the requested GitHub origin {expected}")
+        top = Path(cls.git(checkout, "rev-parse", "--show-toplevel").strip()).resolve()
+        if top != checkout:
+            raise ValueError(f"Repository {checkout} is not its own Git working tree")
+        repository = cls(checkout=checkout, github=expected)
+        branch = repository.default_branch()
+        cls.require_local_commits(checkout, 'HEAD', f'origin/{branch}')
+        cls.git(checkout, 'rev-list', '--objects', '--missing=error', '--quiet',
+                'HEAD', f'origin/{branch}', '--')
+        return repository
+
+    @staticmethod
+    def github_url(name: RepositoryName) -> str:
+        return f"https://github.com/{name.to_wire()}.git"
+
+    @classmethod
+    def acquire_github(cls, name: RepositoryName, checkout: Path) -> Repo:
+        """Acquire once in an exclusively created donor; preserve every failed directory."""
+        if checkout.is_symlink() or checkout != checkout.resolve():
+            raise ValueError(f"Repository donor {checkout} must be a physical path")
+        if checkout.exists():
+            if not (checkout / ".git").is_dir() or (checkout / ".git").is_symlink():
+                raise ValueError(f"Repository donor {checkout} is occupied or incomplete; retained unchanged")
+            try:
+                repository = cls.qualified_github(checkout, name)
+                if cls.common_dir_of(checkout) != checkout / '.git':
+                    raise ValueError('The donor does not own its Git object store')
+                return repository
+            except (GitCommandError, ValueError) as error:
+                raise ValueError(f"Repository donor {checkout} failed qualification; retained unchanged: {error}") from error
+        checkout.parent.mkdir(parents=True, exist_ok=True)
+        checkout.mkdir(exist_ok=False)
+        try:
+            with cls.acquiring():
+                cls.git(checkout.parent, "clone", "--no-checkout",
+                        cls.github_url(name), str(checkout), timeout=300)
+            return cls.qualified_github(checkout, name)
+        except (GitCommandError, ValueError, subprocess.TimeoutExpired) as error:
+            raise ValueError(f"Repository acquisition failed at {checkout}; retained for inspection: {error}") from error
 
     @staticmethod
     def repository_url(url: str) -> RepositoryName:
         """The same Git-origin identity for a checkout and a declared stack source."""
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
         return RepositoryName.from_wire("/".join(github))
+
+
+class RepositorySource(WireValue):
+    """One CLI boundary: an existing local path or explicit github:OWNER/REPO."""
+
+    @classmethod
+    def from_wire(cls, data: object) -> RepositorySource:
+        value = FieldCodec.decode(str, data)
+        if value.startswith("github:"):
+            return GitHubRepositorySource(RepositoryName.from_wire(value.removeprefix("github:")))
+        path = Checkout.path_from_input(value).expanduser().resolve()
+        return LocalRepositorySource(Repo.from_origin(path))
+
+    @classmethod
+    def schema(cls) -> dict[str, JsonValue]:
+        return {"type": "string", "description": "Existing repository path or github:OWNER/REPO"}
+
+    @property
+    @abstractmethod
+    def github(self) -> RepositoryName: ...
+
+    def allocations(self, rule: StorageRule, thread: Thread) -> tuple[Path, ...]:
+        """A local donor already exists; no new source allocation is needed."""
+        return ()
+
+    @abstractmethod
+    def acquire(self, rule: StorageRule, thread: Thread) -> Repo: ...
+
+    def qualify(self, checkout: Path, rule: StorageRule, thread: Thread) -> Repo:
+        if not Checkout.git_roots(checkout):
+            raise ValueError(f"Checkout {checkout} is occupied or incomplete; retained unchanged")
+        repository = Repo.from_origin(checkout)
+        if repository.github != self.github:
+            raise ValueError(f"Checkout {checkout} has a different origin from {self.github}")
+        return repository
+
+
+@dataclass(frozen=True)
+class LocalRepositorySource(RepositorySource):
+    repository: Repo
+
+    @property
+    def github(self) -> RepositoryName:
+        return self.repository.github
+
+    def to_wire(self) -> str:
+        return str(self.repository.checkout)
+
+    def acquire(self, rule: StorageRule, thread: Thread) -> Repo:
+        self.qualify(self.repository.checkout, rule, thread)
+        return self.repository
+
+
+@dataclass(frozen=True)
+class GitHubRepositorySource(RepositorySource):
+    repository: RepositoryName
+
+    @property
+    def github(self) -> RepositoryName:
+        return self.repository
+
+    def to_wire(self) -> str:
+        return f"github:{self.repository.to_wire()}"
+
+    def allocations(self, rule: StorageRule, thread: Thread) -> tuple[Path, ...]:
+        return (rule.repository_donor(thread, thread.goal.require().id, self.repository),)
+
+    def acquire(self, rule: StorageRule, thread: Thread) -> Repo:
+        donor, = self.allocations(rule, thread)
+        return Repo.acquire_github(self.repository, donor)
+
+    def qualify(self, checkout: Path, rule: StorageRule, thread: Thread) -> Repo:
+        repository = Repo.qualified_github(checkout, self.repository)
+        donor, = self.allocations(rule, thread)
+        rule.require_repository_donor(thread, thread.goal.require().id, self.repository, donor)
+        if ((checkout / '.git').is_symlink() or not (checkout / '.git').is_file()
+                or Checkout(checkout).common_dir != donor / '.git'):
+            raise ValueError(f'Checkout {checkout} is not linked to its goal-owned donor {donor}')
+        return repository
 
 
 class CheckoutHoldsWorkError(ValueError):
