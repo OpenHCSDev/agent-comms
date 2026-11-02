@@ -58,7 +58,7 @@ from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice, ThinkingLevelField
 from .registry_provenance import RegistryNames
 from .session_file import RegistrySessionLocation
-from .thread_identity import AgentThreadRole, ThreadRole
+from .thread_identity import AgentThreadRole, ThreadIncarnation, ThreadRole
 from .thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 from .thread_owned_state import ThreadOwnedState
 from .thread_text import ForkedParent, GivenThreadText, NoThreadText, ThreadText
@@ -354,11 +354,13 @@ class ThreadManagement:
                 edit, caller.name, new_name, title=GivenThreadText(new_name.replace("-", " ").replace("_", " "))
             )
 
-    def set_project(self, name: str, path: str) -> ProjectChangeResult:
-        """Move one thread's project, preserving its owner and conversation."""
+    def set_project(self, target_thread: ThreadIncarnation, path: str) -> ProjectChangeResult:
+        """Move the captured thread's project, never a later occupant of its name."""
         if not path.strip():
             raise ValueError("Project path cannot be empty.")
-        original = self.registry.require(name)
+        original = self.registry.require(target_thread.name)
+        if original.incarnation != target_thread:
+            raise RelationViolationError("Thread incarnation changed before project selection")
         target = Path(path).expanduser()
         if not target.is_absolute():
             target = original.worktree.path / target
@@ -374,7 +376,7 @@ class ThreadManagement:
             current.require_original_project(original)
             return current if current.project_path == target else current.moved_to_project(project)
 
-        updated = self.registry.update_thread(name, move)
+        updated = self.registry.update_thread(original.name, move)
         previous, current = str(original.project_path), str(updated.project_path)
         return ProjectChangeResult(updated.name, previous, current, current != previous)
 

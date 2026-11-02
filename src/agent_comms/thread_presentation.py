@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, NoReturn, Self
 
@@ -16,6 +16,7 @@ from .child_process import ProcessIdentity
 from .message_reference import MessageReference
 
 if TYPE_CHECKING:
+    from .session_load import SessionLoadPlan
     from .presentation import MessageNotification
     from .transcripts import AcquiredThreadPresentation, TranscriptReadIdentity
     from agent_comms.registry_document import RegistrySnapshot
@@ -149,6 +150,11 @@ class ThreadOwnerBinding(DeclaredFamily, affix="ThreadOwnerBinding"):
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return False
 
+    async def reload_if_superseded(
+        self, previous: SessionLoadPlan, reload: Callable[[SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        """An unavailable owner cannot supply a new existing-session load."""
+
     def recipient_activity(self, activity, snapshot, thread):
         from .agent_activity import UnavailableRecipientActivity
 
@@ -185,6 +191,14 @@ class LiveThreadOwnerBinding(ThreadOwnerBinding):
 
     def superseded_by(self, replacement: ThreadOwnerBinding) -> bool:
         return replacement.replaces(self)
+
+    async def reload_if_superseded(
+        self, previous: SessionLoadPlan, reload: Callable[[SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        from .session_load import ExistingSessionLoadPlan
+
+        if previous.superseded_by(self):
+            await reload(ExistingSessionLoadPlan(self))
 
     def replaces(self, original: LiveThreadOwnerBinding) -> bool:
         # Both operands are the ORIGINAL registry owner/process witnesses.
