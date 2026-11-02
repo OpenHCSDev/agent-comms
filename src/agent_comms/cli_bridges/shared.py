@@ -1108,7 +1108,9 @@ class ReleasedSessionBridge(ConfirmableBridge):
         try:
             current = InspectSession().information(claim.socket_path)
         except (FileNotFoundError, ConnectionRefusedError):
-            return StartingBridge(claim.thread, runtime)
+            if claim.claim.held_elsewhere():
+                return StartingBridge(claim.thread, runtime)
+            return UnobservedBridge(claim.thread, f"process exited before serving {runtime.prefix}")
         except (OSError, SessionCommandError) as error:
             return UnobservedBridge(claim.thread, f"{type(error).__name__}: {error}")
         if current.process != observed.process or current.owner != observed.owner:
