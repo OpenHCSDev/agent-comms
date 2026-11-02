@@ -15,7 +15,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from .registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
-from .tool_caller import ForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
+from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest
 from .tool_result import ToolResult
 
@@ -66,13 +66,13 @@ class ReadOnlyConnectorCaller(ConnectorCaller, NoThreadCaller):
 
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         request.require_read_only()
-        self.require_root(comms.root)
         return super().invoke(request, comms)
 
 
 @dataclass(frozen=True)
-class UiReadCaller(ReadOnlyConnectorCaller):
-    """The provisioned UI reader of an existing original native namespace."""
+class ScopedUiCaller(ConnectorCaller, NoThreadCaller):
+    """A UI caller acts for the owner without a thread, inside one original native
+    namespace, whether or not it may write."""
 
     namespace: RootId
 
@@ -81,8 +81,24 @@ class UiReadCaller(ReadOnlyConnectorCaller):
             self.namespace, GrantRefusedError("UI grant belongs to a different root."))
 
     def prepare_call(self, comms: Comms, acting: ToolCaller) -> None:
-        """Recheck the opened root before argument context reads or tool execution."""
+        """Check the opened root before argument context reads."""
         self.require_root(comms.root)
+        super().prepare_call(comms, acting)
+
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
+        """Direct and connector invocation use the same namespace guard."""
+        self.require_root(comms.root)
+        return super().invoke(request, comms)
+
+
+@dataclass(frozen=True)
+class UiReadCaller(ScopedUiCaller, ReadOnlyConnectorCaller):
+    """The provisioned reader retains its declared read-only capability."""
+
+
+@dataclass(frozen=True)
+class UiCaller(ScopedUiCaller, HumanCaller):
+    """The owner's writable UI, without an executable colleague's identity."""
 
 
 class ForkingCaller(ThreadConnectorCaller):

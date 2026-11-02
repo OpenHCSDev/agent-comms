@@ -12,7 +12,10 @@ from pathlib import Path
 from typing import ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
-from .connector_caller import CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, UiReadCaller
+from .connector_caller import (
+    CALLER, ConnectorCaller, ForkingCaller, GrantRefusedError, ScopedUiCaller,
+    UiCaller, UiReadCaller,
+)
 from .connector_profile import (
     BearerSecret, HttpsMcpEndpoint, UiConnectionProfile, UiCredential, UiGrantId, UiGrantSummary,
 )
@@ -179,20 +182,33 @@ class ThreadGrant(ConnectorAccess):
 
 
 @dataclass(frozen=True)
-class UiReadAccess(ExpiringGrant, ConnectorAccess):
+class UiGrantAccess(ExpiringGrant, ConnectorAccess, declared_name=None):
+    """Shared UI issuance facts; the concrete member declares its caller capability."""
+
     maximum_seconds: ClassVar[int] = ACCESS_SECONDS
+    caller_type: ClassVar[type[ScopedUiCaller]]
 
     grant_id: UiGrantId
     namespace: RootId
 
     def authorized_caller(self) -> ConnectorCaller:
-        return UiReadCaller(self.namespace)
+        return self.caller_type(self.namespace)
 
     def holds_ui_grant(self, grant_id: UiGrantId) -> bool:
         return self.grant_id == grant_id
 
     def credential(self, token: BearerSecret) -> UiCredential:
         return UiCredential(self.grant_id, self.namespace, self.expires_at, token)
+
+
+@dataclass(frozen=True)
+class UiReadAccess(UiGrantAccess):
+    caller_type = UiReadCaller
+
+
+@dataclass(frozen=True)
+class UiAccess(UiGrantAccess):
+    caller_type = UiCaller
 
 
 @dataclass(frozen=True)
@@ -279,13 +295,14 @@ class ConnectorGrants:
 
     def ui_issued(
         self, namespace: RootId, seconds: int,
+        grant_type: type[UiGrantAccess] = UiReadAccess,
     ) -> DocumentChange[ConnectorGrants, UiCredential]:
-        if not 0 < seconds <= UiReadAccess.maximum_seconds:
+        if not 0 < seconds <= grant_type.maximum_seconds:
             raise ValueError(
-                f"A UI grant lasts between one and {UiReadAccess.maximum_seconds} seconds")
+                f"A UI grant lasts between one and {grant_type.maximum_seconds} seconds")
         now = time.time()
         token = BearerSecret(secrets.token_urlsafe(32))
-        held = UiReadAccess(UiGrantId.mint(), namespace, expires_at=now + seconds)
+        held = grant_type(UiGrantId.mint(), namespace, expires_at=now + seconds)
         current = self.unexpired(now)
         return DocumentChange(
             replace(current, access=current.access | {digest(token): held}),
@@ -349,7 +366,8 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
 
     def publish_ui_profile(
         self, namespace: RootId, endpoint: HttpsMcpEndpoint, path: Path,
-        seconds: int = UiReadAccess.maximum_seconds,
+        seconds: int = UiGrantAccess.maximum_seconds,
+        grant_type: type[UiGrantAccess] = UiReadAccess,
     ) -> UiGrantSummary:
         """Publish the private profile before activating its bearer, in one owned edit.
 
@@ -359,7 +377,7 @@ class ConnectorStore(SingleFileStore, CarriedDocument[ConnectorGrants], Connecto
         never grants authority; only the committed server record does.
         """
         def publish(grants: ConnectorGrants) -> DocumentChange[ConnectorGrants, UiGrantSummary]:
-            changed = grants.ui_issued(namespace, seconds)
+            changed = grants.ui_issued(namespace, seconds, grant_type)
             credential = changed.result
             profile = UiConnectionProfile(endpoint, credential).write_new(path)
             return DocumentChange(changed.document, UiGrantSummary(

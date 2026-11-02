@@ -77,7 +77,8 @@ from .relationships import (
 )
 from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
 from .team.standing import InstallDue
-from .send_result import CorrectionResult
+from .send_result import CorrectionComplete, CorrectionResult, SendResult
+from .repo import Checkout
 from .task_sources import (
     Constraint,
     CurrentTaskScopeSelection,
@@ -970,6 +971,24 @@ class CommsSendTool(SendTool, ThreadToolRequest):
     """The native send declaration; its fields and publication belong to SendTool."""
 
     native_call = CommunicationCall
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsUserSendTool(PublishingToolRequest):
+    """Local and connector UI input use the existing durable human publication."""
+
+    native_call = CommunicationCall
+    label = "Send human input"
+    description = ("Publish input typed by the owner to a thread or channel under the owner's "
+                   "durable user identity; requires a human UI caller.")
+    target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
+    body: Annotated[str, *tool_field("Human input text")]
+
+    def publish(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        caller.require_human()
+        message = comms.messaging.send_user_message(
+            CommandTarget.named(self.target), self.body, worktree=Checkout(comms.root))
+        return MessagePublished.from_send(SendResult(message, CorrectionComplete()))
 
 
 @dataclass(frozen=True, kw_only=True)

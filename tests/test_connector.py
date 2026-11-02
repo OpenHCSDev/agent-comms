@@ -45,11 +45,11 @@ from agent_comms.connector import (
     ToolsCallReply,
     ToolsCallResult,
 )
-from agent_comms.connector_caller import CALLER, GrantRefusedError, UiReadCaller
+from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiCaller, UiReadCaller
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
-    IssuedCode, TrustedBrowser, UiReadAccess, digest,
+    IssuedCode, TrustedBrowser, UiAccess, UiGrantAccess, UiReadAccess, digest,
 )
 from agent_comms.coordination_errors import TranscriptChanged
 from agent_comms.coordinator import Coordination
@@ -63,15 +63,16 @@ from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.order_tools import MessagePublished, TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
     ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, invoke_tool
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsUserSendTool, invoke_tool
+from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
 from agent_comms.threads import Thread
 import subprocess
@@ -883,15 +884,17 @@ async def test_a_revoked_token_is_refused(client, store, comms):
     assert refused.status == 401
 
 
+@pytest.mark.parametrize("grant_type", UiGrantAccess.members_with(UiGrantAccess))
 def test_ui_profile_publication_is_private_exclusive_and_independently_revocable(
     store: ConnectorStore, comms: Comms, tmp_path: Path,
+    grant_type: type[UiGrantAccess],
 ) -> None:
     prepare_native_comms(comms)
     destination = tmp_path / "private-ui" / "connection.json"
     command = GrantUiVerb.parse([
         "grant-ui", "--root", str(comms.root),
         "--endpoint", "https://core.example/mcp", "--profile", str(destination),
-        "--seconds", "60",
+        "--seconds", "60", "--access", grant_type.declared_name,
     ])
     reply = command.apply(store)
     receipt = FieldCodec.decode(UiGrantSummary, FieldCodec.parse(reply))
@@ -901,7 +904,7 @@ def test_ui_profile_publication_is_private_exclusive_and_independently_revocable
     assert profile.credential.token not in reply
     assert destination.stat().st_mode & 0o777 == 0o600
     assert destination.parent.stat().st_mode & 0o777 == 0o700
-    assert store.read().caller_for(profile.credential.token) == UiReadCaller(receipt.namespace)
+    assert store.read().caller_for(profile.credential.token) == grant_type.caller_type(receipt.namespace)
     before = destination.read_bytes(), store.read()
     with pytest.raises(FileExistsError):
         command.apply(store)
@@ -926,15 +929,18 @@ def test_ui_profile_publication_is_private_exclusive_and_independently_revocable
         UiConnectionProfile.read(destination)
 
 
+@pytest.mark.parametrize("caller_type", [
+    member.caller_type for member in UiGrantAccess.members_with(UiGrantAccess)
+])
 def test_ui_grant_expiry_scope_and_direct_mutation_admission(
-    store: ConnectorStore, comms: Comms,
+    store: ConnectorStore, comms: Comms, caller_type: type[ScopedUiCaller],
 ) -> None:
     prepare_native_comms(comms)
     namespace = comms.registry.store.privacy().namespace
     expired = UiReadAccess(UiGrantId.mint(), namespace, expires_at=time.time() - 1)
     with pytest.raises(GrantRefusedError):
         expired.caller()
-    foreign = UiReadCaller(RootId.mint())
+    foreign = caller_type(RootId.mint())
     with pytest.raises(GrantRefusedError):
         foreign.require_root(comms.root)
     with pytest.raises(GrantRefusedError):
@@ -959,8 +965,12 @@ def test_remote_ui_endpoint_refuses_insecure_or_credential_urls(endpoint: str) -
         HttpsMcpEndpoint(URL(endpoint))
 
 
-async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
+@pytest.mark.parametrize(("grant_type", "can_write"), [
+    (UiReadAccess, False), (UiAccess, True),
+])
+async def test_ui_mcp_uses_granted_capability_without_an_agent(
     store: ConnectorStore, comms: Comms,
+    grant_type: type[UiGrantAccess], can_write: bool,
 ) -> None:
     prepare_native_comms(comms)
     comms.channels.create_tag("remote-ui")
@@ -968,7 +978,7 @@ async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
     expected = CommsChannelsTool().apply(comms, NoThreadCaller())
     before = comms.bus.bus.revision(), comms.registry.snapshot()
     connector = Connector(store, "http://127.0.0.1:18766", comms.root)
-    credential = store.update(lambda grants: grants.ui_issued(namespace, 60))
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, grant_type))
     headers = {"Authorization": f"Bearer {credential.token}"}
     async with TestServer(connector.application()) as server:
         async with TestClient(server) as client:
@@ -984,10 +994,60 @@ async def test_ui_mcp_reads_without_an_agent_and_cannot_publish(
             call = ToolsCallMessage(jsonrpc="2.0", id=3, params=ToolCall(
                 write.declared_name, FieldCodec.encode_fields(write)))
             response = await client.post("/mcp", json=FieldCodec.encode(call), headers=headers)
-            denied = FieldCodec.decode(ToolsCallReply, await response.json()).result
-            assert denied.is_error is True
+            written = FieldCodec.decode(ToolsCallReply, await response.json()).result
+            assert written.is_error is not can_write
+            selected, = (row.channel for row in CommsChannelsTool().apply(
+                comms, NoThreadCaller()).channels if row.channel.name == "#remote-ui")
+            assert selected.pinned is can_write
             store.revoke_ui(credential.grant_id)
             revoked = await client.post("/mcp", json=LIST, headers=headers)
             assert revoked.status == 401
     assert comms.bus.bus.revision() == before[0]
     assert comms.registry.snapshot() == before[1]
+
+
+def test_human_publication_refuses_other_principals_before_changing_state(comms: Comms) -> None:
+    prepare_native_comms(comms)
+    namespace = comms.registry.store.privacy().namespace
+    before = comms.bus.bus.revision(), comms.registry.snapshot()
+    request = CommsUserSendTool(target="recipient", body="not human input")
+    for caller in (NoThreadCaller(), ThreadCaller("recipient"), CALLER,
+                   UiReadCaller(namespace), UiCaller(RootId.mint())):
+        with pytest.raises(ToolRefusedError):
+            caller.invoke(request, comms)
+        assert comms.bus.bus.revision() == before[0]
+        assert comms.registry.snapshot() == before[1]
+
+
+async def test_ui_mcp_publishes_with_the_durable_human_identity(
+    store: ConnectorStore, comms: Comms,
+) -> None:
+    prepare_native_comms(comms)
+    comms.registry.declare(Thread("recipient", frozenset(), Checkout(comms.root)))
+    before = comms.registry.snapshot()
+    local = FieldCodec.decode(MessagePublished, FieldCodec.encode(HumanCaller().invoke(
+        CommsUserSendTool(target="recipient", body="local human input"), comms).to_wire()))
+    assert local.message.matches(comms.bus.inbox("recipient").page.messages[-1])
+    namespace = comms.registry.store.privacy().namespace
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, UiAccess))
+    headers = {"Authorization": f"Bearer {credential.token}"}
+    connector = Connector(store, "http://127.0.0.1:18766", comms.root)
+    async with TestServer(connector.application()) as server:
+        async with TestClient(server) as client:
+            for number, body in enumerate(("first human input", "second human input"), 2):
+                request = CommsUserSendTool(target="recipient", body=body)
+                call = ToolsCallMessage(jsonrpc="2.0", id=number, params=ToolCall(
+                    request.declared_name, FieldCodec.encode_fields(request)))
+                response = await client.post("/mcp", json=FieldCodec.encode(call), headers=headers)
+                assert response.status == 200
+                reply = FieldCodec.decode(ToolsCallReply, await response.json()).result
+                assert reply.is_error is False
+                published = FieldCodec.decode(MessagePublished, reply.structured_content)
+                original = comms.bus.inbox("recipient").page.messages[-1]
+                assert published.id == original.message_id
+                assert published.message.matches(original)
+                assert original.body == body and original.sender_role is UserThreadRole
+    messages = comms.bus.inbox("recipient").page.messages
+    assert len(messages) == 3 and {message.sender for message in messages} == {messages[0].sender}
+    assert set(comms.registry.snapshot().threads) - set(before.threads) == {messages[0].sender}
+    assert comms.registry.require(messages[0].sender).role is UserThreadRole

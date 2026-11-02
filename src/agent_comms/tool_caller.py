@@ -80,6 +80,10 @@ class ToolCaller(ReadAuthority):
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller whose sends direct units refuses a body its directive checks refuse."""
 
+    def require_human(self) -> None:
+        """Only a caller acting for the owner may publish human input; a sender name never can."""
+        raise ToolRefusedError("Only a human UI caller can publish user messages.")
+
     def origin(self) -> AgentOrigin:
         """Who this caller's sends speak for; an agent speaks only for itself."""
         return AgentOrigin()
@@ -114,6 +118,14 @@ class NoThreadCaller(OperatorOutcomes, ToolCaller):
 
     def require_directive(self, comms: Comms, body: str) -> None:
         """A caller with no thread gives no directive."""
+
+
+@dataclass(frozen=True)
+class HumanCaller(NoThreadCaller):
+    """An owner-operated UI has human authority without an executable thread."""
+
+    def require_human(self) -> None:
+        """The owner's UI may publish human input."""
 
 
 @dataclass(frozen=True)
