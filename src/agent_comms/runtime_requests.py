@@ -73,6 +73,10 @@ class CancelReply(DeclaredReply):
     pass
 
 
+class QueueActionReply(DeclaredReply):
+    """The owner applied a queue action to its session's queued inputs."""
+
+
 @dataclass(frozen=True)
 class GoalReply(DeclaredReply):
     goal: Goal
@@ -239,6 +243,24 @@ class CancelRuntimeRequest(AttachedResultRuntimeRequest):
     async def result(self, ctx: AttachedRuntimeRequestContext) -> CancelReply:
         await ctx.server.agent.turns.cancel(ctx.session)
         return CancelReply()
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendNowRuntimeRequest(AttachedResultRuntimeRequest):
+    """Any client, attached over ACP or not, asks the owner to send its queued inputs now."""
+
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
+        await ctx.server.agent.inputs.send_now(ctx.session)
+        return QueueActionReply()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ClearQueueRuntimeRequest(AttachedResultRuntimeRequest):
+    """Any client, attached over ACP or not, asks the owner to drop its queued inputs."""
+
+    async def result(self, ctx: AttachedRuntimeRequestContext) -> QueueActionReply:
+        await ctx.server.agent.inputs.clear_queued_inputs(ctx.session)
+        return QueueActionReply()
 
 
 @dataclass(frozen=True, kw_only=True)
