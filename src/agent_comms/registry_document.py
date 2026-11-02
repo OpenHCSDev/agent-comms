@@ -48,6 +48,14 @@ from .registry_provenance import (
 )
 from .repo import Checkout, Repo, RepositorySelection
 from .repository_name import RepositoryName
+from .snapshot_slices import (
+    MappingRowsSlice,
+    OwnRow,
+    SnapshotRestored,
+    SnapshotValue,
+    ThreadSlice,
+    WholeDocumentValue,
+)
 from .restart_refusals import (
     OwnerBusyRefusal,
     OwnerChangedBeforeFenceRefusal,
@@ -276,83 +284,6 @@ class NoUserThread[Value](UserThreadLookup[Value]):
         raise refusal
 
 
-class ThreadSlice[Value](ABC):
-    """How a registry field is copied. Each field declares its policy in metadata."""
-
-    @classmethod
-    @abstractmethod
-    def copy(cls, value: Value) -> Value:
-        """A copy an edit can change without changing ``value``."""
-
-    @staticmethod
-    def of(plan: FieldPlan) -> type[ThreadSlice]:
-        for policy in SlicePolicy.single(plan.annotation):
-            if issubclass(policy.value, ThreadSlice):
-                return policy.value
-        raise TypeError(f"{plan.name} declares no thread slice")
-
-    @classmethod
-    def required[Document: type](cls, document: Document) -> Document:
-        """Refuse, at class definition, a document field without a slice kind."""
-        for plan in FieldCodec.field_plans(document):
-            if plan.declared.init and plan.records:
-                cls.of(plan)
-        return document
-
-
-class SnapshotValue[Value](ThreadSlice[Value]):
-    """A declared registry field owns both editable and snapshot copies."""
-
-    @classmethod
-    @abstractmethod
-    def freeze(cls, value: Value) -> object: ...
-
-    @staticmethod
-    def of(plan: FieldPlan) -> type[SnapshotValue]:
-        policy = ThreadSlice.of(plan)
-        if not issubclass(policy, SnapshotValue):
-            raise TypeError(f"{plan.name} declares no snapshot value policy")
-        return policy
-
-
-class SnapshotRestored:
-    """Restoration copies each declared init field by its snapshot policy and re-enters the
-    constructor, so derived views are rebuilt rather than pickled."""
-    __slots__ = ()
-
-    def __reduce__(self) -> tuple[type[Self], tuple[object, ...]]:
-        return type(self), tuple(
-            SnapshotValue.of(plan).copy(getattr(self, plan.name))
-            for plan in FieldCodec.field_plans(type(self)) if plan.declared.init
-        )
-
-
-class OwnRow[Rows](SnapshotValue[Rows]):
-    """The row under the thread's own name."""
-
-    @classmethod
-    @abstractmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: Rows, changed: Rows) -> None: ...
-
-
-class MappingRowsSlice(OwnRow[MutableMapping]):
-    @classmethod
-    def copy(cls, value: Mapping) -> dict:
-        return dict(value)
-
-    @classmethod
-    def freeze(cls, value: Mapping) -> Mapping:
-        return MappingProxyType(cls.copy(value))
-
-    @classmethod
-    def reuse(cls, rows: Mapping[str, object], kept: frozenset[str],
-              earlier: MutableMapping, changed: MutableMapping) -> None:
-        merged = {name: (earlier if name in kept else changed)[name] for name in rows}
-        changed.clear()
-        changed.update(merged)
-
-
 class InvalidRegistryDocument(RelationViolationError):
     def __init__(self, error: Exception) -> None:
         super().__init__(f"Invalid registry document: {error}")
@@ -565,10 +496,8 @@ class ThreadSection:
               changed: object) -> None:
         """Fill ``changed``'s own rows, in wire order, with the earlier decoded value of
         every kept name; ``changed`` decoded only the rows that differ."""
-        kind = ThreadSlice.of(self.plan)
-        if not issubclass(kind, OwnRow):
-            raise TypeError(f"{self.plan.name} does not hold reusable rows")
-        kind.reuse(self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
+        ThreadSlice.of(self.plan).reuse(
+            self.rows(raw), kept, self.plan.current(earlier), self.plan.current(changed))
 
 
 class GenerationOf(ThreadSlice[GenerationCounter]):
@@ -577,18 +506,6 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
     @classmethod
     def copy(cls, value: GenerationCounter) -> GenerationCounter:
         return GenerationCounter(value.counter, dict(value.generations))
-
-
-class WholeDocumentValue[Value](SnapshotValue[Value]):
-    """An immutable field shared by editable documents and snapshots."""
-
-    @classmethod
-    def copy(cls, value: Value) -> Value:
-        return value
-
-    @classmethod
-    def freeze(cls, value: Value) -> Value:
-        return cls.copy(value)
 
 
 class RootPurpose(DeclaredFamily, affix="RootPurpose"):
@@ -803,9 +720,9 @@ class RegistryDocument(RegistryPresence[dict[str, ThreadStatus]]):
     def thread_sections(cls) -> tuple[ThreadSection, ...]:
         """The sections that hold one row per thread name."""
         return tuple(
-            ThreadSection(plan)
-            for plan in FieldCodec.field_plans(cls)
-            if plan.declared.init and plan.records and issubclass(ThreadSlice.of(plan), OwnRow)
+            ThreadSection(own)
+            for plan in FieldCodec.field_plans(cls) if plan.declared.init and plan.records
+            for own in ThreadSlice.of(plan).own_row_plans(plan)
         )
 
     @classmethod
