@@ -58,6 +58,13 @@ from agent_comms.threads import Thread
 from conftest import ledger_one_failure_short
 from fixture_git import IDENTITY
 
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.comms import wire
+from agent_comms.coordinator import Coordination
+from agent_comms.launch_root import LaunchRoot
+from agent_comms.native_arguments import GivenArguments, GivenBinary
+from native_backend_fixture import NativeBackendFixture, native_backend_fixture
+
 REPO = Path(__file__).resolve().parents[1]
 
 
@@ -350,7 +357,6 @@ def test_a_restore_that_fails_midway_keeps_the_hold(comms, staged, noisy_step):
 
 
 def test_restart_selection_uses_receiving_declaration_with_connected_cli_inbox(comms, stack):
-    from agent_comms.child_process import ProcessIdentity
 
     process = ProcessIdentity.capture(os.getpid())
     native = comms.registry.declare(replace(Thread(
@@ -383,11 +389,6 @@ async def test_the_install_start_stops_owners_under_its_hold(
     tmp_path, stack, native_runtime_package, source_programs,
 ):
     """An actual logical owner retires under the install hold without killing a fake PID."""
-    from agent_comms.comms import wire
-    from agent_comms.coordinator import Coordination
-    from agent_comms.launch_root import LaunchRoot
-    from agent_comms.native_arguments import GivenArguments, GivenBinary
-    from native_backend_fixture import NativeBackendFixture, native_backend_fixture
 
     source_programs.bind(tmp_path)
     async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:

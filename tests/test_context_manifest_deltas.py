@@ -23,6 +23,11 @@ from agent_comms.turn_item import PiRequestKey
 from agent_comms.native_session_reopen import PiSessionId
 
 
+from agent_comms.context_store import ContextStoreInfo
+from agent_comms.errors import RelationViolationError
+from concurrent.futures import ThreadPoolExecutor
+from agent_comms.context_store import ContextPriorSupersededError
+
 def context(owner, path, count, turn):
     native = NativeSessionIdentity(PiSessionId('manifest-delta'), str(path / 'history.jsonl'))
     provenance = (NativeProvenance(native, 1, 'a' * 64),)
@@ -144,7 +149,6 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
     expected = [context(owner, tmp_path, 328 + 2 * turn, turn + 1) for turn in range(40)]
     for manifest in expected:
         comms.contexts.record_after(UNREAD_CONTEXT, manifest)
-    from agent_comms.context_store import ContextStoreInfo
     with comms.contexts.snapshot() as db:
         source = ContextStoreInfo.one(db, singleton=1).source
         rows = ContextRequest.select(db, order_by=('id',))
@@ -176,8 +180,6 @@ def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path)
 
 
 def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
-    from agent_comms.context_store import ContextStoreInfo
-    from agent_comms.errors import RelationViolationError
 
     comms = context_comms(tmp_path)
     owner = comms.registry.require('Alice')
@@ -195,8 +197,6 @@ def test_missing_store_identity_refuses_reads_and_further_records(tmp_path):
 
 
 def test_threads_record_concurrently_and_a_superseded_prior_is_refused(tmp_path):
-    from concurrent.futures import ThreadPoolExecutor
-    from agent_comms.context_store import ContextPriorSupersededError
 
     comms = context_comms(tmp_path)
     owners = [comms.registry.require(name) for name in ('Alice', 'Bob')]

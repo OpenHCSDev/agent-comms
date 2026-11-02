@@ -28,10 +28,22 @@ from agent_comms.tools import invoke_tool
 from agent_comms.transcripts import EarlierThan, TranscriptRead
 from test_coordinated_runtime import _root, tmp_path  # noqa: F401
 from agent_comms.threads import Thread
+from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.notification_assignment import AssignmentActivityEvidence
+from agent_comms.assignment_states import DeferredAssignment
+from agent_comms.coordination_cohort import sealed_cohort_assignments
+from agent_comms.activity import StoppedDrainDiagnostic
+from agent_comms.coordination_tables.assignments import WakeAssignment
+from agent_comms.transcripts import TranscriptSourceWindow
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.routing import MessageRoute, TurnRouting
+from agent_comms.transcript_sources import AssignedTranscriptSource
+from conftest import accept_initial, publish_initial
+from agent_comms.native_runtime_input import NativeRuntimeTable
+from agent_comms.registry_store import RegistryStore
 
 
 def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_path):  # noqa: F811
-    from agent_comms.coordination_errors import CoordinationReadUnavailable
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
@@ -59,7 +71,6 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
 
 def test_a_read_selects_only_its_viewers_claims_and_attempts_before_decoding(tmp_path):  # noqa: F811
-    from agent_comms.notification_assignment import AssignmentActivityEvidence
 
     root, _root_id, comms, initial, people = _root(tmp_path)
     lookups = {person.name: person.incarnation.lookup for person in people}
@@ -112,8 +123,6 @@ def test_invisible_recipients_allocate_no_placeholder_source(tmp_path):  # noqa:
 
 
 def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  # noqa: F811
-    from agent_comms.assignment_states import DeferredAssignment
-    from agent_comms.coordination_cohort import sealed_cohort_assignments
 
     root, _root_id, _comms, initial, people = _root(tmp_path)
     lookups = {person.name: person.incarnation.lookup for person in people}
@@ -139,7 +148,6 @@ def test_retained_reads_refresh_only_for_changes_their_viewer_sees(tmp_path):  #
 
 @pytest.mark.parametrize('direct', [False, True])
 def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct):  # noqa: F811
-    from agent_comms.activity import StoppedDrainDiagnostic
 
     _path, _root_id, comms, initial, _people = _root(tmp_path, direct=direct)
     owner = comms.registry.snapshot().owner_identity('beta')
@@ -164,8 +172,6 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
-    from agent_comms.activity import StoppedDrainDiagnostic
-    from agent_comms.coordination_tables.assignments import WakeAssignment
 
     root, _root_id, comms, _initial, _people = _root(tmp_path)
     owner = comms.registry.snapshot().owner_identity('beta')
@@ -195,7 +201,6 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
 
 
 def test_capture_page_window_names_zero_and_nonzero_sent_windows(tmp_path):  # noqa: F811
-    from agent_comms.transcripts import TranscriptSourceWindow
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     ordinary = comms.transcripts.capture_page_window("sender")
@@ -223,9 +228,6 @@ def test_notification_window_preserves_exact_receipts_and_rejects_duplicates(tmp
 
 
 def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # noqa: F811
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.routing import MessageRoute, TurnRouting
-    from agent_comms.transcript_sources import AssignedTranscriptSource
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
     reply = comms.messaging.send("beta", "sender", "First original reply").message
@@ -337,16 +339,12 @@ def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noq
 def test_missing_bus_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.bus.bus.path.unlink()
-    with pytest.raises(sqlite3.OperationalError) as missing:
+    # The store owner refuses a missing file (locked_store.reader_snapshot) before SQLite opens it.
+    with pytest.raises(FileNotFoundError):
         comms.views.thread_presentations(("beta",)).require("beta")
-    assert missing.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN
 
 
 def test_a_forced_key_batch_captures_the_same_evidence_through_the_recipient_index(tmp_path):  # noqa: F811
-    from conftest import accept_initial, publish_initial
-    from agent_comms.coordination_tables.assignments import WakeAssignment
-    from agent_comms.native_runtime_input import NativeRuntimeTable
-    from agent_comms.registry_store import RegistryStore
 
     root, root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"

@@ -33,6 +33,16 @@ from agent_comms.store_files import StoreOwner
 from agent_comms.threads import Thread
 
 
+from agent_comms.nominal.field_codec import FieldCodec
+from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
+from agent_comms.order_tools import TranscriptPageRead
+from test_transcript_pages import shared_page
+from agent_comms.coordination_errors import StaleRevision
+from dataclasses import fields
+from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.threads import ThreadProvenance
+from test_locked_store import process
+
 @pytest.mark.parametrize('exists', [False, True])
 def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
     archive = HistoryArchive.at(tmp_path)
@@ -236,8 +246,6 @@ def test_stale_cursor_is_rejected(migrated):
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.transcripts import RecordedTranscriptReadIdentity, TranscriptReadIdentity
 
     old, live = setup(tmp_path / "old", 1), setup(tmp_path / "live", 0)
     native = tmp_path / "recorded.jsonl"
@@ -263,8 +271,6 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     assert FieldCodec.value_schema(type[TranscriptReadIdentity])["enum"] == list(TranscriptReadIdentity.names())
     with pytest.raises(ValueError):
         FieldCodec.decode(TranscriptReadIdentity, {**FieldCodec.encode(read.identity), "kind": "unregistered"})
-    from agent_comms.order_tools import TranscriptPageRead
-    from test_transcript_pages import shared_page
 
     recorded = shared_page(live, TranscriptPageRead(thread="alice", page_source=RecordedPageSource(source.key)))
     assert recorded.identity == read.identity
@@ -285,7 +291,6 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
 
 
 def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrated):
-    from agent_comms.coordination_errors import StaleRevision
 
     _old, _prior, live, source = migrated
     read = live.transcripts.capture_page_read("alice", page_source=RecordedPageSource(source.key))
@@ -365,11 +370,7 @@ def test_missing_historical_peer_is_browsable_without_live_registration(migrated
 
 
 def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migrated):
-    from dataclasses import fields
 
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.registry_provenance import RegistryProvenance
-    from agent_comms.threads import ThreadProvenance
 
     old, _, live, source = migrated
     recorded = source.provenance.require("alice")
@@ -404,7 +405,6 @@ def _attach_preserved_source(destination: Path, original: Path) -> None:
 
 
 def test_snapshot_preparation_allows_another_process_to_attach_and_keeps_both_sources(tmp_path):
-    from test_locked_store import process
 
     old = setup(tmp_path / "old")
     other = setup(tmp_path / "other")

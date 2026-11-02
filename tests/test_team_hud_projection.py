@@ -21,6 +21,8 @@ from agent_comms.ui_model.teammate_state import (
 )
 
 
+from agent_comms.task_attachments.team_pings import AlarmSection, NewAlarms, WatchingAlarms
+
 def example_hud() -> TeamHud:
     """Controlled source example; no provider call or claim about the installed fleet."""
     order = TeamOrder(
@@ -139,7 +141,6 @@ def test_every_native_record_producer_declares_entity_identity() -> None:
 
 
 def test_heartbeat_prints_every_alarm_with_watching_below_the_unit_tables() -> None:
-    from agent_comms.task_attachments.team_pings import AlarmSection, NewAlarms, WatchingAlarms
 
     hud = example_hud()
     pings = hud.packets[0].handled

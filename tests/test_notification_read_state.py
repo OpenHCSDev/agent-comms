@@ -46,6 +46,8 @@ from agent_comms.ui_model.observation import (
 )
 
 
+from test_tool_replies import result_type
+
 def test_notification_read_states_use_the_request_revision_contract(comms):
     original = WireRevision.empty()
     later = replace(original, expiry_tick=original.expiry_tick + 60)
@@ -358,7 +360,6 @@ def test_one_shared_read_in_two_root_envelopes_keeps_root_validation(comms):
 
 def test_the_three_public_reads_are_cataloged_once_with_their_original_results():
     sys.path.insert(0, str(Path(__file__).parent))
-    from test_tool_replies import result_type
 
     tools = ToolRequest.members_with(ToolRequest)
     native = NativeRequestTools.members_with(NativeRequestTools)
