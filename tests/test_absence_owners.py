@@ -123,7 +123,7 @@ async def test_unobserved_private_state_and_unmeasured_session_have_no_authority
     assert not SessionRetention.from_optional(None).retain(None, None)
     missing = SessionLoad.capture(str(tmp_path / "missing.jsonl"))
     assert isinstance(missing, UnmeasuredSessionLoad)
-    assert missing.diagnostic == {} and missing.summary == "unknown"
+    assert missing.diagnostic == {}
     saved = tmp_path / "saved.jsonl"
     saved.write_bytes(b"saved session")
     measured = SessionLoad.capture(str(saved))

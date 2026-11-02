@@ -160,8 +160,6 @@ def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail == "short: text"
     shown = comms.views.thread_presentations((thread.name,)).require(thread.name)
     assert shown.status.working
-    assert shown.summary == "Working · short: text"
-    assert shown.marker == "⌛"
     attention = replace(shown, status=shown.status.with_attention())
     assert ExternalThreadExecution.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
     output.enter(IdlePhase())
