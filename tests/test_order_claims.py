@@ -242,7 +242,7 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_tea
     request, claimed, before = unsent_claim(ctx)
     claim = claimed.order.claim
     # Every owed-answer gate reads the retained claim; no bus record is required.
-    opened = OwedAnswer.opened(comms, ctx.commander)
+    opened = OwedAnswer.opened(comms, ctx.incarnation)
     owed, = (rule for rule in opened if isinstance(rule, DeliveryAwaitingJudgement))
     assert (owed.problem, owed.request, owed.message) == ("P1", claim.request(), claim.message)
     assert owed.cited == f"P1 claim of {claim.head[:9]}"
@@ -261,7 +261,7 @@ def test_an_unsent_claim_stays_owed_and_the_same_call_publishes_it_once(held_tea
     ThreadCaller("worker").invoke(request, comms)
     assert comms.bus.bus.revision() == before + 1
     assert comms.goals.todos.get("P1") == claimed
-    owed, = (rule for rule in OwedAnswer.opened(comms, ctx.commander)
+    owed, = (rule for rule in OwedAnswer.opened(comms, ctx.incarnation)
              if isinstance(rule, DeliveryAwaitingJudgement))
     assert owed.request == claim.request()
 
@@ -512,7 +512,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
 
     reply = ctx.root / "claim-status.txt"
     reply.write_text("Waiting on the review, owner lead.")
-    owed = {rule.message.message_id: rule for rule in OwedAnswer.opened(comms, ctx.commander)}
+    owed = {rule.message.message_id: rule for rule in OwedAnswer.opened(comms, ctx.incarnation)}
     capsys.readouterr()
     main(["say", "third", str(reply)], ctx)
     warning = capsys.readouterr().out

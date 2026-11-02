@@ -100,12 +100,12 @@ def test_shared_request_maintenance_does_not_transfer_directive_debt(comms: Comm
         original = directive.original(source)
     assert store.open_requests(comms.registry.require("peer").acting_identity) == (
         store.owner_request(request.id),)
-    assert DirectiveUnacted.opened(comms, "peer") == ()
-    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, "author")} == {
+    assert DirectiveUnacted.opened(comms, comms.registry.require("peer").incarnation) == ()
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require("author").incarnation)} == {
         original.reference}
     comms.messaging.send("author", "claude-code", "Done.", answers=(original.reference,))
-    assert DirectiveUnacted.opened(comms, "author") == ()
-    assert DirectiveUnacted.opened(comms, "peer") == ()
+    assert DirectiveUnacted.opened(comms, comms.registry.require("author").incarnation) == ()
+    assert DirectiveUnacted.opened(comms, comms.registry.require("peer").incarnation) == ()
 
 
 def test_independent_requests_orders_and_directives(comms: Comms, durable_home, capsys) -> None:

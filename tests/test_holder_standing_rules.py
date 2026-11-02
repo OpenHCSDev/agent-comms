@@ -792,7 +792,7 @@ def test_peer_verbs_owe_own_mail_not_the_selected_storage_leads_mail(held_bus, t
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
     assert posted.sender == "outsider" and posted.answers == ()
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, "lead")}
+        held_bus, held_bus.registry.require("lead").incarnation)}
     with pytest.raises(RecordProblems, match="not an open ask owed by outsider"):
         SayVerb(acting_as=peer, units="worker", body_file=str(reply),
                 answers=(foreign.message_id,)).apply(ctx)
@@ -803,7 +803,7 @@ def test_peer_verbs_owe_own_mail_not_the_selected_storage_leads_mail(held_bus, t
             answers=(own.message_id,)).apply(ctx)
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == (own.reference,)
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, "lead")}
+        held_bus, held_bus.registry.require("lead").incarnation)}
 
 
 def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(held_bus, tmp_path):
@@ -828,9 +828,30 @@ def test_bound_child_owes_actual_parents_directive_not_the_storage_leads_mail(he
     posted = held_bus.bus.bus.lookup(held_bus.bus.bus.revision())
     assert posted.sender == child.name and posted.answers == (directive.reference,)
     assert foreign.reference in {rule.message.reference for rule in OwedAnswer.opened(
-        held_bus, "lead")}
+        held_bus, held_bus.registry.require("lead").incarnation)}
     assert not any(rule.message.reference == directive.reference
-                   for rule in OwedAnswer.opened(held_bus, "worker"))
+                   for rule in OwedAnswer.opened(held_bus, held_bus.registry.require("worker").incarnation))
+
+
+def test_answer_reader_refuses_a_reborn_parent_between_actual_registry_cuts(held_bus):
+    child = ForkCaller("parent-rebirth-reader")
+    child.join(held_bus, "worker")
+    ctx = Team.read_root(held_bus.root).model_copy(update={"actor": child})
+    represented = ctx.actor_identity.represented_owners
+    parent = held_bus.registry.require("worker")
+    assert represented[1] == parent.incarnation
+    held_bus.registry.unregister(parent.name)
+    replacement = held_bus.registry.register(replace(parent, created_at=parent.created_at + 1))
+    directive = publish(held_bus, "outsider", replacement.name, time.time() - 3600)
+    store = held_bus.goals.todos
+    request = store.add_request(replacement.incarnation, "The replacement's private request.")
+    store.record_directive(request.id, RequestDirective(directive.seq, time.time() - 1))
+    assert not represented[0].represents(replacement.incarnation)
+    assert OwedAnswer.opened(held_bus, represented[0]) == ()
+    with pytest.raises(RelationViolationError, match="Answer owner worker changed incarnation"):
+        OwedAnswer.opened(held_bus, represented[1])
+    assert directive.reference in {
+        rule.message.reference for rule in OwedAnswer.opened(held_bus, replacement.incarnation)}
 
 
 def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):

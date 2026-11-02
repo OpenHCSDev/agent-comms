@@ -117,7 +117,7 @@ class HeartbeatFrame(TeamInputs):
             inputs.orphaned,
             inputs.pulls,
             plan,
-            OwedAnswer.read_scan(comms, commander, inputs),
+            OwedAnswer.read_scan(comms, snapshot.require(commander).incarnation, inputs),
             closed,
             reviews,
             EditWorkplaces.capture(comms, snapshot, inputs.live, inputs.pulls),

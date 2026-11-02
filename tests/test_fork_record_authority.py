@@ -26,7 +26,7 @@ from test_forks import command, fork_bus  # noqa: F401  (fixture)
 REASON = VerdictReason("The existing class owns this behavior without another copy")
 
 
-def test_a_successor_answers_directives_its_retired_predecessor_received(fork_bus):
+def test_shared_record_maintenance_does_not_make_a_successor_the_private_recipient(fork_bus):
     comms, source, _ = fork_bus
     comms.registry.declare(Thread(
         "successor", frozenset({"comms", TeammatesTag.declared_name}), Checkout(source.checkout),
@@ -40,12 +40,15 @@ def test_a_successor_answers_directives_its_retired_predecessor_received(fork_bu
     with pytest.raises(UnreceivedAnswerError, match=f"successor never received {ask.message_id}"):
         comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
                              answerer=TeamReceipts(ctx.actor_identity, (ctx.incarnation,)))
-    reply = comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
-                                 answerer=ctx.receipts).message
+    with pytest.raises(UnreceivedAnswerError, match=f"successor never received {ask.message_id}"):
+        comms.messaging.send("successor", "lead", "Answered", answers=(ask.reference,),
+                             answerer=ctx.receipts)
+    reply = comms.messaging.send("retained", "lead", "Answered", answers=(ask.reference,),
+                                 answerer=TeamReceipts(retired, (retired,))).message
     assert comms.bus.bus.lookup(reply.seq).answers == (ask.reference,)
 
 
-def test_one_peers_answer_clears_a_retired_teammates_directive_for_every_peer(fork_bus):
+def test_retained_owners_private_directive_does_not_become_every_peers_debt(fork_bus):
     comms, source, _ = fork_bus
     for name in ("peer-one", "peer-two"):
         comms.registry.declare(Thread(
@@ -58,13 +61,18 @@ def test_one_peers_answer_clears_a_retired_teammates_directive_for_every_peer(fo
         worktree=Checkout(source.checkout))
     comms.goals.todos.record_directive(
         request.id, RequestDirective(ask.seq, ask.timestamp + RequestDirective.window))
-    owed = lambda name: {rule.message.message_id for rule in DirectiveUnacted.opened(comms, name)}
-    assert ask.message_id in owed("peer-one") & owed("peer-two")
+    owed = lambda name: {rule.message.message_id for rule in DirectiveUnacted.opened(comms, comms.registry.require(name).incarnation)}
+    assert ask.message_id not in owed("peer-one") | owed("peer-two")
+    assert ask.message_id in owed("retained")
     ctx = TeamContext.read_root(comms.root).model_copy(
         update={"actor": PeerCaller("peer-one")})
-    comms.messaging.send("peer-one", "lead", "Answered", answers=(ask.reference,),
-                         answerer=ctx.receipts)
-    assert ask.message_id not in owed("peer-one") | owed("peer-two")
+    with pytest.raises(UnreceivedAnswerError, match=f"peer-one never received {ask.message_id}"):
+        comms.messaging.send("peer-one", "lead", "Answered", answers=(ask.reference,),
+                             answerer=ctx.receipts)
+    assert ask.message_id in owed("retained")
+    comms.messaging.send("retained", "lead", "Answered", answers=(ask.reference,),
+                         answerer=TeamReceipts(retired, (retired,)))
+    assert ask.message_id not in owed("retained")
 
 
 @pytest.mark.parametrize("fork_count", (1, 3))

@@ -337,21 +337,21 @@ async def test_twelve_directives_require_the_final_of_the_turn_they_opened(
         with comms.bus.bus.reading() as source:
             directives.append(directive.original(source))
     originals = tuple(directives)
-    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == {
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require('viewer').incarnation)} == {
         message.reference for message in originals}
     await confirm_messages(bridge, output, session, originals, prompt_id='directive-turn')
     before = comms.bus.bus.revision()
     for record in suffix:
         output.publish_batch(list(record.updates(session)))
     expected = set() if cleared else {message.reference for message in originals}
-    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require('viewer').incarnation)} == expected
     assert comms.bus.bus.revision() == before
-    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'peer')} == expected
+    assert DirectiveUnacted.opened(comms, comms.registry.require('peer').incarnation) == ()
     for record in (TURN_INTERRUPTED, opening_record('later-source'),
                    assistant_record('later-final', 'A different turn answers')):
         output.publish_batch(list(record.updates(session)))
     finish_reply(output, session)
-    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, 'viewer')} == expected
+    assert {rule.message.reference for rule in DirectiveUnacted.opened(comms, comms.registry.require('viewer').incarnation)} == expected
     assert comms.bus.bus.unanswered_references(
         tuple(message.seq for message in originals), frozenset({'viewer'})) == tuple(
             message.reference for message in originals)

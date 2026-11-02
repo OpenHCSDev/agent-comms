@@ -907,8 +907,8 @@ class DirectiveVerb(TeamVerb):
         now = time.time()
         # Debt and reply receipts follow the same exact represented owners, not the
         # project's storage lead or every request the actor may maintain.
-        owers = tuple(owner.name for owner in ctx.actor_identity.represented_owners)
-        opened = tuple(rule for name in owers for rule in OwedAnswer.opened(ctx.comms, name))
+        owers = ctx.actor_identity.represented_owners
+        opened = tuple(rule for owner in owers for rule in OwedAnswer.opened(ctx.comms, owner))
         owed = frozenset(rule.message.message_id for rule in opened)
         snapshot = ctx.comms.registry.snapshot()
         problems: dict[str, str] = {}
@@ -921,7 +921,7 @@ class DirectiveVerb(TeamVerb):
                     continue
                 if identity not in owed:
                     problems[f'--answers {identity}'] = (
-                        f'not an open ask owed by {" or ".join(owers)}; recording it would '
+                        f'not an open ask owed by {" or ".join(owner.name for owner in owers)}; recording it would '
                         'answer nothing')
         reached = frozenset(snapshot.canonical_name(name) for name in self.addressed)
         named = (tuple(rule.message for rule in opened
