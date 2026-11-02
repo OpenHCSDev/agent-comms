@@ -109,7 +109,6 @@ from agent_comms.todos import (
     OrderWords,
     PendingProblemOrder,
     ProblemFinding,
-    ProgressRead,
     PullRequestLink,
     PullRequests,
     RecordPullRequest,
@@ -1499,10 +1498,8 @@ class InstallVerb(OrderVerb):
     clears = (InstallDue,)
 
     def run(self, ctx: Team) -> None:
-        pulls = ProgressRead()
-        InstallDue.prepare(ctx.comms, ctx.commander, HeldOrders.read(ctx.comms), pulls)
-        for due in InstallDue.due(ctx.comms, pulls):
-            print(f"{due.repo.to_wire()} main {due.main[:12]}: {due.launch(ctx.comms)}")
+        for launch in InstallDue.launch_due(ctx.comms, ctx.commander):
+            print(launch)
 
 
 class IdleVerb(OrderVerb):

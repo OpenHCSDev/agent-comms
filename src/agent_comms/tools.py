@@ -76,6 +76,7 @@ from .relationships import (
     RelationshipEdit,
 )
 from .restart_queue import QueuedRestart, RestartQueued, RestartQueue
+from .team.standing import InstallDue
 from .send_result import CorrectionResult
 from .task_sources import (
     Constraint,
@@ -1190,6 +1191,27 @@ class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
                               tags=self.tags).apply(comms)
+
+
+@dataclass(frozen=True)
+class InstallLaunches(ToolResult):
+    """One line per configured main the install covers: launched, already running, or why not."""
+
+    launches: tuple[str, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsInstallTool(ToolRequest):
+    label = "Install Latest Mains"
+    description = (
+        "Launch Core's installer for every configured main the installed build lacks: the same "
+        "launch as `order install`. Returns once the install's unit is running; an install of "
+        "the same target already running counts as this launch. The install stops and restarts "
+        "teammates and the connector and posts its result to #comms."
+    )
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> InstallLaunches:
+        return InstallLaunches(InstallDue.launch_due(comms, caller.name))
 
 
 @dataclass(frozen=True, kw_only=True)
