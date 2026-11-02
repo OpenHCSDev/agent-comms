@@ -519,6 +519,7 @@ class TestedSources(DeclaredFamily, affix="Sources"):
             source.require_candidate(
                 Repo.selected(repositories, source.repository.to_wire()), self.carrier
             )
+        inputs.require_substantive(repositories)
 
 
 class PullRequestSources(TestedSources, declared_name="pull_request"):
@@ -872,11 +873,7 @@ class IntegrationRun:
             current_snapshot.commander_project.require_scope(
                 current_snapshot, actor, source.repository)
         context.comms.goals.todos.require_input_sources(inputs)
-        if (
-            Repo.git(self.checkout.path, "rev-parse", f"{base}^{{tree}}").strip()
-            == inputs.local.candidate_tree
-        ):
-            raise IntegrationFailed("The Core carrier has no substantive source change")
+        inputs.require_substantive(tuple(repositories.values()))
         original_message = WorkBranches(self.checkout.path).commit_message(candidate_commit)
         if IntegrationInput.from_message(original_message):
             raise IntegrationFailed(
