@@ -412,7 +412,8 @@ class TeamContext(BaseModel):
 
     @property
     def incarnation(self) -> ThreadIncarnation:
-        return self.comms.registry.require(self.commander).incarnation
+        """The teammate running the verb: its writes are recorded as its own."""
+        return self.actor_identity
 
     @property
     def actor_name(self) -> str:
@@ -815,8 +816,7 @@ class Team(TeamContext):
         refuse(why, *DirectiveText.checks())
         previous = todo.holder_state.previous_assignment()
         self.call(CommsChangeProblemTool(problem=pid, operation=WithdrawTodo(
-            todo.revision, self.incarnation, previous, why,
-            superseded_by)))
+            todo.revision, self.incarnation, why, superseded_by)))
         unit = previous.owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} Withdrawn: {withdrawal}. '

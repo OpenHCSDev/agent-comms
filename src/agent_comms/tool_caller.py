@@ -199,29 +199,8 @@ class ActsForTeam(ThreadCaller):
 
 @dataclass(frozen=True)
 class PeerCaller(ThreadCaller):
-    """A collaborator acts under its own incarnation, independently of channel tags.
-
-    Binding to another lead's records remains explicit through as_thread.
-    """
-
-    def as_thread(self, commander: str) -> ThreadCaller:
-        return PeerAuthority(self.name, commander)
-
-
-@dataclass(frozen=True)
-class PeerAuthority(PeerCaller):
-    """Explicit record selection, never representation of the selected storage owner."""
-
-    authority: str
-
-    def as_thread(self, commander: str) -> ThreadCaller:
-        return self
-
-    def commander(self, comms: Comms) -> Thread:
-        return comms.registry.require(self.authority)
-
-    def identity(self, comms: Comms) -> ThreadIncarnation:
-        return comms.registry.require(self.name).acting_identity
+    """A teammate acts and is recorded under its own incarnation, independently of channel
+    tags. There is no lead whose records a peer selects: its orders name it as creator."""
 
 
 class ForkRecordOwed(ToolRefusedError):
