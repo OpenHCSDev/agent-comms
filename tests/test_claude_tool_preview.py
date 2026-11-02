@@ -6,6 +6,7 @@ from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Li
 from agent_comms.tool_calls import ToolCall
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.native_tools import BashTool
+from agent_comms.runtime_updates import FinishedItem
 from agent_comms.tool_results import NoToolDiff
 
 
@@ -33,7 +34,8 @@ def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, argument
     assert call.name==native and call.arguments==expected and call.title==title
     assert active.phase.summary == title
     result=ToolResult(tool_use_id='call',content=[{'type':'text','text':'done'}])
-    completed,_=result.updates(record,session)
+    # The result is a stream of typed updates (a Read adds its context-read evidence); select by type.
+    completed,=(update for update in result.updates(record,session) if isinstance(update, FinishedItem))
     started,ended=completed.events
     assert started.raw_input==expected and started.title==title
     assert started.timestamp == ended.timestamp == record.timestamp
