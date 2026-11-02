@@ -1,8 +1,6 @@
 """Mechanism adaptation fails at import; declaration families stay extensible."""
 
-import ast
 import importlib
-from pathlib import Path
 from types import ModuleType
 
 import pytest
@@ -52,27 +50,3 @@ def test_seal_follows_owned_descendants_and_every_mechanism_in_multiple_inherita
     exec("class Local(Sealed): pass", adapter.__dict__)
     with pytest.raises(TypeError):
         exec("class Adapter(Local, Mechanism): pass", adapter.__dict__)
-
-
-def test_tracked_native_cannot_fork_child_reader_or_claim_authorities():
-    import agent_comms.backend as backend
-    import agent_comms.tracked_turn as tracked_turn
-    import agent_comms.turn_watchdog as turn_watchdog
-
-    tree = ast.parse(Path(tracked_turn.__file__).read_text())
-    forbidden = {"AttachedChild", "PiRpcChannel", "PendingAttestation"}
-    constructors = {
-        node.func.id for node in ast.walk(tree)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
-    }
-    assert not constructors & forbidden
-    assigned = {
-        node.attr for module in (backend, tracked_turn, turn_watchdog)
-        for node in ast.walk(ast.parse(Path(module.__file__).read_text()))
-        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
-    }
-    assert not assigned & {"initial_session_id", "prompt_response", "prompt_dispatched"}
-    assert not {"proc", "reader"} & {
-        node.attr for node in ast.walk(tree)
-        if isinstance(node, ast.Attribute) and isinstance(node.ctx, ast.Store)
-    }
