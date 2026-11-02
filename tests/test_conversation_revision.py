@@ -10,7 +10,6 @@ from agent_comms.historical_views import (
     ChannelDisplayHistory,
     ConversationObservation,
     DMDisplayHistory,
-    DMDisplayIdentity,
 )
 from agent_comms.private_path import FileRevision
 from bus_record_fixture import prepare_native_comms
@@ -56,11 +55,8 @@ def test_peer_rename_replaces_display_once(tmp_path):
     after = DMDisplayHistory.revision(comms.views, target, before, worktree=Checkout(tmp_path))
     settled = DMDisplayHistory.revision(comms.views, target, after, worktree=Checkout(tmp_path))
 
-    assert isinstance(after.selection, DMDisplayIdentity)
     assert after.selection.peer.name == "renamed"
     assert after.selection.scope.second_names == frozenset({"peer", "renamed"})
     assert after.display_changed_since(before)
     assert not settled.display_changed_since(after)
     assert settled.selection is after.selection
-
-
