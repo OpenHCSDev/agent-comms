@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import io
 import shlex
 import unittest
 
@@ -10,13 +11,39 @@ from agent_comms.shell_effects import (
     shell_storage_effects,
 )
 from agent_comms_hooks.bounded_waits import WaitCommand
-from agent_comms_hooks.shell_commands import ConnectCommand, HereDocument, ShellCommand
+from agent_comms_hooks.shell_commands import ConnectCommand, HereDocument, ShellCommand, ShellText
 
 
 CWD = Path('/shell-decoder-control')
 
 
 class ShellDecoding(unittest.TestCase):
+    def test_raw_source_reads_preserve_the_cursor(self):
+        source = ShellText('before λ\\\nafter')
+        source.seek(3)
+        self.assertEqual(source.read_at(7, 3), 'λ\\\n')
+        self.assertEqual(source.tell(), 3)
+        self.assertEqual(source.read_at(100, 2), '')
+        self.assertEqual(source.tell(), 3)
+        with self.assertRaises(ValueError):
+            source.read_at(-1, 1)
+        self.assertEqual(source.tell(), 3)
+
+    def test_physical_single_line_scan_restores_the_cursor(self):
+        for text, expected in (
+            ('', True),
+            ('literal', True),
+            ('x' * (io.DEFAULT_BUFFER_SIZE * 2 + 1), True),
+            ('x' * (io.DEFAULT_BUFFER_SIZE - 1) + '\n', False),
+            ('x' * io.DEFAULT_BUFFER_SIZE + '\n', False),
+            ('\\\ncontinued', False),
+        ):
+            with self.subTest(length=len(text), expected=expected):
+                source = ShellText(text)
+                source.seek(min(3, len(text)))
+                self.assertEqual(source.single_line(), expected)
+                self.assertEqual(source.tell(), min(3, len(text)))
+
     def test_words_are_never_promoted_to_operators(self):
         cases = (
             ("echo '>' picked", ('echo', '>', 'picked')),

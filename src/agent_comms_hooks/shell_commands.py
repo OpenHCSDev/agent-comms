@@ -24,6 +24,23 @@ class ShellText(io.StringIO):
         while line := super().readline():
             yield line
 
+    def read_at(self, position: int, size: int) -> str:
+        """Read only the requested raw span, without invoking the lexer or moving it."""
+        cursor = self.tell()
+        try:
+            self.seek(position)
+            return super().read(size)
+        finally:
+            self.seek(cursor)
+
+    def single_line(self) -> bool:
+        position = 0
+        while chunk := self.read_at(position, io.DEFAULT_BUFFER_SIZE):
+            if '\n' in chunk:
+                return False
+            position += len(chunk)
+        return True
+
 
 @dataclass(frozen=True)
 class Redirection:
@@ -113,8 +130,9 @@ class ShellWord:
 
     @classmethod
     def decoded(cls, value: str, lexer: ShellLexer, end: int) -> ShellWord:
-        source = lexer.getvalue()
-        spelling = ''.join(source[position] for position in lexer.word_positions(end))
+        source = lexer.read_at(lexer.word_start, end - lexer.word_start)
+        spelling = ''.join(source[position - lexer.word_start]
+                           for position in lexer.word_positions(end))
         kind = cls.members.get(spelling, cls)
         return kind(value, lexer.word_start, end, spelling)
 
@@ -181,8 +199,7 @@ class ShellLexer(shlex.shlex, ShellText):
 
     def continuation_end(self, position: int) -> int:
         """Skip active continuations; the caller's native state establishes activity."""
-        source = self.getvalue()
-        while source.startswith('\\\n', position):
+        while self.read_at(position, 2) == '\\\n':
             position += 2
         return position
 
@@ -207,8 +224,7 @@ class ShellLexer(shlex.shlex, ShellText):
         if character == '`':
             self.target.require_expansion()
         elif character == '$':
-            source = self.getvalue()
-            if source.startswith('(', self.continuation_end(following)):
+            if self.read_at(self.continuation_end(following), 1) == '(':
                 self.target.require_expansion()
 
     @property
@@ -225,7 +241,7 @@ class ShellLexer(shlex.shlex, ShellText):
                 self.token = self.token[:-2] + self.token[-1:]
         if self._state == ' ' and value not in (' ', None):
             self.word_start = self.position - 1
-            self.check_substitution(self.getvalue()[self.word_start:self.word_start + 1],
+            self.check_substitution(self.read_at(self.word_start, 1),
                                     self.word_start + 1)
         if value == 'c':
             self.word_type = Operator
@@ -278,7 +294,7 @@ class ShellLexer(shlex.shlex, ShellText):
         if value is None:
             return None
         end = self.position
-        if self.state == ' ' and self.getvalue()[end - 1:end] in self.whitespace:
+        if self.state == ' ' and self.read_at(end - 1, 1) in self.whitespace:
             end -= 1
         return self.word_type.decoded(value, self, end)
 
@@ -516,7 +532,7 @@ class NotStandalone(ValueError):
 
 class LiteralShellParser(ShellParser):
     def __init__(self, lexer: ShellLexer):
-        if '\n' in lexer.getvalue():
+        if not lexer.single_line():
             raise NotStandalone('Recovery requires literal, single-line words')
         super().__init__(lexer)
 
