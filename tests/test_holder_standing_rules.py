@@ -352,7 +352,7 @@ def test_holds_whose_holder_was_deleted_or_registered_again_are_reported_by_ever
     assert {rule.todo.id for rule in HolderGone.violations(comms, "lead")} == set(gone)
     assert frame.todos == ()
     fleet, = FieldCodec.decode(
-        TeamStory, board_read(CommsTeamStoryTool, comms, NoThreadCaller())).lines
+        TeamStory, CommsTeamStoryTool.invoke(comms, {}, caller=NoThreadCaller())).lines
     count, named = fleet.split(": ")
     assert count == "3 orders held by teammates no longer registered"
     assert set(named.split(", ")) == {"P1 worker", "P2 worker", "P3 outsider"}
@@ -912,7 +912,10 @@ def test_an_overdue_owner_directive_gates_until_answered(held_bus, tmp_path):
         SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
     SayVerb(units="#comms", body_file=str(reply)).apply(ctx)
-    SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    before = held_bus.bus.bus.revision()
+    with pytest.raises(RecordProblems, match="not an open ask owed by lead"):
+        SayVerb(units="#comms", body_file=str(reply), answers=(directive.message_id,)).apply(ctx)
+    assert held_bus.bus.bus.revision() == before
     assert held_bus.bus.bus.lookup(held_bus.bus.bus.revision()).answers == ()
 
 
