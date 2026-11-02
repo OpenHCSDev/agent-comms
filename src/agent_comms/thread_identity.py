@@ -614,8 +614,26 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     origin_label: ClassVar[str]
 
     @classmethod
+    def choose(cls, current: type[ThreadRole], previous: type[ThreadRole]) -> type[ThreadRole]:
+        """The declared role owns operational re-registration, like other field policies."""
+        return current.registered_over(previous)
+
+    @classmethod
+    def registered_over(cls, previous: type[ThreadRole]) -> type[ThreadRole]:
+        """Ordinary metadata cannot change the original author's role."""
+        return previous
+
+    @classmethod
     def allows_automatic_reply(cls) -> bool:
         return False
+
+    @classmethod
+    def require_automated_publication(cls, refusal: Exception) -> None:
+        raise refusal
+
+    @classmethod
+    def require_service_publication(cls, refusal: Exception) -> None:
+        raise refusal
 
     @classmethod
     def acp_thread[T](cls, thread: T) -> tuple[T, ...]:
@@ -679,24 +697,32 @@ class ThreadRole(DeclaredFamily, ProjectionSource, affix="ThreadRole"):
     def user_task_facts(cls, message: Message) -> Iterable[object]: ...
 
 
-class AgentThreadRole(ThreadRole):
-    origin_label = "external agent"
+class NonExecutingThreadRole:
+    """Authorship without an owner turn: human readers and service publishers."""
+
+    @classmethod
+    def require_executable(cls, refusal: Exception) -> None:
+        raise refusal
+
+    @classmethod
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return ()
+
+
+class AutomatedThreadRole(ThreadRole):
+    """Shared informational authorship, independent of owning an executable turn."""
+
+    @classmethod
+    def require_automated_publication(cls, refusal: Exception) -> None:
+        pass
 
     @classmethod
     def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
         return message, [target]
 
     @classmethod
-    def require_executable(cls, refusal: Exception) -> None:
-        """An agent executes owner turns."""
-
-    @classmethod
     def require_user(cls, refusal: Exception) -> None:
         raise refusal
-
-    @classmethod
-    def executor[T](cls, item: T) -> tuple[T, ...]:
-        return (item,)
 
     @classmethod
     def human[T](cls, item: T) -> tuple[T, ...]:
@@ -734,6 +760,35 @@ class AgentThreadRole(ThreadRole):
         return ()
 
 
+class AgentThreadRole(AutomatedThreadRole):
+    origin_label = "external agent"
+
+    @classmethod
+    def require_executable(cls, refusal: Exception) -> None:
+        """An agent executes owner turns."""
+
+    @classmethod
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return (item,)
+
+
+class ServiceThreadRole(NonExecutingThreadRole, AutomatedThreadRole):
+    """A platform publisher is not another colleague or a human reader."""
+
+    origin_label = "service"
+
+    @classmethod
+    def registered_over(cls, previous: type[ThreadRole]) -> type[ThreadRole]:
+        """A declared publisher replaces its former automated role, never a human identity."""
+        previous.require_automated_publication(RelationViolationError(
+            "A service publisher cannot replace a human participant."))
+        return cls
+
+    @classmethod
+    def require_service_publication(cls, refusal: Exception) -> None:
+        pass
+
+
 class AcpThreadRole(AgentThreadRole):
     """An agent created by the ACP session lifecycle, independent of channel tags."""
 
@@ -742,7 +797,7 @@ class AcpThreadRole(AgentThreadRole):
         return (thread,)
 
 
-class UserThreadRole(ThreadRole):
+class UserThreadRole(NonExecutingThreadRole, ThreadRole):
     origin_label = "human"
 
     @classmethod
@@ -754,16 +809,8 @@ class UserThreadRole(ThreadRole):
         return replace(message, role=message.role.as_notice()), []
 
     @classmethod
-    def require_executable(cls, refusal: Exception) -> None:
-        raise refusal
-
-    @classmethod
     def require_user(cls, refusal: Exception) -> None:
         """A user is the original human sender."""
-
-    @classmethod
-    def executor[T](cls, item: T) -> tuple[T, ...]:
-        return ()
 
     @classmethod
     def human[T](cls, item: T) -> tuple[T, ...]:

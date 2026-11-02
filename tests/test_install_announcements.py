@@ -14,11 +14,11 @@ from agent_comms.cli_command import CliCommand
 from agent_comms.cli_verbs.history import HistoryCliCommand
 from agent_comms.installer.probes.harnesses import InstallResult
 from agent_comms.registry_document import NoCommanderProject
-from agent_comms.repo import GitCommandError
+from agent_comms.repo import Checkout, GitCommandError
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.host_services import RestartedService
 from agent_comms.installer.backup import BackupReport, RestoreSpace
-from agent_comms.installer.refusals import UpgradeRefused
+from agent_comms.installer.refusals import InterpreterWorkerDied, UpgradeRefused
 from agent_comms.installer.probes.carry import Carried
 from agent_comms.installer.launch import InstallReport
 from agent_comms.installer.commands import InstallCommands
@@ -26,13 +26,18 @@ from agent_comms.installer.interpreter_operation import CommandPhase, PhaseTimin
 from agent_comms.installer.interpreter_operation import InstalledProgram
 from agent_comms.installer.probes.report import InstallReportProbe
 from agent_comms.installer.upgrade import FinishedInstall, RuntimeWriter
+from agent_comms.installer.reporting import UnconfirmedPublication, UnpostedWriter, UnattemptedPublication
 from agent_comms.installer.upgrade import CarriedPass, CarriedRun, CreatedRun, FreshRehearsal, InstalledUpgrade, RehearsalFiles, RetiredRun, StepRun, Stack, UnchangedRun, UnresumedUpgrade, Upgrade, upgrade
 from agent_comms.installer.refusals import InstallRolledBack
 from agent_comms.installer.target_tree import TargetTree
 from agent_comms.installer.owner_starts import RefusedOwner, StartedOwner
 from agent_comms.install_choices import LiveMode, RehearsalMode, UnnamedInstaller
 from agent_comms.launch_runtime import LaunchRuntime, RestoredRuntime
-from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.root_runtime import RootRuntimeStore
+from agent_comms.thread_execution import ExternalThreadExecution, ServiceThreadExecution
+from agent_comms.thread_identity import ServiceThreadRole, UserThreadRole
+from agent_comms.errors import RelationViolationError, ThreadNotStoppedError
+from agent_comms.threads import Thread
 from cli_command import core
 from conftest import declare_test_bus
 from source_revision_fixture import SourceRepository
@@ -114,7 +119,8 @@ def test_typed_results_publish_as_installer_and_survive_history_read(private_com
     assert diagnostics.getvalue().splitlines()[1:] == [timed.line() for timed in installed.phases]
     assert installed.phases[-1].line() not in messages[1].body
     sender = comms.registry.require("installer")
-    assert sender.execution is ExternalThreadExecution
+    assert sender.execution is ServiceThreadExecution
+    assert sender.role is ServiceThreadRole
 
 
 def test_rollback_and_refusal_are_published_from_their_error_types(private_comms):
@@ -145,6 +151,92 @@ def test_a_fresh_bus_carries_the_installer_report_into_its_declared_channel(priv
     original = private_comms.registry.require("installer")
     probe.register(private_comms.registry)
     assert private_comms.registry.require("installer").incarnation == original.incarnation
+
+
+def test_archived_installer_is_redeclared_as_a_publisher_not_a_colleague(private_comms):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    original = comms.registry.declare(Thread(
+        "installer", frozenset(), Checkout(comms.root), execution=ExternalThreadExecution))
+    comms.threads.archive(original.name)
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(original.name, CommsTag.channel(), "Archived legacy publisher")
+    assert comms.bus.bus.revision() == before
+
+    probe = InstallReportProbe(comms.root, "Service publication after archival")
+    probe.run()
+    sender = comms.registry.require(original.name)
+    assert sender.incarnation == original.incarnation
+    assert sender.role is ServiceThreadRole
+    assert sender.execution is ServiceThreadExecution
+    assert sender.role.executor(sender) == ()
+    assert sender.execution.channel_recipients(sender) == ()
+    assert original.name not in {thread.name for thread in comms.registry.snapshot().channel_audience()}
+    comms.registry.status(original.name).require_publication()
+    with pytest.raises(RelationViolationError):
+        comms.registry.status(original.name).require_visible()
+    with pytest.raises(ThreadNotStoppedError):
+        comms.threads.archive(original.name)
+
+    writer = comms.registry.declare(Thread("writer", frozenset(), Checkout(comms.root)))
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(original.name, CommsTag.channel(), "Wrong agent origin")
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(writer.name, CommsTag.channel(), "Wrong service origin", origin=probe.origin)
+    with pytest.raises(RelationViolationError):
+        comms.messaging.send(writer.name, original.name, "A service is not an inbox")
+    assert comms.bus.bus.revision() == before
+    probe.run()
+    messages = HistoryCliCommand(target=CommsTag.channel()).apply(comms).messages
+    assert len(messages) == 2
+    assert all(message.body == probe.body for message in messages)
+    assert comms.registry.require(original.name).incarnation == original.incarnation
+
+
+def test_service_registration_does_not_replace_a_human_participant(private_comms):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    original = comms.registry.declare(Thread(
+        "installer", frozenset(), Checkout(comms.root), role=UserThreadRole))
+    before = comms.bus.bus.revision()
+    with pytest.raises(RelationViolationError):
+        InstallReportProbe(comms.root, "Not a service-owned identity").run()
+    assert comms.registry.require(original.name) == original
+    assert comms.bus.bus.revision() == before
+
+
+def test_unconfirmed_announcement_keeps_the_worker_failure_not_runtime_authority(
+        private_comms, monkeypatch, capsys):
+    comms = declare_test_bus(private_comms, channels=("comms",))
+    original = comms.registry.declare(Thread(
+        "installer", frozenset(), Checkout(comms.root), role=UserThreadRole))
+    before = RootRuntimeStore.at(comms.root).read()
+    revision = comms.bus.bus.revision()
+    repository = Path(__file__).resolve().parents[1]
+    monkeypatch.setenv("PYTHONPATH", str(repository / "src"))
+    with InstallCommands() as commands:
+        stack = Stack(repository, commands, runtime=RestoredRuntime(Path(sys.executable)))
+        writer = RuntimeWriter(comms.root, stack)
+        report = InstallReport()
+        report.starting(writer, "b" * 40)
+        publication = report.announcement
+        assert type(publication) is UnconfirmedPublication
+        assert type(publication.failure) is InterpreterWorkerDied
+        assert publication.failure.errors
+        assert publication.lines()[0] in capsys.readouterr().err
+        assert report.writer is writer
+    assert RootRuntimeStore.at(comms.root).read() == before
+    assert comms.registry.require(original.name) == original
+    assert comms.bus.bus.revision() == revision
+
+
+def test_rehearsal_announcement_has_no_publication_attempt():
+    writer = RehearsalMode().destination(UnpostedWriter())
+    report = InstallReport()
+    report.starting(writer, "b" * 40)
+    assert type(report.announcement) is UnattemptedPublication
+    assert report.announcement.lines() == ()
+    assert report.writer is writer
 
 
 def test_a_read_back_that_differs_from_before_the_carry_refuses():
