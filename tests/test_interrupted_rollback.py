@@ -6,12 +6,12 @@ import os
 import signal
 import subprocess
 import sys
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
 
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.active_route import active_route_path
 from agent_comms.install_choices import RehearsalMode, UnnamedInstaller
 from agent_comms.installer.backup import StoreBackup
@@ -62,59 +62,80 @@ raise AssertionError("The selected registry publication was never restored")
 """
 
 
+@dataclass(frozen=True)
+class CarryingRoot:
+    """A private bus with one declared thread, its route and its backup spill: the root an
+    install finds after a carry that a backup preceded."""
+
+    tmp_path: Path
+    comms: Comms
+
+    @classmethod
+    def prepared(cls, tmp_path: Path) -> "CarryingRoot":
+        comms = prepare_native_comms(wire(tmp_path / "wire"))
+        comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
+        active_route_path().parent.mkdir(mode=0o700, parents=True)
+        return cls(tmp_path, comms)
+
+    @property
+    def registry(self) -> RegistryStore:
+        return RegistryStore.at(self.comms.root)
+
+    @property
+    def spill(self) -> Path:
+        return self.tmp_path / "backups"
+
+    def backup(self, written: tuple[Path, ...]) -> StoreBackup:
+        return StoreBackup.take(self.comms.root, active_route_path(), written, self.spill)
+
+    def carry(self) -> None:
+        RegistryTitleCarry(LiveFilesRequest(self.comms.root), self.spill).carry(apply=True)
+
+    def digests(self) -> dict[Path, str]:
+        return {path: RegistryStore.digest(path) for path in self.registry.written}
+
+    def refused_install(self) -> None:
+        """Enter the real installer; its next Git command fails on the missing checkout, so
+        rollback recovery must finish before a checkout can be inspected or a stack built."""
+        with pytest.raises(UpgradeRefused, match="missing-checkout"):
+            upgrade(
+                self.tmp_path / "missing-checkout", self.comms.root, "HEAD", UnnamedInstaller(),
+                RehearsalMode(), False, self.spill, self.tmp_path / "install-scratch",
+                LaunchRuntime.running(), lambda: None, InstallReport(),
+            )
+
+
 @pytest.mark.skipif(os.name != "posix", reason="SIGKILL and private registry require POSIX")
 @pytest.mark.parametrize("publication", (0, 1), ids=("after-registry", "after-guard"))
 def test_next_install_completes_a_killed_registry_restore(tmp_path, installed_runtime, publication):
     # The temporary installation's HOME selects only this test's route and runtime.
-    # Neither process can replace the developer's route.
-    comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
-    registry = RegistryStore.at(comms.root)
-    route = active_route_path()
-    route.parent.mkdir(mode=0o700, parents=True)
-    spill = tmp_path / "backups"
+    root = CarryingRoot.prepared(tmp_path)
     # Put the guard first, as the interrupted historical backup did. Restore ordering
     # must come from the registry declaration, not from this manifest's ordering.
-    backup = StoreBackup.take(comms.root, route, tuple(reversed(registry.written)), spill)
-    expected = {path: RegistryStore.digest(path) for path in registry.written}
-    RegistryTitleCarry(LiveFilesRequest(comms.root), spill).carry(apply=True)
+    backup = root.backup(tuple(reversed(root.registry.written)))
+    expected = root.digests()
+    root.carry()
     killed = subprocess.run(
-        [sys.executable, "-c", KILLED_RESTORE, str(comms.root), str(route), str(backup.path), str(publication)],
+        [sys.executable, "-c", KILLED_RESTORE, str(root.comms.root), str(active_route_path()),
+         str(backup.path), str(publication)],
         capture_output=True, text=True, timeout=30,
     )
     assert killed.returncode == -signal.SIGKILL, killed.stdout + killed.stderr
-    # Enter the real installer. Its next Git command deliberately fails: rollback
-    # recovery must finish even before the checkout can be inspected or a stack built.
-    with pytest.raises(UpgradeRefused, match="missing-checkout"):
-        upgrade(
-            tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", LaunchRuntime.running(),
-            lambda: None, InstallReport(),
-        )
-    assert {path: RegistryStore.digest(path) for path in registry.written} == expected
-    assert comms.registry.require("worker").title != GivenThreadText("Carried title")
+    root.refused_install()
+    assert root.digests() == expected
+    assert root.comms.registry.require("worker").title != GivenThreadText("Carried title")
 
 
 def test_next_install_leaves_a_completed_installs_backup_alone(tmp_path, installed_runtime):
     # Install 24: every completed install leaves a backup that differs from the live root
     # it carried. Differing is not a restore that began, so the next install must neither
     # roll the bus back to it nor take the maintenance hold.
-    comms = prepare_native_comms(wire(tmp_path / "wire"))
-    comms.registry.declare(Thread("worker", frozenset(), Checkout(tmp_path)))
-    registry = RegistryStore.at(comms.root)
-    route = active_route_path()
-    route.parent.mkdir(mode=0o700, parents=True)
-    spill = tmp_path / "backups"
-    backup = StoreBackup.take(comms.root, route, registry.written, spill)
-    RegistryTitleCarry(LiveFilesRequest(comms.root), spill).carry(apply=True)
-    carried = {path: RegistryStore.digest(path) for path in registry.written}
+    root = CarryingRoot.prepared(tmp_path)
+    backup = root.backup(root.registry.written)
+    root.carry()
+    carried = root.digests()
     assert not backup.original()
-    with pytest.raises(UpgradeRefused, match="missing-checkout"):
-        upgrade(
-            tmp_path / "missing-checkout", comms.root, "HEAD", UnnamedInstaller(), RehearsalMode(),
-            False, spill, tmp_path / "install-scratch", LaunchRuntime.running(),
-            lambda: None, InstallReport(),
-        )
-    assert {path: RegistryStore.digest(path) for path in registry.written} == carried
-    assert comms.registry.require("worker").title == GivenThreadText("Carried title")
+    root.refused_install()
+    assert root.digests() == carried
+    assert root.comms.registry.require("worker").title == GivenThreadText("Carried title")
     assert backup.path.exists()
