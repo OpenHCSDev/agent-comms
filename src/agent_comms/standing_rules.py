@@ -50,6 +50,7 @@ from agent_comms.todos import (
     ProgressSource,
     StoredHeadReview,
     Todo,
+    VerdictAudience,
 )
 from agent_comms.work_branches import (
     BranchDifference, SourceGrowth, UnparsedSource, WorkBranchError,
@@ -582,10 +583,16 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
     behind: int = field(compare=False)
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        comms.messaging.send(commander, self.holder.name, (
-            f"{self.branch} is {self.behind} commits behind main. Merge origin/main into it now,"
-            " resolve every conflict yourself, push, and keep working; a stale tree turns your"
-            " next push into everyone's conflict."))
+        # Retain the registry's alias/birth decision through publication. A departed
+        # holder belongs to HolderGone, never to a new participant reusing its name.
+        with comms.registry.store.current_snapshot() as cut:
+            actor = cut.snapshot.require(commander).incarnation
+            for holder in cut.snapshot.threads_for(self.holder.require_recorded()):
+                VerdictAudience((holder.name,)).publish(comms.goals, actor, (
+                    f"{self.branch} is {self.behind} commits behind main. Rebase your branch onto"
+                    " origin/main now, retain main's moves and deletions, resolve every conflict"
+                    " yourself, push with --force-with-lease, and keep working; a stale tree turns"
+                    " your next push into everyone's conflict."))
 
     @classmethod
     def derive(cls, branches: tuple[HeldBranch, ...]) -> tuple[Self, ...]:
@@ -595,9 +602,9 @@ class BranchBehindMain(CoreActsStandingRule, HeldBranchRule):
                      for held in branches if held.difference.behind and not held.queued)
 
     def line(self) -> str:
-        return (f"MERGE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
+        return (f"REBASE {self.repository.to_wire()}:{self.branch} ({self.holder.name} {self.problem}) is"
                 f" {self.behind} commits behind main. building on a stale tree"
-                " for fun? -> merge main into it")
+                " for fun? -> rebase your branch onto origin/main")
 
 
 @dataclass(frozen=True)
