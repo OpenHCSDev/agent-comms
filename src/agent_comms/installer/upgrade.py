@@ -1145,10 +1145,13 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                 sum(path.stat().st_size for path in selected if path.exists()),
             ), self.root.parent)
             restore.require()
-        with self.staged.borrowing(
-            Carry.writer_declarations(pending), files,
-        ) as staged, staged.services_stopped(self.installed) as stopped:
+        with self.staged.services_stopped(self.installed) as stopped, ExitStack() as borrowed:
             # The install's start holds the root and stopped its owners (owners_stopped).
+            # The carried stores' writer locks span carry, publish and input retirement only:
+            # services restart after they are released, on success and on restore alike,
+            # because a restarted connector's serving probe reads those stores.
+            staged = borrowed.enter_context(self.staged.borrowing(
+                Carry.writer_declarations(pending), files))
             maintenance = MaintenanceBarrier(RegistryStore.at(self.root).path)
             holder = ExitStack()
             try:
@@ -1188,6 +1191,11 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                     passed = migration.carry(pending, staged, rehearsal.reconcile_arguments())
                     passed.files.require_rehearsal(rehearsal.files)
                     self.publish(backup, selected_route)
+                    retirement = tuple(replace(
+                        step, spill_dir=backup.spill_directory(self.spill_dir),
+                    ) for step in self.pending)
+                    passed = passed.after_acceptance(retirement, staged)
+                    borrowed.close()
                     with ClearMaintenancePhase().running(self.staged.commands.clock):
                         report.owners.release()
                     restarted_services = stopped.start_on(self.staged)
@@ -1229,13 +1237,7 @@ class ChangedInstall(ExistingBusInstall[RehearsedFiles]):
                         runtime=self.installed.runtime) from error
                 # Owner startup is reported per owner and never rolls the install back.
                 report.writer = RuntimeWriter(self.root, self.staged)
-                try:
-                    retirement = tuple(replace(
-                        step, spill_dir=backup.spill_directory(self.spill_dir),
-                    ) for step in self.pending)
-                    passed = passed.after_acceptance(retirement, staged)
-                finally:
-                    started = report.owners.published_on(self.staged, self.root)
+                started = report.owners.published_on(self.staged, self.root)
                 with BackupRetirePhase().running(self.staged.commands.clock):
                     retired_backups = backup.retain(self.spill_dir)
                 return passed.extended(
