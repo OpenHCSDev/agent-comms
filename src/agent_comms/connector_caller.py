@@ -13,7 +13,11 @@ from .bus_publication import DirectorOrigin
 from .comms import Comms
 from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from .registry_store import RegistryStore
-from .todos import DirectiveText
+from .todos import DirectiveText, JudgedCall, WaivedVerdict
+from .channel_targets import CommsTag
+from .goal_actions import CompliedGoalAction, OwnerInvocable
+from .turn_digests import OrderEditsRead
+from .work_branches import WorkBranchError
 from .read_basis import OperatorOutcomes
 from .tool_caller import ForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest
@@ -124,6 +128,59 @@ class DirectorCaller(OperatorOutcomes, ThreadConnectorCaller):
 
 class ConnectorTool(ToolRequest[DirectorCaller], affix="ConnectorTool"):
     """Connector-only declarations are absent from the native/CLI tool registry."""
+
+
+@dataclass(frozen=True)
+class EmergencyReleased(ToolResult):
+    """Whose chokehold lifted and how many unjudged edits were waived, per problem."""
+
+    notice: str
+    released: tuple[str, ...]
+    waived: dict[str, int]
+    unreadable: dict[str, str]
+    """Orders whose edits could not be read, with why: their edits still count."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsEmergencyReleaseTool(ConnectorTool, declared_name="comms_emergency_release"):
+    """Tristan's emergency button. The rules stay: only today's pile and today's holds go."""
+
+    label = "Emergency release"
+    description = (
+        "Tristan's emergency button: lift every chokehold and waive every unjudged edit as of "
+        "now. Posts the release to #comms; waived edits are neither approved nor struck, and "
+        "new edits and vibe checks count again afterwards.")
+
+    def apply(self, comms: Comms, caller: DirectorCaller) -> EmergencyReleased:
+        actor = caller.identity(comms)
+        verdicts: list[JudgedCall] = []
+        waived: dict[str, int] = {}
+        unreadable: dict[str, str] = {}
+        for read in OrderEditsRead.for_team(comms, caller.name):
+            try:
+                edits = read.read()
+            except (WorkBranchError, OSError) as error:
+                unreadable[read.todo.id] = str(error)
+                continue
+            for edit in edits:
+                verdicts.append(JudgedCall(edit.problem, WaivedVerdict(
+                    read.todo.revision, actor, read.todo.held(), edit.id)))
+                waived[edit.problem] = waived.get(edit.problem, 0) + 1
+        if verdicts:
+            comms.goals.judge_calls(tuple(verdicts), actor)
+        snapshot = comms.registry.snapshot()
+        held = tuple(thread.name for thread in snapshot.threads.values()
+                     if any(goal.state.lifts_on_compliance for goal in thread.goal))
+        notice = comms.messaging.send(caller.name, CommsTag.channel(), (
+            "Emergency release (Tristan): every chokehold is lifted"
+            f"{' (' + ', '.join(held) + ')' if held else ''} and {sum(waived.values())} unjudged"
+            " edits are waived as of now. Nobody forks judges for the old pile. Waived is not"
+            " approved; new edits count again."
+            f"{' Unreadable, still counting: ' + ', '.join(unreadable) if unreadable else ''}")).message
+        for name in held:
+            comms.goals.update_goal(name, CompliedGoalAction(witness=notice.message_id),
+                                    actor=OwnerInvocable)
+        return EmergencyReleased(notice.message_id, held, waived, unreadable)
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
