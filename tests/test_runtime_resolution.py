@@ -175,6 +175,19 @@ def test_native_image_artifact_uses_its_open_handle():
     assert stream.closed
 
 
+def test_unrecorded_interpreter_is_not_a_runtime_cache_match(tmp_path: Path):
+    recorded = manifest()
+    observed = InterpreterBuildProbe().run()
+    assert not recorded.interpreter.matches(observed)
+    assert observed.matches(observed)
+    changed = observed.model_copy(update={"abi": observed.abi + "-different"})
+    assert not observed.matches(changed)
+    with InstallCommands() as commands:
+        stack = RuntimeStack(Path(__file__).resolve().parents[1], commands,
+                             home=tmp_path, runtime=LaunchRuntime.running())
+        assert not recorded.matches(stack.lock, stack, recorded.core_commit)
+
+
 def test_runtime_identity_refuses_missing_and_changed_interpreter():
     with pytest.raises(ValueError, match="no recorded interpreter"):
         manifest().require_runtime(manifest())

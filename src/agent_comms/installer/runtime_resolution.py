@@ -946,8 +946,7 @@ class RuntimeResolution(BaseModel):
         return result
 
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
-        recorded_interpreter = self.interpreter.require_recorded()
-        if recorded_interpreter != stack.probe(InterpreterBuildProbe()):
+        if not self.interpreter.matches(stack.probe(InterpreterBuildProbe())):
             return False
         resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
