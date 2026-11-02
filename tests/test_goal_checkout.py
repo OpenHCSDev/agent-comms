@@ -255,6 +255,24 @@ def test_remote_goal_checkout_refuses_a_partial_git_store(
     assert not case.path.exists()
 
 
+def test_remote_goal_checkout_refuses_promised_missing_objects_without_fetching_them(
+    remote_goal_checkout: RemoteGoalCheckout,
+) -> None:
+    case = remote_goal_checkout
+    case.repository.git(case.repository.remote_path, 'config', 'uploadpack.allowFilter', 'true')
+    case.donor.parent.mkdir(parents=True)
+    case.repository.git(case.rule.checkout_base.parent, 'clone', '--no-checkout', '--filter=blob:none',
+                        case.repository.remote_path.as_uri(), str(case.donor))
+    case.repository.git(case.donor, 'remote', 'set-url', 'origin', Repo.github_url(case.repository.github))
+    before = case.repository.git(case.donor, 'rev-list', '--objects', '--missing=print', 'HEAD')
+    assert any(line.startswith('?') for line in before.splitlines())
+    refused = case.run()
+    assert refused.returncode != 0
+    assert 'retained unchanged' in refused.stdout + refused.stderr
+    assert not case.path.exists()
+    assert case.repository.git(case.donor, 'rev-list', '--objects', '--missing=print', 'HEAD') == before
+
+
 @pytest.mark.parametrize('changed', ('goal', 'incarnation'))
 def test_acquisition_cannot_publish_for_a_changed_goal_or_incarnation(
     remote_goal_checkout: RemoteGoalCheckout, changed: str,

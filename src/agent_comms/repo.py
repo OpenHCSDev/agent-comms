@@ -389,8 +389,8 @@ class Repo(GitLaunch, BaseModel, WireValue):
         repository = cls(checkout=checkout, github=expected)
         branch = repository.default_branch()
         cls.require_local_commits(checkout, 'HEAD', f'origin/{branch}')
-        cls.git(checkout, 'fsck', '--connectivity-only', '--no-reflogs', '--no-dangling',
-                'HEAD', f'origin/{branch}')
+        cls.git(checkout, 'rev-list', '--objects', '--missing=error', '--quiet',
+                'HEAD', f'origin/{branch}', '--')
         return repository
 
     @staticmethod
