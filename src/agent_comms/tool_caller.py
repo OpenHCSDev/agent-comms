@@ -220,6 +220,11 @@ class PeerAuthority(PeerCaller):
         return comms.registry.require(self.name).acting_identity
 
 
+class ForkRecordOwed(ToolRefusedError):
+    """A fork asked to stop before recording what it found: its stop is sent back once.
+    Any other refusal (an unregistered fork, a foreign parent) is a failure, never a send-back."""
+
+
 @dataclass(frozen=True)
 class ForkCaller(ActsForTeam, SubagentCaller):
     """Team verbs use a registered child without copying registry procedures."""
@@ -273,7 +278,7 @@ class ForkCaller(ActsForTeam, SubagentCaller):
     def retire(self, comms: Comms) -> None:
         """A fork asking to stop is sent back once to record what it found."""
         if not self.recorded(comms):
-            raise ToolRefusedError(
+            raise ForkRecordOwed(
                 f"{self.name} recorded nothing in Core: record a head verdict with"
                 f" `agent-comms-commander judge ... --fork {self.name}` or post what it found with"
                 f" `agent-comms-commander order say '#comms' FILE --fork {self.name}` before it stops.")

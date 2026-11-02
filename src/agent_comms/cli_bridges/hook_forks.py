@@ -9,7 +9,7 @@ from agent_comms_hooks import ClaudeSubagentHook, ClaudeTranscriptHook, Subagent
 
 from .shared import Binding
 from ..comms import Comms
-from ..tool_caller import ForkCaller
+from ..tool_caller import ForkCaller, ForkRecordOwed
 from ..turn_phase import ModelWaitPhase, TurnPhase
 
 
@@ -52,7 +52,7 @@ class SubagentStopHook(SubagentHook):
             return
         try:
             actor.retire(comms)
-        except ToolRefusedError as refused:
+        except ForkRecordOwed as refused:
             self.output.line(json.dumps({"decision": "block", "reason": str(refused)}))
 
 
