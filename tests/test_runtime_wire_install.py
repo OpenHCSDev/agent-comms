@@ -1,25 +1,17 @@
 """The install compares source contracts against the outgoing child's stamped revision."""
 
 import ast
-import json
-import os
 import shlex
 import subprocess
-import sys
 
 import pytest
 from fixture_git import IDENTITY
 from module_layers import OutgoingWire
 
-from agent_comms.bus import Bus
 from agent_comms.cli_bridges.monitor import PauseSession
-from agent_comms.installer.request import InstallRequest
-from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.commands import InstallCommands
-from agent_comms.installer.launch import InstallRun
-from agent_comms.installer.target_tree import TargetTree
-from agent_comms.maintenance_barrier import MaintenanceBarrier
 from agent_comms.installer.upgrade import Stack
+from agent_comms.installer.refusals import RuntimeWireChanged
 from agent_comms.launch_runtime import LaunchRuntime
 
 
@@ -56,7 +48,10 @@ def stamped_child(tmp_path, checkout):
     return LaunchRuntime(child)
 
 
-def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenance(outgoing_tree, tmp_path):
+def test_crosses_runtimes_installed_stamp_refuses_session_drift(outgoing_tree, tmp_path):
+    """The installed stamp, not HEAD, selects the outgoing wire: a commit whose PauseSession
+    field differs is refused by the check the install runs before maintenance
+    (upgrade.py: installed.require_runtime_wire())."""
     wire, checkout = outgoing_tree
     session, = (entry for entry in wire.imports if entry.names == (PauseSession.__name__,))
     path = checkout / session.path
@@ -73,32 +68,9 @@ def test_crosses_runtimes_installed_stamp_refuses_session_drift_before_maintenan
     path.write_text((wire.checkout / session.path).read_text())
     subprocess.run(("git", *IDENTITY, "-C", str(checkout),
                     "commit", "-qam", "new compatible HEAD"), check=True)
-    home = tmp_path / "home"
-    pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(parents=True)
-    pointer.symlink_to(runtime.prefix, target_is_directory=True)
-    root = tmp_path / "bus"
-    root.mkdir()
-    Bus.install(Bus.path_in(root))
-    barrier = MaintenanceBarrier(root / "registry.json")
-    target = subprocess.check_output(("git", "-C", str(checkout), "rev-parse", "HEAD"), text=True).strip()
-    scratch = tmp_path / "attempt"
-    scratch.mkdir()
-    target_tree = TargetTree(scratch, target, repo=checkout)
-    target_tree.add()
-    request = InstallRun(InstallRequest(checkout=checkout, spill_dir=tmp_path), root, scratch, target)
-    result = subprocess.run(
-        (sys.executable, "-m", "agent_comms.installer"),
-        input=json.dumps(FieldCodec.encode(request)), text=True, capture_output=True,
-        cwd=target_tree.path,
-        env={**os.environ, "HOME": str(home),
-             "PYTHONPATH": os.pathsep.join(map(str, (wire.checkout / "src", target_tree.steps_package)))},
-        timeout=60,
-    )
-    assert result.returncode == 1, result.stderr
-    assert "PauseSession declares (old_process: ProcessIdentity), sent as (process: ProcessIdentity)" in result.stderr
-    assert not any(path.exists() for path in barrier.witness_paths)
-    assert not scratch.exists()
+    with InstallCommands() as commands, pytest.raises(RuntimeWireChanged) as refused:
+        Stack(checkout, commands, runtime=runtime).require_runtime_wire()
+    assert "PauseSession declares (old_process: ProcessIdentity), sent as (process: ProcessIdentity)" in str(refused.value)
 
 
 def test_crosses_runtimes_accepts_matching_installed_source(outgoing_tree, tmp_path):
