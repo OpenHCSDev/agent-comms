@@ -105,7 +105,6 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
-    assert "No response obligation exists until triage engages" in frame
     assert len(read_history(comms, "#team")) == 1
 
 

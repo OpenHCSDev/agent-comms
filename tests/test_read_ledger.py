@@ -149,7 +149,7 @@ def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacemen
 def test_bounded_page_marks_only_shown_messages(tmp_path):
     comms = prepared(tmp_path)
     for i in range(5):
-        comms.messaging.send("alice", "#team", f"message {i}").message.message_id
+        comms.messaging.send("alice", "#team", f"message {i}")
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name), bounds=PageBounds(limit=2))
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 3
@@ -157,7 +157,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
 
 def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms = prepared(tmp_path)
-    comms.messaging.send("alice", "#team", "visible in both views").message.message_id
+    comms.messaging.send("alice", "#team", "visible in both views")
     page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
     comms.views.mark_page_read(page, worktree=Checkout(tmp_path))
     assert wire(tmp_path).views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#any"].count == 0
@@ -188,7 +188,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
     peer = comms.registry.require("alice")
     comms.registry.register(replace(peer, process_identity=ProcessIdentity.capture(os.getpid())))
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("alice", viewer, "painted").message.message_id
+    comms.messaging.send("alice", viewer, "painted")
     page = comms.views.dm_display_page(ThreadTarget("alice"), worktree=Checkout(tmp_path))
     assert page.selection.basis.peer_identity == peer.incarnation
     comms.registry.lease_local_turn("alice", TurnId('0b225c32b06b9107d59b5d92d13b83a3'))
@@ -394,7 +394,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
     for target in (viewer, "#team"):
-        comms.messaging.send("alice", target, "initial unread").message.message_id
+        comms.messaging.send("alice", target, "initial unread")
     painted, acknowledged = set(), set()
     pending = []
 
@@ -423,7 +423,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
     rng.shuffle(operations)
     for index, operation in enumerate(operations):
         if operation == "send":
-            comms.messaging.send("alice", rng.choice([viewer, "#team", "bob"]), f"row {index}").message.message_id
+            comms.messaging.send("alice", rng.choice([viewer, "#team", "bob"]), f"row {index}")
         elif operation == "mode":
             comms.channels.set_channel_any_mode("#team", rng.choice([True, False]))
         elif operation == "display":

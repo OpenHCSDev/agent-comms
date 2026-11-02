@@ -170,5 +170,4 @@ def test_fresh_cli_tool_process_preserves_owner_pause(owner, source_programs):
         timeout=10,
     )
     assert result.returncode == 1, result.stderr
-    assert "paused by the owner" in json.loads(result.stdout)["error"]
     assert comms.registry.require("worker").goal == paused

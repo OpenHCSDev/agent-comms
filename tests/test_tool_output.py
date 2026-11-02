@@ -68,7 +68,7 @@ def inbox_comms(root):
 def test_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
-    comms.messaging.send("a", "b", "An unread new message").message.message_id
+    comms.messaging.send("a", "b", "An unread new message")
     authority_before = ledger.path.read_bytes()
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b").page.messages],
@@ -89,7 +89,7 @@ def test_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, cou
 def test_invalid_page_limit_refuses_before_reading(inbox_comms, limit):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)
-    comms.messaging.send("a", "b", "Still unread after failure").message.message_id
+    comms.messaging.send("a", "b", "Still unread after failure")
     authority_before = ledger.path.read_bytes()
 
     with pytest.raises(ValueError):
