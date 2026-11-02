@@ -42,14 +42,14 @@ def test_local_package_membership_comes_from_both_source_declarations() -> None:
     })
 
 
-@pytest.mark.parametrize("dependencies,allowed,declared_python", [
-    pytest.param((), True, "", id="dependencies0-True"),
-    pytest.param(("idna==3.10",), False, "", id="dependencies1-False"),
-    pytest.param((), True, ">=3.14", id="requires-python"),
+@pytest.mark.parametrize("dependencies,declared_python", [
+    pytest.param((), "", id="unchanged-dependencies"),
+    pytest.param(("idna==3.10",), "", id="added-dependency"),
+    pytest.param((), ">=3.14", id="requires-python"),
 ])
-def test_private_project_preserves_settings_pins_and_refuses_external_migration(
+def test_private_project_preserves_settings_pins_and_captured_sources(
     mutual_sources: MutualSources, github_cli: GitHubFixture, tmp_path: Path,
-    dependencies: tuple[str, ...], allowed: bool, declared_python: str,
+    dependencies: tuple[str, ...], declared_python: str,
     monkeypatch: pytest.MonkeyPatch, test_uv: Path,
 ) -> None:
     pair = mutual_sources
@@ -84,23 +84,18 @@ def test_private_project_preserves_settings_pins_and_refuses_external_migration(
                                inputs=inputs, uv_program=test_uv)
         original = checker.core / "stack"
         before = (original / "pyproject.toml").read_bytes(), (original / "uv.lock").read_bytes()
-        if allowed:
-            checker.write_project()
-            expected = tomllib.loads(before[0].decode())
-            expected["tool"]["uv"]["sources"]["agent-comms"] = {"path": str(checker.core), "editable": True}
-            expected["tool"]["uv"]["sources"]["source-client"] = {
-                "path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True,
-                "marker": "python_version >= '3.10'", "fixture-option": {"preserved": True}}
+        checker.write_project()
+        expected = tomllib.loads(before[0].decode())
+        expected["tool"]["uv"]["sources"]["agent-comms"] = {"path": str(checker.core), "editable": True}
+        expected["tool"]["uv"]["sources"]["source-client"] = {
+            "path": str(HeadSide.checkout(pair.output, pair.client.github)), "editable": True,
+            "marker": "python_version >= '3.10'", "fixture-option": {"preserved": True}}
 
-            assert tomllib.loads((checker.checkout / "stack/pyproject.toml").read_text()) == expected
-            assert checker.lock.read_bytes() == before[1]
-            monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
-            with pytest.raises(ValueError, match="isolated runner bootstrap prefix"):
-                checker.prepare()
-        else:
-            with pytest.raises(ValueError, match="External runtime dependency migration"):
-                checker.write_project()
-            assert not checker.checkout.exists()
+        assert tomllib.loads((checker.checkout / "stack/pyproject.toml").read_text()) == expected
+        assert checker.lock.read_bytes() == before[1]
+        monkeypatch.setenv("RUNNER_TEMP", str(tmp_path))
+        with pytest.raises(ValueError, match="isolated runner bootstrap prefix"):
+            checker.prepare()
         assert ((original / "pyproject.toml").read_bytes(), (original / "uv.lock").read_bytes()) == before
         for side in (BaseSide, HeadSide):
             for source in inputs.sources:
@@ -135,11 +130,12 @@ def test_bootstrap_extra_is_runtime_only_when_the_virtual_root_requests_it(
     with InstallCommands() as commands:
         checker = CheckerStack(checkout=tmp_path / "checker", commands=commands, home=tmp_path,
             runtime=LaunchRuntime.running(), source_directory=pair.output, inputs=inputs, uv_program=test_uv)
-        if requested:
-            with pytest.raises(ValueError, match="External runtime dependency migration"):
-                checker.require_runtime_compatibility()
-        else:
-            checker.require_runtime_compatibility()
+        checker.write_project()
+        private = PrivateUvProject.read(checker.checkout / "stack/pyproject.toml")
+        projected = tuple(Requirement(text) for text in private.project.dependencies)
+        baseline_edges = tuple(edge for edge in projected if edge.name == "idna")
+        assert tuple(str(edge) for edge in baseline_edges) == (("idna>=3.9",) if requested else ())
+        checker.resolve()  # Both compatible bounds belong to one actual solve.
         before = checker.clients.projects(BaseSide)[pair.core.github]
         after = checker.clients.projects(HeadSide)[pair.core.github]
         assert before.requirements != after.requirements  # Complete metadata was never filtered away.
