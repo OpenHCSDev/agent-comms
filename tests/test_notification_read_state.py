@@ -40,7 +40,8 @@ from agent_comms.nominal.field_codec import OrderId
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.transcripts import EarlierThan, NativeTranscriptCursor
 from agent_comms.ui_model.observation import (
-    ObserveNotifications, ReadNotifications, ReadOperation, ReadOwnerOperation,
+    NotificationBatch, NotificationsObserved, ObserveNotifications, ReadNotifications, ReadOperation,
+    ReadOwnerOperation,
     ReadTranscript, ReadTranscriptUpdate, RefreshTranscript, SubscribeTranscript,
 )
 
@@ -152,19 +153,43 @@ def test_unrelated_registry_change_keeps_the_notification_window(comms: Comms, t
     assert not settled.live_changed(comms, later)
 
 
-def test_changed_notification_interest_keeps_only_retained_read_states():
-    kept = ReadNotifications('kept', LiveNotificationRead(()))
-    removed = ReadNotifications('removed', LiveNotificationRead(()))
-    added = ReadNotifications('added', LiveNotificationRead(()))
-    previous = ObserveNotifications(frozenset((kept, removed))).observation()
+def batch_of(request: ReadNotifications) -> NotificationBatch:
     state = NotificationsRead(WireRevision.empty())
-    previous.read_states = {kept: state, removed: state}
-    requested = ObserveNotifications(frozenset((kept, added))).observation()
+    return NotificationBatch(request, state, NotificationsObserved(WireRevision.empty(), request, {}))
 
-    continued = previous.for_interest(requested)
 
-    assert continued is requested
-    assert requested.read_states == {kept: state}
+def test_changed_notification_interest_keeps_only_batches_a_request_still_shows():
+    shown, scrolled_away, revealed = (MessageReference(seq, MessageId.mint(f"m{seq}")) for seq in (1, 2, 3))
+    view = ReadNotifications("root", LiveNotificationRead((shown, scrolled_away)))
+    kept, dropped = batch_of(view.showing((shown,))), batch_of(view.showing((scrolled_away,)))
+    previous = ObserveNotifications(frozenset((view,))).observation()
+    previous.batches = (kept, dropped)
+    requested = ObserveNotifications(frozenset((view.showing((shown, revealed)),))).observation()
+
+    assert previous.for_interest(requested) is requested
+    assert requested.batches == (kept,)
+
+
+def test_a_scrolled_view_reads_only_the_messages_no_batch_covers(comms, tmp_path):
+    """An outcome belongs to its message: scrolling one row reads that row, not the page."""
+    first = declare_team(comms, tmp_path)
+    second, third = (comms.messaging.send("sender", "#team", text).message.reference
+                     for text in ("Second?", "Third?"))
+    view = ReadNotifications(str(comms.root), LiveNotificationRead((first, second)))
+    reading = ObserveNotifications(frozenset((view,))).observation()
+    answers = list(reading.read(comms, comms.views.revision()))
+    assert [answer.request for answer in answers] == [view]
+    assert answers[0].outcomes.keys() == {(first.seq, first.message_id), (second.seq, second.message_id)}
+
+    scrolled = view.showing((second, third))
+    moved = ObserveNotifications(frozenset((scrolled,))).observation()
+    assert reading.for_interest(moved) is moved
+    answers = list(moved.read(comms, comms.views.revision()))
+
+    assert [batch.request.operation.references for batch in moved.batches] == [(first, second), (third,)]
+    assert [answer.request for answer in answers] == [scrolled]
+    assert answers[0].outcomes.keys() == {(second.seq, second.message_id), (third.seq, third.message_id)}
+    assert list(moved.read(comms, comms.views.revision())) == []
 
 
 REFERENCES = (MessageReference(1, MessageId.mint("original")),)
@@ -199,20 +224,20 @@ def test_root_request_references_and_archive_each_distinguish_a_notification_req
     assert len({request, *distinct}) == 1 + len(distinct)
 
 
-def test_equal_requests_keep_their_read_state_and_a_new_archive_drops_it():
+def test_equal_requests_keep_their_batches_and_a_new_archive_drops_them():
     kept = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive")))
     replaced = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("detached")))
     reattached = ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("attached")))
     previous = ObserveNotifications(frozenset((kept, replaced))).observation()
-    state = NotificationsRead(WireRevision.empty())
-    previous.read_states = {kept: state, replaced: state}
+    batch = batch_of(kept)
+    previous.batches = (batch, batch_of(replaced))
     requested = ObserveNotifications(frozenset((
         ReadNotifications("root", RecordedNotificationRead(REFERENCES, HistorySourceKey("archive"))), reattached,
     ))).observation()
 
     assert previous.for_interest(requested) is requested
-    assert requested.read_states == {kept: state}
-    assert requested.read_states[kept] is state
+    assert requested.batches == (batch,)
+    assert requested.batches[0] is batch
 
 
 def test_one_operation_in_two_root_envelopes_keeps_root_validation(comms):

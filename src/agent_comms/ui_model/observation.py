@@ -58,6 +58,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.history_views import RetiredViews
 from agent_comms.message_notification import NotificationWindow
 from agent_comms.notification_read import NotificationsRead, UnreadableNotificationsRead
+from agent_comms.message_reference import MessageReference
 from agent_comms.notification_reads import NotificationRead
 from agent_comms.read_basis import DisplayCut, NoDisplaySelection
 from agent_comms.message_notification import MessageNotification
@@ -590,6 +591,20 @@ class ReadNotifications(ReadRequest):
     def read(self, comms: Comms) -> NotificationWindow:
         return self.operation.apply(comms, self.display)
 
+    @property
+    def keys(self) -> tuple[tuple[int, str], ...]:
+        """The outcome keys this read shows, as windows key their outcomes."""
+        return tuple((reference.seq, reference.message_id) for reference in self.operation.references)
+
+    @property
+    def family(self) -> ReadNotifications:
+        """This read with its references removed: reads in one family differ only in which
+        messages they show, so one family's batches answer each other's references."""
+        return self.showing(())
+
+    def showing(self, references: tuple[MessageReference, ...]) -> ReadNotifications:
+        return replace(self, operation=replace(self.operation, references=references))
+
 
 @dataclass(frozen=True)
 class ReadOwnerOperation(OwnerRead):
@@ -746,42 +761,104 @@ class ObserveNotifications(InterestRequest):
         return NotificationReading(self)
 
 
+@dataclass(frozen=True, eq=False)
+class NotificationBatch:
+    """One store read of some message references and where it settled. Requests that differ
+    only in which references they show share batches: an outcome belongs to its message, not
+    to the set of messages that happened to be visible together."""
+
+    request: ReadNotifications
+    state: NotificationsRead
+    observed: NotificationAnswer
+
+    @cached_property
+    def keys(self) -> frozenset[tuple[int, str]]:
+        return frozenset(self.request.keys)
+
+
 class NotificationReading(ReadingObservation[ObserveNotifications]):
+    """Answers each visible-set request from the batches that cover it, and reads only the
+    references no current batch covers. Scrolling therefore reads the newly visible rows,
+    not every visible row again."""
+
     view = NotificationsView()
 
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
-        self.read_states: dict[ReadNotifications, NotificationsRead] = {}
+        self.batches: tuple[NotificationBatch, ...] = ()
+        self.answered: dict[ReadNotifications, tuple[NotificationBatch, ...]] = {}
+
+    def wanted(self) -> dict[ReadNotifications, frozenset[tuple[int, str]]]:
+        """Every key some open request shows, by the request family that reads it."""
+        wanted: dict[ReadNotifications, frozenset[tuple[int, str]]] = {}
+        for request in self.request.reads:
+            wanted[request.family] = wanted.get(request.family, frozenset()) | frozenset(request.keys)
+        return wanted
 
     def continue_from(self, previous: Self) -> Self:
-        self.read_states = {request: state for request, state in previous.read_states.items()
-                            if request in self.request.reads}
+        wanted = self.wanted()
+        self.batches = tuple(batch for batch in previous.batches
+                             if batch.keys & wanted.get(batch.request.family, frozenset()))
+        self.answered = {request: batches for request, batches in previous.answered.items()
+                         if request in self.request.reads}
         return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Generator[ObservationStep]:
-        for request in self.request.reads:
-            previous = self.read_states.get(request)
-            if previous is not None and not request.operation.changed_since(comms, revision, previous):
+        current, stale = [], []
+        for batch in self.batches:
+            changed = batch.request.operation.changed_since(comms, revision, batch.state)
+            (stale if changed else current).append(batch)
+        pending: set[ReadNotifications] = set()
+        for family, keys in self.wanted().items():
+            covered = frozenset().union(*(batch.keys for batch in current if batch.request.family == family))
+            missing = tuple(dict.fromkeys(
+                reference for request in self.request.reads if request.family == family
+                for reference in request.operation.references
+                if (reference.seq, reference.message_id) not in covered))
+            if not missing:
                 continue
-            yield self.notifications(request, comms, revision, previous)
+            known = frozenset().union(*(batch.state.activity.keys() for batch in stale
+                                        if batch.request.family == family))
+            batch = self.batch(family.showing(missing), comms, revision, known)
+            if batch is None:
+                pending.add(family)
+                yield ObservationPending()  # Keep the interest until its source can be read.
+            else:
+                current.append(batch)
+        self.batches = tuple(current)
+        for request in self.request.reads:
+            if request.family not in pending:
+                yield from self.answer(request, revision)
 
-    def notifications(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
-                      previous: NotificationsRead | None) -> ObservationStep:
-        known = comms.views.observed_activity(revision, () if previous is None else previous.activity)
+    def batch(self, request: ReadNotifications, comms: Comms, revision: WireRevision,
+              known: frozenset[str]) -> NotificationBatch | None:
+        activity = comms.views.observed_activity(revision, known)
 
         def read() -> NotificationWindow:
             request.require_root(comms)
             return request.read(comms)
 
-        def settled(result: Observed, state: NotificationsRead) -> Observed:
-            self.read_states[request] = state
-            return result
         return UnreadableHistory.outcome(read).answer(
-            lambda window: settled(NotificationsObserved(revision, request, window.outcomes),
-                                   NotificationsRead.of(revision, comms, known, window)),
-            lambda error: ObservationPending(),  # Keep the interest until its source can be read.
-            lambda error: settled(NotificationsUnreadable(revision, request, error),
-                                  UnreadableNotificationsRead(revision)))
+            lambda window: NotificationBatch(
+                request, NotificationsRead.of(revision, comms, activity, window),
+                NotificationsObserved(revision, request, window.outcomes)),
+            lambda error: None,
+            lambda error: NotificationBatch(
+                request, UnreadableNotificationsRead(revision),
+                NotificationsUnreadable(revision, request, error)))
+
+    def answer(self, request: ReadNotifications, revision: WireRevision) -> Iterator[Observed]:
+        """Send a request its outcomes only when a batch behind them was read since."""
+        keys = frozenset(request.keys)
+        sources = tuple(batch for batch in self.batches
+                        if batch.request.family == request.family and batch.keys & keys)
+        if sources == self.answered.get(request):
+            return
+        self.answered[request] = sources
+        answer: NotificationAnswer = NotificationsObserved(revision, request, {})
+        for batch in sources:
+            answer = batch.observed.joined(answer, keys)
+        yield answer
 
 
 @dataclass(frozen=True)
@@ -1093,15 +1170,50 @@ class ThreadsObserved(Observed):
 
 
 @dataclass(frozen=True)
-class NotificationsObserved(Observed):
+class NotificationAnswer(Observed, ABC):
+    """What one notification read answers its request: its outcomes, or why it could not read.
+    A request's answer folds the answers of the batches behind it."""
+
     request: ReadNotifications
-    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+
+    @abstractmethod
+    def joined(self, answer: NotificationAnswer,
+               keys: frozenset[tuple[int, str]]) -> NotificationAnswer:
+        """This batch's answer folded into a request's answer so far."""
+
+    @abstractmethod
+    def including(self, batch: NotificationsObserved,
+                  keys: frozenset[tuple[int, str]]) -> NotificationAnswer:
+        """This request answer with a readable batch's outcomes for the shown keys."""
 
 
 @dataclass(frozen=True)
-class NotificationsUnreadable(Observed):
-    request: ReadNotifications
+class NotificationsObserved(NotificationAnswer):
+    outcomes: Mapping[tuple[int, str], tuple[MessageNotification, ...]]
+
+    def joined(self, answer: NotificationAnswer,
+               keys: frozenset[tuple[int, str]]) -> NotificationAnswer:
+        """A readable batch adds its outcomes for the shown keys to a request's answer."""
+        return answer.including(self, keys)
+
+    def including(self, batch: NotificationsObserved,
+                  keys: frozenset[tuple[int, str]]) -> NotificationsObserved:
+        return replace(self, outcomes={**self.outcomes, **{
+            key: rows for key, rows in batch.outcomes.items() if key in keys}})
+
+
+@dataclass(frozen=True)
+class NotificationsUnreadable(NotificationAnswer):
     error: UnreadableHistory
+
+    def joined(self, answer: NotificationAnswer,
+               keys: frozenset[tuple[int, str]]) -> NotificationsUnreadable:
+        """One unreadable batch makes the whole answer unreadable."""
+        return NotificationsUnreadable(answer.revision, answer.request, self.error)
+
+    def including(self, batch: NotificationsObserved,
+                  keys: frozenset[tuple[int, str]]) -> NotificationsUnreadable:
+        return self
 
 
 @dataclass(frozen=True)
