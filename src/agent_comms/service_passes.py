@@ -49,8 +49,8 @@ class FailingPass:
     failed_at: float
 
     def failure_line(self, watch: str) -> str:
-        return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}'
-                f' ({max(0, int(time.time() - self.since))}s elapsed):'
+        """The stable condition a heartbeat line captures; its age is painted by whoever renders it."""
+        return (f'FIX service pass {watch} failing since {RecordedEventTime(self.since).clock()}:'
                 f' {self.error}. is anyone fixing it, or letting it pile up?'
                 ' -> fix the owner of the failing read this wake')
 
@@ -61,8 +61,10 @@ class ServicePasses:
     commander_completed: dict[RecordedThreadIncarnation, float] = field(default_factory=dict)
     """Last observation completed for each teammate, including quiet observations."""
 
-    def failure_lines(self) -> tuple[str, ...]:
-        return tuple(failure.failure_line(watch) for watch, failure in sorted(self.failing.items()))
+    def failure_lines(self, now: float) -> tuple[str, ...]:
+        """Painted at read time: each stable line with its age, as a heartbeat line renders."""
+        return tuple(f'{failure.failure_line(watch)} ({RecordedEventTime(failure.since).age(now)})'
+                     for watch, failure in sorted(self.failing.items()))
 
     def heartbeat_completed_at(self, commander: RecordedThreadIncarnation) -> EventTime:
         """The original completion clock, or its declared unrecorded state."""
@@ -89,8 +91,9 @@ class ServiceReading(ToolResult):
 
     @projected(view=WireExclude)
     def service_status(self) -> tuple[str, ...]:
-        clock = self.heartbeat.aged_line('Tristan last completed', time.time())
-        failures = self.services.failure_lines()
+        now = time.time()
+        clock = self.heartbeat.aged_line('Tristan last completed', now)
+        failures = self.services.failure_lines(now)
         if not failures and not self.services.heartbeat_current(self.heartbeat):
             failures = ('no failure recorded, so no heartbeat is running',)
         return (*failures, *(clock or ('Tristan last completed: unrecorded',)))
