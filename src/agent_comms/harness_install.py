@@ -37,8 +37,8 @@ def replace_link(link: Path, target: Path) -> None:
         raise FileExistsError(f"Install cannot replace a regular file: {link}")
     link.parent.mkdir(parents=True, exist_ok=True)
     temporary = link.with_name(f".{link.name}.{ScratchName.mint()}")
+    temporary.symlink_to(target)
     try:
-        temporary.symlink_to(target)
         os.replace(temporary, link)
         Platform.current().sync_directory(link.parent)
     finally:
