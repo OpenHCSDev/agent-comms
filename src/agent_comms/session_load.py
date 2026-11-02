@@ -1,5 +1,6 @@
 """The declared session type checks owner permission when handling an ACP load."""
 from abc import abstractmethod
+from collections.abc import Awaitable, Callable
 from functools import partial
 from .coordinator import Coordination
 from dataclasses import dataclass
@@ -35,6 +36,12 @@ class SessionLoadPlan(DeclaredFamily, affix='SessionLoadPlan'):
     def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
         return False
 
+    async def reload_if_superseded(
+        self, binding: LiveThreadOwnerBinding,
+        reload: Callable[['SessionLoadPlan'], Awaitable[None]],
+    ) -> None:
+        """A plan without an owner witness cannot request an observed reload."""
+
     @abstractmethod
     async def resolve(self, lifecycle: "AttachedSessionLifecycle", thread: "Thread") -> "Thread": ...
 
@@ -57,6 +64,13 @@ class WitnessedSessionLoadPlan(SessionLoadPlan):
 
     def superseded_by(self, binding: ThreadOwnerBinding) -> bool:
         return self.binding.superseded_by(binding)
+
+    async def reload_if_superseded(
+        self, binding: LiveThreadOwnerBinding,
+        reload: Callable[[SessionLoadPlan], Awaitable[None]],
+    ) -> None:
+        if self.superseded_by(binding):
+            await reload(ExistingSessionLoadPlan(binding))
 
 
 @dataclass(frozen=True, slots=True)
