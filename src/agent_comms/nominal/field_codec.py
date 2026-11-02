@@ -37,6 +37,7 @@ from typing import (
     get_type_hints,
     overload,
 )
+from urllib.parse import quote
 from uuid import uuid4
 from weakref import WeakKeyDictionary
 
@@ -1114,6 +1115,10 @@ class ValueDecoder[T](DecoderPlan, JsonSchemaOwner):
         )
         return next(iter(cls._registered(annotation)), scalar)
 
+    def value_schema(self) -> dict[str, JsonValue]:
+        """The compiled decoder owns target-dependent schema as well as conversion."""
+        return self.schema()
+
     @classmethod
     def with_representation(
         cls, annotation: object, target: object, args: tuple[object, ...],
@@ -1450,7 +1455,7 @@ class StructuralRepresentation(FieldRepresentation):
             return FieldCodec._family_schema(annotation)
         if isinstance(annotation, type) and is_dataclass(annotation):
             return FieldCodec.record_schema(annotation)
-        return ValueDecoder.represented_class(annotation).schema()
+        return compile_decoder(annotation).value_schema()
 
 
 class AcceptsNull[T](FieldRepresentation[T]):
@@ -3788,7 +3793,19 @@ def _structural_decoder(annotation: object) -> ValueDecoder[object]:
 class _PydanticDecoder(ValueDecoder[object]):
     """An external model owns its validation and JSON representation."""
 
+    origins = (BaseModel,)
     target: type[BaseModel]
+
+    def value_schema(self) -> dict[str, JsonValue]:
+        # A model's root-relative references belong to that model's resource,
+        # even when its schema is nested inside a tool field or union.
+        identity = quote(f"{self.target.__module__}.{self.target.__qualname__}", safe="")
+        return {
+            "$id": f"urn:python-schema:{identity}",
+            **FieldCodec.decode(dict[str, JsonValue], self.target.model_json_schema(
+                by_alias=True, mode="validation",
+            )),
+        }
 
     @boundary_decoder
     def decode(self, data: object) -> BaseModel:
@@ -3811,8 +3828,6 @@ class _MemberDecoders(dict[object, ValueDecoder[object]]):
     def __missing__(self, target: object) -> ValueDecoder[object]:
         if isinstance(target, type) and is_dataclass(target):
             decoder: ValueDecoder[object] = _RecordDecoder(target)
-        elif isinstance(target, type) and issubclass(target, BaseModel):
-            decoder = _PydanticDecoder(target)
         else:
             raise UnsupportedFieldType(f"Unsupported JSON type: {target}")
         self[target] = decoder

@@ -31,10 +31,14 @@ from agent_comms.nominal.declared_family import DeclaredFamily
 from agent_comms.nominal.field_codec import FieldCodec, GitCommitText, boundary_decoder
 from agent_comms.installer.commands import InstallCommands
 from agent_comms.installer.interpreter_operation import RuntimeProbe
+from agent_comms.installer.probes.interpreter import (
+    InterpreterBuild,
+    InterpreterBuildProbe,
+    RecordedInterpreterBuild,
+)
 from agent_comms.installer.probes.packages import (
     DistributionVersionsProbe,
     GitPin,
-    InstalledPackagesProbe,
     PackagePin,
     PackageRecord,
     PreparePackageProbe,
@@ -637,6 +641,11 @@ class RuntimePackage(DeclaredFamily, affix="Package"):
         return resolution.packages[cls.distribution].source.revision()
 
     @classmethod
+    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
+        """Package origin owns its pin; an archive is not a repository revision."""
+        return resolution.packages[cls.distribution].pin()
+
+    @classmethod
     def preparations(cls) -> tuple[RuntimeProbe[None], ...]:
         """Only packages declaring requirements add target-runtime operations."""
         return ()
@@ -653,6 +662,11 @@ class CorePackage(RuntimePackage, ConsoleScriptPackage):
     @classmethod
     def commit(cls, resolution: RuntimeResolution) -> str:
         return resolution.core_commit
+
+    @classmethod
+    def pin(cls, resolution: RuntimeResolution) -> PackagePin:
+        """Core's built wheel carries its source stamp separately from its URL."""
+        return GitPin(resolution.packages[cls.distribution].version, cls.commit(resolution))
 
 
 class ToadPackage(RuntimePackage, ConsoleScriptPackage):
@@ -842,8 +856,12 @@ class UnbuiltRuntime:
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
         return False
 
-    def prepare(self, stack: RuntimeStack) -> None:
+    def prepare(self, stack: RuntimeStack, core: str) -> None:
         stack.sync()
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """Only the explicit-input stack can supply wheels before first capture."""
+        return ()
 
     def complete(self, stack: RuntimeStack, core: str) -> None:
         """Link the native package, record the resolution and prove the client imports; a
@@ -860,6 +878,16 @@ class UnbuiltRuntime:
 class RuntimeResolution(BaseModel):
     core_commit: str
     packages: dict[str, PackageRecord]
+    interpreter: RecordedInterpreterBuild | InterpreterBuild = Field(
+        default_factory=InterpreterBuild
+    )
+
+    def require_runtime(self, actual: RuntimeResolution) -> None:
+        """Admit observed inputs, never turn an old missing observation into proof."""
+        self.interpreter.require_recorded()
+        actual.interpreter.require_recorded()
+        if self != actual:
+            raise UpgradeRefused("Observed runtime differs from its recorded build inputs")
 
     @classmethod
     def record_path(cls) -> Path:
@@ -879,19 +907,30 @@ class RuntimeResolution(BaseModel):
             return UnbuiltRuntime(prefix)
         return cls.at(prefix)
 
-    def prepare(self, stack: RuntimeStack) -> None:
-        """A recorded runtime is already synced; ``complete`` checks it still matches."""
-
-    def complete(self, stack: RuntimeStack, core: str) -> None:
+    def prepare(self, stack: RuntimeStack, core: str) -> None:
+        """Production-cache reuse must still satisfy the newly resolved source lock."""
         if not self.matches(stack.lock, stack, core):
             raise UpgradeRefused("Existing built runtime differs from its resolved inputs")
+
+    def complete(self, stack: RuntimeStack, core: str) -> None:
+        """Completion proves recorded inputs, not eligibility for a different build."""
+        self.require_runtime(self.capture(stack, core))
         stack.stage_native()
         stack.prepare_runtime()
 
     @classmethod
     def capture(cls, stack: RuntimeStack, core: str) -> RuntimeResolution:
-        packages = stack.probe(InstalledPackagesProbe(core))
-        return cls(core_commit=core, packages=packages)
+        from agent_comms.installer.probes.resolution import RuntimeResolutionProbe
+
+        return stack.probe(RuntimeResolutionProbe(core, stack.wheel_inputs()))
+
+    def wheel_inputs(self) -> tuple[Path, ...]:
+        """Only content-qualified archive records request another wheel observation."""
+        return tuple(
+            wheel
+            for package in self.packages.values()
+            for wheel in package.source.wheel_inputs()
+        )
 
     def save(self, prefix: Path) -> None:
         path = prefix / self.record_path().name
@@ -902,14 +941,14 @@ class RuntimeResolution(BaseModel):
         result: dict[str, PackagePin] = {
             canonicalize_name(name): record.pin() for name, record in self.packages.items()
         }
-        # Wheel URLs locate build output, not the source revisions recorded by this owner.
         for member in RuntimePackage.members_with(RuntimePackage):
-            result[member.distribution] = GitPin(
-                self.packages[member.distribution].version, member.commit(self)
-            )
+            result[member.distribution] = member.pin(self)
         return result
 
     def matches(self, lock: Path, stack: RuntimeStack, core: str) -> bool:
+        recorded_interpreter = self.interpreter.require_recorded()
+        if recorded_interpreter != stack.probe(InterpreterBuildProbe()):
+            return False
         resolved = ResolvedLock.read(lock)
         print(f"install: real lock decodes {len(resolved.package)} packages", file=sys.stderr)
         # sync --locked has already selected the platform, groups and extras. Read its

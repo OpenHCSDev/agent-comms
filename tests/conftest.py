@@ -58,6 +58,7 @@ from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.commander.order import Commander
 from agent_comms.repo import Repo
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.installer.probes.interpreter import InterpreterBuildProbe, RecordedInterpreterBuild
 from source_programs import SourcePrograms
 from source_revision_fixture import SourceRepository
 from agent_comms.threads import Thread
@@ -445,7 +446,19 @@ def configured_repository(durable_home: Path, github_cli) -> Callable[[Comms, *t
 
 
 @pytest.fixture
-def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
+def interpreter_build() -> RecordedInterpreterBuild:
+    """The native implementation tests execute under, also symlinked by fixture runtimes.
+
+    This observes the real current interpreter; it does not claim a process ran
+    inside the synthetic installation's package environment.
+    """
+    return InterpreterBuildProbe().run()
+
+
+@pytest.fixture
+def installed_runtime(
+    durable_home: Path, tmp_path: Path, interpreter_build: RecordedInterpreterBuild,
+) -> LaunchRuntime:
     """A temporary installation record, executable and pointer, never the real home."""
     from agent_comms.installer.probes.packages import CommitRecord, GitRecord, PackageRecord
     from agent_comms.installer.runtime_resolution import RuntimePackage, RuntimeResolution
@@ -462,7 +475,7 @@ def installed_runtime(durable_home: Path, tmp_path: Path) -> LaunchRuntime:
         )
     return record_installed_runtime(tmp_path / 'installed-runtime', RuntimeResolution(
         core_commit=repository.git(repository.checkout, 'rev-parse', 'HEAD').strip(),
-        packages=packages,
+        packages=packages, interpreter=interpreter_build,
     ))
 
 
