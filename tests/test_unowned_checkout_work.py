@@ -232,7 +232,11 @@ def test_a_non_refreshable_todo_conflict_does_not_end_the_heartbeat_pass(checkou
     with LaunchRoot.from_path(c.root).selected():
         run_heartbeat_rules(c, (stale, following))
         update, = CommanderUpdate.latest(c, c.registry.require('lead').incarnation)
-        assert update.not_applied == (stale.rejected_line(StaleTodoDecision(current)),)
+        # The rule's line counts seconds since its failure, so the pass's render and this one
+        # can differ by a clock tick; the refusal and the rule it refused are the facts.
+        refused, = update.not_applied
+        assert refused.startswith(f"Not applied ({StaleTodoDecision(current).explanation()}): ")
+        assert stale.watch in refused
         assert RulePing.capture(stale) not in update.handled
         assert RulePing.capture(following) in update.handled
         assert c.registry.require('lead').incarnation in (
