@@ -1,5 +1,3 @@
-
-from agent_comms.repo import Checkout
 """Counting a listing uses its captured identities, not a borrowed registry lock."""
 
 import multiprocessing
@@ -18,6 +16,7 @@ from agent_comms.cli_verbs.threads import ThreadsCliCommand
 from agent_comms.comms import Comms
 from agent_comms.presentation import CountedInbox
 from agent_comms.registry_store import RegistryStore
+from agent_comms.repo import Checkout
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 
