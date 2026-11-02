@@ -225,6 +225,7 @@ class FinishedPhases(HudRecord):
         return len(self.phases)
 
 
+@dataclass(frozen=True)
 class UnreadableUsage(RateLimitReading):
     reason: str
 

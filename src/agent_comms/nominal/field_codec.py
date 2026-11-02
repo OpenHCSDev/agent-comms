@@ -3843,8 +3843,11 @@ class _MemberDecoders(dict[object, ValueDecoder[object]]):
     """
 
     def __missing__(self, target: object) -> ValueDecoder[object]:
-        if isinstance(target, type) and is_dataclass(target):
-            decoder: ValueDecoder[object] = _RecordDecoder(target)
+        decoder: ValueDecoder[object]
+        if isinstance(target, type) and issubclass(target, BaseModel):
+            decoder = _PydanticDecoder(target)
+        elif isinstance(target, type) and is_dataclass(target):
+            decoder = _RecordDecoder(target)
         else:
             raise UnsupportedFieldType(f"Unsupported JSON type: {target}")
         self[target] = decoder
