@@ -11,6 +11,7 @@ from agent_comms.cli_verbs.sync_checkout import SyncCheckoutCliCommand
 from agent_comms.repo import Checkout, GitCommandError
 from agent_comms.shell_effects import StorageDenied
 from agent_comms.storage_projection import StorageProjection
+from agent_comms.storage_rules import StorageRule
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from source_revision_fixture import SourceRepository
@@ -18,6 +19,10 @@ from source_revision_fixture import SourceRepository
 
 def test_canonical_sync_and_publication_preserve_source_and_prior_release(private_comms, tmp_path):
     comms = private_comms
+    comms.registry.storage_rule = StorageRule(
+        volume=tmp_path, floor_gib=0, checkout_base=tmp_path / "checkouts",
+        scratch_base=tmp_path / "scratch",
+    )
     repository = SourceRepository.create(tmp_path / "git", baseline_files={Path(".gitignore"): "release/\ncurrent\n"})
     checkout = PublishingCheckout(repository.checkout)
     user_file = checkout.path / "user-note"

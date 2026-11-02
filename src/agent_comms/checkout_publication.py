@@ -99,8 +99,12 @@ class CheckoutPublication:
             destination = self.checkout.output(self.destination)
             link = self.checkout.output(self.link)
             previous = self.checkout.output(self.previous)
-            if destination == link or destination in link.parents or link in destination.parents:
-                raise ValueError("Publication bundle and link must be separate paths")
+            if (destination == previous or destination in previous.parents
+                    or previous in destination.parents):
+                raise ValueError("New and previous publication bundles must be disjoint")
+            for bundle in (destination, previous):
+                if bundle == link or bundle in link.parents or link in bundle.parents:
+                    raise ValueError("Publication bundles and link must be separate paths")
             if destination.exists() or destination.is_symlink():
                 raise FileExistsError(f"Publication destination already exists: {destination}")
             if not link.is_symlink() or link.resolve(strict=True) != previous:
