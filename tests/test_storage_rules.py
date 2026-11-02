@@ -3,7 +3,7 @@
 import runpy
 import shutil
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -11,7 +11,8 @@ import pytest
 
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
-from agent_comms.nominal.field_codec import FieldCodec, RecordProblems
+from agent_comms.nominal.field_codec import FieldCodec, GoalId, RecordProblems
+from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.repo import Checkout, DetachedStart, LocalRepositorySource, Repo, RepositoryReads
 from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
@@ -321,6 +322,29 @@ def test_git_source_inside_scratch_still_requires_an_edit_allocation(
     Repo.git(source, 'init', '-q')
     with pytest.raises(StorageDenied, match='not allocated editable work'):
         StorageProjection(rule, thread, comms).require_write(source / 'implementation.py')
+
+
+def test_goal_donor_allocation_never_grants_source_writes(checkout_comms: Comms) -> None:
+    comms = checkout_comms
+    rule = comms.registry.storage_rule
+    owner = comms.registry.require('worker')
+    goal = GoalId.mint()
+    name = Repo.of(owner.project_path).github
+    donor = rule.repository_donor(owner, goal, name)
+    rule.require_repository_donor(owner, goal, name, donor)
+    projection = StorageProjection(rule, owner, comms)
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(donor / 'source.py')
+    donor.mkdir(parents=True)
+    Repo.git(donor, 'init', '-q')
+    with pytest.raises(StorageDenied, match='not allocated editable work'):
+        projection.require_write(donor / 'source.py')
+    next_birth = replace(owner, created_at=RecordedCreationTime(owner.created_at + 1))
+    assert rule.repository_donor(next_birth, goal, name) != donor
+    assert rule.repository_donor(owner, GoalId.mint(), name) != donor
+    assert rule.repository_donor(replace(owner, name='renamed'), goal, name) == donor
+    with pytest.raises(StorageDenied, match='goal and incarnation'):
+        rule.require_repository_donor(next_birth, goal, name, donor)
 
 
 def test_three_small_checkouts_are_admitted(checkout_comms: Comms):

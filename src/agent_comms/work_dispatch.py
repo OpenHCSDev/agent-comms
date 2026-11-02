@@ -25,7 +25,7 @@ from .phase_tasks import PhaseTask
 from .recorded_time import RecordedEventTime
 from .repo import Checkout, CheckoutStart, LocalRepositorySource, Repo
 from .repository_name import RepositoryName
-from .shell_effects import CreateCheckoutStorageEffect
+from .shell_effects import AcquireRepositoryStorageEffect, CreateCheckoutStorageEffect
 from .storage_projection import StorageProjection
 from .thread_status import StoppedThreadStatus
 from .session_file import RegistrySessionLocation
@@ -71,11 +71,12 @@ class WorkDispatch:
         self.action.require_ready(GoalActionContext(comms.goals, candidate))
         comms.registry.require_declaration_available(candidate, StoppedThreadStatus())
         repository = Repo.of(self.action.order.check.directory)
+        source = LocalRepositorySource(repository)
+        projection = StorageProjection(storage, candidate, comms)
+        AcquireRepositoryStorageEffect(checkout, source).check(projection)
         Repo.git(repository.checkout, "fetch", "origin", "main")
         start = CheckoutStart.of(repository.checkout, f"auto/{name}", "origin/main")
-        CreateCheckoutStorageEffect(checkout, LocalRepositorySource(repository), start).check(
-            StorageProjection(storage, candidate, comms)
-        )
+        CreateCheckoutStorageEffect(checkout, source, start).check(projection)
         Checkout.add(repository.checkout, checkout, start)
         location = candidate.runtime.new_location(comms.root, checkout)
         child = comms.registry.declare(

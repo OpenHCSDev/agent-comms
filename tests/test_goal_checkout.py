@@ -9,7 +9,7 @@ import pytest
 from agent_comms.cli_commands import GoalCheckoutGrant
 from agent_comms.comms import Comms
 from agent_comms.goals import Goal
-from agent_comms.repo import Checkout, GitHubRepositorySource, Repo, RepositoryReads, RepositorySource
+from agent_comms.repo import Checkout, DetachedStart, GitHubRepositorySource, Repo, RepositoryReads, RepositorySource
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.thread_creation import RecordedCreationTime
 from agent_comms.shell_effects import AcquireRepositoryStorageEffect, StorageDenied
@@ -201,6 +201,23 @@ def test_remote_goal_checkout_refuses_actual_origin_mismatch(
     assert refused.returncode != 0
     assert 'requested GitHub origin' in refused.stdout + refused.stderr
     assert (case.path / 'keep').read_text() == 'local work'
+
+
+def test_remote_goal_checkout_cannot_adopt_another_donor_of_the_same_repository(
+    remote_goal_checkout: RemoteGoalCheckout, tmp_path: Path,
+) -> None:
+    case = remote_goal_checkout
+    case.source.acquire(case.rule, case.worker)
+    foreign = tmp_path / 'retained-donor'
+    case.donor.rename(foreign)
+    Checkout.add(foreign, case.path, DetachedStart('HEAD'))
+    before = case.repository.git(foreign, 'show-ref')
+    refused = case.run()
+    assert refused.returncode != 0
+    assert 'goal-owned donor' in refused.stdout + refused.stderr
+    assert case.repository.git(foreign, 'show-ref') == before
+    assert Checkout(case.path).common_dir == foreign / '.git'
+    assert not case.donor.exists()
 
 
 @pytest.mark.parametrize('unborn', (False, True))

@@ -420,6 +420,7 @@ class StorageRule(RoomAllocation, DurableFile):
 
     def require_repository_donor(self, owner: Thread, goal: GoalId,
                                  repository: RepositoryName, path: Path) -> None:
+        self.require_destination(owner, path)
         self.require_physical_allocation(path)
         if path != self.repository_donor(owner, goal, repository):
             self.deny(f'{path} is not the repository donor of this goal and incarnation')
