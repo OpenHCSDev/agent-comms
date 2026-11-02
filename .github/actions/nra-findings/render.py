@@ -5,11 +5,12 @@ this only selects those lines from whatever else reached stderr (installer timin
 and splits them. A warn-only measure announces itself with a ``(warns, never blocks)`` warning,
 so its ``found`` lines are warn-only too; every other verdict line blocks.
 
-    python -I render.py STDERR_FILE MARKER KIND SHA OUTCOME > body.md
+    python -I render.py STDERR_FILE MARKER KIND SHA [--passed] > body.md
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -32,7 +33,7 @@ def fenced(lines: list[str], budget: int) -> str:
     return "```\n" + "\n".join(kept) + "\n```"
 
 
-def main(stderr: Path, marker: str, kind: str, sha: str, outcome: str) -> str:
+def main(stderr: Path, marker: str, kind: str, sha: str, passed: bool) -> str:
     lines = [line.rstrip() for line in stderr.read_text(errors="replace").splitlines()]
     advisory = {match["name"]: match for line in lines if (match := ADVISORY.match(line))}
     blocking, warns = [], []
@@ -46,7 +47,7 @@ def main(stderr: Path, marker: str, kind: str, sha: str, outcome: str) -> str:
             blocking.append(line)
 
     head = f"{marker}\n**{kind}** at {sha}"
-    if outcome == "success":
+    if passed:
         body = [f"{head} passes."]
     elif blocking:
         body = [f"{head} blocks on {len(blocking)} lines:", fenced(blocking, BUDGET * 3 // 4)]
@@ -61,5 +62,11 @@ def main(stderr: Path, marker: str, kind: str, sha: str, outcome: str) -> str:
 
 
 if __name__ == "__main__":
-    path, marker, kind, sha, outcome = sys.argv[1:]
-    sys.stdout.write(main(Path(path), marker, kind, sha, outcome))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("stderr", type=Path)
+    parser.add_argument("marker")
+    parser.add_argument("kind")
+    parser.add_argument("sha")
+    parser.add_argument("--passed", action="store_true", help="The gate step succeeded")
+    args = parser.parse_args()
+    sys.stdout.write(main(args.stderr, args.marker, args.kind, args.sha, args.passed))

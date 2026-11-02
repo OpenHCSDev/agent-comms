@@ -37,7 +37,8 @@ runs:
               --jq ".[] | select(.body | startswith(\"$marker\")) | .id" | head -1)
         [ "$OUTCOME" = failure ] || [ -n "$old" ] || exit 0
         body="$RUNNER_TEMP/$KIND-findings.md"
-        python -I "$GITHUB_ACTION_PATH/render.py" "$FINDINGS" "$marker" "$KIND" "${SHA:0:7}" "$OUTCOME" > "$body"
+        passed=$([ "$OUTCOME" = success ] && echo --passed || true)
+        python -I "$GITHUB_ACTION_PATH/render.py" "$FINDINGS" "$marker" "$KIND" "${SHA:0:7}" $passed > "$body"
         if [ -n "$old" ]; then
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$old" -F body=@"$body" --jq .html_url
         else
