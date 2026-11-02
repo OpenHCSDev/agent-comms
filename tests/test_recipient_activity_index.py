@@ -1,4 +1,4 @@
-"""Registry snapshots own recipient lookup; activity reads own their requested set."""
+"""Registry snapshots own recipient lookup and viewer selection."""
 
 
 from agent_comms.notification_assignment import NotificationSelection
@@ -9,7 +9,6 @@ import pytest
 
 from agent_comms.registry_document import ThreadRows
 
-from agent_comms.activity import Activity, ActivityState, ActivityStore
 from agent_comms.frozen_recipient import FrozenRecipient
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
@@ -63,14 +62,6 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     zero = replace(recorded.threads["second"], created_at=0.0)
     unrecorded = replace(recorded, threads={**recorded.threads, "second": zero})
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
-
-
-def test_activity_store_selects_only_requested_threads(tmp_path):
-    store = ActivityStore(tmp_path)
-    for index in range(10):
-        store.emit(Activity(f"peer-{index}", ActivityState.THINKING, "working"))
-    assert set(store.current_for(("peer-7", "absent"))) == {"peer-7", "absent"}
-    assert store.current_for(()) == {}
 
 
 @pytest.mark.parametrize(("viewer_of", "seen"), [

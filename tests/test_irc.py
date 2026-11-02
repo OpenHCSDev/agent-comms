@@ -49,38 +49,27 @@ class TestChannelDelivery:
         assert "#undeclared" not in chat.channels.channels()
         assert chat.bus.pending_count("fixer") == 0
 
-    def test_tag_channel_reaches_tagged_threads_only(self, chat):
-        chat.messaging.send("PR111", "#ci", "ci flaked again").message.message_id
-        assert chat.bus.pending_count("fixer") == 1  # carries tag 'ci'
-        assert chat.bus.pending_count("PR112") == 0  # carries tag 'docs'
-        assert chat.bus.pending_count("PR111") == 0  # sender excluded
-
-    def test_global_channel_reaches_everyone(self, chat):
-        chat.messaging.send("PR111", "#all", "main is green").message.message_id
-        assert chat.bus.pending_count("fixer") == 1
-        assert chat.bus.pending_count("PR112") == 1
-
-    def test_dm_untagged_by_channels(self, chat):
-        chat.messaging.send("PR111", "PR112", "dm").message.message_id
-        assert chat.bus.pending_count("PR112") == 1
-        assert chat.bus.pending_count("fixer") == 0
+    @pytest.mark.parametrize(("target", "reached"), [
+        ("#ci", {"fixer"}),  # a tag channel reaches tagged threads only, never the sender
+        ("#all", {"fixer", "PR112", "loner"}),  # the global channel reaches everyone
+        ("PR112", {"PR112"}),  # a DM ignores tags
+    ])
+    def test_delivery_reaches_exactly_the_target_audience(self, chat, target, reached):
+        chat.registry.declare(Thread(name='loner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
+        chat.messaging.send("PR111", target, "x")
+        assert {name for name in ("PR111", "fixer", "PR112", "loner")
+                if chat.bus.pending_count(name)} == reached
 
     def test_channel_send_fail_closed_unknown_dm(self, chat):
         with pytest.raises(UnregisteredThreadError):
-            chat.messaging.send("PR111", "ghost", "hi").message.message_id
-
-    def test_untagged_thread_does_not_receive_tag_channel(self, chat):
-        # A thread with no tags receives only DMs and the global channel.
-        chat.registry.declare(Thread(name='loner', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        chat.messaging.send("PR111", "#ci", "only tagged see this").message.message_id
-        assert chat.bus.pending_count("loner") == 0
+            chat.messaging.send("PR111", "ghost", "hi")
 
 
 class TestHistory:
     def test_dm_history_is_full_conversation(self, chat):
-        chat.messaging.send("PR111", "fixer", "hello").message.message_id
-        chat.messaging.send("fixer", "PR111", "hi back").message.message_id
-        chat.messaging.send("PR111", "PR112", "unrelated").message.message_id
+        chat.messaging.send("PR111", "fixer", "hello")
+        chat.messaging.send("fixer", "PR111", "hi back")
+        chat.messaging.send("PR111", "PR112", "unrelated")
         history = [m.body for m in list(chat.views.history_page(CommandTarget.named("fixer"), viewer=NamedViewer("PR111")).messages)]
         assert history == ["hello", "hi back"]
 
@@ -88,15 +77,12 @@ class TestHistory:
         assert chat.views.history_page(CommandTarget.named("ghost"), viewer=NamedViewer("PR111")).messages == ()
         assert "ghost" not in chat.registry
 
-    def test_channel_history_returns_all(self, chat):
-        chat.messaging.send("PR111", "#ci", "one").message.message_id
-        chat.messaging.send("fixer", "#ci", "two").message.message_id
-        chat.messaging.send("PR111", "#all", "three").message.message_id
+    def test_channel_history_returns_exactly_that_channel(self, chat):
+        chat.messaging.send("PR111", "#ci", "one")
+        chat.messaging.send("fixer", "#ci", "two")
+        chat.messaging.send("PR111", "#all", "three")
         assert [m.body for m in read_history(chat, "#ci")] == ["one", "two"]
-
-    def test_global_channel_history(self, chat):
-        chat.messaging.send("PR111", "#all", "hello").message.message_id
-        assert [m.body for m in read_history(chat, "#all")] == ["hello"]
+        assert [m.body for m in read_history(chat, "#all")] == ["three"]
         with pytest.raises(ValueError):
             read_history(chat, "broadcast")
 
@@ -117,11 +103,6 @@ class TestChannelsDerived:
 
 
 class TestPresence:
-    def test_register_sets_last_seen(self, tmp_path):
-        registry = Registration(tmp_path / "r.json")
-        registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        assert registry.last_seen("a") > 0
-
     def test_heartbeat_updates_last_seen(self, tmp_path):
         registry = Registration(tmp_path / "r.json")
         registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
@@ -142,7 +123,7 @@ class TestPresence:
         registry = Registration(path)
         registry.register(Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))))
         seen = registry.last_seen("a")
-        assert Registration(path).last_seen("a") == seen
+        assert seen > 0 and Registration(path).last_seen("a") == seen
 
     def test_who_shape(self, chat):
         rows = {row.thread.name: row.to_wire() for row in chat.views.who()}
@@ -153,9 +134,11 @@ class TestPresence:
 
 
 class TestCurrentThreadEnvironment:
-    def test_agent_comms_thread_env(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("AGENT_COMMS_THREAD", "me")
-        monkeypatch.chdir(tmp_path)
+    def test_current_thread_decodes_its_launch_record(self, monkeypatch, tmp_path):
+        from agent_comms.launch_runtime import ThreadLaunch
         from agent_comms.threads import current_thread
 
-        assert current_thread(wire(tmp_path).registry).name == "me"
+        monkeypatch.setenv(ThreadLaunch.variable("name"), "me")
+        monkeypatch.setenv(ThreadLaunch.variable("worktree"), str(tmp_path))
+        thread = current_thread(wire(tmp_path).registry)
+        assert (thread.name, thread.worktree) == ("me", Checkout(tmp_path))

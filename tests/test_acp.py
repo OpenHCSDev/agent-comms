@@ -223,10 +223,10 @@ class TestHandlers:
     async def test_new_session_starts_after_existing_wire_history(self, tmp_path, native_runtime_package):
         agent = canonical_agent(wire(tmp_path / "wire"))
         agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        agent._comms.messaging.send("peer", "#all", "old message").message.message_id
+        agent._comms.messaging.send("peer", "#all", "old message")
         response = await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         assert agent._comms.bus.inbox(response.session_id).page.messages == ()
-        agent._comms.messaging.send("peer", "#all", "new message").message.message_id
+        agent._comms.messaging.send("peer", "#all", "new message")
         assert [message.body for message in agent._comms.bus.inbox(response.session_id).page.messages] == [
             "new message"
         ]
@@ -339,7 +339,7 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.registry.declare(Thread(name='peer', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        agent._comms.messaging.send("peer", "proj", "hello").message.message_id
+        agent._comms.messaging.send("peer", "proj", "hello")
         await agent.cancel(session_id="proj")
         assert agent._comms.bus.pending_count("proj") == 1
 
@@ -465,9 +465,9 @@ class TestFullHistory:
         comms = installed_comms(tmp_path / "wire")
         comms.registry.declare(Thread(name='a', tags=frozenset({'x'}), worktree=Checkout(Path('/wt'))))
         comms.registry.declare(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        comms.messaging.send("a", "#all", "one").message.message_id
-        comms.messaging.send("a", "b", "dm").message.message_id
-        comms.messaging.send("b", "#x", "tagged").message.message_id
+        comms.messaging.send("a", "#all", "one")
+        comms.messaging.send("a", "b", "dm")
+        comms.messaging.send("b", "#x", "tagged")
         bodies = [(m.sender, m.target, m.body) for m in list(comms.views.history_page(AnyChannel.target()).messages)]
         assert bodies == [("a", "#all", "one"), ("a", "b", "dm"), ("b", "#x", "tagged")]
 
@@ -518,23 +518,17 @@ class TestActivityLayer:
         )
         assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
-    def test_activity_persistence(self, tmp_path):
-        from agent_comms.activity import Activity, ActivityStore
-
-        store = ActivityStore(tmp_path)
-        store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
-        assert ActivityStore(tmp_path).current("a").detail == "bash"
-
-    def test_all_current_latest_per_thread(self, tmp_path):
+    def test_store_reads_the_latest_activity_of_exactly_the_requested_threads_after_reopen(self, tmp_path):
         from agent_comms.activity import Activity, ActivityStore
 
         store = ActivityStore(tmp_path)
         store.emit(Activity(thread="a", state=ActivityState.THINKING))
         store.emit(Activity(thread="a", state=ActivityState.WORKING, detail="bash"))
         store.emit(Activity(thread="b", state=ActivityState.THINKING))
-        current = store.current_for(("a", "b"))
-        assert current["a"].state is ActivityState.WORKING
-        assert current["b"].state is ActivityState.THINKING
+        current = ActivityStore(tmp_path).current_for(("a", "absent"))
+        assert set(current) == {"a", "absent"}
+        assert (current["a"].state, current["a"].detail) == (ActivityState.WORKING, "bash")
+        assert store.current_for(()) == {}
 
 
 class TestTargetPrefix:
