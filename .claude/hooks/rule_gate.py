@@ -8,6 +8,7 @@ call. One script owns the whole gate so its pieces cannot drift:
   rule_gate.py gate    PreToolUse:   while reading is owed, allow only Reads of listed files
   rule_gate.py record  PostToolUse:  a successful Read marks the lines it returned
   rule_gate.py fg      PreToolUse:   refuse a foreground Bash call that asks for over 15 s
+  rule_gate.py install               write these hooks into ~/.claude/settings.json (cloud setup)
 
 Claude Code's JSON is decoded once, at the top, into a HookEvent and its ToolCall; everything
 after asks those types. A file counts once every line of it has been read by a Read that
@@ -261,10 +262,44 @@ def foreground(event: HookEvent) -> None:
 
 
 VERBS = {"deal": deal, "gate": gate, "record": record, "fg": foreground}
+USER_FLAG = "--user"
+
+
+def install() -> None:
+    """Put this gate in ~/.claude/settings.json, which loads whatever the session's project
+    directory is. A cloud session started above the checkouts never loads their .claude
+    settings; its environment setup script runs this once. The hooks are this checkout's own
+    .claude/settings.json with the script's path made absolute, so that file stays the owner."""
+    script = Path(__file__).resolve()
+    project = json.loads((script.parent.parent / "settings.json").read_text())["hooks"]
+    relative = '"$CLAUDE_PROJECT_DIR/.claude/hooks/rule_gate.py"'
+    settings = Path.home() / ".claude" / "settings.json"
+    document = json.loads(settings.read_text()) if settings.is_file() else {}
+    hooks = document.setdefault("hooks", {})
+    for event, groups in project.items():
+        kept = [group for group in hooks.get(event, [])
+                if not any("rule_gate.py" in hook.get("command", "") for hook in group.get("hooks", []))]
+        hooks[event] = kept + [{**group, "hooks": [
+            {**hook, "command": hook["command"].replace(relative, f'"{script}"') + f" {USER_FLAG}"}
+            for hook in group["hooks"]]} for group in groups]
+    settings.parent.mkdir(parents=True, exist_ok=True)
+    settings.write_text(json.dumps(document, indent=2) + "\n")
+    print(f"rule gate installed in {settings}")
+
+
+def project_gates() -> bool:
+    """The session's project settings already run this gate; the user-level copy stands down."""
+    settings = Path(os.environ.get("CLAUDE_PROJECT_DIR", Path.cwd())) / ".claude" / "settings.json"
+    return settings.is_file() and "rule_gate.py" in settings.read_text()
 
 
 def main() -> None:
+    if sys.argv[1] == "install":
+        install()
+        return
     try:
+        if USER_FLAG in sys.argv and project_gates():
+            return
         VERBS[sys.argv[1]](HookEvent.decode(json.load(sys.stdin)))
     except Exception as error:  # a gate bug must allow the call, never lock the session
         print(f"rule_gate {sys.argv[1:]}: {type(error).__name__}: {error}", file=sys.stderr)
