@@ -14,7 +14,7 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
         subject=TurnId.mint(),
         thread="worker",
         sequences=(6943,),
-        failure=NativePreflightTimeout,
+        failure=NativePreflightTimeout("Pi did not answer its preflight within 5 s"),
         measurements={
             "wait_ms": 5000,
             "session_bytes": 88255627,
@@ -26,6 +26,7 @@ def test_terminal_diagnostic_excludes_untrusted_payloads(tmp_path):
     raw = path.read_text()
     value = json.loads(raw)
     assert value["failure"] == NativePreflightTimeout.declared_name
+    assert value["text"] == "Pi did not answer its preflight within 5 s"
     assert value["measurements"] == {"wait_ms": 5000, "session_bytes": 88255627, "exit_code": -15}
     assert value["sequences"] == [6943]
     assert all(fragment not in raw for fragment in ("SECRET", "private user", "base64"))

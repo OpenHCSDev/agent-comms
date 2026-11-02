@@ -47,7 +47,7 @@ def bound(tmp_path, *, thread_registration):
     observation = FailedTurnObservation.from_terminal(
         permit.reservation, owner=owner, goal=goal, lease=lease,
         turn_id=lease.turn_id, claim_scope=3, current_owner=owner, current_claim=3,
-        failure=FinalStopMissing,
+        failure=FinalStopMissing("Pi ended without its final stop"),
     )
     assert observation is not None
     return store, owner, lease, observation
@@ -90,7 +90,7 @@ def test_mismatched_turn_lease_is_not_bound(bound, mutation):
     rejected = FailedTurnObservation.from_terminal(
         observation.reservation, owner=owner, goal=owner.goal,
         lease=replace(lease, **mutation), turn_id=lease.turn_id, claim_scope=3,
-        current_owner=owner, current_claim=3, failure=BackendFailed,
+        current_owner=owner, current_claim=3, failure=BackendFailed("the provider refused the request"),
     )
     assert rejected is None
     observation.reservation.fail(store, FailedTurnResolution(BackendFailed), observation=rejected)
