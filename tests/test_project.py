@@ -16,7 +16,6 @@ from acp import RequestError
 from delivery_owner_fixture import canonical_agent
 from agent_comms.comms import wire
 from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
-from agent_comms.native_arguments import GivenArguments, GivenBinary
 from agent_comms.repo import Checkout
 
 
@@ -30,8 +29,8 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    agent = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()))
-    session = (await agent.new_session(str(old))).session_id
+    agent = canonical_agent(comms)
+    session = FieldCodec.decode(AcpSessionId, (await agent.new_session(str(old))).session_id)
     updates = []
 
     class Client:
@@ -48,16 +47,16 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
         if isinstance(update, CoordinationChangedUpdate)
     ) == Checkout(new)
     await agent.shutdown()
-    resumed = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()))
+    resumed = canonical_agent(comms)
     try:
-        result = await resumed.load_session(str(old), session)
+        result = await resumed.load_session(str(old), FieldCodec.encode(session))
         assert next(
             update.worktree
             for update in decode_updates(result.field_meta)
             if isinstance(update, CoordinationChangedUpdate)
         ) == Checkout(new)
         with pytest.raises(RequestError):
-            await resumed.load_session(str(tmp_path / "unrelated"), session)
+            await resumed.load_session(str(tmp_path / "unrelated"), FieldCodec.encode(session))
         assert len(comms.registry.all_threads()) == 1
     finally:
         await resumed.shutdown()
@@ -71,7 +70,7 @@ async def test_project_changes_reach_all_subscribed_clients(tmp_path, native_run
     old.mkdir()
     new.mkdir()
     comms = wire(tmp_path / "wire")
-    owner = canonical_agent(comms, agent_bin=GivenBinary("/bin/echo"), agent_args=GivenArguments(()), runtime_enabled=True)
+    owner = canonical_agent(comms, runtime_enabled=True)
     session = FieldCodec.decode(AcpSessionId, (await owner.new_session(str(old))).session_id)
     proxies, updates = [], [[], []]
 
