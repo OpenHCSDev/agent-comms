@@ -11,7 +11,7 @@ from pydantic import JsonValue
 
 from agent_comms.connector_store import (
     AuthorizationRequest, ConnectorAccess, ConnectorCredentialsFile, ConnectorGrants,
-    ExpiringGrant, IssuedAccess, IssuedCode, RegisteredClient, ThreadGrant, TrustedBrowser,
+    ExistingDirectorAccess, ExpiringGrant, IssuedCode, RegisteredClient, ThreadGrant, TrustedBrowser,
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.installer.probes.carry import Carried, Carry
@@ -24,10 +24,10 @@ from agent_comms.store_files import AtomicFile
 class PreviousIssuedAccess(ExpiringGrant):
     client_id: str
 
-    def carried(self) -> IssuedAccess:
-        # Older local proofs also occupied this record. Do not invent a registered
-        # client relationship from their label: preserve its prior Director authority.
-        return IssuedAccess(self.client_id, expires_at=self.expires_at)
+    def carried(self) -> ExistingDirectorAccess:
+        # OAuth and local proofs both occupied this record. Preserve its label and
+        # Director authority without inventing which producer issued the bearer.
+        return ExistingDirectorAccess(self.client_id, expires_at=self.expires_at)
 
 
 @dataclass(frozen=True)

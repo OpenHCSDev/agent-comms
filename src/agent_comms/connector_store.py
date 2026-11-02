@@ -137,8 +137,15 @@ class ExpiringDirectorAccess(ExpiringGrant, ConnectorAccess, declared_name=None)
 
 
 @dataclass(frozen=True)
+class ExistingDirectorAccess(ExpiringDirectorAccess):
+    """A retained Director bearer whose OAuth/service producer was not recorded."""
+
+    label: str
+
+
+@dataclass(frozen=True)
 class IssuedAccess(ExpiringDirectorAccess):
-    """OAuth access; carried pre-family records retain their exact prior authority."""
+    """An access token issued from the registered OAuth client's code or refresh."""
 
     client_id: str
 

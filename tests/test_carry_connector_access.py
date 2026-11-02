@@ -10,7 +10,7 @@ import pytest
 from agent_comms.connector_caller import CALLER, ForkingCaller, GrantRefusedError
 from agent_comms.connector_store import (
     CALLBACK, AuthorizationQuery, AuthorizationRequest, ConnectorAccess,
-    ConnectorCredentialsFile, ConnectorGrants, ConnectorStore, IssuedCode,
+    ConnectorCredentialsFile, ConnectorGrants, ConnectorStore, ExistingDirectorAccess, IssuedCode,
     RegisteredClient, TrustedBrowser, digest,
 )
 from agent_comms.errors import RelationViolationError
@@ -76,6 +76,8 @@ def test_selected_credential_carry_preserves_live_authority_and_pending_state(
     assert current.codes == previous_grants.codes
     assert current.refresh == previous_grants.refresh
     assert current.trusted_browsers == previous_grants.trusted_browsers
+    for key, old in previous_grants.access.items():
+        assert current.access[key] == ExistingDirectorAccess(old.client_id, expires_at=old.expires_at)
     assert current.caller_for("oauth") == CALLER
     assert current.caller_for("service") == CALLER
     assert current.caller_for("thread") == ForkingCaller("reader")

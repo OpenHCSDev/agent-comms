@@ -26,8 +26,10 @@ checks the original native namespace at authentication, before argument-context
 reads in the opened call, and at direct invocation. Accepted calls retain the
 connector's existing disconnect/shutdown policy; revocation rejects subsequent requests.
 
-One `ConnectorAccess` family now distinguishes OAuth, service, thread and UI
-bearers. The explicit `ConnectorAccessCarry` preserves existing clients, pending
+One `ConnectorAccess` family now distinguishes new OAuth, service, thread and UI
+bearers. `ExistingDirectorAccess` retains pre-family bearer labels and authority
+without pretending their unrecorded producer was OAuth or a local service.
+The explicit `ConnectorAccessCarry` preserves existing clients, pending
 approvals/codes, refresh state and browser trust, without assigning legacy service
 labels a fabricated registered-client meaning. Colliding old access/thread digests
 refuse without rewriting the file. The runtime has no old-format fallback.
