@@ -33,7 +33,7 @@ class TurnTerminal(TurnInterruption):
         raise RuntimeError("Turn has no reported backend result")
 
     async def prepare_publication(self, progress: TurnProgress) -> Done:
-        return await progress.record_failure(BackendFailed("Native turn ended without a result"))
+        return await progress.record_failure(EndedWithoutResult().turn_failure)
 
     async def report_failure(self, progress: TurnProgress, error: Exception, kind: type[TurnFailure]):
         cause = error.__cause__ or error
@@ -64,24 +64,26 @@ class FailedGoalTurn(TurnTerminal):
             claim_scope=account.lease.claimed_generation,
             current_owner=snapshot.threads.get(account.thread_name),
             current_claim=snapshot.claim_generation(account.thread_name),
-            failure=self.failure_kind,
+            failure=self.turn_failure,
         )
 
     @property
     @abstractmethod
-    def failure_kind(self) -> type[TurnFailure]: ...
+    def turn_failure(self) -> TurnFailure:
+        """The failure this turn ended with, its text included: the ledger, the diagnostic and
+        the blocked line all say what broke, never only which kind."""
 
     def settle_launched(self, account, permit, store, captured, current) -> None:
         if permit.has_verified_progress(store):
             return
-        self.failure_kind.settle_attempt(
+        self.turn_failure.settle_attempt(
             permit, store, self.failure_observation(account, permit, captured))
 
 
 class EndedWithoutResult(FailedGoalTurn):
     @property
-    def failure_kind(self) -> type[TurnFailure]:
-        return BackendFailed
+    def turn_failure(self) -> TurnFailure:
+        return BackendFailed("Native turn ended without a result")
 
 
 class OperatorStopped(TurnTerminal):

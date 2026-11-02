@@ -317,12 +317,13 @@ class Done(AgentEvent, FailedGoalTurn):
         return replace(self, outcome=outcome)
 
     @property
-    def failure_kind(self) -> type[TurnFailure]:
-        return BackendFailed if self.failure is None else type(self.failure)
+    def turn_failure(self) -> TurnFailure:
+        """A failure the backend reported without a declared kind keeps the text it ended with."""
+        return BackendFailed(self.text) if self.failure is None else self.failure
 
     @property
     def reason_code(self) -> str | None:
-        return None if self.ok else self.failure_kind.declared_name
+        return None if self.ok else self.turn_failure.declared_name
 
     def failure_observation(self, account, permit, captured):
         return None if self.ok else super().failure_observation(account, permit, captured)

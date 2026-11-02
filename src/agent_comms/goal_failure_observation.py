@@ -63,6 +63,8 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable, GoalFailureEvidence):
     goal_revision: Annotated[int, Column(check="goal_revision>=0")]
     turn_id: Annotated[TurnId, Column(unique=True)]
     failure: type[TurnFailure]
+    failure_text: str = "recorded before Core kept the failure's text"
+    """What the failure said; a row written before the text was kept says that instead."""
 
     def __post_init__(self) -> None:
         # These are the durable observation's constraints, independent of any

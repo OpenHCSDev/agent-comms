@@ -115,7 +115,7 @@ class FailedTurnObservation:
         claim_scope: int,
         current_owner: Thread | None,
         current_claim: int | None,
-        failure: type[TurnFailure],
+        failure: TurnFailure,
     ) -> FailedTurnObservation | None:
         # Observation is passive: a changed owner, goal or lease yields no
         # observation. The evidence is built from already-trusted values, so a
@@ -123,7 +123,7 @@ class FailedTurnObservation:
         evidence = FailedTurnEvidence(
             reservation.attempt_id, reservation.goal_id, reservation.generation,
             owner.name, owner.incarnation.wire_birth, owner.worktree, claim_scope,
-            lease.identity.generation, goal.revision, turn_id, failure,
+            lease.identity.generation, goal.revision, turn_id, type(failure), failure.text,
         )
         if owner.goal != goal or reservation.goal_id != goal.id:
             return None
@@ -549,7 +549,7 @@ class LaunchPermit(GoalTurnPermit):
     def failure_observation(
         self, *, owner: Thread, goal: Goal, lease: TurnLeaseFence, turn_id: TurnId,
         claim_scope: int, current_owner: Thread | None, current_claim: int | None,
-        failure: type[TurnFailure],
+        failure: TurnFailure,
     ) -> FailedTurnObservation | None:
         return FailedTurnObservation.from_terminal(
             self.reservation, owner=owner, goal=goal, lease=lease, turn_id=turn_id,

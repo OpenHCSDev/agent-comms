@@ -251,7 +251,7 @@ class AttemptFailedExecution(BlockedExecution, RetryableExecution):
 
     @property
     def reason(self) -> str:
-        return self.evidence.failure.declared_name
+        return f"{self.evidence.failure.declared_name}: {self.evidence.failure_text}"
 
 
 class GoalPublicationSnapshot(ABC):

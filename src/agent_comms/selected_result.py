@@ -57,7 +57,7 @@ def publish_native_failure(
         participant.comms.root,
         subject=FieldCodec.decode(InputId, input_id),
         thread=participant.owner.thread.name,
-        failure=BackendFailed,
+        failure=BackendFailed(description),
         sequences=tuple(source.delivery.message.seq for source in participant.batch.sources),
         native_response=native_response,
         source_error=source_error,

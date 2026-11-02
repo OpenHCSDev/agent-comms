@@ -319,7 +319,7 @@ class TurnProgress(events.AgentEventConsumer):
                 self.comms.root,
                 subject=self.turn_lease.turn_id,
                 thread=self.thread_name,
-                failure=terminal.failure_kind,
+                failure=terminal.turn_failure,
                 measurements=terminal.diagnostic,
                 sequences=(),
             )
