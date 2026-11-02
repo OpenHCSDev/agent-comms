@@ -1,3 +1,4 @@
+import ctypes
 import hashlib
 import json
 import os
@@ -10,6 +11,8 @@ from zipfile import ZipFile
 
 import pytest
 
+from agent_comms.build_artifact import BuildArtifact
+from agent_comms.child_process import Platform
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.installer.refusals import UpgradeRefused
 from agent_comms.installer.commands import InstallCommands
@@ -161,6 +164,15 @@ def test_archive_proof_binds_both_origin_and_runtime(installed_wheel: InstalledW
             installed_wheel.wheel, installed_wheel.distribution,
             LaunchRuntime.at_prefix(tmp_path / "unrelated"),
         )
+
+
+def test_native_image_artifact_uses_its_open_handle():
+    address = ctypes.cast(ctypes.pythonapi.Py_GetVersion, ctypes.c_void_p)
+    with Platform.current().native_image(address) as stream:
+        observed = BuildArtifact.from_stream(stream)
+        assert observed == BuildArtifact.capture(observed.path)
+        assert not stream.closed
+    assert stream.closed
 
 
 def test_runtime_identity_refuses_missing_and_changed_interpreter():

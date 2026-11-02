@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Annotated, ClassVar, Self
 
 import pytest
-from pydantic import JsonValue
+from pydantic import BaseModel, JsonValue
 from typing_extensions import TypeForm
 
 from agent_comms.nominal.declared_family import DeclaredFamily, UnknownFamilyMember
@@ -102,6 +102,28 @@ def test_registered_value_decoders_own_their_json_schema() -> None:
 
     with pytest.raises(TypeError):
         FieldCodec.value_schema(NoSchema)
+
+
+def test_external_model_schema_and_conversion_use_the_same_decoder() -> None:
+    class Child(BaseModel):
+        count: int
+
+    class Model(BaseModel):
+        child: Child
+
+    @dataclass
+    class Envelope:
+        value: Model
+
+    value = Envelope(Model(child=Child(count=3)))
+    assert FieldCodec.decode(Envelope, FieldCodec.encode(value)) == value
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(Envelope, {"value": {"child": {"count": "wrong"}}})
+    schema = FieldCodec.value_schema(Model)
+    assert schema["$id"]
+    assert {key: item for key, item in schema.items() if key != "$id"} == Model.model_json_schema()
+    assert FieldCodec.record_schema(Envelope)["properties"]["value"] == schema
+    assert compile_decoder(Model).target is Model
 
 
 def test_transient_plan_excludes_fields_before_decoder_or_value_access() -> None:
