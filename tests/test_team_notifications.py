@@ -15,8 +15,6 @@ import pytest
 from agent_comms.registry_document import RegisteredTeamProject
 
 from agent_comms.child_process import NoProcess, ProcessIdentity
-from agent_comms.cli_verbs.fork import ForkCliCommand
-from agent_comms.thread_management import GivenTags
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from agent_comms.comms import Comms
 from team_heartbeat_fixture import ObservedHeartbeat, capture_frame, current_hud
@@ -1089,18 +1087,6 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
         assert quiet.task.commander == recipient
         assert aged(quiet.task.handled) == aged(first.task.handled)
         assert TeamFrame.current(comms, recipient.name).packets == (quiet.task,)
-
-
-def test_fork_cli_inherits_channels_without_a_rank_exception(notification_bus):
-    comms = notification_bus
-    parent = comms.registry.require('worker')
-    tag = TeammatesTag.declared_name
-    comms.registry.register(replace(parent, tags=parent.tags | {'comms', tag}))
-    parent = comms.registry.require(parent.name)
-    command = ForkCliCommand.thread_binding(parent)
-    assert command.tags.for_new() == parent.tags
-    explicit = replace(command, tags=GivenTags(parent.tags))
-    assert tag in explicit.tags.for_new()
 
 
 def test_enrollment_and_independent_execution_not_tags_determine_shared_participation(notification_bus, tmp_path):

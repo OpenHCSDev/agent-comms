@@ -95,7 +95,7 @@ from .turn_lease import (
 
 if TYPE_CHECKING:
     from .bus_publication import Delivered
-    from .cli_command import CliCommand
+    from .cli_command import CliCommand, CommandBinding
     from .comms import Comms
 
 
@@ -115,10 +115,10 @@ class ResolvedThread(ResolvedTarget):
     thread: Thread
     status: ThreadStatus
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings(
+        self, declaration: type[CliCommand], comms: Comms, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.thread_bindings(
             comms, self.thread, self.status, channel, catalog=catalog,
         )
@@ -129,10 +129,10 @@ class ResolvedChannel(ResolvedTarget):
     channel: Channel
     members: tuple[ResolvedThread, ...]
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings(
+        self, declaration: type[CliCommand], comms: Comms, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.channel_bindings(
             comms, self, project=project, snapshot=snapshot, catalog=catalog,
         )

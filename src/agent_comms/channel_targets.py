@@ -24,8 +24,7 @@ if TYPE_CHECKING:
     from .frozen_recipient import FrozenRecipient
     from .catalog_document import CatalogAccess, CatalogDocument
     from .channels import Channel
-    from .cli_command import CliCommand
-    from .cli_result import CliResult
+    from .cli_command import CliCommand, CommandBinding
     from .comms import Comms
     from .goal_management import Goals
     from .historical_views import ChannelHistory, DMHistory, HistoryView
@@ -111,20 +110,20 @@ class ResolvedTarget(ABC):
     """An acquired value owns its binding operation, not a second type dispatcher."""
 
     @abstractmethod
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings(
+        self, declaration: type[CliCommand], comms: Comms, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]: ...
+    ) -> tuple[CommandBinding, ...]: ...
 
 
 @dataclass(frozen=True)
 class ResolvedProject(ResolvedTarget):
     project: Checkout
 
-    def bindings[C: CliCommand](
-        self, declaration: type[C], comms: Comms, channel: SurroundingChannel,
+    def bindings(
+        self, declaration: type[CliCommand], comms: Comms, channel: SurroundingChannel,
         *, project: Checkout, snapshot: RegistrySnapshot, catalog: CatalogAccess,
-    ) -> tuple[C, ...]:
+    ) -> tuple[CommandBinding, ...]:
         return declaration.project_bindings(comms, self.project)
 
 
@@ -182,7 +181,7 @@ class CommandTarget(DeclaredFamily, ProjectionSource, affix="Target"):
         raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return (NoChannel(),)
 
@@ -398,7 +397,7 @@ class ThreadTarget(NamedTarget):
         return direct.for_target(self.name, messages, has_older)
 
     def contexts(
-        self, declaration: type[CliCommand[CliResult]], channel: ChannelSelection,
+        self, declaration: type[CliCommand], channel: ChannelSelection,
     ) -> tuple[SurroundingChannel, ...]:
         return declaration.selection_channels(channel, self.name)
 
