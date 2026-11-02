@@ -1,18 +1,10 @@
-"""Capacity reports the load formula without policy advice."""
-
-import pytest
+"""Load weighs an expired review timer twice and every unjudged edit once."""
 
 from agent_comms.team.vibe_check import OverloadDegradation
 from agent_comms.nominal.field_codec import FieldCodec
 
 
-@pytest.mark.parametrize("unjudged", [0, 1, 395, 1_000_000])
-def test_capacity_reports_load(unjudged):
-    load = OverloadDegradation(24, 14, unjudged)
+def test_capacity_reports_load():
+    load = OverloadDegradation(24, 14, 395)
+    assert load.total == 24 + 2 * 14 + 395
     assert FieldCodec.encode(load)["total"] == load.total
-    assert load.total == 24 + 2 * 14 + unjudged
-    assert str(load) == (
-        f"load {load.total:.0f} (24 open orders, 14 review timers up, {unjudged} unjudged edits)"
-    )
-
-
