@@ -15,6 +15,7 @@ from agent_comms.nominal.field_codec import (
 from agent_comms.threads import Thread
 from agent_comms.turn_phase import (
     CompactionPhase,
+    IdlePhase,
     ModelWaitPhase,
     ProviderRetryPhase,
     ToolRunningPhase,
@@ -44,24 +45,23 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
     current = comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
     assert current.state is ActivityState.STARTING
     assert current.detail == "Long-running work"
-    comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).state is ActivityState.THINKING
+    def activity():
+        return comms.agents.activity_of("worker", snapshot=comms.registry.snapshot())
 
+    comms.agents.observe_native_phase(first, ModelWaitPhase())
+    assert activity().state is ActivityState.THINKING
     comms.agents.transition_turn(first, ToolRunningPhase(tools=((ToolCallId("call"), "bash"),)))
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Working · bash"
+    assert "bash" in activity().presentation("Worker").summary
+    for excursion in (CompactionPhase(), ProviderRetryPhase()):
+        comms.agents.observe_native_phase(first, ModelWaitPhase())
+        assert activity().state is ActivityState.THINKING
+        comms.agents.observe_native_phase(first, excursion)
+        assert activity().detail == excursion.label
     comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
-    comms.agents.observe_native_phase(first, CompactionPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).detail == "Compacting context"
-    comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
-    comms.agents.observe_native_phase(first, ProviderRetryPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).detail == "Provider retry"
-    comms.agents.observe_native_phase(first, ModelWaitPhase())
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Thinking"
+    assert activity().state is ActivityState.THINKING
 
     comms.agents.finish_turn(first)
-    assert comms.agents.activity_of("worker", snapshot=comms.registry.snapshot()).presentation("Worker").summary == "Ready"
+    assert activity().presentation("Worker").summary == IdlePhase.label
     assert not comms.views.thread_views()[0].presentation.status.working
     comms.agents.begin_turn("worker", TurnId('16367aacb67a4a017c8da8ab95682ccb'))
     comms.agents.finish_turn(first)

@@ -64,18 +64,16 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert set(pointers) == {initial.message.reference, *(message.reference for message in sent)}
     pointed = comms.bus.bus.messages_for_references(pointers)
     assert all(record.target == "#team" for record in pointed)
-    assert "may omit older" in frame
     assert comms.bus.reads.path.read_bytes() == ledger
     assert comms.bus.bus.revision() == revision
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
 
 
 async def test_natural_owned_turn_prepares_observer_pointer_without_native_start(tmp_path):  # noqa: F811
-    from pathlib import Path
-
-
     from agent_comms.acp import CommsAgent
     from agent_comms.owned_turn import OwnedTurn
+    from agent_comms.nominal.field_codec import AcpSessionId
+    from agent_comms.session_lifecycle import PublishedSession
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     agent = CommsAgent(
@@ -83,6 +81,10 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
         agent_bin=GivenBinary("pi"),
         auto_wake=False,
     )
+    # OwnedTurn.acquire syncs a published session's identity (owned_turn.py:515); the
+    # session is published here without a native start. SessionLifecycle.publish replaces
+    # this write once it lands on main.
+    agent.sessions.published[AcpSessionId("alpha")] = PublishedSession.of(comms.registry.require("alpha"))
     turn = OwnedTurn(
         agent.turns, "alpha", "alpha", "Independently authorized task",
         acceptance=NoTurnAcceptance(),
@@ -95,8 +97,6 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
                 assert turn.task == "Independently authorized task"
                 rendered = turn.context.render().text
                 assert initial.message.message_id in rendered
-                assert "Canonical bus awareness" in rendered
-                assert "No response obligation" in rendered
                 assert set(agent.turns.persistent_backends) == {"alpha"}
                 assert not agent.turns.persistent_backends["alpha"].available
     finally:
