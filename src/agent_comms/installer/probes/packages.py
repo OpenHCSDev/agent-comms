@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
-from enum import StrEnum
 from importlib.metadata import Distribution, distributions
 from pathlib import Path, PurePosixPath
 from urllib.parse import unquote, urlsplit
 from zipfile import ZipExtFile, ZipFile
-from typing import Self
+from typing import ClassVar, Self
 
 from packaging.utils import canonicalize_name
 from pydantic import BaseModel, Field, JsonValue, RootModel
@@ -72,23 +71,6 @@ class SourceRecord(BaseModel, WheelSource):
         raise ValueError("The installed package does not record a Git revision")
 
 
-class ArchiveScheme(StrEnum):
-    """The external URL scheme admitted for an observable local wheel."""
-
-    local_file = "file"
-
-
-class ArchiveHost(StrEnum):
-    """RFC8089's local-file authority spellings."""
-
-    empty = ""
-    loopback = "localhost"
-
-
-class WheelSuffix(StrEnum):
-    wheel = ".whl"
-
-
 class ArchiveInfo(BaseModel):
     """PEP610's algorithm-to-digest map; an empty map supplies no content proof."""
 
@@ -102,32 +84,32 @@ class ArchiveInfo(BaseModel):
         verified.hashes = {**self.hashes, "sha256": artifact.sha256}
         return verified
 
-    def wheel_inputs(self, url: str) -> tuple[Path, ...]:
-        if "sha256" not in self.hashes:
-            return ()
-        Sha256Text.decode(self.hashes["sha256"])
-        source = urlsplit(url)
-        # Remote archives retain their PEP610 hashes, not a request to fetch them.
-        # Only local wheel inputs can be re-observed without a network operation.
-        if (source.scheme != ArchiveScheme.local_file.value
-                or Path(source.path).suffix != WheelSuffix.wheel.value):
-            return ()
-        if source.netloc not in (ArchiveHost.empty.value, ArchiveHost.loopback.value):
-            raise ValueError("Runtime wheel input names a foreign file host")
-        wheel = Path(unquote(source.path))
-        if not wheel.is_absolute():
-            raise ValueError("Verified runtime archive is not an absolute wheel input")
-        return (wheel,)
-
-
 class ArchiveRecord(SourceRecord):
+    """PEP610 archive metadata and its local-wheel URL boundary."""
+
     archive_info: ArchiveInfo = Field(default_factory=ArchiveInfo)
+    file_scheme: ClassVar[str] = "file"
+    local_hosts: ClassVar[tuple[str, ...]] = ("", "localhost")
+    wheel_suffix: ClassVar[str] = ".whl"
 
     def pin(self, version: str) -> PackagePin:
         return ArchivePin(version, self.url, tuple(sorted(self.archive_info.hashes.items())))
 
     def wheel_inputs(self) -> tuple[Path, ...]:
-        return self.archive_info.wheel_inputs(self.url)
+        if "sha256" not in self.archive_info.hashes:
+            return ()
+        Sha256Text.decode(self.archive_info.hashes["sha256"])
+        source = urlsplit(self.url)
+        # A remote archive retains its PEP610 hash without fetching its URL.
+        if (source.scheme != self.file_scheme
+                or Path(source.path).suffix != self.wheel_suffix):
+            return ()
+        if source.netloc not in self.local_hosts:
+            raise ValueError("Runtime wheel input names a foreign file host")
+        wheel = Path(unquote(source.path))
+        if not wheel.is_absolute():
+            raise ValueError("Verified runtime archive is not an absolute wheel input")
+        return (wheel,)
 
     def verified_wheel(
         self, wheel: Path, distribution: Distribution, runtime: LaunchRuntime
