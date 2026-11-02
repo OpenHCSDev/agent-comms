@@ -75,6 +75,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.threads import Thread
 from agent_comms.todos import (
     ClaimOrder,
+    DraftListedPullRequest,
     CorrectLinkTodo,
     CorrectMergedLinkTodo,
     MergedLink,
@@ -169,7 +170,7 @@ def test_stop_rejects_a_human_before_any_registry_change(comms, tmp_path):
 
 
 @pytest.fixture
-def claim_order(held_bus):
+def claim_order(held_bus, github_cli):
     """Publish the real order and claim messages, using their retained identities."""
     def claim(problem, *, pull_request=1, head="a" * 40):
         todo = held_bus.goals.todos.get(problem)
@@ -178,7 +179,12 @@ def claim_order(held_bus):
         original = held_bus.messaging.send("lead", "worker", todo.order.instructions(todo)).message
         todo = held_bus.goals.todos.apply(
             todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
-        claimed = OrderClaim.for_order(todo, worker, pull_request, head,
+        github_cli.put(todo.repo, DraftListedPullRequest(
+            number=pull_request, branch="repair", head=head, base="main",
+            updated=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            reviewable_times=(),
+        ))
+        claimed = OrderClaim.for_order(todo, worker, PullRequestLink(todo.repo, pull_request), head,
                                       "Review the published repair", original.reference,
                                       store=held_bus.goals.todos)
         claimed = replace(claimed, message=replace(
@@ -210,7 +216,8 @@ def test_order_claim_publishes_only_to_its_retained_team_birth(
     todo = comms.goals.todos.apply(
         todo.id, OrderMessage(todo.revision, lead, original.message_id, at=RecordedEventTime(time.time())))
     claim = OrderClaim.for_order(
-        todo, worker, 1, "a" * 40, "Review this published repair with @outsider", original.reference,
+        todo, worker, PullRequestLink(todo.repo, 1), "a" * 40,
+        "Review this published repair with @outsider", original.reference,
         store=comms.goals.todos)
     if change == "rename":
         comms.registry.rename("lead", "renamed")
