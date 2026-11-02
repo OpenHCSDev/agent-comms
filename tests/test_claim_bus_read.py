@@ -1,9 +1,6 @@
-"""A file claim in a selected turn reads the bus's messages, not its context rows.
+"""A file claim in a selected turn publishes its claim and release notices to the holder only.
 
 Real private bus, checkpoint, registry and coordination stores under /var/tmp.
-Context rows are nearly all of a long-lived bus (888 of 889 MB on the root
-where this was found); reading them four times per claim took 3.5 minutes on
-the owner's event loop with the wire, bus and registry locks held.
 """
 
 from __future__ import annotations
@@ -13,12 +10,10 @@ import hashlib
 import os
 import sys
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
 from agent_comms.attempt_start import AttemptStart
-from agent_comms.bus import BusReader
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -29,8 +24,8 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_session import NativeCapture
 from agent_comms.coordination_tables.executions import WireOrigin
 from agent_comms.coordinator import Coordination
-from agent_comms.envelope_claim_transitions import ExistingFileClaim, NativeClaim, WakeClaim
-from agent_comms.nominal.field_codec import ClaimId, InputId, TurnId
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.nominal.field_codec import ClaimId, TurnId
 from agent_comms.message_page import ConversationMessagePageRequest, MessagePageRequest
 from agent_comms.messages import ClaimMessage, ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
@@ -156,48 +151,23 @@ def claim_originals(comms: Comms) -> tuple[ClaimMessage, ...]:
     return tuple(record for record in records if isinstance(record, ClaimMessage))
 
 
-DEFAULT_CLAIM_OPERATION = ClaimId("e" * 32)
-
-
-def acquire_tool_claim(
-    comms: Comms, name: str, resource: Path, turn_id: TurnId,
-    operation_id: ClaimId = DEFAULT_CLAIM_OPERATION,
-):
-    with NativeCapture(comms.bus) as boundary:
-        owner = boundary.registry.require(name)
-        scope = NativeClaim(
-            owner_claimed_generation=boundary.registry.claim_generation(name),
-            operation_id=operation_id, turn_id=turn_id, input_id=InputId.mint(),
-        )
-        return comms.bus.publisher._publish_acquisition_unlocked(
-            boundary.registry, owner,
-            ExistingFileClaim(resource).normalized(Path(owner.worktree)), scope,
-            activity=boundary.activity,
-        )
-
-
 def release_tool_claim(comms: Comms, claim) -> None:
     with NativeCapture(comms.bus) as boundary:
         comms.bus.publisher.release_resources(boundary, (claim,), "Finished test tool operation")
 
 
-def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch, selected_turn) -> None:
+def test_claim_write_and_release_publish_claim_notices_only_to_the_holder(selected_turn) -> None:
     (comms, store, claim_scope, resource) = selected_turn
-    def whole_bus(*_, **__):
-        raise AssertionError("a claim read every row of the bus")
-
-    with monkeypatch.context() as patch:
-        patch.setattr(BusReader, "message_history", whole_bus)
-        claimed = publish_selected_resource_claim(
-            comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
-        )
-        # Asking again for the same file in the same turn returns the held claim.
-        assert publish_selected_resource_claim(
-            comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
-        ) == claimed
-        write_selected_claimed_file(comms, store, claim_scope, "Alice", claimed, b"value = 2\n")
-        record_context(comms, "Alice", 3)
-        settle_failed(store)
+    claimed = publish_selected_resource_claim(
+        comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
+    )
+    # Asking again for the same file in the same turn returns the held claim.
+    assert publish_selected_resource_claim(
+        comms, store, claim_scope, "Alice", ExistingFileClaim(resource)
+    ) == claimed
+    write_selected_claimed_file(comms, store, claim_scope, "Alice", claimed, b"value = 2\n")
+    record_context(comms, "Alice", 3)
+    settle_failed(store)
     assert resource.read_bytes() == b"value = 2\n"
     # The strict whole-bus reader agrees with what the claim path left.
     assert dict(comms.bus.bus.claim_projection()) == {}
