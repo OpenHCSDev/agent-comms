@@ -45,7 +45,7 @@ from agent_comms.connector import (
     ToolsCallReply,
     ToolsCallResult,
 )
-from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiReadCaller
+from agent_comms.connector_caller import CALLER, GrantRefusedError, ScopedUiCaller, UiCaller, UiReadCaller
 from agent_comms.connector_profile import HttpsMcpEndpoint, UiConnectionProfile, UiGrantId, UiGrantSummary
 from agent_comms.connector_store import (
     CALLBACK, CODE_SECONDS, AuthorizationQuery, ConnectorGrants, ConnectorStore,
@@ -63,15 +63,16 @@ from agent_comms.host_services.connector import ConnectorService
 from agent_comms.installer.backup import StoreBackup
 from agent_comms.launch_root import LaunchRoot
 from agent_comms.native_transcript import NativeTranscript
-from agent_comms.order_tools import TranscriptPageRead
+from agent_comms.order_tools import MessagePublished, TranscriptPageRead
 from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.maintenance_barrier import (
     InstallingPhase, MaintenanceBarrier, MaintenanceHeldError, MaintenanceOperator, PausedPhase,
     ReadyPhase,
 )
 from agent_comms.store_files import ExclusiveLock, StoreGuard, _store_lock
-from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, invoke_tool
-from agent_comms.tool_caller import NoThreadCaller
+from agent_comms.tools import ChannelListing, CommsChannelsTool, CommsPinChannelTool, CommsUserSendTool, invoke_tool
+from agent_comms.tool_caller import HumanCaller, NoThreadCaller, ThreadCaller
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.tool_request import ReadTool, ToolCall, ToolRequest
 from agent_comms.threads import Thread
 import subprocess
@@ -1003,3 +1004,50 @@ async def test_ui_mcp_uses_granted_capability_without_an_agent(
             assert revoked.status == 401
     assert comms.bus.bus.revision() == before[0]
     assert comms.registry.snapshot() == before[1]
+
+
+def test_human_publication_refuses_other_principals_before_changing_state(comms: Comms) -> None:
+    prepare_native_comms(comms)
+    namespace = comms.registry.store.privacy().namespace
+    before = comms.bus.bus.revision(), comms.registry.snapshot()
+    request = CommsUserSendTool(target="recipient", body="not human input")
+    for caller in (NoThreadCaller(), ThreadCaller("recipient"), CALLER,
+                   UiReadCaller(namespace), UiCaller(RootId.mint())):
+        with pytest.raises(ToolRefusedError):
+            caller.invoke(request, comms)
+        assert comms.bus.bus.revision() == before[0]
+        assert comms.registry.snapshot() == before[1]
+
+
+async def test_ui_mcp_publishes_with_the_durable_human_identity(
+    store: ConnectorStore, comms: Comms,
+) -> None:
+    prepare_native_comms(comms)
+    comms.registry.declare(Thread("recipient", frozenset(), Checkout(comms.root)))
+    before = comms.registry.snapshot()
+    local = FieldCodec.decode(MessagePublished, FieldCodec.encode(HumanCaller().invoke(
+        CommsUserSendTool(target="recipient", body="local human input"), comms).to_wire()))
+    assert local.message.matches(comms.bus.inbox("recipient").page.messages[-1])
+    namespace = comms.registry.store.privacy().namespace
+    credential = store.update(lambda grants: grants.ui_issued(namespace, 60, UiAccess))
+    headers = {"Authorization": f"Bearer {credential.token}"}
+    connector = Connector(store, "http://127.0.0.1:18766", comms.root)
+    async with TestServer(connector.application()) as server:
+        async with TestClient(server) as client:
+            for number, body in enumerate(("first human input", "second human input"), 2):
+                request = CommsUserSendTool(target="recipient", body=body)
+                call = ToolsCallMessage(jsonrpc="2.0", id=number, params=ToolCall(
+                    request.declared_name, FieldCodec.encode_fields(request)))
+                response = await client.post("/mcp", json=FieldCodec.encode(call), headers=headers)
+                assert response.status == 200
+                reply = FieldCodec.decode(ToolsCallReply, await response.json()).result
+                assert reply.is_error is False
+                published = FieldCodec.decode(MessagePublished, reply.structured_content)
+                original = comms.bus.inbox("recipient").page.messages[-1]
+                assert published.id == original.message_id
+                assert published.message.matches(original)
+                assert original.body == body and original.sender_role is UserThreadRole
+    messages = comms.bus.inbox("recipient").page.messages
+    assert len(messages) == 3 and {message.sender for message in messages} == {messages[0].sender}
+    assert set(comms.registry.snapshot().threads) - set(before.threads) == {messages[0].sender}
+    assert comms.registry.require(messages[0].sender).role is UserThreadRole

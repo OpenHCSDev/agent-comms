@@ -15,7 +15,7 @@ from .nominal.field_codec import FieldCodec, MalformedRecord, RootId
 from .registry_store import RegistryStore
 from .todos import DirectiveText
 from .read_basis import OperatorOutcomes
-from .tool_caller import ForkCaller, NoThreadCaller, ThreadCaller, ToolCaller
+from .tool_caller import ForkCaller, HumanCaller, NoThreadCaller, ThreadCaller, ToolCaller
 from .tool_request import ReadTool, ToolArgumentsRefusedError, ToolRequest
 from .tool_result import ToolResult
 
@@ -96,7 +96,7 @@ class UiReadCaller(ScopedUiCaller, ReadOnlyConnectorCaller):
 
 
 @dataclass(frozen=True)
-class UiCaller(ScopedUiCaller, NoThreadCaller):
+class UiCaller(ScopedUiCaller, HumanCaller):
     """The owner's writable UI, without an executable colleague's identity."""
 
 
