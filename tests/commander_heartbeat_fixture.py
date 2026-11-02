@@ -12,13 +12,21 @@ from agent_comms.task_attachments.commander_pings import CommanderDelivery, Comm
 from agent_comms.ui_model.unit_state import UnitState
 from agent_comms.heartbeat_frame import CommanderInputs, HeartbeatFrame
 from agent_comms.nominal_census import NominalPlanReadings
-from agent_comms.plan_reading import PlanReadings
+from agent_comms.plan_reading import PlanReadings, RetainedPlanReadings
 from agent_comms.threads import Thread
 from agent_comms.todos import ProgressRead
 
 
+class RetainedNominalPlanReadings(RetainedPlanReadings, NominalPlanReadings):
+    """The live heartbeat's plan reading: answers a main commit still supports carry forward,
+    so a frame re-reads only the evidence its commit changed."""
+
+
+LIVE_PLAN_READINGS = RetainedNominalPlanReadings()
+
+
 def capture_frame(comms: Comms, commander: str, pulls: ProgressRead,
-                  plans: PlanReadings = NominalPlanReadings()) -> HeartbeatFrame:
+                  plans: PlanReadings = LIVE_PLAN_READINGS) -> HeartbeatFrame:
     """Direct consumers acquire inputs before entering the actual frame read."""
     inputs = CommanderInputs.prepare(comms, commander, pulls, plans)
     return HeartbeatFrame.capture(comms, commander, inputs, plans)
