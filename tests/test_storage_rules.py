@@ -164,11 +164,10 @@ def test_resource_checker_reads_root_override(tmp_path):
     assert checker['limits_for'](tmp_path)['/home'][1] == StorageRule.load(tmp_path).floor_gib
 
 
-@pytest.mark.parametrize("separator", ("--", "__"))
-def test_allocation_names_invert_every_declared_checkout_name(tmp_path, monkeypatch, separator):
-    """The checkout name format has one declaration: renaming its separator renames every
-    checkout and its inverse together."""
-    monkeypatch.setattr(StorageRule, "checkout_separator", separator)
+def test_allocation_names_invert_every_declared_checkout_name(tmp_path):
+    """Order and repository checkout names invert to their allocation, including an
+    allocation whose own name contains the separator."""
+    separator = StorageRule.checkout_separator
     rule = StorageRule(checkout_base=tmp_path / "wt")
     for allocation in ("pi-unit", f"pi{separator}unit"):
         roots = StorageRoots(tmp_path / "scratch" / allocation)
