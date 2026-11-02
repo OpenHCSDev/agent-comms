@@ -6,8 +6,6 @@ import subprocess
 import sys
 
 
-
-
 def test_native_launcher_imports_no_acp():
     env = {name: value for name, value in os.environ.items()
            if not name.startswith(("AGENT_COMMS_", "PI_"))}

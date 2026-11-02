@@ -39,5 +39,3 @@ def test_fork_default_retains_annotated_thinking_representation(source_repositor
     payload.update(command.editor_arguments({'thinking_level': '"high"'}))
     assert FieldCodec.decode(ForkCliCommand, payload).thinking_level is HighThinkingLevel
     assert compile_decoder(str).encode_editor('literal text') == 'literal text'
-
-
