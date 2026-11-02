@@ -979,8 +979,8 @@ class CommsUserSendTool(PublishingToolRequest):
 
     native_call = CommunicationCall
     label = "Send human input"
-    description = "Publish input typed by the owner to a thread or channel; requires a human UI caller."
-    bus_effect = "Publishes human input with the durable user's identity."
+    description = ("Publish input typed by the owner to a thread or channel under the owner's "
+                   "durable user identity; requires a human UI caller.")
     target: Annotated[str, *tool_field("Target thread name or channel", wire_name="to")]
     body: Annotated[str, *tool_field("Human input text")]
 
