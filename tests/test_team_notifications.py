@@ -1051,9 +1051,9 @@ def test_a_closed_lead_session_leaves_the_board_for_the_live_teammates(notificat
 
 
 def test_one_pass_gives_every_team_its_own_packet(notification_bus):
-    """#commanders declares who commands: one board read, one packet per live member under its
-    own incarnation. A thread outside the channel, and a fork of a commander (in the channel
-    with its commander's tags, acting for it), get none."""
+    """One board read, one packet per live independent colleague under its own incarnation.
+    Execution owns independence (#3824): a thread without the teammates tag still gets one, and
+    a fork of a colleague (carrying its tags, acting for it) gets none."""
     comms = notification_bus
     live = ProcessIdentity.capture(os.getpid())
     for name, tags in (("worker", {"comms", TeammatesTag.declared_name}), ("outsider", {"comms"})):
@@ -1067,12 +1067,13 @@ def test_one_pass_gives_every_team_its_own_packet(notification_bus):
     beat(comms, (failing,))
     lead_packet, = TeamUpdate.latest(comms, comms.registry.require("lead").incarnation)
     worker = comms.registry.require("worker").incarnation
-    worker_packet, = TeamUpdate.latest(comms, worker)
-    assert worker_packet.commander == worker
-    assert worker_packet.handled == lead_packet.handled == (RulePing.capture(failing),)
-    assert TeamUpdate.latest(comms, comms.registry.require("outsider").incarnation) == ()
+    outsider = comms.registry.require("outsider").incarnation
+    for colleague in (worker, outsider):
+        packet, = TeamUpdate.latest(comms, colleague)
+        assert packet.commander == colleague
+        assert packet.handled == lead_packet.handled == (RulePing.capture(failing),)
     assert TeamUpdate.latest(comms, comms.registry.require("worker-fork").incarnation) == ()
-    served = (lead_packet.commander, worker)
+    served = (lead_packet.commander, worker, outsider)
     assert set(ServicePassStore.at(comms.root).read().commander_completed) == set(served)
     for recipient in served:
         hud = TeamFrame.current(comms, recipient.name)
