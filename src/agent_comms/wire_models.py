@@ -30,7 +30,11 @@ class _WireFamilyMeta(FamilyMeta, ModelMetaclass):
     """Compose the family's existing metaclass with Pydantic model construction."""
 
 
-class DeclaredWireFamily(DeclaredFamily, BaseModel, metaclass=_WireFamilyMeta):
-    """A validated wire model whose family owns declaration discovery."""
+class DeclaredModel(BaseModel):
+    """A validated model whose declaration name is metadata, never a wire field."""
 
     declared_name: ClassVar[str]
+
+
+class DeclaredWireFamily(DeclaredFamily, DeclaredModel, metaclass=_WireFamilyMeta):
+    """A validated wire model whose family owns declaration discovery."""

@@ -62,7 +62,7 @@ from agent_comms.transcript_events import (
 from agent_comms.turn_item import NativeItemId, NativeTurnId, NamedSourceTurn
 from agent_comms.turn_phase import CompactionPhase, ModelWaitPhase, ToolRunningPhase, TurnPhase
 
-from ..wire_models import DeclaredWireFamily, WireModel
+from ..wire_models import DeclaredModel, DeclaredWireFamily, WireModel, _WireFamilyMeta
 from .shared import BridgeInputObserved
 
 
@@ -158,7 +158,7 @@ class RateWindow(WireModel):
         return f'usage {self.used_percent:g}% {period}, resets {reset}'
 
 
-class RateLimitReading(DeclaredWireFamily, ABC, affix='RateLimitReading'):
+class RateLimitReading(DeclaredFamily, ABC, affix='RateLimitReading'):
     """A usage reading supplies its own display and need for operator attention."""
 
     @abstractmethod
@@ -168,7 +168,7 @@ class RateLimitReading(DeclaredWireFamily, ABC, affix='RateLimitReading'):
         return False
 
 
-class RateLimits(RateLimitReading):
+class RateLimits(RateLimitReading, DeclaredModel, metaclass=_WireFamilyMeta):
     primary: RateWindow
 
     def line(self) -> str:
