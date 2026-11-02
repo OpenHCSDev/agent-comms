@@ -20,6 +20,7 @@ from agent_comms.active_route import (
     read_active_route,
     route_new_bus,
     ActiveRouteFile,
+    active_route_path,
 )
 from agent_comms.bus import Bus
 from agent_comms.native_build_inputs import DetachedChildStdio
@@ -218,9 +219,10 @@ def test_a_client_call_never_holds_publication_and_the_bus_refuses_writes_held_b
 ):
     """Toad is a client: an open call no longer stalls the installer's route step, and the
     store itself refuses writes once maintenance holds the root, under its write lock."""
-    path = tmp_path / "state" / "active-route.json"
+    monkeypatch.setenv("HOME", str(tmp_path))
+    path = active_route_path()
+    path.parent.mkdir(parents=True)
     route_new_bus(route_bus, path)
-    monkeypatch.setattr("agent_comms.active_route.active_route_path", lambda: path)
     with Comms.client(route_bus) as comms:
         for name in ("sender", "recipient"):
             comms.registry.declare(Thread(
