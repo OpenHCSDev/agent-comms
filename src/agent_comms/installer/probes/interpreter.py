@@ -22,6 +22,10 @@ class InterpreterBuild(BaseModel):
     def __str__(self) -> str:
         return "unrecorded interpreter"
 
+    def matches(self, actual: RecordedInterpreterBuild) -> bool:
+        """Absent evidence cannot make a cached runtime eligible for reuse."""
+        return False
+
     def require_recorded(self) -> RecordedInterpreterBuild:
         raise ValueError("The runtime has no recorded interpreter build")
 
@@ -39,6 +43,9 @@ class RecordedInterpreterBuild(InterpreterBuild):
         images = ", ".join(f"{artifact.path} sha256={artifact.sha256}"
                            for artifact in self.artifacts)
         return f"interpreter {self.invoked} [{self.abi}]: {images}"
+
+    def matches(self, actual: RecordedInterpreterBuild) -> bool:
+        return self == actual
 
     def require_recorded(self) -> RecordedInterpreterBuild:
         return self
