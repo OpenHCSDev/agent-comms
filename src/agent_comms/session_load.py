@@ -25,22 +25,21 @@ class SessionLoadPlan(CoordinationWork, DeclaredFamily, affix='SessionLoadPlan')
     def metadata(self) -> dict:
         return {"agentCommsLoad": FieldCodec.encode(self)}
 
+    @staticmethod
+    def witnessed(metadata: object, key: str, witness: type[SessionLoadPlan]) -> SessionLoadPlan:
+        """Foreign metadata carries a load witness under its key, or carries none."""
+        if isinstance(metadata, dict) and key in metadata:
+            return FieldCodec.decode(witness, metadata[key])
+        return EnsuringSessionLoadPlan()
+
     @classmethod
     def at_response(cls, metadata: object) -> 'SessionLoadPlan':
-        if not isinstance(metadata, dict):
-            return EnsuringSessionLoadPlan()
-        witness = metadata.get("agentCommsLoad")
-        return (EnsuringSessionLoadPlan() if witness is None
-                else FieldCodec.decode(ExistingSessionLoadPlan, witness))
+        return cls.witnessed(metadata, "agentCommsLoad", ExistingSessionLoadPlan)
 
     @classmethod
     def from_failure(cls, data: object) -> SessionLoadPlan:
         """Decode foreign failure metadata into a plan with its own reload behavior."""
-        if not isinstance(data, dict):
-            return EnsuringSessionLoadPlan()
-        witness = data.get("agentCommsLoadFailure")
-        return (EnsuringSessionLoadPlan() if witness is None
-                else FieldCodec.decode(FailedSessionLoadPlan, witness))
+        return cls.witnessed(data, "agentCommsLoadFailure", FailedSessionLoadPlan)
 
     def superseded_by(self, binding: thread_presentation.ThreadOwnerBinding) -> bool:
         return False

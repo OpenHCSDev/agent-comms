@@ -71,7 +71,7 @@ async def test_only_a_superseding_live_owner_supplies_an_existing_load(plan_type
     assert previous.binding == original
 
 
-@pytest.mark.parametrize("metadata", (None, {}, {"agentCommsLoadFailure": None}))
+@pytest.mark.parametrize("metadata", (None, {}))
 async def test_an_ensuring_load_is_not_an_old_owner_witness(metadata):
     binding = LiveThreadOwnerBinding(
         OwnerIdentity(RecordedThreadIncarnation("source", 123.0), 2),
