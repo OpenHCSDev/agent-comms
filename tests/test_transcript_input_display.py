@@ -14,6 +14,7 @@ from agent_comms.acp_extension import TranscriptSnapshotUpdate, decode_updates
 from agent_comms.comms import wire
 from conftest import installed_comms
 from agent_comms.native_entries import TranscriptProjection
+from agent_comms.nominal.field_codec import AcpSessionId
 from agent_comms.pi_payloads import PiMessage, UserMessage
 from agent_comms.threads import Thread
 from agent_comms.transcript_routes import DisplayText, InputDisplay, NoDisplayText, SentInputText
@@ -109,14 +110,20 @@ async def test_acp_saved_transcript_replay_hides_only_owned_internal_input(tmp_p
     comms.transcripts.routes.record_input_display(SECOND_INPUT_ID, DisplayText("test2"))
     agent = CommsAgent(wire(comms.root))
     updates = []
+    destinations = []
+    destination = AcpSessionId("input-display-destination")
 
     class Client(SessionUpdateSink):
-        async def publish_update(self, **kwargs):
-            updates.append(kwargs["update"])
+        async def publish_update(self, *, session_id, update):
+            destinations.append(session_id)
+            updates.append(update)
             return True
 
     try:
-        await agent.sessions.transcript.replay("worker", client=Client())
+        await agent.sessions.transcript.replay(
+            "worker", session_id=destination, client=Client(),
+        )
+        assert destinations == [destination]
         facts = decode_updates(updates[0].field_meta)
         snapshot, = (fact for fact in facts if isinstance(fact, TranscriptSnapshotUpdate))
         events = snapshot.page.events
