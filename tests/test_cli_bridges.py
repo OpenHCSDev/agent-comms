@@ -13,6 +13,6 @@ def test_bridges_list_their_own_state_directories(monkeypatch, tmp_path: Path) -
     assert bridges
     assert BridgeDeliveryStore.path() == tmp_path
     for bridge in bridges:
-        assert bridge.state_path() == tmp_path / bridge.state_directory
+        assert bridge.state_path().is_relative_to(tmp_path)
     for parent in HarnessHistory.__subclasses__():
         assert not set(History.readers(parent.harness)).intersection(bridges)

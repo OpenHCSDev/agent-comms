@@ -1,4 +1,4 @@
-"""Merge observation closes the real stored order, without a completion request."""
+"""Ancestry checks never fetch, and a failed git command is never a negative answer."""
 from agent_comms.repository_name import RepositoryName
 
 import pytest

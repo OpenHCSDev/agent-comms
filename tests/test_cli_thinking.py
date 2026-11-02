@@ -1,4 +1,4 @@
-"""Stopped-thread configuration uses the session's model-specific catalog."""
+"""Native Pi arguments come from one declared default, or from the environment when set."""
 
 
 from agent_comms.native_arguments import ConfiguredBinary, GivenArguments, InheritedArguments, NativeArguments
