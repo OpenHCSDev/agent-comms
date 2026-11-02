@@ -1,6 +1,5 @@
 """Read/correct original annotation addresses without reader-side installation."""
 from dataclasses import replace
-import hashlib
 import pytest
 
 from agent_comms.coordination_database import ReadableStore
@@ -13,14 +12,7 @@ from agent_comms.working_memory_annotations import WorkingMemoryAnnotations
 from agent_comms.working_memory_labels import (
     JevClassifier,
 )
-
-
-def local_system(text, sources=()):
-    """Unattested local content; no SDK/provider observation is claimed."""
-    raw = text.encode()
-    return SystemLayerSegment(provenance=(UnattributedProvenance(),), content=text,
-        tokens=0, sha256=hashlib.sha256(raw).hexdigest(), utf8_bytes=len(raw),
-        source_spans=sources)
+from working_memory_fixture import local_system
 
 
 def test_readers_do_not_create_a_missing_store(tmp_path):

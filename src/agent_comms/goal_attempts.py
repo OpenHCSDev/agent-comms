@@ -76,6 +76,7 @@ from .attempt_resolution import (
     WorkDecision,
 )
 from .typed_table import (
+    LOCAL_TABLE_SOURCE,
     Column,
     Generated,
     ReconciledFile,
@@ -83,6 +84,7 @@ from .typed_table import (
     SQLiteJournalMode,
     StoreWriter,
     TableReference,
+    TableSource,
     TypedTable,
 )
 
@@ -212,9 +214,10 @@ class Generation(GoalLedgerTable, TypedTable):
             raise ValueError("Generation must be positive.")
 
     @classmethod
-    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object]) -> list[Self]:
+    def _keyed(cls, db: sqlite3.Connection, key: dict[str, object], *,
+               table_source: TableSource = LOCAL_TABLE_SOURCE) -> list[Self]:
         try:
-            return super()._keyed(db, key)
+            return super()._keyed(db, key, table_source=table_source)
         except (sqlite3.Error, MalformedRecord) as error:
             raise StorageUncertainError("Invalid persisted goal generation.") from error
 

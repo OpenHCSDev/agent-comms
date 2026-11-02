@@ -693,6 +693,18 @@ class BusFile(DurableFile):
         )
 
 
+class InputCaptureFile(RootFile):
+    """A store participating in the original input capture's common source cut."""
+
+    __slots__ = ()
+
+
+class CompleteInputReader(InputCaptureFile):
+    """An input reader retained whole before selecting context and coordinator rows."""
+
+    __slots__ = ()
+
+
 class WireWakeFile(RootFile):
     """Declared commit signals wake idle readers, unlike lock-file churn."""
 

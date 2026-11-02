@@ -106,6 +106,9 @@ class GrantedSends:
 class MaintenanceTarget(SubclassUnion):
     """A hold without a target grants no additional runtime attachment."""
 
+    def require_capture(self, runtime: LaunchRuntime) -> None:
+        raise MaintenanceNotHeldError("Selected input capture needs a retargeted maintenance hold")
+
     @abstractmethod
     def allows_runtime(self, runtime: LaunchRuntime) -> bool: ...
 
@@ -129,6 +132,10 @@ class NoMaintenanceTarget(NullMember, MaintenanceTarget):
 class TargetRuntime(LaunchRuntime, RecordMember, MaintenanceTarget):
     def allows_runtime(self, runtime: LaunchRuntime) -> bool:
         return self.prefix == runtime.prefix
+
+    def require_capture(self, runtime: LaunchRuntime) -> None:
+        if not self.allows_runtime(runtime):
+            raise MaintenanceNotHeldError("Selected input capture needs the held target runtime")
 
     def require_drained_writes_open_to(self, state: MaintenanceState,
                                        holder: MaintenanceHolder) -> None:
@@ -375,6 +382,9 @@ class MaintenanceStatus:
         never enabled maintenance has no holder."""
         raise MaintenanceNotHeldError.unheld(change)
 
+    def require_capture(self, runtime: LaunchRuntime) -> MaintenanceState:
+        raise MaintenanceNotHeldError.unheld("Selected input capture")
+
 
 @dataclass(frozen=True, eq=False)
 class MaintenanceOperator(ProcessIdentity, declared_name=None):
@@ -512,6 +522,11 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
     def require_held_by(self, holder: MaintenanceHolder, change: str) -> None:
         self.phase.require_held_by(self, holder, change)
 
+    def require_capture(self, runtime: LaunchRuntime) -> MaintenanceState:
+        self.require_held_by(MaintenanceHolder.current(), "Selected input capture")
+        self.target.require_capture(runtime)
+        return self
+
     def require_draining(self) -> None:
         if self.phase is not DrainingPhase:
             raise ValueError('Only an acquired draining phase can be cleared')
@@ -633,6 +648,14 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def read(self) -> MaintenanceStatus:
         return self.current_unlocked()
+
+    @contextmanager
+    def capturing(self, runtime: LaunchRuntime) -> Iterator[MaintenanceState]:
+        """Borrow a current retargeted hold; never acquire, refresh or rewrite it."""
+        held = self.read().require_capture(runtime)
+        yield held
+        if self.read().require_capture(runtime) != held:
+            raise MaintenanceNotHeldError("Maintenance changed during selected input capture")
 
     def held_by(self, operator: MaintenanceOperator) -> MaintenanceState:
         """``operator``'s hold as the root records it now, in whatever phase it is in."""
