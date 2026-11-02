@@ -991,21 +991,18 @@ def test_a_subagent_start_registers_its_fork_and_a_resume_reuses_the_archived_th
 
 
 def test_a_hook_registered_fork_stays_its_sessions_child_under_another_recorded_team(
-        subagent_hook, tmp_path, monkeypatch):
+        subagent_hook, tmp_path):
     """The bus records lead as the team lead; a fork the hook registered under a peer lead's
     session acts through a team verb and stays that peer's child."""
-    comms, run = subagent_hook
+    comms, _ = subagent_hook
     comms.registry.declare(Thread("peer", frozenset({"comms", TeammatesTag.declared_name}),
                                   comms.registry.require("lead").worktree,
                                   model=DeclaredModel("anthropic/claude-opus-4-6"),
                                   execution=ExternalThreadExecution))
-    WatchClaim("peer-session").enrol(WatchRecord("peer", str(comms.root), (), tmp_path / "peer"))
-    monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "peer-session")
-    record = {"session_id": "peer-session", "hook_event_name": "SubagentStart",
-              "transcript_path": str(tmp_path / "peer.jsonl"), "agent_id": "a2",
-              "agent_type": "general-purpose"}
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(record)))
-    forks.started()
+    # A bound session answers its hooks only through its own resident bridge.
+    with resident_session(comms, tmp_path / "peer-state", "peer", "peer-session") as peer:
+        resident_stdout(peer, SubagentStartRequest, tmp_path / "peer.jsonl",
+                        agent_id="a2", agent_type="general-purpose")
     found = tmp_path / "found.txt"
     found.write_text("The fork recorded its finding.")
     said = command(comms, "order", "say", "#comms", str(found), "--fork", "claude-a2")
