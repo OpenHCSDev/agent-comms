@@ -300,7 +300,7 @@ def test_incomplete_original_participant_refuses_selected_publication(
         missing.delete(db, owner_lookup=lookup)
         for guard in delete_guards:
             db.execute(guard.sql)
-        CoordinationStore.table_schema().require_schema(db)
+        CoordinationStore.schema_at(source.path).require_schema(db)
     with pytest.raises(ParticipantNotRegistered):
         source.store.participants.get(lookup)
     before = CoordinationStore.digest(source.path)

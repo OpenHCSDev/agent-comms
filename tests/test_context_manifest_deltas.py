@@ -229,6 +229,10 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
     ) for turn, count in enumerate((1, 2, 4), start=1))
     selected = originals[1]
     reference = ContextManifestReference(selected.source, selected.record_id)
+    with comms.contexts.snapshot() as db:
+        expected = comms.contexts.resolve(
+            db, reference.source, ContextRequest.require(db, id=reference.record_id),
+        )
     before = ContextStore.digest(comms.contexts.path)
     copy = PracticeCopy(comms.root, tmp_path / 'retained')
     copy.include_contexts((), requests=(reference, reference), maximum_bytes=2**20)
@@ -239,7 +243,7 @@ def test_selected_context_copy_preserves_closure_and_original_sequences(tmp_path
         assert info.source == selected.source
         rows = ContextRequest.select(db, order_by=('id',))
         assert tuple(row.id for row in rows) == tuple(row.record_id for row in originals[:2])
-        assert retained.resolve(db, info.source, rows[-1]).value == selected.value
+        assert retained.resolve(db, info.source, rows[-1]) == expected
         assert ContextEntry.count(db) == 2
         retained_version = max(row.id for row in ContextSegmentVersion.select(db))
     with comms.contexts.snapshot() as db:
