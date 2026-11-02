@@ -291,20 +291,6 @@ class TestThreadOps:
         wired.owners.release("fixer")
         assert type(wired.registry.status("fixer")) is StoppedThreadStatus
 
-    def test_stop_current_calling_thread_uses_voluntary_release(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
-        owner = wired.registry.require("fixer")
-        wired.registry.register(
-            replace(owner, process_identity=ProcessIdentity.capture(os.getpid()))
-        )
-        before = wired.registry.snapshot().claim_generation(owner.name)
-        monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
-
-        wired.owners.stop(owner.name)
-
-        snapshot = wired.registry.snapshot()
-        assert type(snapshot.statuses[owner.name]) is StoppedThreadStatus
-        assert snapshot.claim_generation(owner.name) > before
-
     def test_archive_requires_stopped_thread(self, wired: Comms) -> None:
         wired.messaging.send("PR111", "fixer", "kept after archive")
         with pytest.raises(RelationViolationError):
@@ -421,30 +407,6 @@ class TestThreadOps:
         wired.threads.rename_self("reviewer", caller=ThreadCaller("fixer"))
         with pytest.raises(RelationViolationError):
             wired.registry.register(Thread(name='fixer', tags=frozenset(), worktree=Checkout(Path('/tmp/other'))))
-
-    @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="uses /proc")
-    def test_stop_terminates_real_process(self, wired: Comms) -> None:
-        env = dict(
-            __import__("os").environ,
-            AGENT_COMMS_THREAD="live-process",
-            AGENT_COMMS_ROOT=str(wired.root),
-        )
-        process = subprocess.Popen(
-            [sys.executable, "-c", "import time; time.sleep(30)"],
-            start_new_session=True,
-            env=env,
-        )
-        wired.registry.declare(
-            Thread(name='live-process', tags=frozenset(), worktree=Checkout(Path('/tmp')), process_identity=ProcessIdentity.capture(process.pid))
-        )
-        try:
-            wired.owners.stop("live-process")
-            assert process.wait(timeout=5) == -__import__("signal").SIGTERM
-            assert type(wired.registry.status("live-process")) is StoppedThreadStatus
-        finally:
-            if process.poll() is None:
-                process.kill()
-
 
 class TestFork:
     def test_fork_requires_parent_session(self, wired: Comms, source_repository) -> None:

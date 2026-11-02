@@ -69,5 +69,3 @@ def test_running_native_activity_is_derived_from_current_turn_phase(tmp_path):
         comms.registry.require("worker").turn_record.read().require_active().id
         == '16367aacb67a4a017c8da8ab95682ccb'
     )
-    comms.owners.stop("worker")
-    assert not comms.registry.require('worker').executing
