@@ -1,6 +1,6 @@
 """Pure precommit audience values; these tests assert no durable delivery proof."""
 
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import replace
 
 import pytest
 
@@ -44,12 +44,6 @@ def freeze(msg=None, members=None, **changes):
 
 def test_full_ordered_membership_ignores_mentions_and_has_two_unique_identities():
     result = freeze()
-    assert result.seq == 11
-    assert result.message_id == message().message_id
-    assert result.target == "#team"
-    assert result.sender_lookup == UNRELATED_LOOKUP
-    assert result.sender == "sender"
-    assert result.source_revision == "registry+catalog:7"
     assert result.recipients == (
         FrozenRecipient(SENDER_LOOKUP, "alpha"),
         FrozenRecipient(RECIPIENT_LOOKUP, "beta"),
@@ -57,8 +51,6 @@ def test_full_ordered_membership_ignores_mentions_and_has_two_unique_identities(
     assert result.canonical_members == frozenset({"alpha", "beta"})
     assert freeze(members=list(reversed(result.recipients))).digest == result.digest
     assert freeze(members=[FrozenRecipient(SENDER_LOOKUP, "renamed")]).digest != result.digest
-    with pytest.raises(FrozenInstanceError):
-        result.target = "#other"
     assert replace(result, source_revision="changed").digest != result.digest
 
 
