@@ -39,10 +39,7 @@ def _repo(tmp_path: Path, name: str, *, remote: bool = True) -> Path:
     return worktree
 
 
-def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
-    tmp_path: Path, monkeypatch
-):
-    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
+def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(tmp_path: Path):
     comms = context_comms(tmp_path)
     worktree = _repo(tmp_path, "repo")
     (worktree / "step.py").write_text("print('step')\n")
@@ -70,9 +67,7 @@ def test_a_dirty_worktree_is_committed_and_pushed_to_the_derived_branch(
 def test_production_git_never_discovers_a_checkout_above_the_declaration(
     tmp_path: Path, monkeypatch, relative: bool
 ):
-    # The production git() carries the ceiling pin itself; the ancestor repo
-    # here exists on purpose and the declared non-repo worktree must refuse.
-    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
+    # The ancestor repo exists on purpose; the declared non-repo worktree must refuse.
     comms = context_comms(tmp_path)
     ancestor = _repo(tmp_path, "ancestor", remote=False)
     (ancestor / "base.txt").write_text("base\n")
@@ -94,11 +89,7 @@ def test_production_git_never_discovers_a_checkout_above_the_declaration(
     assert _git(ancestor, "rev-parse", "--short", "HEAD").strip() == base
 
 
-def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(
-    tmp_path: Path, monkeypatch
-):
-    # The production git() owns the ceiling pin; no test-side pin is needed.
-    monkeypatch.delenv("GIT_CEILING_DIRECTORIES", raising=False)
+def test_a_stale_declaration_or_broken_transport_never_names_a_fake_push(tmp_path: Path):
     comms = context_comms(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
