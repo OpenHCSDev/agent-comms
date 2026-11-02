@@ -1090,8 +1090,7 @@ def test_turns_that_changed_nothing_are_held_up_against_what_the_session_wrote(
 
     idle = (said("Skipped"), ended) * 3
     asked = json.loads(stopped(*idle))["reason"]
-    assert "Tristan is asking you:" in asked and "> I clear his board first." in asked
-    assert "> Skipped" in asked and "did you mean it?" in asked
+    assert asked == "> I clear his board first.\n\ndid you mean it?"  # a quote and the question, no narration
     assert stopped(*idle, active=True) == ""  # never loops
     assert stopped(said("Skipped"), ended, said("Skipped"), ended) == ""  # two is not a pattern
     assert stopped(said("Skipped"), ended, called("Bash"), result, said("done"), ended,

@@ -28,7 +28,6 @@ from importlib.util import find_spec
 from pathlib import Path, PurePosixPath
 from typing import ClassVar, Self
 
-from .session_receipts import SessionReceipts
 from .nominal.declared_family import DeclaredFamily
 from .instruction_deck import DealtCalls
 from .nominal.field_codec import FieldCodec, MalformedRecord, MessageId
@@ -230,7 +229,7 @@ class Speaking(Voice):
             fresh = answered - covered.asked
             if not fresh:
                 return DocumentChange.to(covered)
-            line = audit.batch(fresh).his_question(deal.receipts())
+            line = audit.batch(fresh).his_question()
             return DocumentChange.to(covered.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
@@ -431,16 +430,11 @@ class SessionAudit:
         return next((line.strip()[:200] for entry in reversed(self.quotable())
                      for line in entry.does.splitlines() if line.strip()), "")
 
-    def his_question(self, receipts: SessionReceipts) -> str:
-        """His question carries the audit's own statement beside observed transcript actions;
-        an audit that says nothing and a session with no record hear the question alone."""
+    def his_question(self) -> str:
+        """His question quotes the session's own statement and asks; it never narrates what the
+        session did. An audit that says nothing hears the question alone."""
         statement = self.last_does()
-        said = f"> {statement}\n\nyou wrote that." if statement else ""
-        proved = "\n\n".join("Written answers:\n" + "\n".join(
-            f"> {line}" for line in answer.splitlines())
-            for answer in MeantRecord.answers_in(tuple(entry.answer for entry in self.meant)))
-        return "\n\n".join(part for part in (said, "\n".join(receipts.lines()), proved, MeantRecord.question)
-                           if part)
+        return f"> {statement}\n\n{MeantRecord.question}" if statement else MeantRecord.question
 
     def entry(self, rule: str) -> RuleAudit:
         """What this audit says about one rule; a rule it skips has said nothing."""
@@ -960,7 +954,7 @@ class Unmeant(Owed):
         if not meant.open:
             return
         yield cls(record, deal.audit, meant.open[0], record.opened_by(deal, opened),
-                  SessionAudit.read(deal.audit).his_question(deal.receipts()))
+                  SessionAudit.read(deal.audit).his_question())
 
     @property
     def reason(self) -> str:
@@ -1106,10 +1100,6 @@ class RuleDeal(State, DealtCalls):
     def delivery(self) -> DealDelivery:
         """How the session receives what it is dealt; a deal that knows no launcher reads."""
         return DealDelivery()
-
-    def receipts(self) -> SessionReceipts:
-        """What the session's own record shows it just did; a backend with no record has none."""
-        return SessionReceipts()
 
     def audit_written(self) -> None:
         """A successful audit edit settles its exact question, then asks about new rules."""

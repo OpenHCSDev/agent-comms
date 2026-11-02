@@ -28,7 +28,6 @@ from .nominal.field_codec import ThreadLookup
 from .rule_deal import (
     DealDelivery, DealTrigger, DealtRuleGate, Redeals, RuleDeal, Voice,
 )
-from .session_receipts import SessionReceipts
 from .meant_voice import BusVoice
 from .tool_denial import SelectedToolDenied
 from .threads import Thread
@@ -92,9 +91,6 @@ class PiThreadGate(PiRuleGate, BusVoice):
 
     def speaker(self) -> str:
         return self.thread.name
-
-    def receipts(self) -> SessionReceipts:
-        return self.session().receipts()
 
     def delivery(self) -> DealDelivery:
         """The thread's runtime knows what its launcher put in the system prompt."""

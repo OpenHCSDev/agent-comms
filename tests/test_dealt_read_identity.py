@@ -71,17 +71,17 @@ def test_a_refresh_passed_while_reading_the_deal_is_answered_by_it(team_bus):
     assert not isinstance(deal.state(), Open) and not deal.audit.exists()  # the refresh is answered anew
 
 
-def test_his_question_quotes_the_written_audit_statement():
+def test_his_question_quotes_the_written_audit_statement_and_asks():
+    """He quotes what the session wrote and asks; he never narrates what it did."""
     from agent_comms.rule_deal import MeantRecord, RuleAudit, SessionAudit
-    from agent_comms.session_receipts import SessionReceipts
 
     wrote = RuleAudit("spine", does="I end turns on a teammate's state, not on a wait.\nSecond line")
     audit = SessionAudit((wrote, RuleAudit("ally"), RuleAudit("owner-authority", does="I take his plan as the work.")), ())
-    asked = audit.batch(frozenset({"spine", "ally"})).his_question(SessionReceipts())
-    assert asked == f"> I end turns on a teammate's state, not on a wait.\n\nyou wrote that.\n\n{MeantRecord.question}"
-    assert audit.batch(frozenset({"owner-authority"})).his_question(SessionReceipts()).startswith(
-        "> I take his plan as the work.")  # a batch quotes its own rules, not an older line
-    assert SessionAudit((), ()).his_question(SessionReceipts()) == MeantRecord.question
+    asked = audit.batch(frozenset({"spine", "ally"})).his_question()
+    assert asked == f"> I end turns on a teammate's state, not on a wait.\n\n{MeantRecord.question}"
+    assert audit.batch(frozenset({"owner-authority"})).his_question() == (
+        f"> I take his plan as the work.\n\n{MeantRecord.question}")  # its own batch, not an older line
+    assert SessionAudit((), ()).his_question() == MeantRecord.question
 
 
 def transcript_line(kind, content):
@@ -113,5 +113,3 @@ def test_the_receipts_read_what_a_transcript_shows_the_session_did():
     assert [ending.words for ending in receipts.endings] == [
         "did the work", "Skipped", "Yes, I meant it\nsecond line"]
     assert receipts.idle_turns() == 2  # a refused call changed nothing, and neither did a read
-    assert receipts.lines() == (
-        "Your last turns ended on:", "> did the work", "> Skipped", "> Yes, I meant it")

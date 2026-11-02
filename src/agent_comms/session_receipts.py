@@ -28,8 +28,6 @@ class SessionReceipts:
     running: dict[str, str] = field(default_factory=dict)
     acted: int = 0
 
-    quoted_endings: ClassVar[int] = 3
-    quoted_width: ClassVar[int] = 120
     reading_tool: ClassVar[str] = "Read"
 
     def said(self, words: tuple[str, ...]) -> None:
@@ -59,12 +57,3 @@ class SessionReceipts:
                 break
             idle += 1
         return idle
-
-    def lines(self) -> tuple[str, ...]:
-        """The receipts as he would read them out; a session with no record has none."""
-        ended = tuple(self.quoted(ending) for ending in self.endings[-self.quoted_endings:])
-        return ("Your last turns ended on:", *ended) if ended else ()
-
-    def quoted(self, ending: TurnEnding) -> str:
-        first = next((line.strip() for line in ending.words.splitlines() if line.strip()), "")
-        return f"> {first[:self.quoted_width]}"

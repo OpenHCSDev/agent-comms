@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from itertools import takewhile
 from math import inf
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Never
+from typing import TYPE_CHECKING, BinaryIO, Never
 
 from .errors import RelationViolationError
 from .native_failures import NativePiUnavailable
@@ -40,9 +40,6 @@ from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .native_session_reopen import NativeSessionIdentity
 from .private_path import FileRevision
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .native_tools import ReadTool
-from .selected_triage import SelectedTriage
-from .session_receipts import SessionReceipts
 from .transcript_sources import TranscriptRecord, TranscriptSource
 from .turn_item import FreshNativeId, NativeItemId
 
@@ -231,17 +228,6 @@ class StoredRecord(NativeRecord):
     @property
     def size(self):
         return sum(event.text_size for event in self.events)
-
-
-@dataclass
-class NativeReceipts(SessionReceipts):
-    """A Pi session's receipts: its read tool has Pi's own name, and a reply to Core's triage
-    prompt is a decision record, not words the session ended a turn on."""
-
-    reading_tool: ClassVar[str] = ReadTool.declared_name
-
-    def said(self, words: tuple[str, ...]) -> None:
-        super().said(tuple(text for text in words if not SelectedTriage.recognizes(text)))
 
 
 class NativeTranscript(TranscriptSource):
@@ -481,24 +467,12 @@ class NativeTranscript(TranscriptSource):
             return record, entry
         raise RelationViolationError("Native turn has no final reply after its checkpoint")
 
-    receipts_window: ClassVar[int] = 6_000_000
     """How far back receipts read: a Pi record carrying tool output is large, so a smaller
     window can hold no turn's end."""
 
     def voice(self, deal: Speaking) -> Voice:
         """A native thread can receive the question; its own audit carries the answer."""
         return deal
-
-    def receipts(self) -> SessionReceipts:
-        """The session file's recent past, folded oldest first."""
-        receipts = NativeReceipts()
-        with closing(self.tail(max_bytes=self.receipts_window)) as entries:
-            newest_first = tuple(entries)
-        for entry in reversed(newest_first):
-            for message in entry.messages:
-                message.tally(receipts)
-        receipts.turn_ended()
-        return receipts
 
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size

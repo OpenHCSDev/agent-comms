@@ -23,13 +23,11 @@ from agent_comms.rule_deal import DealtRuleGate, Mute, Owed, ReadSpan, RuleDeal,
 from agent_comms.comms import Comms
 from agent_comms.compaction_notices import CompactionNotice
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.session_receipts import SessionReceipts
 from agent_comms.cli_bridges.shared import Binding, Watch
 import time
 from agent_comms.turn_phase import ToolRunningPhase
 from agent_comms_hooks import ClaudeToolHook, ClaudeTranscriptHook, HookRecord
 from agent_comms.meant_voice import BusVoice
-from .claude_transcript import ClaudeJsonLines
 from .hook_forks import SubagentActivity
 
 
@@ -124,11 +122,7 @@ class EditTool(WriteTool, declared_name="Edit"):
 
 
 class TranscriptWords(ClaudeTranscriptHook, RuleDeal):
-    """The session's transcript supplies bounded display receipts, never audit answers."""
-
-    def receipts(self) -> SessionReceipts:
-        """The transcript's recent past: a gate hook runs often, so it never reads more of it."""
-        return ClaudeJsonLines().receipts(self.tail())
+    """A rule deal read beside a Claude session's own transcript."""
 
 
 @dataclass(frozen=True)
