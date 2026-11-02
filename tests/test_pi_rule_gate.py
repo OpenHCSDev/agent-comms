@@ -403,6 +403,39 @@ def test_pi_question_settles_only_on_its_exact_successful_audit_write(
     assert owner_lines(commander_bus, "unit-p") == lines
 
 
+@pytest.mark.usefixtures("native_runtime_package")
+def test_an_open_question_keeps_its_id_until_the_answer_naming_it(tmp_path, commander_bus):
+    """Answering more rules while a question is open asks nothing new, so the answer the
+    session writes for the question it read still settles it."""
+    session = create_fresh_private_session(tmp_path / "sessions", worktree=Checkout(tmp_path)).path
+    commander_bus.registry.declare(Thread(
+        "unit-q", frozenset(), Checkout(tmp_path),
+        session_file=RegistrySessionLocation.from_path(str(session), commander_bus.root),
+        model=DeclaredModel("anthropic/claude-opus-4-6")))
+    deal = PiRedeal.of(commander_bus, commander_bus.registry.require("unit-q"))
+    events.CompactionEnd().deal_rules(deal)
+    record = deal.current()
+    first, second = [source for source in record.dealt if source.stem in record.due.rules][:2]
+    write = call("write", {"path": str(deal.audit), "content": ""})
+    deal.audit.write_text(json.dumps({"rules": [engaged(first.stem, first)], "owner_words": []}))
+    write.completed_under(deal)
+    [line] = owner_lines(commander_bus, "unit-q")
+    question = deal.meant.read().open[0].message_id
+
+    both = {"rules": [engaged(first.stem, first), engaged(second.stem, second)], "owner_words": []}
+    deal.audit.write_text(json.dumps(both))
+    write.completed_under(deal)
+    assert owner_lines(commander_bus, "unit-q") == [line]
+    assert deal.meant.read().open[0].message_id == question
+
+    answer = "Yes, I meant both answers, and I am reading the next batch of rules now."
+    answered = replace(SessionAudit.read(deal.audit), meant=(MeantAnswer(question, answer),))
+    deal.audit.write_text(FieldCodec.compact(FieldCodec.encode(answered)))
+    write.completed_under(deal)
+    assert not deal.meant.read().open
+    assert {first.stem, second.stem} <= deal.meant.read().asked
+
+
 @pytest.mark.parametrize("opening", ("Yes", "No"))
 def test_audit_answers_keep_the_declared_explanatory_word_bar(opening):
     question = MessageId.mint("word-bar")

@@ -157,6 +157,13 @@ class MeantRecord:
         return tuple(word for word in words
                      if cls.answer.match(word) and len(word.split()) >= cls.answer_words)
 
+    def covering(self, answered: frozenset[str]) -> MeantRecord:
+        """An open question covers every rule answered while it stands: nothing new opens until
+        it is answered, so those rules were read in its batch. Asking again would replace it,
+        and the session's answer must name the question it read. On 2026-11-02 pi-commander
+        answered "Yes" four times while each audit edit replaced the question it named."""
+        return replace(self, asked=self.asked | answered) if self.open else self
+
     def asking(self, rules: frozenset[str], asked: Asked) -> MeantRecord:
         return replace(self, asked=self.asked | rules, open=(asked,))
 
@@ -211,11 +218,12 @@ class Speaking(Voice):
         """After an audit edit: ask about the rules it newly answered, once."""
 
         def asked(meant: MeantRecord) -> DocumentChange[MeantRecord, MeantRecord]:
-            fresh = answered - meant.asked
+            covered = meant.covering(answered)
+            fresh = answered - covered.asked
             if not fresh:
-                return DocumentChange.to(meant)
+                return DocumentChange.to(covered)
             line = audit.his_question(deal.receipts())
-            return DocumentChange.to(meant.asking(fresh, self.say(line, deal)))
+            return DocumentChange.to(covered.asking(fresh, self.say(line, deal)))
 
         deal.meant.update(asked)
 
