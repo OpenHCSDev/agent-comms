@@ -56,7 +56,7 @@ from agent_comms.cli_bridges.hook_read_gate import GatedCall, MonitorInput
 from agent_comms_hooks.skill import (DeckReader, DeckStart, LightReader,
                                      LightPrime, Prime, SessionSource)
 from agent_comms.cli_bridges.session_watch import DeafWatch, LiveWatch, WatchClaim, WatchRecord
-from conftest import engaged
+from conftest import engaged, fresh_confession
 from test_team_notifications import beat
 from test_head_review import ACCEPTED, invoke
 
@@ -804,7 +804,7 @@ def test_every_unanswered_rule_is_named_in_one_refusal(capsys, dealt_session, te
 
 
 @pytest.mark.parametrize("change, says", [
-    ({"quote": "no rule file holds this line"}, "not verbatim"),
+    ({"quote": "no rule file holds this line"}, "not whole consecutive greentext lines"),
     ({"quote": "   "}, "blank"),
     ({"quote": ""}, "blank"),
     ({"does": " "}, "does and why"),
@@ -1013,10 +1013,10 @@ def test_a_resume_keeps_the_deal_its_session_is_answering(tmp_path, commanding_s
         start.publish(replace(old, dealt=(first.with_name("retired-source.md"), *old.dealt[1:])))
     result = session_start(transcript, "resume", comms=team_bus, binding=team_binding)
     assert result.returncode == 0, result.stderr
-    assert start.audit.exists() is not retired
+    assert fresh_confession(start) is retired
     assert start.current().read_by(start) == (() if retired else (first,))
     assert session_start(transcript, "compact", comms=team_bus, binding=team_binding).returncode == 0
-    assert not start.audit.exists()  # a compaction owes a fresh confession, never a carried one
+    assert fresh_confession(start)  # a compaction owes a fresh confession, never a carried one
     assert start.current().read_by(start) == ()
 
 

@@ -9,8 +9,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.rule_deal import (
-    Asked, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
-    SessionAudit, StartupDealMode, Unengaged,
+    Asked, AuditDue, CompactionDealMode, FullDealMode, MeantAnswer, MeantRecord, OffDealMode,
+    OwnerWordsAnswer, RuleAudit, SessionAudit, StartedDeal, StartupDealMode, Unaudited, Unengaged,
+    Unmeant,
 )
 from agent_comms.nominal.field_codec import FieldCodec, MessageId
 
@@ -30,7 +31,7 @@ from agent_comms.session_file import RegistrySessionLocation
 from agent_comms.thread_model import DeclaredModel
 from agent_comms.cli_bridges.hook_read_gate import ReadInput
 from agent_comms_hooks.skill import DeckReader
-from conftest import answer_deal, engaged
+from conftest import answer_deal, engaged, fresh_confession
 
 
 def call(name: str, arguments: dict[str, object]) -> CodingCall:
@@ -53,7 +54,7 @@ def test_every_independent_thread_is_dealt_the_same_sources_once(team_bus):
         assert deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
         deal.audit.write_text("{}")
         deal.start()
-        assert deal.audit.exists()
+        assert deal.audit.read_text() == "{}"
 
 
 def test_a_retired_package_source_redeals_before_owner_binding(peer_deal):
@@ -66,7 +67,7 @@ def test_a_retired_package_source_redeals_before_owner_binding(peer_deal):
     peer_deal.start()
 
     assert peer_deal.current().dealt == tuple(path.resolve() for path in DeckReader.sources())
-    assert not peer_deal.audit.exists()
+    assert fresh_confession(peer_deal)
     with pytest.raises(RulesUnread):
         peer_deal.judge_tool("bash")
 
@@ -457,3 +458,44 @@ def test_a_settled_meant_answer_replies_to_the_owner_on_the_real_bus(tmp_path, p
     assert (reply.sender, reply.target) == ("unit-x", owner)
     assert reply.body == "Yes. I meant it, and I am doing it now."
     assert team_bus.bus.bus.message_reference(asked.message_id) in reply.answers
+
+
+# The four refusals that cost three teammates their turn after compaction (bus 57071-57076).
+
+def test_a_quote_may_drop_the_greentext_marker_but_not_a_line(tmp_path):
+    source = tmp_path / "rule.md"
+    source.write_text("> be agent\n> read the rule\n\n- a bullet\n")
+    assert RuleAudit("rule", quote="be agent\nread the rule", does="d", why="w").unengaged(source) == ""
+    assert RuleAudit("rule", quote="> be agent\nread the rule", does="d", why="w").unengaged(source) == ""
+    for partial in ("be ag", "read the rule\nbe agent", "a bullet"):
+        assert "whole consecutive greentext lines" in RuleAudit(
+            "rule", quote=partial, does="d", why="w").unengaged(source)
+
+
+def test_the_owners_words_are_shown_exactly_as_the_audit_must_hold_them(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    due = AuditDue(frozenset({"voice"}), ("fix the gate",))
+    refusal = due.refusal(SessionAudit((RuleAudit("voice"),), ()))
+    reason = Unaudited(deal.current(), deal.audit, refusal).reason
+    assert '"fix the gate".' in reason and "fix the gate." not in reason.replace('"fix the gate".', "")
+    idle = SessionAudit((RuleAudit("voice"),), (OwnerWordsAnswer("fix the gate", " "),))
+    assert due.refusal(idle) == 'the audit names no action for: "fix the gate"'
+
+
+def test_a_meant_refusal_names_its_one_id_and_why_the_written_answer_failed(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    deal.redeal(StartedDeal())
+    question = MessageId.mint("meant-trap")
+    reason = Unmeant(deal.current(), deal.audit, Asked(question), (), "did you mean it?",
+                     ("Yes", "I meant every answer I wrote and I am reading the next batch now")).reason
+    assert question in reason and "none replaces it" in reason
+    assert '"Yes" under this id does not count: it has 1 words, fewer than 12' in reason
+    assert "does not open with yes or no" in reason
+
+
+def test_a_deal_writes_the_blank_audit_its_session_fills(team_bus):
+    deal = PiRedeal.of(team_bus, team_bus.registry.require("unit-x"))
+    deal.redeal(StartedDeal())
+    audit = SessionAudit.read(deal.audit)
+    assert audit == deal.current().due.skeleton() and not audit.fault()
+    assert {entry.rule for entry in audit.rules} == deal.current().due.rules
