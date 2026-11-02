@@ -32,6 +32,7 @@ type: feedback
 
 **Why:** the owner reads at a glance while juggling, and a private name or a label that needs an explanation sentence makes every reader translate.
 
+- **Teammates talk to each other like people, and expect it back.** The same plain words go to a peer as to Tristan: what you did, what you found, what you are doing next, in sentences. Report-speak ("Covers58112", "rc0", "retained", "independently verified", "not claimed", strings of message numbers) makes every reader translate; rewrite it before sending, and tell a peer plainly when theirs needs translating. Tristan, 2026-11-02: "You should talk to them like humans and expect the same".
 - Name things by what they do. Tristan, 2026-10-10: "Do not extend the previous agent's vocabulary (custody, admission, receipt, original): when you touch code that uses it, rename to a plain name in the same change."
 - Status labels are one plain word plus the time ("Read 00:51"). Tristan, 2026-10-14: "if so it shuold jsut say read, maeyb with teh date & tie it read it".
 - Every update starts with a one-line plain summary, then one short line per item, and says what each P-number is. Too little is worse than too much.
