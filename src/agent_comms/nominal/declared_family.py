@@ -199,6 +199,11 @@ class DeclaredFamily(FamilyMember, ABC, metaclass=FamilyMeta):
         return cls.__registry__[cast(Hashable, name)]
 
     @classmethod
+    def recorded_member(cls, name: object) -> type[Self]:
+        """The member a stored or wire name selects; only a declared name selects one."""
+        return cls.member_named(name)
+
+    @classmethod
     def member_named(cls, name: object) -> type[Self]:
         try:
             member = cls._named_member(name)

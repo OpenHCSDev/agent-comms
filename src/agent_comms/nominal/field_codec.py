@@ -1028,13 +1028,21 @@ class DefaultExternalName:
     """The family member selected when an external name is absent or unrecognized."""
 
 
-class ExternalName(ExternalField, DeclaredFamily):
+class DefaultedName:
+    """Precedes a family's base: its recorded names can outlive their declarations (a newer
+    build, an older record), so an absent or unrecognized name selects its one
+    DefaultExternalName member."""
+
+    @classmethod
+    def recorded_member(cls, name: object) -> type[Self]:
+        return cast(type[DeclaredFamily], cls).member_or_default(name, DefaultExternalName)
+
+
+class ExternalName(ExternalField, DefaultedName, DeclaredFamily):
     @classmethod
     @boundary_decoder
     def from_external(cls, value: object) -> type[Self]:
-        return cls.member_or_default(
-            FieldCodec.decode(str | None, value), DefaultExternalName,
-        )
+        return cls.recorded_member(FieldCodec.decode(str | None, value))
 
     @classmethod
     def decode_external_value(cls, value: object, record: Mapping[str, object]) -> object:
@@ -3111,9 +3119,9 @@ class _UndeclaredDecoder(_JsonValueRepresentation, ValueDecoder[JsonValue]):
 def _declared_member[Family: DeclaredFamily](
     family: type[Family], name: object,
 ) -> type[Family]:
-    """A wire name the family does not declare is malformed data."""
+    """A wire name the family's recorded_member does not resolve is malformed data."""
     try:
-        return family.member_named(name)
+        return family.recorded_member(name)
     except ValueError as error:
         raise MalformedRecord(str(error)) from error
 
