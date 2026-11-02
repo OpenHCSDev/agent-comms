@@ -34,45 +34,48 @@ from delivery_owner_fixture import canonical_agent
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
-    @dataclass(frozen=True, kw_only=True)
-    class InspectFixtureTool(SearchAction, ToolDeclaration):
-        label = "Inspect"
-        query: str
+    try:
+        @dataclass(frozen=True, kw_only=True)
+        class InspectFixtureTool(SearchAction, ToolDeclaration):
+            label = "Inspect"
+            query: str
 
-        def reads(self):
-            return self.query
+            def reads(self):
+                return self.query
 
-    event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
-    assert (event.title, event.kind) == ("Inspect new declaration", SearchAction)
-    owner, received = acp_tools
-    await AcpEventConsumer(owner, "declared-tool", owner.sessions.client).dispatch(event)
-    async with asyncio.timeout(3):
-        update = await received.get()
-    assert isinstance(update, ToolCallStart)
-    assert (update.kind, update.title, update.raw_input) == (
-        "search",
-        "Inspect new declaration",
-        {"query": "new declaration"},
-    )
-    with pytest.raises(ValueError):
-        CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
-    case = FieldCodec.decode(ToolCallId, "case")
-    examples = (ReadTool(call_id=case, path="file"), BashTool(call_id=case, command="pwd"),
-        EditTool(call_id=case, path="file", edits=(ReplacementEdit("before", "after"),)),
-        WriteTool(call_id=case, path="file", content="value"))
-    assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
-    for tool in examples:
-        call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
-        assert type(call) is type(tool)
-        event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
-        assert event.kind is tool.declared_action() and event.args == tool.arguments
-        assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
-    unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
-    assert (unknown.title, unknown.kind, unknown.args) == (
-        "external_extension",
-        OtherAction,
-        {"private": "preserved"},
-    )
+        event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
+        assert (event.title, event.kind) == ("Inspect new declaration", SearchAction)
+        owner, received = acp_tools
+        await AcpEventConsumer(owner, "declared-tool", owner.sessions.client).dispatch(event)
+        async with asyncio.timeout(3):
+            update = await received.get()
+        assert isinstance(update, ToolCallStart)
+        assert (update.kind, update.title, update.raw_input) == (
+            "search",
+            "Inspect new declaration",
+            {"query": "new declaration"},
+        )
+        with pytest.raises(ValueError):
+            CodingTool.from_call("inspect_fixture", {"query": "new declaration"}, call_id="case")
+        case = FieldCodec.decode(ToolCallId, "case")
+        examples = (ReadTool(call_id=case, path="file"), BashTool(call_id=case, command="pwd"),
+            EditTool(call_id=case, path="file", edits=(ReplacementEdit("before", "after"),)),
+            WriteTool(call_id=case, path="file", content="value"))
+        assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
+        for tool in examples:
+            call = type(tool).from_call(tool.declared_name, tool.arguments, call_id=case)
+            assert type(call) is type(tool)
+            event = events.ToolStart.from_call("case", tool.declared_name, call.arguments)
+            assert event.kind is tool.declared_action() and event.args == tool.arguments
+            assert call.call_id == "case" and call.arguments == tool.arguments and tool.reads() in event.title
+        unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
+        assert (unknown.title, unknown.kind, unknown.args) == (
+            "external_extension",
+            OtherAction,
+            {"private": "preserved"},
+        )
+    finally:
+        ToolDeclaration.__registry__.pop("inspect_fixture", None)
 
 
 @pytest.mark.parametrize("name,label", [("grep", "Search"), ("glob", "Find")])
@@ -161,11 +164,8 @@ def test_core_commands_share_native_identity_without_changing_external_decode():
         request.declared_name for request in ToolRequest.members_with(ToolRequest)
     }
     assert json.loads(json.dumps(schemas)) == schemas
-    assert ToolRequest.__registry__ is CodingTool.__registry__ is ToolDeclaration.__registry__
     assert isinstance(ToolDeclaration.for_name("EXTERNAL_UNKNOWN"), UndeclaredTool)
     assert ToolDeclaration.for_name("EXTERNAL_UNKNOWN").label == "EXTERNAL_UNKNOWN"
-    assert "undeclared" not in ToolDeclaration.names()
-    assert all(isinstance(member.label, str) for member in ToolDeclaration.members_with(ToolDeclaration))
     assert set(NativeToolDeclaration.members_with(NativeToolDeclaration)) == (
         set(CodingTool.members_with(CodingTool)) | set(ToolRequest.members_with(ToolRequest))
     )

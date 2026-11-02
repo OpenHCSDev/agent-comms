@@ -51,7 +51,7 @@ class TestOrderCompletion:
         self, held_team, proof_build_checkouts,
     ):
         """2026-10-25: "AWAIT RUN unit-backend P483 P739" named P739, sent with no commit,
-        and hid that the unit was still writing it."""
+        and hid that its holder was still writing it."""
         ctx = held_team
         repo = ctx.repos[0]
         graph = next(graph for graph in proof_build_checkouts if graph.repository.github == repo.github)
@@ -63,11 +63,11 @@ class TestOrderCompletion:
         writing = replace(pending, id='P3')
 
         def orders(*todos):
-            unit = TeammateObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
+            teammate = TeammateObservation(ctx.comms, ctx.comms.registry.require('worker'), todos,
                                    capture_frame(ctx.comms, 'lead', ProgressRead()),
                                    (), time.time(),
                                    ctx.comms.registry.snapshot().status('worker'), False)
-            return [state.orders for state in AwaitingApplicationRun.derive(unit)]
+            return [state.orders for state in AwaitingApplicationRun.derive(teammate)]
 
         assert orders(awaiting, delivered) == [('P1',)]
         assert orders(awaiting, delivered, writing) == []

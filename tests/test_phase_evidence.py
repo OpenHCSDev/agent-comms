@@ -16,7 +16,6 @@ from agent_comms.phase_evidence import (
     ClassRostersAbsent,
     CommitMerged,
     FunctionDeclared,
-    MainEvidence,
     MainTree,
     ModuleBindings,
     QualifiedName,
@@ -87,10 +86,7 @@ def test_boundary_evidence_ignores_its_declaration_and_exception_groups(tmp_path
     assert reading.holds(ExternalBoundariesPhase.evidence)
 
     source.write_text("try:\n    pass\nexcept Exception:\n    raise\n")
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-qm", "broad")
-    git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-    changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
+    changed = advanced(tmp_path, "broad", reading)
     assert not changed.holds(ExternalBoundariesPhase.evidence)
 
 
@@ -98,6 +94,14 @@ def test_every_plan_phase_declares_its_plan_and_evidence():
     phases = PlanPhase.members_with(PlanPhase)
     assert phases and all(phase.plan.document.startswith("plans/") for phase in phases)
     assert all(isinstance(phase.phase_evidence(), PhaseEvidence) for phase in phases)
+
+
+def advanced(checkout, message, reading, paths="."):
+    """Commit the checkout's changes as origin/main and read that main afresh."""
+    git(checkout, "add", paths)
+    git(checkout, "commit", "-qm", message)
+    git(checkout, "update-ref", "refs/remotes/origin/main", git(checkout, "rev-parse", "HEAD"))
+    return PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
 
 
 def main_of(tmp_path, files):
@@ -137,18 +141,12 @@ def test_roster_evidence_keeps_external_abi_and_each_remaining_internal_registry
         remaining_file = tmp_path / path
         remaining_file.parent.mkdir(parents=True, exist_ok=True)
         remaining_file.write_text(remaining)
-        git(tmp_path, "add", ".")
-        git(tmp_path, "commit", "-qm", "registry")
-        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-        changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
+        changed = advanced(tmp_path, "registry", reading)
         assert not changed.holds(RostersPhase.evidence), remaining
         remaining_file.unlink()
 
     (tmp_path / "src/remaining.py").write_text("class Carry:\n    declared = {}\n")
-    git(tmp_path, "add", ".")
-    git(tmp_path, "commit", "-qm", "unrelated same-named class")
-    git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-    changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
+    changed = advanced(tmp_path, "unrelated same-named class", reading)
     assert changed.holds(RostersPhase.evidence)
     (tmp_path / "src/remaining.py").unlink()
 
@@ -287,10 +285,7 @@ def test_bus_deletion_evidence_reads_uses_without_matching_its_own_declaration(t
         "def use(owner):\n    return owner / 'bus_meta.json'\n",
     ):
         (tmp_path / "src/uses.py").write_text(source)
-        git(tmp_path, "add", ".")
-        git(tmp_path, "commit", "-qm", "use")
-        git(tmp_path, "update-ref", "refs/remotes/origin/main", git(tmp_path, "rev-parse", "HEAD"))
-        changed = PlanReading((), MainTree.of(reading.main.repo, NominalCensus()))
+        changed = advanced(tmp_path, "use", reading)
         assert not changed.holds(BusDeletionPhase.evidence), source
 
 

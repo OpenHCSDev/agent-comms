@@ -133,7 +133,6 @@ def test_runtime_producer_digests_ignore_foreign_source(installed_home, tmp_path
                        env=runtime.environment(environment), program=InstalledProgram())
         diagnostics = "\n".join(worker.errors() for worker in commands.workers.values())
         assert f"stamped producer digests from {runtime.package_root / '__init__.py'}" in diagnostics
-        print(diagnostics)
     path = runtime.package_root / "package_stamp.py"
     original = path.read_bytes()
     read = """
@@ -161,7 +160,6 @@ print(json.dumps({'source': agent_comms.__file__, 'stamp': type(STAMP).__name__,
     assert {name for name, digest in own["read"].items()
             if reviewed["read"][name] != digest} == {TeamUpdatePosition.declared_name}
     assert path.read_bytes() == original
-    print(json.dumps({"runtime": own, "review": reviewed, "file_unchanged": True}))
 
 
 def drop_one_index(root: Path) -> Path:

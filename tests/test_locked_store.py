@@ -182,7 +182,7 @@ def assert_writer_excluded(path):
         pass
 
 
-def test_abstract_parent_and_real_adopter(tmp_path):
+def test_abstract_parent_refuses_and_a_concrete_adopter_reads(tmp_path):
     @dataclass(frozen=True, slots=True)
     class AbstractDocument(LockedStore[RuntimeInfoDocument]):
         pass
@@ -190,8 +190,7 @@ def test_abstract_parent_and_real_adopter(tmp_path):
     for owner in (LockedStore, AbstractDocument):
         with pytest.raises(TypeError):
             owner(tmp_path / "document")
-    assert RuntimeInfoStore.read is LockedStore.read
-    assert RuntimeInfoStore.update is LockedStore.update
+    assert RuntimeInfoStore(tmp_path / "document").read() == RuntimeInfoDocument()
 
 
 def test_current_observation_persistence_and_noop(tmp_path):

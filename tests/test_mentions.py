@@ -9,7 +9,6 @@ from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.mentions import MentionQuery
 from agent_comms.comms import wire
 from conftest import installed_comms
-from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy

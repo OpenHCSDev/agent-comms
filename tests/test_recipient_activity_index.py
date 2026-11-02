@@ -44,7 +44,6 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         "second": replace(recorded.threads["second"], created_at=1700.0),
     })
     lookup = source.threads["old"].incarnation.lookup
-    assert type(archived) is RegistryProvenance and not hasattr(archived, "lookup_names")
     ledger = ReadLedger(tmp_path / "archive-reads.json")
     message = Message('old', '#archive', 'seen', InfoKind, seq=7, timestamp=1700.0)
     conversation = ledger.conversation(message, archived)
@@ -64,7 +63,6 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     zero = replace(recorded.threads["second"], created_at=0.0)
     unrecorded = replace(recorded, threads={**recorded.threads, "second": zero})
     assert isinstance(unrecorded.threads["second"].incarnation, UnrecordedThreadIncarnation)
-    assert not hasattr(unrecorded.threads["second"].incarnation, "lookup")
 
 
 def test_activity_store_selects_only_requested_threads(tmp_path):

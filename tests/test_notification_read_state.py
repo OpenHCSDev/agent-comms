@@ -292,7 +292,6 @@ def test_notification_rank_overrides_follow_the_mro_without_changing_parent_rank
         SentProgress, SettledDelivery, ShownToModelProgress, WaitingDelivery,
     )
 
-    assert {rank.__module__ for rank in DeliveryRank.__subclasses__()} == {DeliveryRank.__module__}
     assert SentProgress(100).rank() == DeliveryRank.position_of(WaitingDelivery)
     assert ShownToModelProgress(100).rank() == DeliveryRank.position_of(SettledDelivery)
     assert SendingProgress(100).rank() == DeliveryRank.position_of(ActiveDelivery)
@@ -309,7 +308,7 @@ SHARED_UI_READS = [
 ]
 
 
-@pytest.mark.parametrize("operation", SHARED_UI_READS, ids=["team_unit", "transcript_page"])
+@pytest.mark.parametrize("operation", SHARED_UI_READS, ids=["teammate", "transcript_page"])
 def test_shared_ui_reads_are_root_free_family_records_in_one_generic_envelope(operation):
     encoded = FieldCodec.encode(operation)
     assert not UI_ONLY_FIELDS & set(encoded)
@@ -333,18 +332,18 @@ def test_owner_scoped_reads_are_root_free_records_in_their_envelope(operation: O
 
 
 def test_witnesses_cursors_and_archive_each_distinguish_a_shared_read_request():
-    commander = ReadOperation("root", SHARED_UI_READS[0], request_id=4)
+    teammate_read = ReadOperation("root", SHARED_UI_READS[0], request_id=4)
     page = ReadOperation("root", SHARED_UI_READS[1], request_id=4)
     distinct = (
-        replace(commander, root="other-root"),
-        replace(commander, request_id=5),
-        replace(commander, operation=replace(SHARED_UI_READS[0], unit=RecordedThreadIncarnation("worker", 3.0))),
-        replace(commander, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
+        replace(teammate_read, root="other-root"),
+        replace(teammate_read, request_id=5),
+        replace(teammate_read, operation=replace(SHARED_UI_READS[0], unit=RecordedThreadIncarnation("worker", 3.0))),
+        replace(teammate_read, operation=replace(SHARED_UI_READS[0], orders=(OrderId.mint(),))),
         page,
         replace(page, operation=replace(SHARED_UI_READS[1], position=EarlierThan(NativeTranscriptCursor("session.jsonl", 8)))),
         replace(page, operation=replace(SHARED_UI_READS[1], page_source=RecordedPageSource("other-archive"))),
     )
-    assert len({commander, *distinct}) == 1 + len(distinct)
+    assert len({teammate_read, *distinct}) == 1 + len(distinct)
 
 
 def test_one_shared_read_in_two_root_envelopes_keeps_root_validation(comms):

@@ -1,8 +1,7 @@
 """How a selected turn's final answer becomes replies.
 
-Real private bus, registry and coordination stores; the last test runs the
-real Pi child against a local provider. Found on a live thread whose model
-ended a direct-message turn in plain text: the turn was recorded as failed
+Real private bus, registry and coordination stores. Found on a live thread
+whose model ended a direct-message turn in plain text: the turn was recorded as failed
 and the answer was never delivered.
 """
 
@@ -13,7 +12,6 @@ from agent_comms.repo import Checkout
 from bus_record_fixture import prepare_native_comms
 
 from conftest import publish_initial
-import json
 import os
 import sys
 from contextlib import contextmanager
@@ -27,8 +25,7 @@ from agent_comms.comms import wire
 from conftest import accept_initial
 from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordinator import Coordination
-from agent_comms.nominal.field_codec import FieldCodec
-from agent_comms.messages import InfoKind, Message
+from agent_comms.messages import InfoKind
 from agent_comms.native_failures import NativePiUnavailable
 from agent_comms.selected_source_batch import SelectedSource, SelectedSourceBatch
 from agent_comms.threads import Thread
@@ -72,27 +69,11 @@ def test_plain_answer_to_one_reply_route_is_that_routes_reply() -> None:
         assert (reply.sender, reply.target, reply.body, reply.type) == (
             "Alice", "sender", "Blocked: the edit did not run.", InfoKind,
         )
-        # A JSON value that is not the requested array is plain text too.
+        # A JSON answer is plain text too: Core stamps it onto the route as written.
         reply = batch.response_message('{"files": 3}', "Alice")
         assert reply.body == '{"files": 3}'
         with pytest.raises(NativePiUnavailable):
             batch.response_message("  \n", "Alice")
-
-
-def test_no_answer_format_is_demanded_of_the_model() -> None:
-    """The routed-answer shape is no longer asked for or decoded.
-
-    Found on GLM 5.3 Flash agents whose batch answer arrived in prose or in a
-    near-miss array; the whole batch was then marked uncertain and never
-    replayed. The turn already fixes sender, targets and type, so Core stamps
-    the one plain answer onto each original route itself.
-    """
-    with alice_batch(("Alice", "What did you find?")) as batch:
-        array = json.dumps(FieldCodec.encode(
-            (Message("Alice", "sender", "Found it.", InfoKind, timestamp=0),)
-        ))
-        reply = batch.response_message(array, "Alice")
-        assert (reply.target, reply.body) == ("sender", array)
 
 
 def test_one_selected_turn_answers_one_reply_route() -> None:

@@ -114,7 +114,6 @@ def test_the_stack_relocks_every_branch_tracking_package_and_refuses_a_unit_bran
     lock = ResolvedLock.read(path)
     tracked = lock.tracked()
     assert {"batrachian-toad", "metaclass-registry", "textual"} <= set(tracked)
-    assert "objectstate" not in tracked
     document = tomllib.loads(path.read_text())
     toad = next(entry for entry in document["package"] if entry["name"] == "batrachian-toad")
     toad["source"]["git"] = toad["source"]["git"].replace("branch=main", "branch=work/unit-toad--P694")

@@ -74,10 +74,6 @@ def test_non_user_tracked_identity_cannot_disappear_into_display_fallback(role):
             decode(raw)
 
 
-
-
-
-
 def test_duplicate_input_ids_are_not_silently_projected_away(tmp_path):
     sessions = tmp_path / "sessions"
     sessions.mkdir(mode=0o700)

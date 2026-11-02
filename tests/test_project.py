@@ -19,8 +19,6 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, decode_updates
 from agent_comms.native_arguments import GivenArguments, GivenBinary
 
 
-
-
 async def test_project_update_is_published_and_old_saved_cwd_can_resume(
     tmp_path, native_runtime_package
 ):
@@ -60,8 +58,6 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(
         assert len(comms.registry.all_threads()) == 1
     finally:
         await resumed.shutdown()
-
-
 
 
 @pytest.mark.skipif(os.name == "nt", reason="UNIX runtime subscriptions")

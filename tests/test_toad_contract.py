@@ -11,12 +11,10 @@ from agent_comms.acp import CommsAgent
 from agent_comms.agent_event_updates import AcpEventConsumer, Routed, RoutedTurnEventConsumer
 from agent_comms.agent_events import Chunk
 from agent_comms.acp_extension import CoordinationChangedUpdate, TextRouteUpdate, decode_updates
-from agent_comms.comms import Comms, wire
-from agent_comms.goals import Goal
+from agent_comms.comms import wire
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.routing import MessageRoute
 from agent_comms.threads import Thread
-from agent_comms.transcripts import TranscriptCursor, TranscriptPage
 from agent_comms.native_arguments import GivenBinary
 
 
@@ -27,12 +25,7 @@ from agent_comms.native_arguments import GivenBinary
 ))
 async def test_toad_public_types_and_acp_agent_comms_metadata(tmp_path, consumer) -> None:
     turn_id = TurnId.mint()
-    assert all(
-        isinstance(public_type, type)
-        for public_type in (Comms, Goal, TranscriptCursor, TranscriptPage, MessageRoute)
-    )
     comms = wire(tmp_path / "wire")
-    assert isinstance(comms, Comms)
     comms.registry.declare(Thread('worker', frozenset(), Checkout(tmp_path)))
     agent = CommsAgent(comms, agent_bin=GivenBinary("nonexistent-pi"), runtime_enabled=False, auto_wake=False)
 

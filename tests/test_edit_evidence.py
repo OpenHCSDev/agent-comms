@@ -28,11 +28,11 @@ def assert_edit(edit, clock):
 def test_native_edit_keeps_its_recorded_time_through_reply_and_presentation():
     timestamp = 1792430000.0
     start, _ = original_call().finished('done', True, 12, timestamp)
-    evidence = start.edit_calls('unit', 'P215', 1.0)
+    evidence = start.edit_calls('worker', 'P215', 1.0)
     wire = FieldCodec.encode(UnjudgedEdits(evidence))
     presented, = FieldCodec.decode(tuple[Edit, ...], wire['edits'])
     assert_edit(presented, RecordedEventTime(timestamp))
-    assert presented.thread == 'unit'
+    assert presented.thread == 'worker'
     assert wire['edits'][0]['at'] == FieldCodec.encode(presented.at, EventTime)
 
 

@@ -1,7 +1,6 @@
 """Normal coding policies use existing claims; no provider or user work is touched."""
 
 
-
 from agent_comms.repo import Checkout
 import json
 import os
@@ -33,6 +32,19 @@ from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.threads import Thread
 
 
+def acquire(comms, name, turn_id, resource, work):
+    """Publish one claim for a declared owner's turn, as a native tool call would."""
+    with NativeCapture(comms.bus) as boundary:
+        owner = boundary.registry.require(name)
+        scope = NativeClaim(
+            owner_claimed_generation=boundary.registry.claim_generation(name),
+            operation_id=ClaimId.mint(), turn_id=turn_id, input_id=InputId.mint(),
+        )
+        return comms.bus.publisher._publish_acquisition_unlocked(
+            boundary.registry, owner, resource.normalized(work), scope, activity=boundary.activity,
+        )
+
+
 def test_create_claim_competes_before_file_exists_and_releases_without_creation():
     with TemporaryDirectory(prefix="comms-create-claim-", dir="/var/tmp") as directory:
         root = Path(directory) / "wire"
@@ -46,23 +58,14 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
             thread = Thread(name, frozenset({'team'}), Checkout(work), created_at=created)
             c.registry.declare(replace(thread, process_identity=ProcessIdentity.capture(os.getpid())))
         resource = WritableFileClaim(Path("new/nested/file.py"))
-        def acquire(name):
-            with NativeCapture(c.bus) as boundary:
-                owner = boundary.registry.require(name)
-                scope = NativeClaim(owner_claimed_generation=boundary.registry.claim_generation(name),
-                                    operation_id=ClaimId.mint(), turn_id=turns[name],
-                                    input_id=InputId.mint())
-                return c.bus.publisher._publish_acquisition_unlocked(
-                    boundary.registry, owner, resource.normalized(work), scope,
-                    activity=boundary.activity)
-        committed = acquire("a")
+        committed = acquire(c, "a", turns["a"], resource, work)
         assert not (work / "new").exists()
         assert c.bus.bus.claim_projection()[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
-            acquire("b")
+            acquire(c, "b", turns["b"], resource, work)
         with NativeCapture(c.bus) as boundary:
             c.bus.publisher.release_resources(boundary, (committed,), "Release unused creation")
-        assert acquire("b").owner == "b"
+        assert acquire(c, "b", turns["b"], resource, work).owner == "b"
 
 
 @pytest.mark.parametrize("existing", (False, True))
@@ -84,28 +87,15 @@ def test_stopped_holder_reclaimed_in_copied_root(tmp_path, monkeypatch, existing
             thread, process_identity=ProcessIdentity.capture(os.getpid())
         ))
 
-    def acquire(comms, name):
-        with NativeCapture(comms.bus) as boundary:
-            owner = boundary.registry.require(name)
-            scope = NativeClaim(
-                owner_claimed_generation=boundary.registry.claim_generation(name),
-                operation_id=ClaimId.mint(), turn_id=turns[name],
-                input_id=InputId.mint(),
-            )
-            return comms.bus.publisher._publish_acquisition_unlocked(
-                boundary.registry, owner, resource.normalized(work),
-                scope, activity=boundary.activity,
-            )
-
-    first = acquire(original, "holder-a")
+    first = acquire(original, "holder-a", turns["holder-a"], resource, work)
     original_revision = original.bus.bus.revision()
     copied = wire(shutil.copytree(original.root, tmp_path / "copied"))
     assert first.live(copied.registry.snapshot())
     with pytest.raises(ClaimConflict):
-        acquire(copied, "holder-b")
+        acquire(copied, "holder-b", turns["holder-b"], resource, work)
     copied.registry.unregister("holder-a")
     assert not first.live(copied.registry.snapshot())
-    second = acquire(copied, "holder-b")
+    second = acquire(copied, "holder-b", turns["holder-b"], resource, work)
     assert second.owner == "holder-b" and second.generation != first.generation
     with NativeCapture(copied.bus) as boundary:
         copied.bus.publisher.release_resources(boundary, (first,), "Late old release")
@@ -185,8 +175,6 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     assert ToolDeclaration.record("read", arguments, call_id="refused") == NoToolRecord()
 
 
-
-
 @pytest.mark.parametrize("name,arguments,title", [
     ("read", {"path": "x", "offset": 2, "limit": 3}, "Read x"),
     ("bash", {"command": "pwd", "timeout": 2}, "Run pwd"),
@@ -194,15 +182,11 @@ def test_family_selector_is_denied_but_record_presentation_stays_readable():
     ("write", {"path": "x", "content": "value"}, "Write x"),
 ])
 def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
-    from dataclasses import fields
     from agent_comms.agent_events import ToolStart
 
     call = CodingCall.decode("typed-argument-shape", name, arguments)
-    assert "arguments" not in {item.name for item in fields(call)}
     assert call.arguments == arguments
     assert ToolStart.from_call("typed", name, arguments).title == title
-
-
 
 
 def _request(socket, id, name, args):

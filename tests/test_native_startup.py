@@ -1,9 +1,7 @@
 """Native startup readiness is size-aware, and cancellation reaps a starting child."""
 
 
-
 from agent_comms.native_startup import MeasuredSessionLoad, NativeStartupPolicy, UnmeasuredSessionLoad
-
 
 
 def test_readiness_budget_is_size_aware_bounded_and_not_a_turn_deadline():

@@ -196,10 +196,6 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
         progress=ShownToModelProgress(1),
         response=UnansweredResponse(),
     )
-    with pytest.raises(TypeError):
-        assignment.notification(
-            recipient, SENDER, observation=RecordedRecipientActivity(), updated_at_ms=1
-        )
     recorded = assignment.notification(
         recipient,
         SENDER,

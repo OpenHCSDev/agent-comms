@@ -1,10 +1,12 @@
-"""The real PreToolUse command refuses a Bash wait loop that cannot end on its own."""
+"""The PreToolUse hook refuses a Bash wait loop that cannot end on its own."""
 
 import json
 import subprocess
 import sys
 
 import pytest
+
+from agent_comms_hooks.bounded_waits import BoundedWaits
 
 
 def pre_tool_use(command: str) -> subprocess.CompletedProcess:
@@ -33,11 +35,7 @@ def pre_tool_use(command: str) -> subprocess.CompletedProcess:
     ("timeout 60 until [ -s f ]; do sleep 5; done", "timeout N bash -c"),
 ])
 def test_an_unbounded_wait_is_denied(command, refused):
-    result = pre_tool_use(command)
-    assert result.returncode == 0, result.stderr
-    decision = json.loads(result.stdout)["hookSpecificOutput"]
-    assert decision["permissionDecision"] == "deny"
-    assert refused in decision["permissionDecisionReason"]
+    assert any(refused in reason for reason in BoundedWaits.reasons(command))
 
 
 @pytest.mark.parametrize("command", [
@@ -54,5 +52,14 @@ def test_an_unbounded_wait_is_denied(command, refused):
     "X=1 timeout 60 /bin/bash -c 'until [ -s f ]; do sleep 5; done'",
 ])
 def test_a_bounded_wait_or_plain_command_passes(command):
-    result = pre_tool_use(command)
-    assert (result.returncode, result.stdout) == (0, ""), result.stderr
+    assert BoundedWaits.reasons(command) == ()
+
+
+def test_the_real_hook_command_denies_with_the_reason_and_passes_silently():
+    refused = pre_tool_use("until [ -s out.txt ]; do sleep 5; done")
+    assert refused.returncode == 0, refused.stderr
+    decision = json.loads(refused.stdout)["hookSpecificOutput"]
+    assert decision["permissionDecision"] == "deny"
+    assert "timeout N" in decision["permissionDecisionReason"]
+    passed = pre_tool_use("timeout 60 bash -c 'until [ -s f ]; do sleep 5; done'")
+    assert (passed.returncode, passed.stdout) == (0, ""), passed.stderr

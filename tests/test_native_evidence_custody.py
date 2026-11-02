@@ -55,10 +55,6 @@ def test_held_private_source_refuses_a_new_hardlink(tmp_path):
             tuple(reader.rows())
 
 
-
-
-
-
 @pytest.mark.parametrize("rewrite", ["in_place", "replace"])
 def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, rewrite):
     files = _evidence(tmp_path)
@@ -90,12 +86,6 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
         assert evidence.source.size == len(restored)
 
 
-
-
-
-
-
-
 @pytest.mark.parametrize("operation", ["append", "alter_prefix"])
 def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operation):
     files = _evidence(tmp_path)
@@ -113,8 +103,6 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
             with pytest.raises(NativePiUnavailable):
                 tuple(rows)
             assert source.stream.closed
-
-
 
 
 def test_indexed_proof_borrow_does_not_classify_consumer_sql_failure(tmp_path):

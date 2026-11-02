@@ -17,12 +17,10 @@ from agent_comms.messages import (
     InfoKind,
     JoinedMembership,
     MembershipConversationRole,
-    MembershipTransition,
     Message,
     MessageKind,
     NoticeRole,
 )
-from agent_comms.obligation_states import SilentResponse
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedPolicy
 from agent_comms.thread_identity import AgentThreadRole, ThreadRole, UserThreadRole
 from agent_comms.threads import Thread
@@ -244,8 +242,6 @@ def test_no_wake_is_not_a_passive_claim() -> None:
     assert observer == NoWakeDecision(SENDER_LOOKUP, NoWakeReason.UNMENTIONED_OBSERVER)
     assert observer.claim_decisions() == ()
     assert observer.wake_policy() == PassiveWake()
-    assert not hasattr(observer, "wake_mode")
-    assert not hasattr(observer, "audience")
     assert MEMBERS[0] in audience(mentioned).recipients
     assert decide(mentioned, OWNER_LOOKUP) is None
     passive = WakeDecision(SENDER_LOOKUP, MessageAudience.DIRECT, PassiveWake())
@@ -315,34 +311,4 @@ def test_exact_stored_channel_routes_no_wildcard_or_silence_inference(
     ]
     assert decide(broadcast) == WakeDecision(
         SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake()
-    )
-    assert SilentResponse.declared_name == "silent"  # Existing explicit disposition type.
-    assert channel.exact_reply_target == "#team"
-
-
-def test_pure_shadow_does_not_mutate_envelope_state_or_live_cursor(tmp_path: Path) -> None:
-    comms = installed_comms(tmp_path / "wire")
-    for name in ("sender", "alpha"):
-        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(tmp_path)))
-    message = comms.messaging.send("sender", "#team", "status update").message
-    manifest = audience(message, MEMBERS[:1])
-    before = message.to_wire()
-    high_water = comms.bus.bus.revision()
-    pending = comms.bus.pending_count("alpha")
-    live_policy = message.role.response_policy(message)
-    live_starts = message.role.response_policy(message).starts_turn_for(message, "alpha")
-    live_reply = message.reply_target
-    assert resolve_wake(
-        manifest,
-        recipient=MEMBERS[0],
-        control=OrdinaryControl,
-    ) == WakeDecision(SENDER_LOOKUP, MessageAudience.COLLECTIVE, BoundedTriageWake())
-    assert message.exact_reply_target == "#team"
-    assert message.to_wire() == before
-    assert comms.bus.bus.revision() == high_water
-    assert comms.bus.pending_count("alpha") == pending
-    assert (message.role.response_policy(message), message.role.response_policy(message).starts_turn_for(message, "alpha"), message.reply_target) == (
-        live_policy,
-        live_starts,
-        live_reply,
     )

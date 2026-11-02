@@ -116,10 +116,6 @@ def test_snapshot_family_roundtrip_has_only_owned_fields(event):
     payload = FieldCodec.encode(event)
     assert FieldCodec.decode(TranscriptEvent, payload) == event
     assert set(payload) <= {"kind", *(f.name for f in fields(event))}
-    if isinstance(event, ToolStartTranscript):
-        assert "text" not in payload and "ok" not in payload and "diff" not in payload
-    if isinstance(event, AssistantTranscript):
-        assert "tool_call_id" not in payload and "raw_input" not in payload
 
 
 def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):

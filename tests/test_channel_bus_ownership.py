@@ -39,7 +39,6 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     assert not comms.registry.require("beta").executing
     assert original.message in read_history(comms, "#team")
     assert message in read_history(comms, "#team")
-    assert not (root / "acp_passive_channel_awareness.json").exists()
 
 
 def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
@@ -68,7 +67,6 @@ def test_channel_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     assert "may omit older" in frame
     assert comms.bus.reads.path.read_bytes() == ledger
     assert comms.bus.bus.revision() == revision
-    assert not (root / "acp_passive_channel_awareness.json").exists()
     assert comms.bus.awareness_segments(replace(observer, created_at=observer.created_at + 1), ()) == ()
 
 
@@ -101,6 +99,5 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
                 assert "No response obligation" in rendered
                 assert set(agent.turns.persistent_backends) == {"alpha"}
                 assert not agent.turns.persistent_backends["alpha"].available
-                assert not (root / "acp_passive_channel_awareness.json").exists()
     finally:
         await agent.shutdown()

@@ -19,12 +19,11 @@ from agent_comms.cli_command import CliCommand
 
 
 @pytest.fixture
-def isolated_cli(tmp_path):
+def isolated_home(tmp_path):
+    """HOME is set before the child imports declarations with path defaults."""
     home = tmp_path / "home"
     home.mkdir()
-    # Set HOME before the child imports declarations with path defaults. Install's
-    # non-Git checkout fails with Git's own error as one JSON result before installation.
-    env = {
+    return home, {
         **os.environ,
         "HOME": str(home),
         "XDG_CONFIG_HOME": str(home / "config"),
@@ -32,6 +31,11 @@ def isolated_cli(tmp_path):
         "XDG_CACHE_HOME": str(home / "cache"),
         "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
     }
+
+
+@pytest.fixture
+def isolated_cli(isolated_home):
+    home, env = isolated_home
 
     def run(root, *arguments):
         result = subprocess.run(
@@ -43,8 +47,7 @@ def isolated_cli(tmp_path):
             timeout=20,
         )
         assert result.returncode in (0, 1), result.stderr
-        # Install's non-Git checkout fails with Git's own error as one JSON result
-        # before installation. Protocol TypeErrors must never be hidden.
+        # Protocol TypeErrors must never be hidden.
         assert "TypeError:" not in result.stderr, (arguments, result.stderr)
         value = json.loads(result.stdout) if result.stdout.strip() else None
         assert result.returncode != 0 or result.stdout.strip(), (arguments, result.stderr)
@@ -54,20 +57,11 @@ def isolated_cli(tmp_path):
 
 
 @pytest.mark.timeout(240)
-def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path):
+def test_every_registered_command_runs_through_dispatcher_with_parser_defaults(tmp_path, isolated_home):
     # Import once with HOME already isolated, then use the real dispatcher for
-    # every declaration. Required options keep their genuine parser refusals.
-    # Install fails with Git's own error as one JSON result before any installation.
-    home = tmp_path / "home"
-    home.mkdir()
-    env = {
-        **os.environ,
-        "HOME": str(home),
-        "XDG_CONFIG_HOME": str(home / "config"),
-        "XDG_STATE_HOME": str(home / "state"),
-        "XDG_CACHE_HOME": str(home / "cache"),
-        "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src"),
-    }
+    # every declaration. Required options keep their genuine parser refusals;
+    # install fails with Git's own error as one JSON result before any installation.
+    home, env = isolated_home
     result = subprocess.run(
         [sys.executable, str(Path(__file__)), str(tmp_path)],
         cwd=home,

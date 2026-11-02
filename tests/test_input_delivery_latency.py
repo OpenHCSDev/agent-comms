@@ -62,10 +62,9 @@ async def test_message_injects_into_next_tool_call(
                     # without pretending a row-insertion timestamp is a commit clock.
                     send_started = perf_counter()
                     async with asyncio.timeout(2):
-                        sent = await Coordination.run_worker(partial(
+                        await Coordination.run_worker(partial(
                             comms.messaging.send, 'sender', session, marker,
                         ))
-                        send_returned = perf_counter()
                         while True:
                             forwarding.changed.clear()
                             accepted = tuple(
@@ -81,9 +80,6 @@ async def test_message_injects_into_next_tool_call(
                     assert queued - send_started < 2
                     assert not returned.exists(), 'The native tool returned before steer acknowledgement'
                     assert not turn.done()
-                    print('BUS_COMMIT_TO_NATIVE_STEER_UPPER_BOUND_SECONDS', queued - send_started,
-                          'SEND_CALL_SECONDS', send_returned - send_started,
-                          'MESSAGE_SEQ', sent.message.seq)
                 finally:
                     # Always release the actual tool, including a latency failure.
                     os.write(release_fd, b'released\n')

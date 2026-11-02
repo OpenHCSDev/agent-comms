@@ -84,9 +84,9 @@ def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkey
 
 def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     comms = setup_wire(tmp_path)
-    comms.messaging.send("peer", "owner", "Direct input").message.message_id
-    comms.messaging.send("peer", "#team", "Channel input").message.message_id
-    comms.messaging.send("owner", "peer", "Output").message.message_id
+    comms.messaging.send("peer", "owner", "Direct input")
+    comms.messaging.send("peer", "#team", "Channel input")
+    comms.messaging.send("owner", "peer", "Output")
     messages = comms.bus.inbox("owner").page.messages
     comms.bus.mark_read_through("owner", messages[-1].seq)
     pending = comms.bus.pending_count("owner")
@@ -333,7 +333,7 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
 
     try:
         comms = setup_wire(tmp_path)
-        comms.messaging.send("peer", "owner", "Review").message.message_id
+        comms.messaging.send("peer", "owner", "Review")
         snapshot = comms.relationships.snapshot("owner")
         group = next(group for group in snapshot.sortable_groups if type(group) is SortedInboundRelationshipGroup)
         assert FieldCodec.encode(group)["key"] == "sorted_inbound"

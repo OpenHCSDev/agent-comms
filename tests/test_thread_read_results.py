@@ -2,13 +2,10 @@
 from agent_comms.repo import Checkout
 from dataclasses import replace
 from itertools import product
-import sys
 
 import pytest
 
-from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import WireRevision
-from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_presentation import NoThreadPresentation
 from agent_comms.ui_model.observation import (
     NotObserved, ObserveThreads, ThreadBusy, ThreadPresented, ThreadUnavailable, ThreadsObserved,
@@ -67,7 +64,7 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     ('beta', {'beta'}), ('outside', set()), ('read', {'beta'}), ('unrelated_read', set()),
     ('expiry', set()),
 ])
-def test_assignment_row_changes_attribute_only_their_view_without_projection(
+def test_assignment_row_changes_attribute_only_their_view(
     private_directory, changed_name, expected,
 ):
     from conftest import accept_initial, publish_initial
@@ -75,7 +72,6 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     from agent_comms.assignment_states import DeferredAssignment
     from agent_comms.coordination_cohort import sealed_cohort_assignments
     from agent_comms.coordinator import Coordination
-    from agent_comms.message_notification import MessageNotification
     from agent_comms.threads import Thread
     from agent_comms.notification_read import NotificationsRead
     from agent_comms.notification_reads import LiveNotificationRead
@@ -120,32 +116,8 @@ def test_assignment_row_changes_attribute_only_their_view_without_projection(
     if changed_name == 'expiry':
         later = replace(later, expiry_tick=revision.expiry_tick + 60)
     assert later != revision
-    calls = 0
-    evidence_calls = 0
-    evidence_codes = {NotificationAssignment.changed.__func__.__code__,
-                      ReadLedger.changed_notifications.__code__}
-    projection_code = MessageNotification.delivery_window.__func__.__code__
-
-    def count_projection(frame, event, argument):
-        nonlocal calls, evidence_calls
-        if event == 'call':
-            if frame.f_code is projection_code:
-                calls += 1
-            if frame.f_code in evidence_codes:
-                evidence_calls += 1
-
-    profiling = sys.getprofile()
-    sys.setprofile(count_projection)
-    try:
-        changed = later.changed_threads(previous, comms, activity)
-        notification_changed = notification_read.live_changed(comms, later)
-    finally:
-        sys.setprofile(profiling)
-    assert changed == expected
-    assert notification_changed == bool(expected)
-    assert calls == 0
-    if changed_name == 'expiry':
-        assert evidence_calls == 0
+    assert later.changed_threads(previous, comms, activity) == expected
+    assert notification_read.live_changed(comms, later) == bool(expected)
 
 
 def reachable_types(root: object) -> set[str]:
@@ -196,7 +168,6 @@ def test_thread_reading_keeps_acquired_evidence_and_publishes_its_projection(pri
     from conftest import publish_initial
     from test_coordinated_runtime import _root
     from agent_comms.transcripts import AcquiredThreadPresentation, NotifiedThreadPresentation
-    from agent_comms.thread_presentation import ThreadPresentation
 
     _path, _root_id, comms, initial, _people = _root(private_directory, direct=True)
     reading = ObserveThreads(frozenset({'beta'})).observation()

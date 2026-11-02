@@ -44,7 +44,7 @@ def test_finished_turn_reads_only_its_waits_after_rename(tmp_path, monkeypatch):
             RecordedThreadIncarnation(f"other-{index}", 10.0 + index)),))
         for index in range(200)
     )
-    fence = _finish(comms, "child", "child-turn")
+    fence = _finish(comms, "child")
     comms.registry.rename("child", "renamed-child")
     decoded = []
     validate = RecordedGoalWait.__post_init__

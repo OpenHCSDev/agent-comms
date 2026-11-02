@@ -79,7 +79,6 @@ def test_serve_requires_explicit_root(tmp_path):
 
 def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
     """The actual serve entrypoint, curl transport and production maintenance thread."""
-    import os
     import subprocess
 
     project = Path(__file__).resolve().parents[1]
@@ -97,7 +96,6 @@ def test_real_connector_refusals_and_replaced_source(tmp_path, source_programs):
 
 @pytest.mark.parametrize("registered", [True, False])
 def test_connector_round_trip_reads_this_bus_as_its_caller(comms, tmp_path, registered):
-    import os
     import site
     import socket
     import subprocess

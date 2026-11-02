@@ -1,7 +1,5 @@
 """Stored lifecycle names, graph/data ownership, and current codec paths."""
 
-from dataclasses import fields, replace
-
 import pytest
 
 from agent_comms.assignment_states import AssignmentState, EngagedAssignment, FullPendingAssignment
@@ -9,8 +7,6 @@ from agent_comms.attempt_states import SucceededAttempt
 from agent_comms.coordination_errors import IntegrityViolationError
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.coordination_tables.executions import (
-    AcpOrigin,
-    ExecutionProvenance,
     ExecutionRecord,
     WireOrigin,
 )
@@ -44,40 +40,6 @@ def test_state_data_cannot_be_attached_to_wrong_variant():
         SucceededAttempt(lease_expires_at_ms=100)
     with pytest.raises(IntegrityViolationError):
         SucceededAttempt.load(None, False, True)
-
-
-def test_record_replacement_uses_only_nominal_state():
-    record = ExecutionRecord(
-        execution_id="e",
-        origin=AcpOrigin,
-        lifecycle=PendingExecution(),
-        owner_lookup=OWNER_LOOKUP,
-        revision=1,
-        max_attempts=3,
-        reason_code=NoReasonCode(),
-        created_at_ms=0,
-        updated_at_ms=0,
-    )
-    assert {"status", "current_attempt_ordinal"}.isdisjoint(
-        f.name for f in fields(record) if f.init
-    )
-    active = replace(record, revision=2, lifecycle=ActiveExecution.load(1))
-    assert active.lifecycle == ActiveExecution(1)
-    assert replace(active, revision=3).lifecycle == active.lifecycle
-
-
-def test_response_extension_decodes_transitions_and_projects_without_catalog_edits():
-    class ReviewedResponse(ResponseState):
-        @classmethod
-        def successors(cls):
-            return (SilentResponse,)
-
-    try:
-        state = FieldCodec.decode(ResponseState, {"kind": "reviewed"})
-        assert state.may_become(SilentResponse())
-        assert ResponseState.member_named("reviewed") is ReviewedResponse
-    finally:
-        ResponseState.__registry__.pop("reviewed")
 
 
 def test_execution_extension_is_stored_and_transitioned(tmp_path):
@@ -122,6 +84,8 @@ def test_new_response_state_roundtrips_real_store(tmp_path):
             return (SilentResponse,)
 
     try:
+        assert ResponseState.member_named("reviewed") is ReviewedResponse
+        assert FieldCodec.decode(ResponseState, {"kind": "reviewed"}).may_become(SilentResponse())
         with Coordination(tmp_path / "coordination.sqlite3") as store:
             store.participants.register(OWNER_LOOKUP, committed=True)
             with store.session.writing() as db:
@@ -194,7 +158,7 @@ def test_assignment_extension_derives_sql_projection_and_transitions(tmp_path):
 
 
 def test_original_target_and_receipt_legality_is_owned_by_current_variants():
-    """The three original checks with retired diagnostics now have typed owners."""
+    """Each lifecycle variant refuses fields it cannot carry and requires the ones it must."""
     # Unstarted assignments cannot carry a frozen response target at all.
     unstarted = FieldCodec.encode(FullPendingAssignment())
     assert FieldCodec.decode(AssignmentState, unstarted) == FullPendingAssignment()

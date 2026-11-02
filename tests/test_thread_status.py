@@ -206,7 +206,7 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
     from agent_comms.tools import invoke_tool
 
     comms = wire(tmp_path)
-    comms.registry.declare(Thread("commander", frozenset(), Checkout(tmp_path)))
+    comms.registry.declare(Thread("lead", frozenset(), Checkout(tmp_path)))
     comms.registry.register(Thread(
         "subject", frozenset(), Checkout(tmp_path),
         process_identity=ProcessIdentity.capture(os.getpid()),
@@ -218,7 +218,7 @@ def test_tier_only_tool_changes_next_catalog_without_changing_active_request(tmp
 
     result = invoke_tool(comms, "comms_model", {
         "thread": "subject", "service_tier": "standard",
-    }, caller=ThreadCaller("commander"))
+    }, caller=ThreadCaller("lead"))
 
     updated = comms.registry.require("renamed")
     next_request = ToolsCliCommand(name=ThreadCaller("renamed")).apply(comms)

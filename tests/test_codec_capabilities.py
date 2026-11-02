@@ -22,13 +22,13 @@ from agent_comms.nominal.field_codec import (
     MalformedRecord,
 )
 from agent_comms.native_startup import NativeStartupPolicy
-from agent_comms.pi_events import AgentStart, PiEvent, QueueUpdate
+from agent_comms.pi_events import PiEvent
 from agent_comms.pi_wire import PiDiagnostic, PiPayload
-from agent_comms.pi_wire import Opaque, UnknownPayload
-from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, StrictFields, TextContent, UnknownContent, UnknownData
+from agent_comms.pi_wire import UnknownPayload
+from agent_comms.pi_payloads import ContentDelta, NativeToolDetails, PiContent, PiDelta, PiMessage, PiResponseData, SessionSwitchData, StateData, TextContent, UnknownContent, UnknownData
 from agent_comms.pi_vocabulary import CompactionReason, PiStopReason
 from agent_comms.turn_output import TurnOutput
-from agent_comms.turn_phase import AcceptsPrompt, ModelWaitPhase, PromptAcceptancePhase
+from agent_comms.turn_phase import ModelWaitPhase, PromptAcceptancePhase
 from agent_comms.turn_watchdog import ModelWait, ProgressWatchdog
 
 
@@ -61,7 +61,6 @@ class ExternalRepresentation(ExternalJsonShape, CapabilityRepresentation):
 def test_accepts_null_owns_null_while_ordinary_representation_uses_structure():
     nullable, = CapabilityRepresentation.members_with(AcceptsNull)
     assert FieldCodec.decode(Annotated[str | None, nullable], None) == "null decoded"
-    assert OrdinaryRepresentation not in CapabilityRepresentation.members_with(AcceptsNull)
     assert FieldCodec.decode(Annotated[str | None, OrdinaryRepresentation], None) is None
     with pytest.raises(MalformedRecord):
         FieldCodec.decode(Annotated[str, OrdinaryRepresentation], None)
@@ -77,8 +76,6 @@ def test_external_json_shape_owns_from_wire_while_ordinary_representation_decode
 
 
 def test_opaque_retains_the_record_while_known_content_projects_declared_fields():
-    assert UnknownContent in PiContent.members_with(Opaque)
-    assert TextContent not in PiContent.members_with(Opaque)
     original = {"type": "future_content", "nested": {"future": [1, True]}, "text": "extension"}
     assert UnknownContent.from_wire(original).payload == original
     unknown = PiContent.from_wire(original)
@@ -241,8 +238,6 @@ def test_exact_response_capability_covers_sdk_and_durable_commands(command):
 
 
 def test_strict_fields_rejects_extra_keys_while_ordinary_response_projects_them():
-    assert SessionSwitchData in PiResponseData.members_with(StrictFields)
-    assert StateData not in PiResponseData.members_with(StrictFields)
     assert SessionSwitchData.from_wire({"cancelled": False}) == SessionSwitchData(False)
     with pytest.raises(MalformedRecord):
         SessionSwitchData.from_wire({"cancelled": False, "extra": True})
@@ -367,8 +362,6 @@ class WatchdogSession:
 
 
 def test_accepts_prompt_dispatch_restarts_progress_without_accepting_unowned_events():
-    assert AgentStart in PiEvent.members_with(AcceptsPrompt)
-    assert QueueUpdate not in PiEvent.members_with(AcceptsPrompt)
     watchdog = ProgressWatchdog(ModelWait(), 10, 10, NativeStartupPolicy())
     watchdog.launching(lambda: 3.0, None)
     watchdog.model_wait.elapsed = watchdog.input_wait.elapsed = 2.0
@@ -398,7 +391,5 @@ def test_text_wire_is_inherited_by_real_external_part_decoders(family, record):
     assert isinstance(decoded, TextWire)
     assert decoded.text == "visible"
     assert decoded.model_dump()["type"] == record["type"]
-    assert any(not issubclass(member, TextWire)
-               for member in family.members_with(family))
     with pytest.raises(ValueError):
         adapter.validate_python({**record, "type": "unrecognized"})

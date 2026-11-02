@@ -208,7 +208,7 @@ def test_one_send_back_over_two_edits_cites_their_checkout_and_strikes_once(comm
 
 
 def test_two_send_backs_with_the_same_reason_strike_twice(comms, tmp_path):
-    """A unit that repeats a miss after it was sent back is struck again, whatever the words."""
+    """A holder that repeats a miss after it was sent back is struck again, whatever the words."""
     caller, other = edit_order(comms, tmp_path)
     for call in map(ToolCallId, ("first-call", "second-call")):
         caller.invoke(CommsVerdictsTool(verdicts=(

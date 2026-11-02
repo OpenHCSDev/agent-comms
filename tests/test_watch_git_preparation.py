@@ -30,17 +30,13 @@ from agent_comms.comms import Comms
 from agent_comms.message_bus import Watch
 from agent_comms.service_passes import ServicePassStore
 from git_shutdown_fixture import HeldGitHTTP, held_commit
-from agent_comms.nominal_census import NominalCensus, NominalPlanReadings
-from agent_comms.plan_reading import RetainedPlanReadings
+from agent_comms.nominal_census import NominalCensus
 from agent_comms.phase_evidence import BusStorageAbsent, CommitMerged, EvidenceFound, EvidenceUnread, MainTree, PathsAbsent
 from agent_comms.repo import Checkout, GitCommandError, Repo, UnavailableCommitError
 from agent_comms.todos import DraftPullRequest, UnmergedPullRequest
 from agent_comms.work_branches import SourceGrowth, WorkBranchError, WorkBranches
 from source_revision_fixture import SourceRepository
-
-
-class RetainedNominalReadings(RetainedPlanReadings, NominalPlanReadings):
-    """The commander heartbeat's plan readings without the rest of the heartbeat."""
+from team_heartbeat_fixture import RetainedNominalPlanReadings
 
 
 @dataclass(frozen=True)
@@ -249,7 +245,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
     repo = case.repository
     head = case.commit_at_remote(case.source.main_commit, "Future plan", "refs/pull/99/head")
     evidence = CommitMerged(head)
-    plans = RetainedNominalReadings()
+    plans = RetainedNominalPlanReadings()
     Repo.git(repo.checkout, "remote", "set-url", "origin", str(repo.checkout / "absent-remote"))
     failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     assert isinstance(failed.read(evidence), EvidenceUnread)
@@ -267,7 +263,7 @@ def test_failed_plan_acquisition_is_unknown_and_retries_without_main_moving(git_
 
 def test_unexpected_plan_object_loss_is_unknown_not_phase_completion(git_preparation):
     repo = git_preparation.repository
-    reading = RetainedNominalReadings().prepare_reading(
+    reading = RetainedNominalPlanReadings().prepare_reading(
         repo, (), (), history=Checkout(repo.checkout).read())
     missing = CommitMerged("f" * 40)
     assert isinstance(reading.read(missing), EvidenceUnread)
@@ -323,7 +319,7 @@ def test_promised_content_is_unreadable_not_absent_and_never_lazily_acquired(
     with pytest.raises(GitCommandError):
         Repo.git_pipeline(repo.checkout, ("cat-file", "blob", objects[0]), ("hash-object", "--stdin"))
     evidence = BusStorageAbsent()
-    plans = RetainedNominalReadings()
+    plans = RetainedNominalPlanReadings()
     failed = plans.prepare_reading(repo, (), (evidence,), history=Checkout(repo.checkout).read())
     plans.observe_reading(failed, (evidence,))
     assert isinstance(failed.read(evidence), EvidenceUnread)

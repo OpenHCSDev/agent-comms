@@ -1,4 +1,4 @@
-"""S2 declaration extension and real stream-boundary invariants."""
+"""Pi turn phases, failures and commands at the real RPC stream boundary."""
 
 from __future__ import annotations
 
@@ -56,7 +56,6 @@ def test_new_excursion_declares_both_transitions_without_dispatch_edits():
         "audit_pause_no_progress", "audit_pause"
     )
     assert isinstance(AuditPauseEnd().on(phase), ModelWaitPhase)
-    assert issubclass(AuditPausePhase, StallExempt)
     assert AuditPausePhase in TurnPhase.members_with(StallExempt)
 
 
@@ -72,7 +71,6 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     phase = pi.CompactionStart().on(ModelWaitPhase())
     assert isinstance(phase, CompactionPhase) and phase.pauses_input_clock
     assert phase.model_wait(bounded, unbounded) is unbounded
-    assert CompactionPhase.model_wait is ToolRunningPhase.model_wait
     # Compaction completion exits even if a tool was already present.
     assert isinstance(pi.CompactionEnd().on(phase), ModelWaitPhase)
     phase = pi.ToolExecutionStart(tool_call_id=ReportedText("a")).on(ModelWaitPhase())

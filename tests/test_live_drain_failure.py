@@ -20,16 +20,11 @@ from agent_comms.coordinator import Coordination
 from agent_comms.drain_failures import drain_failures
 from agent_comms.nominal.field_codec import AcpSessionId, TurnId
 from agent_comms.queued_input import DeliveredInput
+from native_backend_fixture import wait_for as until
 from test_acp_private_nk_delivery import _session
 from test_coordinated_runtime import tmp_path as private_root_fixture
 
 tmp_path = private_root_fixture
-
-
-async def until(predicate):
-    async with asyncio.timeout(8):
-        while not predicate():
-            await asyncio.sleep(0.02)
 
 
 def owner_view(comms):
@@ -243,7 +238,7 @@ async def test_cancelled_drain_keeps_original_failure(tmp_path):
     (UnavailableDrainDiagnostic, True), (StoppedDrainDiagnostic, True),
     (NativeInputDrainDiagnostic, False),
 ])
-def test_unit_deaf_is_dated_by_the_drain_that_cannot_read_its_inbox(
+def test_deaf_teammate_is_dated_by_the_drain_that_cannot_read_its_inbox(
     tmp_path, monkeypatch, kind, deaf,
 ):
     from agent_comms.team.standing import InboxUnavailable, UnitDeaf

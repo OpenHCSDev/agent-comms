@@ -387,7 +387,6 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
     tmp_path: Path,
 ) -> None:
     """Real frozen wire and SQLite lifecycle; projection cannot create permission."""
-    import time
 
     from agent_comms.assignment_states import PassiveAssignment
     from agent_comms.coordination_tables.responses import ResponseObligation
@@ -422,9 +421,7 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         sequence_before = comms.bus.bus.revision()
         assignments_before = WakeAssignment.select(store.session._connection)
         obligations_before = ResponseObligation.select(store.session._connection)
-        started = time.monotonic()
         result = builder(initial, assignment, owner)
-        elapsed = time.monotonic() - started
         context = result.context()
         assert {row["claim_id"] for row in context["selected"]} == {
             assignment.assignment_id,
@@ -439,7 +436,6 @@ def test_saved_wire_awareness_preserves_passive_authority_and_rejects_incomplete
         assert WakeAssignment.select(store.session._connection) == assignments_before
         assert ResponseObligation.select(store.session._connection) == obligations_before
         assert comms.bus.bus.revision() == sequence_before
-        print(f"actual complete wire projection: {elapsed:.6f}s", flush=True)
 
         # A reused numeric PID with a different recorded process birth is not
         # the selected owner, even when every old numeric-PID field agrees.
@@ -488,6 +484,5 @@ def test_full_bounded_awareness_window_keeps_foreground_deadline(tmp_path: Path)
         assert 'Optional awareness omitted' in bounded.render(32768)
         assert bounded.reason == "ProjectionUnavailableError"
         assert elapsed < 0.250
-        print(f"actual 100-row optional projection: {elapsed:.6f}s", flush=True)
     finally:
         store.close()

@@ -51,12 +51,15 @@ def _owner(tmp_path: Path) -> tuple[Comms, CommsAgent, RecordedThreadIncarnation
     return comms, agent, owner.incarnation.require_recorded(), claimed_generation
 
 
-async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
+def held_owner(tmp_path: Path):
+    """The owner's agent in a held native turn, with the inbox its inputs reach."""
     comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn(
-        "beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture"
-    )
-    inbox = agent.inputs.state('beta').open_inbox()
+    comms.agents.begin_turn("beta", TurnId.mint(), "Held native fixture")
+    return agent, agent.inputs.state("beta").open_inbox()
+
+
+async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp_path):
+    agent, inbox = held_owner(tmp_path)
     response = await agent.prompt(
         "beta",
         [TextContentBlock(type="text", text="valid task")],
@@ -80,11 +83,7 @@ async def test_real_acp_surrogate_queue_ingress_stays_unknown_and_attachable(tmp
 
 
 async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_replay(tmp_path):
-    comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn(
-        "beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture"
-    )
-    inbox = agent.inputs.state('beta').open_inbox()
+    agent, inbox = held_owner(tmp_path)
     requests = [QueuePromptRequest("same"), SteerPromptRequest("same")]
     for request in requests:
         response = await agent.prompt(
@@ -121,11 +120,7 @@ async def test_request_identity_tracks_equal_queue_and_immediate_inputs_without_
 
 @pytest.mark.parametrize("user_text", [["list"], [], {"text": "dict"}, 7, False])
 async def test_real_acp_rejects_nonstring_user_text_before_unknown_or_enqueue(tmp_path, user_text):
-    comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn(
-        "beta", TurnId('96879611650f80a81392a52e0db9b023'), "Held native fixture"
-    )
-    inbox = agent.inputs.state('beta').open_inbox()
+    agent, inbox = held_owner(tmp_path)
     metadata = encode_request(QueuePromptRequest("valid", True))
     metadata["agentComms"]["request"]["user_text"] = user_text
     with pytest.raises(RequestError) as error:
@@ -147,9 +142,7 @@ async def test_queue_preview_preserves_long_input_identity_body_and_actions(tmp_
     from agent_comms.turn_inbox import ClearQueue, SendNow
     from agent_comms.acp_extension import AvailableQueueProjection, QueueItem
 
-    comms, agent, _, _ = _owner(tmp_path)
-    comms.agents.begin_turn("beta", TurnId.mint(), "Held native fixture")
-    inbox = agent.inputs.state("beta").open_inbox()
+    agent, inbox = held_owner(tmp_path)
     requests = [QueuePromptRequest(text) for _ in range(count)]
     for request in requests:
         await agent.prompt("beta", [TextContentBlock(type="text", text=text)],

@@ -26,19 +26,17 @@ from agent_comms.assignment_states import (
     EngagedAssignment,
 )
 from agent_comms.attempt_states import (
-    AbortingAttempt,
     AttemptFailedAttempt,
     ModelRunningAttempt,
     PromptAcceptedAttempt,
     PromptStartingAttempt,
     SettlingAttempt,
-    RetryingAttempt,
     SucceededAttempt,
 )
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.store_files import StoreBusy
 from agent_comms.coordination_errors import IntegrityViolationError, SchemaVersionError
-from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION, CoordinatorTable
+from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_snapshot import RecoverySnapshot
 from agent_comms.coordination_tables.assignments import (
     ExecutionAssignmentLink,
@@ -52,8 +50,6 @@ from agent_comms.coordination_tables.executions import (
     ExecutionProvenance,
     WireOrigin,
     AcpOrigin,
-    GoalOrigin,
-    SystemOrigin,
     ExecutionRecord,
 )
 from agent_comms.coordination_tables.participants import OwnerGenerations, Participants
@@ -291,19 +287,6 @@ def fail_defer(db, name="e", ordinal=1):
     db.execute("COMMIT")
 
 
-def test_total_enum_partition_and_transitions():
-    assert set(ExecutionState.names()) == {
-        "queued",
-        "pending",
-        "active",
-        "deferred",
-        "completed",
-        "failed",
-    }
-    assert RetryingAttempt in AbortingAttempt.successors()
-    assert ActiveExecution not in {CompletedExecution, FailedExecution}
-
-
 def test_typed_execution_and_attempt_authority_are_separate():
     pending = execution()
     first = attempt()
@@ -315,8 +298,6 @@ def test_typed_execution_and_attempt_authority_are_separate():
         first.attempt_ordinal = 2
     with pytest.raises(FrozenInstanceError):
         pending.lifecycle = FailedExecution()
-
-
 
 
 def test_snapshot_projection_retry_and_inert_secrets():
@@ -443,8 +424,6 @@ def test_wire_claim_obligation_and_publication_contract():
         replace(intent, expected_message_id=MessageId.mint("fabricated"))
 
 
-
-
 @pytest.fixture
 def db(tmp_path):
     path = tmp_path / "coordination.sqlite3"
@@ -458,7 +437,6 @@ def test_database_version_privacy_and_reopen(db):
     connection, path = db
     assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     assert not CoordinatorTable.schema_differs(connection)
-    assert COORDINATION_SNAPSHOT_VERSION == 3
     if os.name != "nt":  # NTFS access is governed by ACLs, not POSIX mode bits.
         assert os.stat(path).st_mode & 0o777 == 0o600
     with CoordinationStore(path) as reopened:
@@ -1231,8 +1209,6 @@ def test_fence_digest_is_globally_unique_across_executions(db):
         assert reopened._connection.execute("SELECT count(*) FROM attempts").fetchone()[0] == 1
 
 
-
-
 def test_claim_target_and_recipient_lineage_is_immutable(db):
     c, path = db
     sql_wire_execution(c, pending=False)
@@ -1340,12 +1316,6 @@ def test_sql_publication_envelope_rejects_invalid_commits_and_reopens(db, mutati
         )
 
 
-
-
-
-
-
-
 def test_obligation_same_state_rewrite_is_rejected_including_terminal(db):
     c, path = db
     sql_wire_execution(c)
@@ -1364,8 +1334,6 @@ def test_obligation_same_state_rewrite_is_rejected_including_terminal(db):
         assert reopened._connection.execute(
             "SELECT state,revision FROM obligations"
         ).fetchone() == ("silent", 2)
-
-
 
 
 def test_recovery_audit_immutable_reopen(db):

@@ -77,32 +77,45 @@ from test_todos import order, thread
 pytest_plugins = ("test_held_problem_orders",)
 
 
+def working(ctx) -> Todo:
+    """The holder works P1 under its own problem goal."""
+    original = ctx.comms.goals.todos.get("P1")
+    ctx.comms.goals.update_goal("worker", SetGoalAction(
+        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
+        goal_id=original.held().generation,
+    ))
+    return original
+
+
+def delivery(ctx, report: str) -> CommsOrderDeliverTool:
+    """The holder's claim of P1 at the checkout's HEAD through pull request 1."""
+    return CommsOrderDeliverTool(
+        problem="P1", pull_request=PullRequestLink(ctx.comms.goals.todos.get("P1").repo, 1),
+        head=ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip(),
+        report=DeliveryReport(report))
+
+
 def test_pathname_handoff_publishes_without_completing_the_held_work(held_team):
     comms = held_team.comms
-    commander = held_team.commander
-    assigned = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=assigned.held().generation,
-    ))
-    original = comms.goals.todos.get(assigned.id)
-    goals = tuple(comms.registry.require(name).goal for name in ("worker", commander))
+    lead = held_team.commander
+    original = comms.goals.todos.get(working(held_team).id)
+    goals = tuple(comms.registry.require(name).goal for name in ("worker", lead))
     body = (
         "Recording saved at `/home/ts/.cache/agent-scratch/probe/toad-comms-fixed`; "
         "investigation continues."
     )
 
-    committed = comms.messaging.send("worker", commander, body, HandoffKind).message
+    committed = comms.messaging.send("worker", lead, body, HandoffKind).message
     stored = comms.bus.bus.lookup_message(committed.message_id).message
 
     assert stored.body == body
-    assert (stored.sender, stored.target, stored.type) == ("worker", commander, HandoffKind)
+    assert (stored.sender, stored.target, stored.type) == ("worker", lead, HandoffKind)
     assert Message.from_message(stored).to_wire() == Message.from_message(committed).to_wire()
     assert stored.type.allows_automatic_reply(stored)
     assert comms.bus.bus.unanswered_references(
-        (stored.seq,), frozenset({commander}),
+        (stored.seq,), frozenset({lead}),
     ) == (stored.reference,)
-    assert tuple(comms.registry.require(name).goal for name in ("worker", commander)) == goals
+    assert tuple(comms.registry.require(name).goal for name in ("worker", lead)) == goals
     assert comms.goals.todos.get(original.id) == original
 
 
@@ -119,11 +132,7 @@ def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
 
     ctx = held_team
     comms = ctx.comms
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
-    ))
+    original = working(ctx)
     sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
     request = FieldCodec.decode(CommsOrderDeliverTool, {
         "tool": "comms_order_deliver", "problem": "P1",
@@ -139,17 +148,10 @@ def test_a_delivery_records_the_repository_its_pull_request_lives_in(held_team):
 def test_claim_verdict_family_on_retained_copy(held_team):
     ctx = held_team
     comms = ctx.comms
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
-    ))
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
+    original = working(ctx)
     report = ctx.root / "report.txt"
     report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
-    request = CommsOrderDeliverTool(
-        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(report.read_text()),
-    )
+    request = delivery(ctx, report.read_text())
     with pytest.raises(TodoConflict):
         ThreadCaller(ctx.commander).invoke(request, comms)
     assert comms.goals.todos.get("P1") == original
@@ -159,7 +161,7 @@ def test_claim_verdict_family_on_retained_copy(held_team):
     assert isinstance(claimed.order, ClaimedProblemOrder)
     assert not claimed.pending
     assert FieldCodec.decode(Todo, FieldCodec.encode(claimed)) == claimed
-    assert claimed.order.claim.head == sha
+    assert claimed.order.claim.head == request.head
     assert claimed.order.claim.message.body == report.read_text()
     history = ThreadCaller(ctx.commander).invoke(CommsHistoryTool(peer="worker"), comms)
     sent = next(message for message in history.messages
@@ -219,16 +221,9 @@ def test_a_busy_begin_answers_every_storage_error_handler() -> None:
 def unsent_claim(ctx):
     """A real claim whose Todo commits while another writer holds the bus."""
     comms = ctx.comms
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
-    ))
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
-    request = CommsOrderDeliverTool(
-        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(
-            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
-    )
+    working(ctx)
+    request = delivery(
+        ctx, "Killed the stupid duplicated count decision; read its actual diff before accepting it.")
     before = comms.bus.bus.revision()
     # The bus writer's own busy wait expires; nothing in the publisher or claim is patched.
     with SQLiteFile.writers_drained(comms.bus.bus.path):
@@ -310,16 +305,9 @@ def test_a_published_claim_retried_on_a_held_bus_is_unavailable_never_unsent(hel
     it reports the publication unavailable, and after release returns that original."""
     ctx = held_team
     comms = ctx.comms
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
-    ))
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
-    request = CommsOrderDeliverTool(
-        problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(
-            "Killed the stupid duplicated count decision; read its actual diff before accepting it."),
-    )
+    working(ctx)
+    request = delivery(
+        ctx, "Killed the stupid duplicated count decision; read its actual diff before accepting it.")
     ThreadCaller("worker").invoke(request, comms)
     claimed = comms.goals.todos.get("P1")
     published = comms.bus.bus.revision()
@@ -354,11 +342,7 @@ def test_claimed_check_correction_reads_the_base_the_fix_was_built_on(
     ctx = held_team
     comms = ctx.comms
     base, first, merge = merge_two_commit_fix(cited_source, tmp_path / "bin", 4)
-    original = comms.goals.todos.get("P1")
-    comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=original.held().generation,
-    ))
+    working(ctx)
     head = cited_source.git(cited_source.checkout, "rev-parse", "fix/4").strip()
     ThreadCaller("worker").invoke(CommsOrderDeliverTool(
         problem="P1", pull_request=PullRequestLink(comms.goals.todos.get("P1").repo, 4), head=head,
@@ -451,16 +435,9 @@ def test_unstrike_does_not_undo_an_explicit_release(held_team):
 
 
 def claimed_by_worker(ctx) -> Todo:
-    ctx.comms.goals.update_goal("worker", SetGoalAction(
-        text=ProblemGoalOrder.text, order=ProblemGoalOrder(),
-        goal_id=ctx.comms.goals.todos.get("P1").held().generation,
-    ))
-    sha = ctx.repos[0].git(ctx.repos[0].checkout, "rev-parse", "HEAD").strip()
-    report = ctx.root / "report.txt"
-    report.write_text("Killed the broken count copy; inspect its actual diff before accepting it.")
-    ThreadCaller("worker").invoke(CommsOrderDeliverTool(
-        problem="P1", pull_request=PullRequestLink(ctx.comms.goals.todos.get("P1").repo, 1), head=sha, report=DeliveryReport(report.read_text()),
-    ), ctx.comms)
+    working(ctx)
+    ThreadCaller("worker").invoke(delivery(
+        ctx, "Killed the broken count copy; inspect its actual diff before accepting it."), ctx.comms)
     claimed = ctx.comms.goals.todos.get("P1")
     assert isinstance(claimed.order, ClaimedProblemOrder)
     return claimed
@@ -562,7 +539,7 @@ def test_two_delivery_claims_warn_without_deadlocking_other_orders(
     assert store.get("P2") == claims[1]
 
 
-def test_claimed_order_to_another_unit_is_refused_and_writes_nothing(held_team, cited_source):
+def test_claimed_order_to_another_teammate_is_refused_and_writes_nothing(held_team, cited_source):
     ctx = held_team
     ctx.comms.registry.register(thread("other", ctx.root, 3.0))
     claimed = claimed_by_worker(ctx)
@@ -623,7 +600,7 @@ def test_closed_problem_refuses_a_check_correction_and_writes_nothing(held_team)
     assert ctx.comms.goals.todos.get("P1") == claimed
 
 
-def test_say_without_answers_answers_the_target_units_open_asks(held_team, capsys):
+def test_say_without_answers_answers_the_targets_open_asks(held_team, capsys):
     from test_holder_standing_rules import publish
 
     ctx = held_team

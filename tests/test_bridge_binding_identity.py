@@ -23,11 +23,11 @@ from agent_comms.threads import Thread
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('operation,tags', [
-    (Watch(ChannelsFrom('commander')), frozenset({'comms'})),
+    (Watch(ChannelsFrom('lead')), frozenset({'comms'})),
     (Watch(), frozenset()),
 ])
 async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path, operation, tags):
-    comms.registry.declare(Thread('commander', frozenset({'comms'}), Checkout(tmp_path)))
+    comms.registry.declare(Thread('lead', frozenset({'comms'}), Checkout(tmp_path)))
     state = tmp_path / 'journal'
     address = BindingAddress(root=str(comms.root), bus='new-reader', thread='session',
                              start=Binding.bus_head(str(comms.root)))
@@ -69,7 +69,7 @@ async def test_enrol_register_rename_and_rebind_preserve_reader(comms, tmp_path,
         with pytest.raises(ValueError, match='another Core/CLI conversation'):
             await operation.prepare(bridge)
         assert Binding.select(db) == [renamed]
-        comms.messaging.send('commander', 'renamed-reader', 'new incarnation only')
+        comms.messaging.send('lead', 'renamed-reader', 'new incarnation only')
         with pytest.raises(UnregisteredThreadError, match='lookup .* is not registered'):
             renamed.recipient(comms)
         assert comms.bus.pending_count('renamed-reader') == 1

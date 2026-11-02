@@ -11,7 +11,6 @@ from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, Dis
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.transcripts import NotifiedThreadPresentation
 from agent_comms.thread_presentation import WorkingThreadPresentationStatus
-from agent_comms.thread_presentation import ThreadPresentation
 from agent_comms.ui_model.status import ThreadStatusModel
 
 

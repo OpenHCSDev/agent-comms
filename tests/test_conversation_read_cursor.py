@@ -18,7 +18,6 @@ def test_prefixes_and_alias_union_stay_in_their_conversation():
     assert 40 not in joined.for_conversation(b)
     assert 50 in joined.for_conversation(b)
     assert joined.for_conversation(b).high_water == 10
-    assert not hasattr(joined, "high_water")
 
 
 def test_sparse_prefix_drops_only_its_covered_exceptions():

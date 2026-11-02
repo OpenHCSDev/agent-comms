@@ -1,4 +1,4 @@
-"""Acquired original native fixture shared by pytest and installed drivers."""
+"""Acquired original native fixture: a saved Pi session, its owner and a loopback provider."""
 
 from agent_comms.repo import Checkout
 import asyncio
@@ -17,22 +17,18 @@ from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.comms import wire
 from agent_comms.coordinator import Coordination
 from agent_comms.cursor_publication import CursorDelivery
-from agent_comms.nominal.field_codec import AcpSessionId, FieldCodec, InputId
+from agent_comms.nominal.field_codec import AcpSessionId, InputId
 from agent_comms.fresh_private_session import create_fresh_private_session
 from agent_comms.native_arguments import GivenArguments, GivenBinary, NativeArguments
 from agent_comms.native_child import PiSessionChild
 from agent_comms.native_package import VerifiedNativePackage
-from agent_comms.owned_turn import OwnedTurn
 from agent_comms.pi_native_backend import PersistentPiSession
-from agent_comms.queued_input import InitialInput
 from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.storage_rules import StorageRule
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.threads import Thread
-from agent_comms.queued_input import AcceptedTurn
 from compaction_loopback import LoopbackProvider
 from delivery_owner_fixture import canonical_agent
-from native_proof_cases import read_proof_rows
 
 
 async def wait_for(predicate):
@@ -134,34 +130,6 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             await agent.shutdown()
             assert not any(state.turn_task.busy or state.turn_open() for state in states)
             assert not agent.turns.persistent_backends
-
-    @asynccontextmanager
-    async def original_input(self, agent, session_id, text):
-        """Reserve and acquire through the same input/turn owners as ACP dispatch."""
-        async with AsyncExitStack() as resources:
-            async with InitialInput.reserve(
-                agent.inputs, session_id, agent.sessions.require(session_id),
-                text=text, prompt=text, echo=True, images=(), controller=None,
-                input_id=InputId.mint(),
-            ) as reservation:
-                item = reservation.item
-                resources.push_async_callback(reservation.release().aclose)
-            # Native acquisition begins after the wire reservation ends; its
-            # rollback actions remain with this turn until acquisition finishes.
-            turn = OwnedTurn(
-                agent.turns, session_id, agent.sessions.require(session_id), text,
-                original_keys=(item.key,), initial_display_text=text,
-                original_owner_input=True, original_goal_id=item.context.active_goal_id,
-                acceptance=AcceptedTurn(item.input_id),
-            )
-            async with AsyncExitStack() as permits:
-                assert await turn.acquire(resources, permits)
-                yield turn
-
-    async def force_reopen(self):
-        """Retire this fixture's actual attested child; the next turn opens the saved session."""
-        self.persistent.child_state.child.attestation.require_identity()
-        await self.persistent.close_idle()
 
     def original(self, native_id: str, text: str) -> bool:
         return self._observe_start(None, native_id, text)
@@ -306,19 +274,5 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage,
                         retirement.push_async_callback(child.shutdown)
                     retirement.push_async_callback(owner.persistent.close)
                 assert all(child.retired or child.release_failure is not None for child in owner.children)
-                print(json.dumps({
-                    "saved_native_fixture": str(root),
-                    "localhost_posts": provider.posts,
-                    "native_input_proofs": sum(
-                        len(read_proof_rows(files))
-                        for files in {
-                            child.key[0].session.files(child.key[0].root)
-                            for child in owner.children
-                        }
-                        if files.input_proof.is_file()
-                    ),
-                    "children": [FieldCodec.encode(child.proc.identity) for child in owner.children],
-                    "children_retired": all(child.retired for child in owner.children),
-                }))
 
             await join_retirement(asyncio.create_task(retire_all()))

@@ -151,7 +151,3 @@ def test_coordination_read_preserves_revision_and_repairs_exposed_mode(tmp_path)
     path.chmod(0o644)
     with Coordination(path):
         assert path.stat().st_mode & 0o777 == 0o600
-
-
-    # This control observes actual delivery/recovery facts. It neither mocks
-    # native execution nor grants a provider call to the pending input.

@@ -1,5 +1,4 @@
 """Named destinations share counting, change attribution and human read contracts."""
-from pathlib import Path
 
 from agent_comms.repo import Checkout
 import pytest

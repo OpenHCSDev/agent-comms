@@ -45,7 +45,6 @@ def test_activity_family_tracks_original_roles_targets_and_member_scope(bus):
         for scope, expected in scopes:
             assert scope.activity(captured) == expected
         assert db.total_changes == changes
-    assert not tuple(bus.path.parent.glob("bus_*json"))
 
 
 def test_activity_rolls_back_with_its_original_append(bus):

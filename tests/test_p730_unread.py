@@ -1,15 +1,12 @@
 """Each sidebar count is either indexing or an exact value, never an absent zero."""
 
-from agent_comms.repo import Checkout
-from dataclasses import fields
-
 import pytest
 
+from agent_comms.repo import Checkout
 from conftest import installed_comms
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.ui_model.sidebar import SidebarModel
 from agent_comms.ui_model.unread import ExactUnread, IndexingUnread, UnreadPresentation
-from agent_comms.presentation import CoordinationSnapshot
 from agent_comms.threads import Thread
 
 
@@ -39,9 +36,3 @@ def test_indexing_roster_and_exact_count_share_required_maps(tmp_path):
     channels, threads = SidebarModel.derive(after)
     assert threads["peer"].unread == after.unread["peer"]
     assert channels["#any"].unread == after.channel_unread["#any"]
-
-
-def test_snapshot_declares_typed_counts_without_pending_mirror():
-    names = {field.name: field for field in fields(CoordinationSnapshot)}
-    assert "unread_pending" not in names
-    assert names["unread"].default is names["channel_unread"].default

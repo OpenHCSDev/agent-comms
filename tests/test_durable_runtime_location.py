@@ -1,4 +1,4 @@
-"""P117 location behavior over a real, paused durable store; no provider inputs."""
+"""Durable-store thread location and history paging over a real store; no provider inputs."""
 from agent_comms.repo import Checkout
 import asyncio
 import subprocess
@@ -7,11 +7,9 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
-from agent_comms.agent_backend import NewThreadBackend
 from agent_comms.nominal.field_codec import FieldCodec
 from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
-from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
 from agent_comms.turn_runner import TurnRunner
 from agent_comms.unstarted_runtime import UnstartedRuntime
@@ -25,16 +23,12 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     restored = replace(restored, session_file=restored.session_file.bound_to(tmp_path))
     assert restored.runtime == (location if saved else UnstartedRuntime(PiDurableBackend))
     assert restored.runtime.backend is PiDurableBackend
-    assert NewThreadBackend.selected() is PiNativeBackend
-    assert not DurableDatabase.__abstractmethods__
     class Runner:
         persistent_backends = {}
     runner = Runner()
     backend = TurnRunner.backend_for(runner, 'durable', restored)
     assert isinstance(backend, PiDurableBackend)
     assert TurnRunner.backend_for(runner, 'durable', restored) is backend
-
-
 
 
 SEED = """

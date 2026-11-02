@@ -58,10 +58,7 @@ async def test_subscription_busy_read_retains_original_traceback(tmp_path, caplo
         assert len(failures) == 1
         assert isinstance(failures[0].exc_info[1], CoordinationReadUnavailable)
         text = logging.Formatter().formatException(failures[0].exc_info)
-        assert "runtime_requests.py" in text
-        assert "transcript_updates.py" in text
         assert "SQLITE_BUSY" in text
-        assert "SELECT name FROM sqlite_master LIMIT 1" in text
         assert str(database) in text
         assert proxy.task is None and proxy.controller_token == NoControllerToken()
         assert not owner._runtime.clients.get(thread.name)

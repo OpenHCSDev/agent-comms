@@ -1,4 +1,4 @@
-"""Current goal consumers over the original checked private-bus producer."""
+"""An owner pause refuses goal input review and a precondition expecting an active goal."""
 
 from agent_comms.repo import Checkout
 import os
@@ -8,7 +8,6 @@ import pytest
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import (
     ActiveGoalAction,
-    CompletedGoalAction,
     GoalPrecondition,
     OwnerInvocable,
     PausedGoalAction,
@@ -20,27 +19,11 @@ from agent_comms.threads import Thread
 from agent_comms.goal_scope import OneGoal
 
 
-@pytest.fixture
-def selected_goal(tmp_path):
+def test_owner_pause_refuses_review_and_active_precondition(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
-    for name in ("worker", "peer", "other"):
+    for name in ("worker", "peer"):
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
-    goal = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
-    return comms, goal
-
-
-
-
-
-
-def test_exact_cas_and_owner_pause_remain_strict(selected_goal):
-    comms, original = selected_goal
-    later = comms.goals.update_goal("worker", ActiveGoalAction(progress="Later revision"))
-    with pytest.raises(ValueError):
-        comms.goals.update_goal("worker", CompletedGoalAction(
-            expect=GoalPrecondition(expected_goal=original, goal_id=OneGoal(original.id)),
-        ))
-    assert comms.registry.require("worker").goal == later
+    original = comms.goals.update_goal("worker", SetGoalAction(text="Original objective"))
     paused = comms.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=OneGoal(original.id))),
         actor=OwnerInvocable,
@@ -54,8 +37,3 @@ def test_exact_cas_and_owner_pause_remain_strict(selected_goal):
         with pytest.raises(ValueError):
             operation()
         assert comms.registry.require("worker").goal == paused
-
-
-
-
-

@@ -55,9 +55,8 @@ def test_full_ordered_membership_ignores_mentions_and_has_two_unique_identities(
         FrozenRecipient(RECIPIENT_LOOKUP, "beta"),
     )
     assert result.canonical_members == frozenset({"alpha", "beta"})
-    assert not hasattr(result, "wake_mode")
-    assert not hasattr(result, "claim_id")
     assert freeze(members=list(reversed(result.recipients))).digest == result.digest
+    assert freeze(members=[FrozenRecipient(SENDER_LOOKUP, "renamed")]).digest != result.digest
     with pytest.raises(FrozenInstanceError):
         result.target = "#other"
     assert replace(result, source_revision="changed").digest != result.digest
@@ -79,16 +78,6 @@ def test_full_envelope_hash_binds_body_type_role_mentions_sequence_and_target():
         assert other.wire_envelope_digest != base.wire_envelope_digest
         assert other.digest != base.digest
     assert freeze(message(body="@alpha please review", mentions=())).recipients == base.recipients
-
-
-def test_reusing_frozen_value_after_rename_retag_stop_does_not_resolve_members_again():
-    original = freeze()
-    mutable_later_registry = {"alpha": ("renamed", frozenset(), "stopped")}
-    mutable_later_registry["beta"] = ("beta", frozenset({"other"}), "running")
-    assert original.recipients[0].canonical_thread == "alpha"
-    assert original.canonical_members == frozenset({"alpha", "beta"})
-    assert freeze(members=list(original.recipients)).digest == original.digest
-    assert freeze(members=[FrozenRecipient(SENDER_LOOKUP, "renamed")]).digest != original.digest
 
 
 def test_exact_stored_all_target_and_no_wildcard_inference():

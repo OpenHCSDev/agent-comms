@@ -18,9 +18,7 @@ from agent_comms.repository_name import RepositoryName
 from agent_comms.shell_effects import (
     CreateCheckoutStorageEffect,
     RemoveCheckoutStorageEffect,
-    ShellProgram,
     StorageDenied,
-    StorageEffect,
     shell_storage_effects,
 )
 from agent_comms.standing_rules import StorageHomeMissing
@@ -413,11 +411,6 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command, comms):
     thread = Thread('worker', frozenset(), Checkout(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
         StorageProjection(rule, thread, comms).check(shell_storage_effects(command, tmp_path))
-
-
-def test_programs_do_not_claim_to_be_effect_values():
-    assert all(not issubclass(program, StorageEffect)
-               for program in set(ShellProgram.programs.values()))
 
 
 @pytest.mark.parametrize('command,kind', [

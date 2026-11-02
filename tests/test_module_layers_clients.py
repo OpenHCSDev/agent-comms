@@ -294,7 +294,7 @@ def test_crosses_runtimes_discovers_sessions_without_importing_monitor(tmp_path:
 def test_crosses_runtimes_discovers_a_new_session_member(tmp_path: Path) -> None:
     source = tmp_path / "src"
     shutil.copytree(OutgoingWire.at().checkout / "src/agent_comms", source / "agent_comms",
-                    ignore=shutil.ignore_patterns("__pycache__", ".git"))
+                    ignore=shutil.ignore_patterns("__pycache__", ".git", "node_modules"))
     script = source / "agent_comms/new_session.py"
     write(script, '''
 from dataclasses import dataclass

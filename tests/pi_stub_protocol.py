@@ -34,12 +34,6 @@ def answer_state(data):
     send(request_response(read_state(), data))
 
 
-def answer_stats(data):
-    request = read_request()
-    assert request["type"] == "get_session_stats"
-    send(request_response(request, data))
-
-
 def next_prompt():
     while True:
         request = read_request()

@@ -66,11 +66,8 @@ async def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path,
             await asyncio.sleep(0.02)
         assert (await Coordination.run_worker(partial(comms.owners.start_many, ("worker",))))[0].pid == owner.require_process().pid
         assert not owner.process_identity.runs_here()
-        assert owner.process_identity is not None
         from agent_comms.owner_cutover import PreserveOwnerRuntime
 
-        # The current launch derives its immutable package from the installation;
-        # the removed mutable-package override is not a supported input.
         assert owner.process_alive
         assert isinstance(comms.owners.releases.read_many(("worker",))["worker"], NoRelease)
         restarted = await Coordination.run_worker(partial(
@@ -123,9 +120,6 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
     from delivery_owner_fixture import FakeClient
     from agent_comms.tools import CommsResourcesTool
     from agent_comms.tool_caller import NoThreadCaller
-    from agent_comms.nominal.field_codec import FieldCodec
-    from agent_comms.child_process import Platform, ProportionalMemory, ResidentMemory
-    import json
 
     comms = wire(native_workers.root)
     names = tuple(f"shared-{index}" for index in range(owner_count))
@@ -138,7 +132,6 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
             CommsResourcesTool(thread=name).apply, comms, NoThreadCaller(),
         ))
         measurements.append(result)
-        print("HOST_RESOURCES", json.dumps(FieldCodec.encode(result)), flush=True)
         return result
     try:
         for name in names:
@@ -169,13 +162,6 @@ async def test_team_memory_stays_under_its_cap(tmp_path, native_workers, owner_c
         assert all(reply.result().stop_reason == "end_turn" for reply in pending)
         loaded = await resources(names[0])
         assert loaded.owners == owner_count
-        children = ResidentMemory.tree(host, Path("/proc"))
-        print("FLEET_PROCESSES", json.dumps([
-            {"process": FieldCodec.encode(Platform.current().identity(pid)),
-             "memory": FieldCodec.encode(memory),
-             "proportional_bytes": ProportionalMemory.read(Path("/proc") / str(pid)).bytes}
-            for pid, memory in children.items()
-        ]), flush=True)
         journals = {name: Path(comms.registry.require(name).runtime.read_key) for name in names}
         assert len(set(journals.values())) == len(names)
         for name, journal in journals.items():
@@ -250,10 +236,6 @@ def test_stale_stored_birth_does_not_signal_real_process(tmp_path: Path) -> None
         child.stop_sync()
 
 
-
-
-
-
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
     """The production detached launch retains a failure before socket creation.
 
@@ -262,8 +244,9 @@ def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkey
     """
     checkout = tmp_path / "unprepared"
     package = Path(native_package.__file__).parent
+    # A clean checkout holds neither bytecode nor the untracked node_modules install.
     shutil.copytree(package, checkout / "src" / package.name,
-                    ignore=shutil.ignore_patterns("__pycache__"))
+                    ignore=shutil.ignore_patterns("__pycache__", "node_modules"))
     (checkout / "stack").mkdir()
     shutil.copy2(native_package.MANIFEST, checkout / "stack" / native_package.MANIFEST.name)
     # A source checkout stamps its build from its own repository's HEAD.

@@ -50,26 +50,26 @@ def test_calling_thread_is_declared_by_owner_launch_environment() -> None:
 
 class TestMessaging:
     def test_send_routes_through_bus(self, wired: Comms) -> None:
-        mid = wired.messaging.send("PR111", "fixer", "hello", QuestionKind).message.message_id
-        assert isinstance(mid, str)
+        wired.messaging.send("PR111", "fixer", "hello", QuestionKind)
         assert wired.bus.pending_count("fixer") == 1
 
     def test_send_fail_closed_unknown_sender(self, wired: Comms) -> None:
         with pytest.raises(UnregisteredThreadError):
-            wired.messaging.send("ghost", "fixer", "hello").message.message_id
+            wired.messaging.send("ghost", "fixer", "hello")
 
     def test_broadcast_reaches_all_peers(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "#all", "green").message.message_id
+        wired.messaging.send("PR111", "#all", "green")
         assert wired.bus.pending_count("fixer") == 1
 
-    def test_scoped_read_only_clears_selected_conversation(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "direct").message.message_id
-        wired.messaging.send("PR111", "#all", "global").message.message_id
+    @pytest.mark.parametrize("selected, other", [("PR111", "#all"), ("#all", "PR111")])
+    def test_scoped_read_only_clears_selected_conversation(self, wired: Comms, selected: str, other: str) -> None:
+        wired.messaging.send("PR111", "fixer", "direct")
+        wired.messaging.send("PR111", "#all", "global")
 
-        shown = wired.bus.inbox("fixer", CommandTarget.named("PR111")).page.messages
-        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named("PR111"))
-        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
-        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
+        shown = wired.bus.inbox("fixer", CommandTarget.named(selected)).page.messages
+        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named(selected))
+        assert wired.bus.pending_count("fixer", CommandTarget.named(selected)) == 0
+        assert wired.bus.pending_count("fixer", CommandTarget.named(other)) == 1
         assert wired.bus.pending_count("fixer") == 1
 
     def test_each_target_member_reads_and_counts_the_same_messages(self, wired: Comms) -> None:
@@ -82,26 +82,16 @@ class TestMessaging:
             assert {message.body for message in wired.bus.inbox("fixer", target).page.messages} == bodies
             assert wired.bus.pending_count("fixer", target) == len(bodies)
 
-    def test_scoped_channel_read_does_not_clear_dm(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "direct").message.message_id
-        wired.messaging.send("PR111", "#all", "global").message.message_id
-
-        shown = wired.bus.inbox("fixer", CommandTarget.named("#all")).page.messages
-        wired.bus.mark_read_through("fixer", shown[-1].seq, target=CommandTarget.named("#all"))
-        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 0
-        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 1
-        assert wired.bus.pending_count("fixer") == 1
-
     def test_inbox_order_follows_seq(self, wired: Comms) -> None:
         for i in range(5):
-            wired.messaging.send("PR111", "fixer", f"m{i}").message.message_id
+            wired.messaging.send("PR111", "fixer", f"m{i}")
         bodies = [m.body for m in wired.bus.inbox("fixer").page.messages]
         assert bodies == [f"m{i}" for i in range(5)]
 
     def test_opened_pending_counts_groups_all_conversations_in_one_result(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "direct one").message.message_id
-        wired.messaging.send("PR111", "fixer", "direct two").message.message_id
-        wired.messaging.send("PR111", "#all", "global").message.message_id
+        wired.messaging.send("PR111", "fixer", "direct one")
+        wired.messaging.send("PR111", "fixer", "direct two")
+        wired.messaging.send("PR111", "#all", "global")
 
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
@@ -112,7 +102,7 @@ class TestMessaging:
 
     def test_shared_history_page_contract(self, wired: Comms) -> None:
         for index in range(5):
-            wired.messaging.send("PR111", "#all", f"m{index}").message.message_id
+            wired.messaging.send("PR111", "#all", f"m{index}")
 
         page = wired.views.history_page(CommandTarget.named("#all"), PageBounds(limit=2))
         assert [message.body for message in page.messages] == ["m3", "m4"]
@@ -195,14 +185,14 @@ class TestThreadOps:
         assert "Important decisions" in notice.text
 
     def test_claimed_thread_inbox_starts_at_its_creation(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "#all", "before claim").message.message_id
+        wired.messaging.send("PR111", "#all", "before claim")
         claimed = wired.threads.claim_thread(
             "viewer",
             tags=frozenset({"acp"}),
             worktree=Checkout(Path("/tmp/project")),
         )
         assert wired.bus.inbox(claimed.name).page.messages == ()
-        wired.messaging.send("PR111", "#all", "after claim").message.message_id
+        wired.messaging.send("PR111", "#all", "after claim")
         assert [message.body for message in wired.bus.inbox(claimed.name).page.messages] == ["after claim"]
 
     def test_presence_uses_configured_model_with_runtime_context(self, wired: Comms) -> None:
@@ -317,7 +307,7 @@ class TestThreadOps:
         assert snapshot.claim_generation(owner.name) > before
 
     def test_archive_requires_stopped_thread(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "kept after archive").message.message_id
+        wired.messaging.send("PR111", "fixer", "kept after archive")
         with pytest.raises(RelationViolationError):
             wired.threads.archive("fixer")
         wired.owners.stop("fixer")
@@ -330,7 +320,7 @@ class TestThreadOps:
         ]
 
     def test_rename_self_preserves_routing_history_and_state(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
-        wired.messaging.send("fixer", "PR111", "before rename").message.message_id
+        wired.messaging.send("fixer", "PR111", "before rename")
         shown = wired.bus.inbox("PR111", CommandTarget.named("fixer")).page.messages
         wired.bus.mark_read_through("PR111", shown[-1].seq, target=CommandTarget.named("fixer"))
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
@@ -353,8 +343,8 @@ class TestThreadOps:
         assert ledger["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
-        wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
-        wired.messaging.send("PR111", "fixer", "old process sends canonically").message.message_id
+        wired.messaging.send("fixer", "PR111", "old alias routes")
+        wired.messaging.send("PR111", "fixer", "old process sends canonically")
         assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer")).page.messages] == [
             "old alias routes"
         ]
@@ -367,7 +357,7 @@ class TestThreadOps:
         assert history[-2].target == "planner"
         assert history[-1].sender == "planner"
         with pytest.raises(RelationViolationError):
-            wired.messaging.send("PR111", "planner", "alias self-DM").message.message_id
+            wired.messaging.send("PR111", "planner", "alias self-DM")
 
     def test_rename_self_rejects_collisions_and_stopped_threads(self, wired: Comms, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
@@ -524,7 +514,7 @@ class TestLedgerOps:
 
 class TestPollAndWire:
     def test_poll_snapshot(self, wired: Comms) -> None:
-        wired.messaging.send("PR111", "fixer", "hello").message.message_id
+        wired.messaging.send("PR111", "fixer", "hello")
         snap = FieldCodec.decode(dict[str, JsonValue], wired.views.poll(NamedThreadTarget("fixer")).to_wire())
         thread = FieldCodec.decode(dict[str, JsonValue], snap["thread"])
         inbox = snap["inbox"]
@@ -584,6 +574,6 @@ class TestReDeclarationPreservesProvenance:
 
     def test_tagless_child_keeps_channel_after_reregister(self, wired: Comms) -> None:
         wired.registry.declare(Thread(name='fixer', tags=frozenset(), worktree=Checkout(Path('/tmp/wt1'))))
-        wired.messaging.send("PR111", "#auth", "only tagged fixer sees this").message.message_id
+        wired.messaging.send("PR111", "#auth", "only tagged fixer sees this")
         assert wired.bus.pending_count("fixer") == 1
 

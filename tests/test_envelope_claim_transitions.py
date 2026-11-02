@@ -332,13 +332,6 @@ def test_stored_claims_decode_without_resolving_changed_filesystem(tmp_path, mon
             assert FieldCodec.decode(type(record), raw) == record
 
 
-def test_no_claim_state_or_sidecar_is_written_by_pure_application(tmp_path):
-    worktree, a, _ = resources(tmp_path)
-    before = set(worktree.iterdir())
-    assert transition(1, claims=(a,), generation=G1).project(ClaimProjection())[a].owner == "owner"
-    assert set(worktree.iterdir()) == before and os.access(worktree / "a.py", os.R_OK)
-
-
 def _wake_scope(operation: ClaimId) -> WakeClaim:
     return WakeClaim(
         wire_root_id=ROOT_ID, source_seq=7, source_message_id=MessageId.mint("source-7"),

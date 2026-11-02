@@ -23,7 +23,6 @@ from agent_comms.team.publication_rules import EmptyPullRequest, UnpushedBranch
 from agent_comms.team.spinning import SpinningTeammate
 from agent_comms.team_heartbeat import TeamHeartbeat, TeamObservation
 from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
-from agent_comms.team_hud import TeamHud
 from agent_comms.comms import Comms
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.nominal.field_codec import ToolCallId

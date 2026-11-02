@@ -10,25 +10,25 @@ from agent_comms.threads import Thread
 
 
 def conversation(comms):
-    for name in ("claude-ai", "commander", "user", "other"):
+    for name in ("claude-ai", "lead", "user", "other"):
         comms.registry.declare(Thread(
             name=name, tags=frozenset(), worktree=Checkout(Path("/work")),
         ))
     expected = []
     for number in range(5):
-        sender, target = (("claude-ai", "commander") if number % 2 == 0
-                          else ("commander", "claude-ai"))
+        sender, target = (("claude-ai", "lead") if number % 2 == 0
+                          else ("lead", "claude-ai"))
         expected.append(comms.messaging.send(sender, target, f"message {number}").message)
-        comms.messaging.send("other", "commander", f"unrelated {number}")
+        comms.messaging.send("other", "lead", f"unrelated {number}")
     return expected
 
 
 def test_newest_first_pages_are_exclusive_and_conversation_scoped(comms):
     expected = conversation(comms)
     caller = ThreadCaller("claude-ai")
-    first = invoke_tool(comms, "comms_history", {"peer": "commander", "limit": 2}, caller=caller)
+    first = invoke_tool(comms, "comms_history", {"peer": "lead", "limit": 2}, caller=caller)
     second = invoke_tool(comms, "comms_history", {
-        "peer": "commander", "limit": 2, "before": first["before"],
+        "peer": "lead", "limit": 2, "before": first["before"],
     }, caller=caller)
     assert [m["id"] for m in first["dm"]] == [m.message_id for m in reversed(expected[-2:])]
     assert [m["id"] for m in second["dm"]] == [m.message_id for m in reversed(expected[-4:-2])]
@@ -38,9 +38,9 @@ def test_newest_first_pages_are_exclusive_and_conversation_scoped(comms):
 
 def test_explicit_user_conversation_does_not_read_the_callers_conversation(comms):
     conversation(comms)
-    sent = comms.messaging.send("user", "commander", "from user").message
+    sent = comms.messaging.send("user", "lead", "from user").message
     page = invoke_tool(comms, "comms_history", {
-        "peer": "commander", "participant": "user", "limit": 2,
+        "peer": "lead", "participant": "user", "limit": 2,
     }, caller=ThreadCaller("claude-ai"))
     assert [m["id"] for m in page["dm"]] == [sent.message_id]
     assert page["has_older"] is False

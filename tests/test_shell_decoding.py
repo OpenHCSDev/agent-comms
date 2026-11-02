@@ -387,7 +387,3 @@ class ShellDecoding(unittest.TestCase):
     def test_document_capabilities_compose(self):
         parsed, = ShellCommand.parsed("cat <<'EOF'\nliteral\nEOF\n")
         self.assertEqual(parsed.redirections, (HereDocument('EOF'),))
-
-
-if __name__ == '__main__':
-    unittest.main()

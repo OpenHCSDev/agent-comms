@@ -2,7 +2,6 @@ from agent_comms.repo import Checkout
 import pytest
 
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.channels import BuiltinChannelView
 from agent_comms.errors import UnregisteredThreadError
 from agent_comms.threads import Thread
 from conftest import installed_comms
@@ -12,10 +11,8 @@ def test_all_is_the_only_global_target(tmp_path):
     comms = installed_comms(tmp_path)
     for name in ("sender", "first", "second"):
         comms.registry.declare(Thread(name, frozenset(), Checkout(tmp_path)))
-    with pytest.raises(ValueError):
-        BuiltinChannelView.member_named("broadcast")
     with pytest.raises(UnregisteredThreadError):
-        comms.messaging.send("sender", "broadcast", "must not become a global message").message.message_id
+        comms.messaging.send("sender", "broadcast", "must not become a global message")
     assert not list(comms.views.history_page(CommandTarget.named("#any")).messages)
 
     global_message = comms.messaging.send("sender", "#all", "global").message

@@ -51,12 +51,12 @@ def bodies(page):
 
 def test_default_off_and_opt_in_only_changes_display(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("outsider", "#api", "exact target").message.message_id
-    comms.messaging.send("alice", "bob", "member to outsider").message.message_id
-    comms.messaging.send("bob", "carol", "outsider to member").message.message_id
-    comms.messaging.send("outsider", "bob", "explicit @alice mention").message.message_id
-    comms.messaging.send("outsider", "#ui", "unrelated channel").message.message_id
-    comms.messaging.send("outsider", "bob", "ordinary outsider DM").message.message_id
+    comms.messaging.send("outsider", "#api", "exact target")
+    comms.messaging.send("alice", "bob", "member to outsider")
+    comms.messaging.send("bob", "carol", "outsider to member")
+    comms.messaging.send("outsider", "bob", "explicit @alice mention")
+    comms.messaging.send("outsider", "#ui", "unrelated channel")
+    comms.messaging.send("outsider", "bob", "ordinary outsider DM")
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
         before_delivery = comms.bus.pending_counts_opened(source, basis)
     before_bus = comms.bus.bus.page(comms.bus.bus.revision() + 1, 100)
@@ -76,7 +76,6 @@ def test_default_off_and_opt_in_only_changes_display(tmp_path):
     assert [message.target for message in page.messages] == ["#api", "bob", "carol", "bob"]
     assert len({message.seq for message in page.messages}) == len(page.messages)
     assert bodies(comms.views.history_page(CommandTarget.named("#api"))) == ["exact target"]
-    assert [message.body for message in list(comms.views.history_page(CommandTarget.named("#api")).messages)] == ["exact target"]
     assert bodies(comms.views.channel_display_page("#ui")) == ["unrelated channel"]
     assert comms.bus.bus.page(comms.bus.bus.revision() + 1, 100) == before_bus
     with comms.bus.snapshot(viewer=NamedViewer("alice")) as (basis, source):
@@ -120,7 +119,7 @@ def test_opt_in_user_input_activity_uses_same_member_scope(tmp_path):
 
 def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "old sender DM").message.message_id
+    comms.messaging.send("alice", "bob", "old sender DM")
     comms.channels.set_channel_any_mode("api", True)
     high_water = comms.bus.bus.revision()
     assert bodies(comms.views.channel_display_page("#api")) == ["old sender DM"]
@@ -160,13 +159,13 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
     comms.messaging.send_user_message(CommandTarget.named('#api'), "owned before rename", worktree=Checkout(tmp_path))
     comms.registry.rename(viewer, "human")
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 0
-    comms.messaging.send("alice", "bob", "before threshold").message.message_id
+    comms.messaging.send("alice", "bob", "before threshold")
     comms.views.mark_user_view_read("#api", worktree=Checkout(tmp_path))
     comms.channels.set_channel_any_mode("#api", True)
     # The previously hidden DM was never painted, so enabling the broader
     # projection must expose it as unread despite the exact-channel marker.
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 1
-    comms.messaging.send("bob", "alice", "after threshold").message.message_id
+    comms.messaging.send("bob", "alice", "after threshold")
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#api"].count == 2
     # The old user sender is still an alias of the current human viewer.
     comms.messaging.send_user_message(CommandTarget.named('#api'), "human owned", worktree=Checkout(tmp_path))
@@ -177,9 +176,9 @@ def test_human_marker_unread_and_own_alias_exclusion(tmp_path):
 
 def test_page_boundaries_match_target_pager(tmp_path):
     comms = populated(tmp_path)
-    comms.messaging.send("alice", "bob", "first projected").message.message_id
-    comms.messaging.send("outsider", "#api", "second target").message.message_id
-    comms.messaging.send("bob", "alice", "third projected").message.message_id
+    comms.messaging.send("alice", "bob", "first projected")
+    comms.messaging.send("outsider", "#api", "second target")
+    comms.messaging.send("bob", "alice", "third projected")
     comms.channels.set_channel_any_mode("#api", True)
     rows = comms.views.channel_display_page("#api").messages
     head = comms.views.channel_display_page("#api", bounds=PageBounds(NewerTraversal(), 1))
@@ -191,7 +190,7 @@ def test_page_boundaries_match_target_pager(tmp_path):
 def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_path):
     comms = populated(tmp_path)
     viewer = comms.messaging.user_identity(Checkout(tmp_path)).name
-    comms.messaging.send("alice", viewer, "DM original").message.message_id
+    comms.messaging.send("alice", viewer, "DM original")
     started, finished = Event(), Event()
     failures = []
 
@@ -201,7 +200,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
             started.set()
             for n in range(20):
                 other.registry.heartbeat("alice")
-                other.messaging.send("alice", "#api", f"burst {n}").message.message_id
+                other.messaging.send("alice", "#api", f"burst {n}")
         except BaseException as error:
             failures.append(error)
         finally:
@@ -231,8 +230,8 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
 def test_views_answer_how_far_the_bus_has_grown(tmp_path):
     comms = populated(tmp_path)
     assert comms.views.latest_sequence() == 0
-    comms.messaging.send("outsider", "#api", "to a channel").message.message_id
-    comms.messaging.send("alice", "bob", "to someone else").message.message_id
+    comms.messaging.send("outsider", "#api", "to a channel")
+    comms.messaging.send("alice", "bob", "to someone else")
     # Every message counts, not only those one conversation shows.
     newest_in_channel = comms.views.channel_display_page("#api").messages[-1].seq
     assert comms.views.latest_sequence() == comms.bus.bus.revision() > newest_in_channel

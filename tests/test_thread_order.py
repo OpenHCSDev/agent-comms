@@ -4,7 +4,6 @@ from agent_comms.repo import Checkout
 from agent_comms.channel_targets import CommandTarget
 
 
-import os
 
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.activity import Activity, ActivityState

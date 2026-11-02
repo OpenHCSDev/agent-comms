@@ -104,7 +104,6 @@ async def test_sigterm_drops_a_read_but_finishes_a_bus_write(comms, tmp_path, to
                 if not isinstance(reply, BaseException):
                     reply.release()
         assert f"pending tools: {tool.declared_name}" in output
-        print(f"{tool.declared_name}: SIGTERM to process exit {elapsed:.3f}s")
         if tool is ShutdownWriteTool:
             assert elapsed >= 1.2
             assert (server.directory / "finished").exists()
@@ -132,4 +131,3 @@ async def test_sigterm_drops_observe_but_joins_and_names_pass_body(comms, tmp_pa
         pending = holders[0].split("pending watches: ", 1)[1]
         assert watch.__name__ in tuple(name.strip() for name in pending.split(","))
         watch.check_exit(comms, server.directory, elapsed)
-        print(f"{watch.__name__}: SIGTERM to process exit {elapsed:.3f}s; {holders[0]}")

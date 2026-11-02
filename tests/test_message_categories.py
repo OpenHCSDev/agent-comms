@@ -33,7 +33,6 @@ def test_role_owns_wire_filter_category(role, category, sender_role):
     selected = all_categories() - {OtherCategory}
     assert event.category is category
     assert (event.category in selected) == (category is InboundCategory)
-    assert event.category in all_categories()
 
 
 @pytest.mark.parametrize("data,category", [({}, InboundCategory), ({"notice": True}, OtherCategory)])

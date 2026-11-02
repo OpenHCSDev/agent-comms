@@ -1,6 +1,5 @@
 """Original private prefix verification permits append, not changed evidence."""
 
-import io
 import json
 import os
 
@@ -61,12 +60,6 @@ def test_non_growth_revision_change_reverifies_prefix(session):
         with pytest.raises(NativePiUnavailable):
             tuple(source.rows())
         assert source.stream.closed
-
-
-def test_decode_uses_buffered_reader(session):
-    with PrivateEvidenceRead.open(session) as source:
-        assert isinstance(source.stream, io.BufferedReader)
-        assert len(tuple(source.rows())) == 2
 
 
 def test_next_decode_cannot_reuse_prefetched_bytes(session):

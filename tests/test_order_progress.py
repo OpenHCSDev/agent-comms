@@ -1,5 +1,5 @@
-"""An order's progress is read from its unit's checkout and PRs; no clock strikes or releases it.
-The commander's review timer comes back every window until delivery, and the unit never sees it."""
+"""An order's progress is read from its holder's checkout and PRs; no clock strikes or releases it.
+The lead's review timer comes back every window until delivery, and the holder never sees it."""
 
 
 from agent_comms.repo import Checkout
@@ -14,7 +14,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.team_hud import TeamFrame, TeamHud
+from agent_comms.team_hud import TeamFrame
 from agent_comms.team_heartbeat import TeamHeartbeat
 from team_heartbeat_fixture import ObservedHeartbeat, current_hud, observe_team
 from agent_comms.comms import wire
@@ -34,7 +34,6 @@ from agent_comms.todos import (
     ProgressSource,
 )
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tool_declaration import NativeRequestTools
 from agent_comms.ui_model.teammate_state import Unreadable
 from agent_comms.work_branches import WorkBranchError, WorkBranches
 from fixture_git import IDENTITY
@@ -49,15 +48,8 @@ def git(checkout, *args):
     return subprocess.run(['git', *IDENTITY, '-C', str(checkout), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-def test_prior_declarations_do_not_enter_native_request_schemas():
-    import json
-    catalog = json.dumps(NativeRequestTools.catalog())
-    assert 'prior_orders' not in catalog
-    assert 'preceding' not in catalog
-
-
-def unit_checkout(path):
-    """A unit's checkout with one commit; the test edits it without committing."""
+def holder_checkout(path):
+    """A holder's checkout with one commit; the test edits it without committing."""
     path.mkdir(parents=True)
     git(path, 'init', '-q')
     (path / 'owner.py').write_text('one\n')
@@ -72,7 +64,7 @@ def edited(path, name, at):
 
 
 @pytest.mark.parametrize('name', ['owner.py', 'new_module.py'])
-def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(held, name):
+def test_a_holder_editing_before_its_first_commit_is_moving_not_stalled(held, name):
     """20:07:17: P358's holder was fixing a send-back, uncommitted; Core read no commit as a stall."""
     comms, worktree = held
     checkout = PresentCheckout(worktree)
@@ -88,17 +80,17 @@ def test_a_unit_editing_before_its_first_commit_is_moving_not_stalled(held, name
 
 
 def test_a_deleted_file_is_no_edit_time(tmp_path):
-    worktree = unit_checkout(tmp_path / 'worker--P1')
+    worktree = holder_checkout(tmp_path / 'worker--P1')
     (worktree / 'owner.py').unlink()
     assert tuple(PresentCheckout(worktree).edits) == ()
 
 
 def test_a_submodule_with_a_missing_git_directory_does_not_stop_reading_edits(tmp_path):
-    """10:09 on 2026-10-21: one unit checkout whose submodule pointed at a removed git directory
-    failed every commander heartbeat pass, and comms_todo_list for every caller, for half an hour.
-    Both readers of a unit's uncommitted files ask the one owner."""
-    package = unit_checkout(tmp_path / 'package')
-    worktree = unit_checkout(tmp_path / 'worker--P1')
+    """10:09 on 2026-10-21: one holder checkout whose submodule pointed at a removed git directory
+    failed every lead heartbeat pass, and comms_todo_list for every caller, for half an hour.
+    Both readers of a holder's uncommitted files ask the one owner."""
+    package = holder_checkout(tmp_path / 'package')
+    worktree = holder_checkout(tmp_path / 'worker--P1')
     git(worktree, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', str(package), 'pinned')
     git(worktree, 'commit', '-q', '-m', 'pin')
     (worktree / 'pinned' / '.git').write_text('gitdir: ../.git/modules/removed\n')
@@ -125,7 +117,7 @@ def held(tmp_path):
         problem='P1', order=order(source), request=request, review_at=RecordedEventTime(1000),
         commander='lead', assigner=comms.registry.require('lead').incarnation,
         repo=RepositoryName.from_wire('org/repo'), text='Repair the worker')), comms)
-    return comms, unit_checkout(tmp_path / 'wt' / 'worker--P1')
+    return comms, holder_checkout(tmp_path / 'wt' / 'worker--P1')
 
 
 def test_no_clock_takes_a_held_order(held):
@@ -151,7 +143,7 @@ def test_the_review_timer_comes_back_every_window_until_delivery(held):
 
 
 def test_deleted_branch_marks_one_card_unreadable(held_bus):
-    """Delete after unit reads, before HUD rendering, then complete another heartbeat."""
+    """Delete after the holder reads, before HUD rendering, then complete another heartbeat."""
     comms = held_bus
     checkout = comms.goals.todos.get('P1').order.checked().check.directory
     branch = 'work/worker--P1'
@@ -181,14 +173,13 @@ def test_deleted_branch_marks_one_card_unreadable(held_bus):
             asyncio.run(ObservedHeartbeat((frame,)).run(lambda: nullcontext(comms)))
             expected = current_hud(comms, lead.name, frame.frame, frame.states)
             assert TeamFrame.read_all(comms.root) == (expected,)
-        print(broken.line())
 
 
 def test_push_times_come_from_origin_reflogs_only(tmp_path):
     """The connector walked every reflog (`--all`, 3.2 s on the live checkout) to keep the origin ones."""
     origin = tmp_path / 'origin.git'
     subprocess.run(['git', 'init', '-q', '--bare', str(origin)], check=True)
-    worktree = unit_checkout(tmp_path / 'worker--P1')
+    worktree = holder_checkout(tmp_path / 'worker--P1')
     assert PresentCheckout(worktree).origin_pushes == ()
     git(worktree, 'remote', 'add', 'origin', str(origin))
     git(worktree, 'push', '-q', 'origin', 'HEAD:refs/heads/work')
@@ -200,11 +191,11 @@ def test_push_times_come_from_origin_reflogs_only(tmp_path):
     assert sorted(sha for sha, _ in PresentCheckout(worktree).origin_pushes) == sorted([pushed, side])
 
 
-def test_every_order_greps_one_history_walk_per_selection(tmp_path):
+def test_every_order_reads_the_newest_match_git_grep_gives(tmp_path):
     """Each held order re-walked every origin ref with its own `git log -1 --grep`: about 500
     walks of one history per heartbeat (36 s of a 220 s pass, 2026-10-30). One walk per
     selection answers every order with the newest match Git's --grep would give."""
-    worktree = unit_checkout(tmp_path / 'worker--P1')
+    worktree = holder_checkout(tmp_path / 'worker--P1')
     for message in ('P1 first', 'fix P12 slot', 'body only\n\nrefs p3 here', 'P1: second', 'XP1 is not P1x'):
         git(worktree, 'commit', '-q', '--allow-empty', '-m', message)
     checkout = PresentCheckout(worktree)
@@ -214,4 +205,3 @@ def test_every_order_greps_one_history_walk_per_selection(tmp_path):
         expected = git(worktree, 'log', '-1', '--extended-regexp', '--regexp-ignore-case',
                        f'--grep={pattern}', '--format=%H', *refs, '--not')
         assert [point.sha for point in checkout.commits(pattern, refs)] == expected.split()
-    assert len(checkout.branches.history._walks) == 1

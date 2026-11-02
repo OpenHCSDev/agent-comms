@@ -1,4 +1,4 @@
-"""S8 extension experiments and canonical saved-data contracts."""
+"""Owner pause, goal CAS and goal-control wire contracts."""
 
 from agent_comms.repo import Checkout
 import json
@@ -46,7 +46,7 @@ def owner(tmp_path):
         PausedGoalAction(progress="Updated pause note"),
     ],
 )
-def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
+def test_every_pause_preserving_action_keeps_owner(owner, action):
     comms, goal = owner
     paused = comms.goals.update_goal("worker", PausedGoalAction(), actor=OwnerInvocable)
     changed = comms.goals.update_goal("worker", action, actor=OwnerInvocable)

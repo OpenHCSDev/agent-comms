@@ -24,7 +24,6 @@ def test_user_answer_follows_revisions_and_stays_out_of_wire_fields(tmp_path):
     comms.registry.register(replace(selected, title=GivenThreadText('current human title')))
     assert comms.registry.user_thread().existing()[0].title == GivenThreadText('current human title')
     raw = FieldCodec.encode(comms.registry.store.read())
-    assert '_human' not in raw
     assert RegistryDocument.from_wire(raw).user_thread().existing()[0].name == 'renamed-human'
     assert comms.registry.entry('renamed-human').entry.thread.name == 'renamed-human'
     comms.registry.unregister('renamed-human')

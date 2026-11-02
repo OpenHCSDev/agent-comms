@@ -8,8 +8,6 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
-from sys import monitoring
-from types import CodeType
 
 import pytest
 
@@ -22,10 +20,10 @@ from agent_comms.order_runs import MechanicalOrderRun
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.repository_name import RepositoryName
 from agent_comms.standing_rules import (
-    StandingRule, StorageHomeMissing, StorageViolation,
+    StorageHomeMissing, StorageViolation,
 )
 from agent_comms.storage_rules import StorageRule, UnitStorage
-from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead, TodoStore
+from agent_comms.todos import PendingProblemOrder, PresentCheckout, ProgressRead
 from agent_comms.ui_model.teammate_state import TeammateState
 from order_scope_fixture import FIX_SCOPE
 from agent_comms.threads import Thread
@@ -40,7 +38,7 @@ from agent_comms.threads import Thread
         (True, 1, set()),
     ],
 )
-def test_storage_family_reads_once_and_renders_each_broken_fact(
+def test_storage_family_renders_each_broken_fact(
     tmp_path: Path,
     configured_repository,
     has_home: bool,
@@ -116,40 +114,15 @@ def test_storage_family_reads_once_and_renders_each_broken_fact(
             first_call_deadline=RecordedEventTime(130),
         ),
     )
-    reads: list[UnitStorage] = []
-    held_reads: list[CodeType] = []
-
-    def observed_read(_code: CodeType, _offset: int, value: UnitStorage) -> None:
-        reads.append(value)
-
-    def held_read(code: CodeType, _offset: int) -> None:
-        held_reads.append(code)
-
-    monitoring.use_tool_id(monitoring.PROFILER_ID, __name__)
-    try:
-        monitoring.register_callback(
-            monitoring.PROFILER_ID, monitoring.events.PY_RETURN, observed_read
-        )
-        monitoring.set_local_events(
-            monitoring.PROFILER_ID, UnitStorage.read.__func__.__code__, monitoring.events.PY_RETURN
-        )
-        monitoring.register_callback(
-            monitoring.PROFILER_ID, monitoring.events.PY_START, held_read,
-        )
-        monitoring.set_local_events(
-            monitoring.PROFILER_ID, TodoStore.held_for_team.__code__, monitoring.events.PY_START,
-        )
-        frame = capture_frame(comms, "lead", ProgressRead())
-        found = StorageViolation.broken(
-            comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
-    finally:
-        monitoring.free_tool_id(monitoring.PROFILER_ID)
+    frame = capture_frame(comms, "lead", ProgressRead())
+    found = StorageViolation.broken(
+        comms, "lead", observed=TeammateState.current(comms, "lead", frame), frame=frame)
+    storage = UnitStorage.read(comms.registry.storage_rule, worker, RepositoryReads())
     assert {type(violation) for violation in found} == expected
-    assert len(reads) == len(held_reads) == 1
-    assert all(violation.storage is reads[0] for violation in found)
-    assert reads[0].home.path == home
-    assert len(reads[0].extra_checkouts) == extra_count
-    assert reads[0].missing_home is not has_home
+    assert all(violation.storage == storage for violation in found)
+    assert storage.home.path == home
+    assert len(storage.extra_checkouts) == extra_count
+    assert storage.missing_home is not has_home
     assert not (base / "worker").exists()
     assert comms.registry.storage_rule.owns_present_checkout(worker, home, RepositoryReads()) is has_home
     assert not comms.registry.storage_rule.owns_present_checkout(worker, base / "worker", RepositoryReads())

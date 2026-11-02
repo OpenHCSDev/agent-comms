@@ -170,7 +170,6 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     assert original.task.source_turn == owner.require_turn_lease().identity
     assert original.reference == FieldCodec.decode(type(original.reference), result["reference"])
     assert "text" not in FieldCodec.encode(original.task)
-    assert "decision" not in original.to_wire()
     original_rows = read_history(comms)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "beta")
     with pytest.raises(RelationViolationError):

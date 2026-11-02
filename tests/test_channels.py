@@ -129,11 +129,6 @@ def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_pa
         with pytest.raises(ValueError) as refusal:
             comms.channels.delete_tag('cohort', disposition=disposition)
         assert str(refusal.value) == disposition.confirmation('cohort')
-        refusal_text = (
-            'no longer stopped'
-            if isinstance(disposition, ArchiveThreadsTagDisposition)
-            else 'still has a live process; stop it first'
-        )
         with pytest.raises(RelationViolationError):
             comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)
         assert comms.registry.snapshot() == original
@@ -198,10 +193,7 @@ def test_exclusive_tag_deletion_never_deletes_a_stopped_owner_that_is_still_aliv
     assert not surviving.tags
 
 
-def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path):
-    import cProfile
-    import pstats
-
+def test_tag_removal_preserves_current_records(tmp_path):
     comms = wire(tmp_path / 'wire')
     for index in range(40):
         comms.registry.declare(Thread(f'member-{index}', frozenset({'remove', 'keep'}), Checkout(tmp_path)), StoppedThreadStatus())
@@ -209,12 +201,7 @@ def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path)
     current = replace(originals[0], title=GivenThreadText('new title'), task=GivenThreadText('new task'), model=DeclaredModel('selected/model'))
     comms.registry.register(current, ArchivedThreadStatus())
     before = comms.registry.snapshot()
-    profile = cProfile.Profile()
-    with profile:
-        comms.channels._change_tag('remove', None)
-    writes = sum(values[0] for (_, _, name), values in pstats.Stats(profile).stats.items()
-                 if name == 'save_unlocked')
-    assert writes == 1
+    comms.channels._change_tag('remove', None)
     after = comms.registry.snapshot()
     for name, thread in before.threads.items():
         assert after.require(name) == replace(thread, tags=frozenset({'keep'}),

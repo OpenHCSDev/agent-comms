@@ -16,6 +16,16 @@ from agent_comms.view_unread import Counted, ReplyIndex
 from agent_comms.threads import Thread
 
 
+def team_channel(root, *outsiders):
+    """alice and bob in #team; each outsider registered with no tags."""
+    comms = installed_comms(root)
+    for name in ("alice", "bob"):
+        comms.registry.declare(Thread(name, frozenset({'team'}), Checkout(root)))
+    for name in outsiders:
+        comms.registry.declare(Thread(name, frozenset(), Checkout(root)))
+    return comms
+
+
 def test_reply_suffix_counts_only_its_revision_or_a_fully_read_source(tmp_path):
     source = tmp_path / "native.jsonl"
     source.write_bytes(b"first reply\n")
@@ -59,10 +69,8 @@ def test_an_appended_source_keeps_its_stored_replies_while_the_delta_prepares(tm
 
 
 def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
-    comms.messaging.send("alice", "bob", "hidden until any-mode").message.message_id
+    comms = team_channel(tmp_path)
+    comms.messaging.send("alice", "bob", "hidden until any-mode")
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
     comms.views.mark_user_view_read("#team", worktree=Checkout(tmp_path))
     comms.channels.set_channel_any_mode("#team", True)
@@ -71,14 +79,10 @@ def test_any_mode_expansion_keeps_unpainted_dm_unread(tmp_path):
 
 
 def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
-    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
-    comms.registry.declare(Thread('dave', frozenset(), Checkout(tmp_path)))
+    comms = team_channel(tmp_path, "carol", "dave")
     comms.channels.set_channel_any_mode("#team", True)
-    comms.messaging.send("carol", "dave", "unpainted older DM").message
-    comms.messaging.send("alice", "bob", "painted DM").message
+    comms.messaging.send("carol", "dave", "unpainted older DM")
+    comms.messaging.send("alice", "bob", "painted DM")
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 1
     comms.views.mark_user_view_read("#team", worktree=Checkout(tmp_path))
     assert comms.views.viewer_snapshot(Checkout(tmp_path)).channel_unread["#team"].count == 0
@@ -90,14 +94,10 @@ def test_any_mode_ack_covers_only_the_painted_participant_basis(tmp_path):
 
 
 def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
-    comms = installed_comms(tmp_path)
-    comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(tmp_path)))
-    comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(tmp_path)))
-    comms.registry.declare(Thread('carol', frozenset(), Checkout(tmp_path)))
-    comms.registry.declare(Thread('dave', frozenset(), Checkout(tmp_path)))
+    comms = team_channel(tmp_path, "carol", "dave")
     comms.channels.set_channel_any_mode("#team", True)
-    comms.messaging.send("carol", "dave", "hidden old DM").message
-    comms.messaging.send("alice", "bob", "painted DM").message
+    comms.messaging.send("carol", "dave", "hidden old DM")
+    comms.messaging.send("alice", "bob", "painted DM")
     painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(Checkout(tmp_path)).name))
     assert [message.seq for message in painted.messages] == [2]
 
@@ -114,10 +114,8 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
 def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
     with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
         root = Path(directory)
-        comms = installed_comms(root)
-        comms.registry.declare(Thread('alice', frozenset({'team'}), Checkout(root)))
-        comms.registry.declare(Thread('bob', frozenset({'team'}), Checkout(root)))
-        comms.messaging.send("alice", "bob", "hidden before crash").message
+        comms = team_channel(root)
+        comms.messaging.send("alice", "bob", "hidden before crash")
         comms.views.mark_user_view_read("#team", worktree=Checkout(root))
         child = subprocess.run(
             [

@@ -94,6 +94,20 @@ def opened(github, source, number, head):
     return PullRequestHead(source.github, number, head)
 
 
+def merged_base_head(github: GitHubFixture, source: SourceRepository,
+                     request: PullRequestHead) -> PullRequestHead:
+    """Advance main independently and merge it into the head: the same change at a new head."""
+    (source.checkout / "base_only.py").write_text("advanced = True\n")
+    source.git(source.checkout, "add", "base_only.py")
+    source.git(source.checkout, "commit", "-m", "Advance the base independently")
+    source.git(source.checkout, "push", "origin", "main")
+    source.git(source.checkout, "checkout", "feature")
+    source.git(source.checkout, "merge", "--no-edit", "main")
+    head = source.git(source.checkout, "rev-parse", "HEAD").strip()
+    source.git(source.checkout, "push", "origin", f"HEAD:refs/pull/{request.pr}/head")
+    return opened(github, source, request.pr, head)
+
+
 @pytest.fixture
 def head_bus(held_bus, github_cli, reviewed_source):
     source = reviewed_source
@@ -493,15 +507,8 @@ def test_qualification_does_not_carry_acceptance_to_an_unchanged_later_head(head
     comms, github, request = head_bus
     source = reviewed_source
     invoke(comms, request, QualifiedHeadVerdict(QUALIFIED))
-    (source.checkout / "base_only.py").write_text("advanced = True\n")
-    source.git(source.checkout, "add", "base_only.py")
-    source.git(source.checkout, "commit", "-m", "Advance the base independently")
-    source.git(source.checkout, "push", "origin", "main")
-    source.git(source.checkout, "checkout", "feature")
-    source.git(source.checkout, "merge", "--no-edit", "main")
-    head = source.git(source.checkout, "rev-parse", "HEAD").strip()
-    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
-    moved = opened(github, source, request.pr, head)
+    moved = merged_base_head(github, source, request)
+    head = moved.head
     branches = WorkBranches(source.checkout)
     branches.prepare_pull_request("main", request.head)
     branches.prepare_pull_request("main", moved.head)
@@ -969,15 +976,8 @@ def test_review_ok_follows_an_unchanged_change(head_bus, reviewed_source):
     source = reviewed_source
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
 
-    (source.checkout / "base_only.py").write_text("advanced = True\n")
-    source.git(source.checkout, "add", "base_only.py")
-    source.git(source.checkout, "commit", "-m", "Advance the base independently")
-    source.git(source.checkout, "push", "origin", "main")
-    source.git(source.checkout, "checkout", "feature")
-    source.git(source.checkout, "merge", "--no-edit", "main")
-    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
-    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
-    moved = opened(github, source, request.pr, merged)
+    moved = merged_base_head(github, source, request)
+    merged = moved.head
 
     pulls = ProgressRead()
     pulls.carry_reviews(comms.goals, request.repo)
@@ -1024,15 +1024,7 @@ def test_refused_carry_records_nothing_and_alarms_only_its_head(head_bus, review
     comms, github, request = head_bus
     source = reviewed_source
     invoke(comms, request, ReviewedHeadVerdict(ACCEPTED))
-    (source.checkout / "base_only.py").write_text("advanced = True\n")
-    source.git(source.checkout, "add", "base_only.py")
-    source.git(source.checkout, "commit", "-m", "Advance the base independently")
-    source.git(source.checkout, "push", "origin", "main")
-    source.git(source.checkout, "checkout", "feature")
-    source.git(source.checkout, "merge", "--no-edit", "main")
-    merged = source.git(source.checkout, "rev-parse", "HEAD").strip()
-    source.git(source.checkout, "push", "origin", "HEAD:refs/pull/7/head")
-    moved = opened(github, source, request.pr, merged)
+    moved = merged_base_head(github, source, request)
     github.refuse_status(request.repo, moved.head, HeadReview.context,
                          "gh: Repository was archived so is read-only. (HTTP 403)")
 
@@ -1087,7 +1079,6 @@ def test_review_timer_up_with_open_head_builds(held_bus, github_cli, reviewed_so
                           PullRequestLink(request.repo, request.pr), held.generation).record(
                               comms.goals, todo.id)
     frame = capture_frame(comms, "lead", ProgressRead(()))
-    assert HeadReviewTimerUp.scan_owner() is ReviewTimerUp
     found, = ReviewTimerUp.broken(comms, "lead", observed=(), frame=frame)
     assert found.problem == "P3"
     assert found.holder == todo.held().owner_identity
@@ -1295,7 +1286,7 @@ def test_an_armed_head_with_a_red_required_check_is_a_stuck_merge_every_pass(hea
 
 def test_an_idle_draft_and_a_conflicting_ready_head_are_board_items(head_bus):
     """2026-10-25: five open agent-comms PRs, idle for hours or red, raised no line at all;
-    then another commander's idle PRs on the same repository locked this one's verbs."""
+    then another teammate's idle PRs on the same repository locked this one's verbs."""
     comms, github, ready = head_bus
     hour = datetime.fromtimestamp(time.time() - 3600, UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     fresh = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -1454,7 +1445,7 @@ def test_a_request_no_order_links_reaches_the_thread_working_on_its_branch(
 
 def test_another_teammates_linked_request_stays_off_the_orderless_board(head_bus):
     """The 2026-10-25 guarantee holds: a request an open order links is never orderless.
-    The orders read are every commander's open orders, so another commander's linked
+    The orders read are every teammate's open orders, so another teammate's linked
     request is its own board's line, never this one's."""
     comms, github, ready = head_bus
     todo = comms.goals.todos.get("P2")

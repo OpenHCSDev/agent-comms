@@ -13,7 +13,7 @@ from agent_comms.goal_actions import (
     PausedGoalAction,
     SetGoalAction,
 )
-from agent_comms.tool_request import ToolRequest
+from agent_comms.tools import CommsGoalTool, CommsResumeGoalTool
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.threads import Thread
 from agent_comms.goal_scope import OneGoal
@@ -30,21 +30,12 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     paused = reopened.registry.require("worker").goal
     assert paused.state.declared_name == "paused"
     assert reopened.registry.require("worker").goal.state.pause_source.declared_name == "owner"
-    assert "paused_by" not in paused.to_wire()
     assert reopened.views.list_threads()[0].thread.goal.state.pause_source.declared_name == "owner"
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")
-    report = next(
-        tool for tool in ToolRequest.members_with(ToolRequest) if tool.declared_name == "comms_goal"
-    )
     with pytest.raises(ValueError):
-        report.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
-    resume = next(
-        tool
-        for tool in ToolRequest.members_with(ToolRequest)
-        if tool.declared_name == "comms_resume_goal"
-    )
+        CommsGoalTool.invoke(reopened, {"goal_id": goal.id, "status": "active", "progress": "4/50"}, caller=ThreadCaller("worker"))
     with pytest.raises(ValueError):
-        resume.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
+        CommsResumeGoalTool.invoke(reopened, {"goal_id": goal.id, "progress": "I should continue"}, caller=ThreadCaller("worker"))
     assert reopened.registry.require("worker").goal == paused
     active = reopened.goals.update_goal(
         "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=OneGoal(goal.id))), actor=OwnerInvocable

@@ -161,8 +161,8 @@ def test_team_unstrike_selects_the_newest_live_record(recorded_problem, source_r
     second = replace(first, expected_revision=struck.revision,
         reason="The worker omitted the installed application check for its changed owner.")
     store.apply("P1", second)
-    commander = Team.on_root("lead", (source_repository,), comms.root)
-    commander.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
+    lead = Team.on_root("lead", (source_repository,), comms.root)
+    lead.unstrike("P1", "The second strike was issued in error after the required owner was repaired.")
     assert store.get("P1").live_strikes() == (first,)
 
 

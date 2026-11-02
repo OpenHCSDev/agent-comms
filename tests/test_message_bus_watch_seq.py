@@ -63,7 +63,6 @@ async def test_real_message_bus_watch_recipient_suffix_and_rollback(bus):
             assert bus.revision() == before
             done, _ = await asyncio.wait((target, idle), timeout=0.2)
             assert not done, "unaddressed or rolled-back append yielded a message"
-            print("real Comms.watch: exact new recipient suffix; unaddressed and rollback silence")
         finally:
             for task in tasks:
                 task.cancel()

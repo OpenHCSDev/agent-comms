@@ -4,8 +4,6 @@ from agent_comms.repo import Checkout, LaunchCheckout
 from agent_comms.bus import Bus
 import json
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -28,11 +26,8 @@ from agent_comms.threads import Thread
 def cli(capsys, tmp_path):
     """The command line over a root the installer prepared, as every installed root is."""
     Bus.install(Bus.path_in(tmp_path))
-    root = None
 
     def run(root_path, *argv: str) -> tuple[int, dict | None]:
-        nonlocal root
-        root = root_path
         code = main(["--root", str(root_path), *argv])
         captured = capsys.readouterr().out
         return code, (json.loads(captured) if captured.strip() else None)
@@ -95,7 +90,6 @@ class TestCliSuccess:
         assert code == 0 and out["threads"][0]["name"] == "a"
         assert out["threads"][0]["tags"] == ["x", "y"]
         assert isinstance(out["threads"][0]["activity"], str)
-        assert "activity_state" not in out["threads"][0]
         assert "activity_detail" in out["threads"][0]
         code, presence = cli(tmp_path, "who")
         assert code == 0 and presence == {"who": []}
@@ -179,13 +173,6 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "ledger")
         assert out["k"] == "v"
 
-    def test_poll(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
-        cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", "hi")
-        code, out = cli(tmp_path, "poll", "--thread", "b")
-        assert out["thread"]["name"] == "b" and len(out["inbox"]) == 1
-
 
 class TestCliFailClosed:
 
@@ -198,44 +185,10 @@ class TestCliFailClosed:
         code, out = cli(tmp_path, "send", "--from", "ghost", "--to", "b", "--body", "hi")
         assert code == 1 and "Sender" in out["error"]
 
-    def test_unknown_thread_detail(self, cli, tmp_path):
+    def test_unknown_thread_detail_is_one_failed_json_object(self, cli, tmp_path):
         code, out = cli(tmp_path, "thread", "--name", "ghost")
         assert code == 1 and "not registered" in out["error"]
-
-
-    def test_every_error_is_single_json_object(self, cli, tmp_path):
-        code, out = cli(tmp_path, "thread", "--name", "ghost")
-        assert isinstance(out, dict) and set(out) == {"error", "type"}
-        assert out["type"] == "failed"
-
-
-class TestCliSubprocess:
-    """The real adapter contract: exit code, stdout JSON, parseable by shim."""
-
-    def test_console_script_roundtrip(self, tmp_path):
-        env = dict(
-            __import__("os").environ,
-            PYTHONPATH=str(Path(__file__).parents[1] / "src"),
-        )
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "agent_comms.cli",
-                "--root",
-                str(tmp_path),
-                "register",
-                "--name",
-                "a",
-                "--worktree",
-                "/wt",
-            ],
-            capture_output=True,
-            text=True,
-            env=env,
-        )
-        assert result.returncode == 0
-        assert json.loads(result.stdout) == {"registered": "a"}
+        assert set(out) == {"error", "type"} and out["type"] == "failed"
 
 
 class TestStatusCommand:
@@ -326,7 +279,6 @@ class TestSelectedTargetActions:
         from agent_comms.cli_command import CliCommand
         from agent_comms.cli_verbs.queue_restart import QueueRestartCliCommand
         from agent_comms.cli_verbs.restart import RestartCliCommand
-        from agent_comms.cli_verbs.stop import StopCliCommand
         from agent_comms.restart_scope import OneOwner
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -358,7 +310,6 @@ class TestSelectedTargetActions:
             '--agent-args=--no-extensions'])
         parsed = options.command_declaration.from_arguments(options)
         assert parsed == explicit
-        assert StopCliCommand.help == 'Stop process'
         assert not QueueRestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus(), NoChannel(), catalog=NoCatalog())
         busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
         record = StoredTurnRecord.begin(

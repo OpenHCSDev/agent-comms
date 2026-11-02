@@ -1,27 +1,24 @@
 """An order or retry that re-activates a goal keeps the running turn; pausing or another goal ends it."""
 
+import pytest
+
 from agent_comms.nominal.field_codec import GoalId
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, PausedGoal
 from agent_comms.goal_authority import GoalAuthority
 from agent_comms.goals import NoGoal
 
-
-def test_reactivated_goal_keeps_the_running_turn():
-    g_goal_id = GoalId.mint()
-    captured = GoalAuthority(g_goal_id, BlockedGoal("Backend turn ended without a result."))
-    assert captured.keeps_turn_under(GoalAuthority(g_goal_id, ActiveGoal()))
+RUNNING, OTHER = GoalId.mint(), GoalId.mint()
 
 
-def test_paused_goal_ends_the_running_turn():
-    g_goal_id = GoalId.mint()
-    assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(GoalAuthority(g_goal_id,
-        PausedGoal()))
-
-
-def test_another_goal_ends_the_running_turn():
-    g_goal_id = GoalId.mint()
-    h_goal_id = GoalId.mint()
-    assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(GoalAuthority(h_goal_id,
-        ActiveGoal()))
-    assert not GoalAuthority(g_goal_id, ActiveGoal()).keeps_turn_under(NoGoal().authority)
-    assert not NoGoal().authority.keeps_turn_under(GoalAuthority(g_goal_id, ActiveGoal()))
+@pytest.mark.parametrize(("captured", "current", "keeps"), [
+    pytest.param(GoalAuthority(RUNNING, BlockedGoal("Backend turn ended without a result.")),
+                 GoalAuthority(RUNNING, ActiveGoal()), True, id="reactivated"),
+    pytest.param(GoalAuthority(RUNNING, ActiveGoal()), GoalAuthority(RUNNING, PausedGoal()),
+                 False, id="paused"),
+    pytest.param(GoalAuthority(RUNNING, ActiveGoal()), GoalAuthority(OTHER, ActiveGoal()),
+                 False, id="another-goal"),
+    pytest.param(GoalAuthority(RUNNING, ActiveGoal()), NoGoal().authority, False, id="cleared"),
+    pytest.param(NoGoal().authority, GoalAuthority(RUNNING, ActiveGoal()), False, id="from-none"),
+])
+def test_running_turn_continues_only_under_its_reactivated_goal(captured, current, keeps):
+    assert captured.keeps_turn_under(current) is keeps

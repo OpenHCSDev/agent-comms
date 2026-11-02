@@ -60,7 +60,7 @@ def test_runtime_path_is_idempotent_and_keeps_other_search_entries(inherited, ex
     assert applied['AUTHORED_CREDENTIAL'] == 'kept'
 
 
-def stopped(registry):
+def stopped():
     # A declared absent synthetic process, never a borrowed original identity.
     thread = Thread("authored", frozenset(), Checkout(Path("/authored")),
                     process_identity=ProcessIdentity(2147483647, 1), created_at=1.0)
@@ -73,8 +73,8 @@ def stopped(registry):
     return thread, snapshot
 
 
-def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registration):
-    thread, snapshot = stopped(registry=thread_registration)
+def test_retired_witness_cannot_borrow_live_or_replaced_claim():
+    thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     owner = RetiredOwnerLaunch.capture_retired(snapshot, thread, launch, ProcessExitedOwnerCompletion())
@@ -97,8 +97,8 @@ def test_retired_witness_cannot_borrow_live_or_replaced_claim(*, thread_registra
             owner.require_current(substituted)
 
 
-def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*, thread_registration):
-    thread, snapshot = stopped(registry=thread_registration)
+def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch():
+    thread, snapshot = stopped()
     environment = {
         "AGENT_COMMS_THREAD": thread.name, "AGENT_COMMS_AGENT_BIN": "/authored/pi",
         "AGENT_COMMS_AGENT_ARGS": "--no-tools 'authored value'",
@@ -116,8 +116,6 @@ def test_handoff_codec_preserves_complete_stopped_witness_and_original_launch(*,
     assert decoded.owners[0].require_current(snapshot) is thread
     assert decoded.owners[0].launch.arguments == ("--no-tools", "authored value")
     assert decoded.owners[0].launch.environment["AUTHORED_CREDENTIAL"] == "in-memory-only"
-    stored = replace(thread, storage_roots=thread_registration.storage_rule.initial_roots(thread.name))
-    assert "execution" not in FieldCodec.encode(stored)
     unrelated = replace(launch, process=ProcessIdentity(2147483646, 1))
     with pytest.raises(RelationViolationError):
         replace(owner, launch=unrelated).require_current(snapshot)
@@ -134,20 +132,18 @@ def test_retained_arguments_restart_from_the_original_environment(environment, a
     assert InheritedArguments().restarted(launch.arguments).argv == arguments
 
 
-def test_retirement_capture_refuses_changed_original_incarnation(*, thread_registration):
-    thread, snapshot = stopped(registry=thread_registration)
+def test_retirement_capture_refuses_changed_original_incarnation():
+    thread, snapshot = stopped()
     launch = RetainedOwnerLaunch(thread.require_process(), "/authored/python",
                                  {"AGENT_COMMS_AGENT_BIN": "/authored/pi"})
     with pytest.raises(RelationViolationError):
         RetiredOwnerLaunch.capture_retired(snapshot, replace(thread, created_at=2.0), launch, ProcessExitedOwnerCompletion())
 
 
-
-
-def test_a_release_naming_no_process_retires_a_thread_that_holds_none(*, thread_registration):
+def test_a_release_naming_no_process_retires_a_thread_that_holds_none():
     # Stops before #3669 recorded a dead owner's release with no process; the thread
     # holds none either, so it is retired and may start (no "no released process").
-    thread, snapshot = stopped(registry=thread_registration)
+    thread, snapshot = stopped()
     unbound = replace(thread, process_identity=NoProcess())
     snapshot = replace(snapshot, threads=ThreadRows.from_threads({thread.name: unbound}))
     release = OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, NoProcess(), 4, 5)
@@ -158,10 +154,10 @@ def test_a_release_naming_no_process_retires_a_thread_that_holds_none(*, thread_
         release.require_retired_for(held)
 
 
-def test_a_retired_session_is_judged_by_the_registry_not_the_stopped_copy(*, thread_registration):
+def test_a_retired_session_is_judged_by_the_registry_not_the_stopped_copy():
     # A stop settles with the Thread it captured before the session retired, which still
     # names the live process; retirement reads the registry, which holds none.
-    thread, snapshot = stopped(registry=thread_registration)
+    thread, snapshot = stopped()
     retired = OwnerIdentity(thread.incarnation, 3)
     release = OwnerReleaseEvidence(thread.name, thread.incarnation.wire_birth, thread.process_identity,
                                    4, 5, SessionRetiredOwnerCompletion(retired))

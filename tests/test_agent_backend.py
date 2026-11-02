@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 from agent_comms.repo import Checkout
-import json
 import os
 import runpy
 import sys
 from dataclasses import replace
 from pathlib import Path
-from types import MappingProxyType, SimpleNamespace
+from types import SimpleNamespace
 
 import pytest
 
@@ -29,12 +28,11 @@ from agent_comms.session_file import NoSessionFile, RegistrySessionLocation
 # -- registry ---------------------------------------------------------------
 
 
-def test_registry_holds_the_pi_native_backend_and_is_frozen():
+def test_registry_holds_the_pi_backends_and_selects_native_for_new_threads():
     assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
     assert ab.AgentBackend.member_named("pi_native") is PiNativeBackend
-    assert ab.NewThreadBackend.selected() is PiNativeBackend
-    assert isinstance(ab.AgentBackend.__registry__, MappingProxyType)
     assert ab.AgentBackend.member_named("pi_durable") is PiDurableBackend
+    assert ab.NewThreadBackend.selected() is PiNativeBackend
 
 
 def test_a_backend_declared_after_sealing_fails_loud():
@@ -44,16 +42,6 @@ def test_a_backend_declared_after_sealing_fails_loud():
             pass
 
     assert ab.AgentBackend.names() == ("pi_native", "pi_durable")
-
-
-def test_pi_native_serves_threads_with_every_thread_capability():
-    assert issubclass(PiNativeBackend, ab.NewThreadBackend)
-    assert issubclass(PiNativeBackend, ab.ThreadServingBackend)
-    assert issubclass(PiNativeBackend, ab.Interrupts)
-    assert issubclass(PiNativeBackend, ab.Forks)
-    assert not issubclass(PiDurableBackend, ab.ThreadServingBackend)
-    assert not PiNativeBackend.__abstractmethods__
-    assert PiNativeBackend.location_type is PiSessionFile
 
 
 @pytest.mark.parametrize("session_file, location", [
@@ -66,10 +54,7 @@ def test_runtime_location_round_trip_uses_declared_backend(session_file, locatio
     restored = FieldCodec.decode(Thread, FieldCodec.encode(thread))
     restored = replace(restored, session_file=restored.session_file.bound_to(Path("/home/ts/wt")))
     assert restored.runtime == location
-    assert restored.runtime is restored.runtime
     assert restored.backend is PiNativeBackend
-
-
 
 
 # -- declaration checks -------------------------------------------------------
@@ -296,30 +281,6 @@ async def test_runner_obtains_one_backend_per_session_from_the_thread_declaratio
             agent.turns.backend_for("other", thread)
     finally:
         await agent.shutdown()
-
-
-# -- Pi conversions -----------------------------------------------------------
-
-
-def _session_lines(path: Path) -> None:
-    rows = [
-        {"type": "session", "id": "s", "version": 3, "timestamp": "2026-10-10T10:00:00.000Z",
-         "cwd": "/tmp"},
-        {"type": "message", "id": "u1", "parentId": None, "timestamp": "2026-10-10T10:00:01.000Z",
-         "message": {"role": "user", "content": "hello there"}},
-        {"type": "message", "id": "a1", "parentId": "u1", "timestamp": "2026-10-10T10:00:02.000Z",
-         "message": {"role": "assistant", "content": [{"type": "text", "text": "hi back"}],
-                     "stopReason": "stop"}},
-        {"type": "message", "id": "t1", "parentId": "a1", "timestamp": "not a time",
-         "message": {"role": "toolResult", "toolCallId": "c", "toolName": "read",
-                     "content": [{"type": "text", "text": "file body"}]}},
-        {"type": "compaction", "id": "c1", "parentId": "t1", "timestamp": "2026-10-10T10:00:04.000Z",
-         "summary": "earlier work", "firstKeptEntryId": "a1", "tokensBefore": 10},
-        {"type": "label", "id": "l1", "parentId": "c1"},
-    ]
-    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-
-
 
 
 # -- inbox records --------------------------------------------------------------

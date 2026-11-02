@@ -36,7 +36,7 @@ pytest_plugins = ("test_todos",)
 
 @pytest.fixture
 def cited_source(pr_team, proof_build_checkouts):
-    """The source the proof fixture built. The commander declares its repos as plain Repo,
+    """The source the proof fixture built. The lead declares its repos as plain Repo,
     and the practice copy decodes them as such, so the source is selected by GitHub name."""
     return next(graph.repository for graph in proof_build_checkouts
                 if graph.repository.github == pr_team.repos[0].github)
@@ -190,7 +190,7 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     path.write_text(json.dumps(FieldCodec.encode(document)))
     before = ctx.comms.goals.todos.board()
     goal = ctx.comms.registry.require("worker").goal
-    # The busy-unit decision is the Todo transaction's own: --reassign passes the preflight's
+    # The busy-teammate decision is the Todo transaction's own: --reassign passes the preflight's
     # owner check, so the refusal comes from the write that would have given worker P2.
     with pytest.raises(TeammateOccupied) as refused:
         main(["send", "worker", str(path), "--reassign",
@@ -200,7 +200,6 @@ def test_second_unplanned_order_is_refused_without_recording(held_team, cited_so
     assert ctx.comms.goals.todos.board() == before
     assert ctx.comms.goals.todos.get("P1") == original
     assert ctx.comms.registry.require("worker").goal == goal
-    print(str(refused.value))
 
 
 def test_an_order_waiting_on_install_frees_its_holder_for_the_next_order(
@@ -274,7 +273,7 @@ def test_done_without_a_merged_pull_request_records_nothing(held_team):
     assert ctx.comms.goals.todos.get("P1") == original
 
 
-def test_a_problem_not_held_by_the_unit_is_refused(held_team):
+def test_a_problem_not_held_by_the_teammate_is_refused(held_team):
     ctx = held_team
     original = ctx.comms.goals.todos.get("P1")
     with pytest.raises(ValueError, match="worker holds no order on P2"):

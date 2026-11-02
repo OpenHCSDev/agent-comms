@@ -90,7 +90,6 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
         with pytest.raises(ValueError):
             send()
     assert comms.bus.bus.revision() == before
-    assert "audiences" not in json.loads(catalog.path.read_text())
     assert catalog.read() == imported
     assert FieldCodec.decode(type(imported), json.loads(catalog.path.read_text())) == imported
     with pytest.raises(ValueError):

@@ -25,27 +25,27 @@ class RetainedNominalPlanReadings(RetainedPlanReadings, NominalPlanReadings):
 LIVE_PLAN_READINGS = RetainedNominalPlanReadings()
 
 
-def capture_frame(comms: Comms, commander: str, pulls: ProgressRead,
+def capture_frame(comms: Comms, lead: str, pulls: ProgressRead,
                   plans: PlanReadings = LIVE_PLAN_READINGS) -> HeartbeatFrame:
     """Direct consumers acquire inputs before entering the actual frame read."""
-    inputs = TeamInputs.prepare(comms, commander, pulls, plans)
-    return HeartbeatFrame.capture(comms, commander, inputs, plans)
+    inputs = TeamInputs.prepare(comms, lead, pulls, plans)
+    return HeartbeatFrame.capture(comms, lead, inputs, plans)
 
 
-def current_hud(comms: Comms, commander: str, frame: HeartbeatFrame,
+def current_hud(comms: Comms, lead: str, frame: HeartbeatFrame,
                 states: tuple[TeammateState, ...]) -> TeamHud:
     """Read explicit retained inputs for direct controls; production derives its delivery."""
     usage = CodexUsage.read()
-    owner = comms.registry.require(commander).incarnation
+    owner = comms.registry.require(lead).incarnation
     previous = TeamUpdate.latest(comms, owner)
     packet = next(iter(previous), TeamUpdateNotice(owner, ()))
     history = TeamHistory.read(comms, TeamService.actors(comms.registry.snapshot()))
-    return TeamHud.of(comms, commander, frame, states,
+    return TeamHud.of(comms, lead, frame, states,
                            delivery=TeamDelivery(packet, packet.open_pings(history)), usage=usage)
 
 
 def observe_team(comms: Comms, thread: Thread, pulls: ProgressRead,
-                      plans: PlanReadings = NominalPlanReadings()) -> TeamObservation:
+                 plans: PlanReadings = LIVE_PLAN_READINGS) -> TeamObservation:
     inputs = TeamInputs.prepare(comms, thread.name, pulls, plans)
     return TeamObservation.read(comms, thread, inputs, plans=plans)
 

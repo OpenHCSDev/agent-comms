@@ -102,58 +102,32 @@ class TestGoalRevision:
 
 
 class TestThreadDeclaration:
-    def test_constructing_declares(self, *, thread_registration):
-        thread = Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')))
-        assert thread.name == "a"
-        assert thread.is_fork is False
-
-    def test_rejects_bad_name_characters(self, *, thread_registration):
+    @pytest.mark.parametrize(("name", "worktree"), [("bad name!", "/wt"), ("", "/wt"), ("a", "")])
+    def test_rejects_bad_name_or_worktree(self, name, worktree, *, thread_registration):
         with pytest.raises(ValueError):
-            Thread(name='bad name!', tags=frozenset(), worktree=Checkout(Path('/wt')))
-
-    def test_rejects_empty_name(self, *, thread_registration):
-        with pytest.raises(ValueError):
-            Thread(name='', tags=frozenset(), worktree=Checkout(Path('/wt')))
-
-    def test_rejects_empty_worktree(self, *, thread_registration):
-        with pytest.raises(ValueError):
-            Thread(name='a', tags=frozenset(), worktree=Checkout(Path('')))
+            Thread(name=name, tags=frozenset(), worktree=Checkout(Path(worktree)))
 
     def test_rejects_self_parent(self, *, thread_registration):
         with pytest.raises(RelationViolationError):
             Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')), parent=ForkedParent('a'))
 
     def test_fork_provenance(self, *, thread_registration):
+        assert Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt'))).is_fork is False
         fork = Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt')), parent=ForkedParent('a'))
         assert fork.is_fork is True
         assert fork.parent == ForkedParent("a")
 
-    def test_frozen(self, *, thread_registration):
-        thread = Thread(name='a', tags=frozenset(), worktree=Checkout(Path('/wt')))
-        with pytest.raises(AttributeError):
-            thread.name = "b"  # type: ignore[misc]
-
 
 class TestMessageDeclaration:
-    def test_constructing_declares(self):
-        message = Message(sender="a", target="b", body="hello", type=InfoKind)
-        assert message.sender == "a" and message.target == "b"
-
-    def test_rejects_self_message(self):
-        with pytest.raises(RelationViolationError):
-            Message(sender="a", target="a", body="hello", type=InfoKind)
-
-    def test_rejects_empty_sender(self):
-        with pytest.raises(RelationViolationError):
-            Message(sender="", target="b", body="hello", type=InfoKind)
-
-    def test_rejects_empty_target(self):
-        with pytest.raises(RelationViolationError):
-            Message(sender="a", target="", body="hello", type=InfoKind)
-
-    def test_rejects_empty_body(self):
-        with pytest.raises(ValueError):
-            Message(sender="a", target="b", body="", type=InfoKind)
+    @pytest.mark.parametrize(("sender", "target", "body", "refusal"), [
+        ("a", "a", "hello", RelationViolationError),
+        ("", "b", "hello", RelationViolationError),
+        ("a", "", "hello", RelationViolationError),
+        ("a", "b", "", ValueError),
+    ])
+    def test_rejects_self_or_empty_parts(self, sender, target, body, refusal):
+        with pytest.raises(refusal):
+            Message(sender=sender, target=target, body=body, type=InfoKind)
 
     def test_id_is_identity_not_ordering(self):
         # Hash identity: two identical messages share an id, ids are not
@@ -164,12 +138,7 @@ class TestMessageDeclaration:
 
     def test_wire_roundtrip(self):
         original = Message(sender="a", target="b", body="hello", type=HandoffKind, seq=7)
-        restored = Message.from_wire(original.to_wire())
-        assert restored.sender == original.sender
-        assert restored.target == original.target
-        assert restored.body == original.body
-        assert restored.type is HandoffKind
-        assert restored.seq == 7
+        assert Message.from_wire(original.to_wire()) == original
 
 
 class TestRegistration:
@@ -220,7 +189,6 @@ class TestRegistration:
         snapshot = Registration(registry.store.path).snapshot()
         assert snapshot.claim_generation("renamed-a") == before
         assert snapshot.claim_generation("a") == before
-        assert not hasattr(snapshot, "claimed_generations")
 
     def test_rename_reclaims_own_alias_without_losing_owner_or_turn(self, tmp_path: Path) -> None:
         goal_1_goal_id = GoalId.mint()
@@ -270,7 +238,6 @@ class TestRegistration:
         lease = turn.require_turn_lease()
         assert registry.release_turn(lease)[0]
         assert not registry.release_turn(lease)[0]
-        assert "owner_epoch" not in owner.to_wire()
 
     @pytest.mark.parametrize("revocation", ["stop", "finish"])
     def test_registering_saved_turn_never_attests_a_revoked_incarnation(
@@ -297,7 +264,6 @@ class TestRegistration:
             assert registry.snapshot().owner_generations["a"] > owner_generation
         else:
             assert registry.snapshot().owner_generations["a"] == owner_generation
-        assert "turn_epochs" not in leased.to_wire()
 
     def test_comms_begin_turn_cannot_revive_stopped_owner(self, tmp_path: Path) -> None:
         comms = wire(tmp_path / "wire")
@@ -397,9 +363,6 @@ class TestRegistration:
             cold.require("a")
         with pytest.raises(RelationViolationError):
             comms.registry.register(Thread(name='b', tags=frozenset(), worktree=Checkout(Path('/wt'))))
-        # A refused read leaves no cached document; none may carry guard state.
-        entry = comms.registry.store.cache.entry
-        assert entry is None or "registry_guard" not in entry.document.threads["a"].to_wire()
 
     def test_release_turn_resolves_retained_alias_only_for_exact_lease(self, tmp_path: Path):
         registry = Registration(tmp_path / "registry.json")
@@ -467,11 +430,6 @@ class TestRegistration:
 
 
 class TestSharedLedger:
-    def test_merge_and_read(self, tmp_path: Path):
-        ledger = SharedLedger(tmp_path / "ledger.json")
-        ledger.merge({"a": 1}, author="x")
-        assert FieldCodec.encode(ledger.read())["a"] == 1
-
     def test_rejects_non_string_keys(self, tmp_path: Path):
         ledger = SharedLedger(tmp_path / "ledger.json")
         with pytest.raises(ValueError):

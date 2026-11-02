@@ -29,7 +29,6 @@ from agent_comms.todos import (
     ClaimOrder,
     OrderClaim,
     PendingProblemOrder,
-    TodoError,
     TodoStore,
     TriageScope,
     WithdrawTodo,
@@ -73,9 +72,8 @@ def test_retired_team_requests_follow_peer_authority(
     request_main(["list"], peer_context)
     assert first.id.value in capsys.readouterr().out
     outsider_context = Team.on_root(outsider.name, (repository,), comms.root)
-    with pytest.raises(RejectedEnforcementError, match="belongs to another teammate") as refused:
+    with pytest.raises(RejectedEnforcementError, match="belongs to another teammate"):
         request_main(["complete", first.id.value, "--why", "Not my request."], outsider_context)
-    assert isinstance(refused.value, TodoError)
     peer_context = Team.on_root(peer.name, (repository,), comms.root)
     request_main(
         ["complete", first.id.value, "--why", "The peer completed the request."], peer_context,
@@ -91,8 +89,8 @@ def test_retired_team_requests_follow_peer_authority(
 def test_a_directive_the_team_answered_is_owed_by_no_peer(comms: Comms) -> None:
     """The gate and --answers both read this debt, so it cannot depend on who reads it."""
     checkout = Checkout(Path.cwd())
-    commanders = frozenset({TeammatesTag.declared_name})
-    for name, tags in (("author", commanders), ("peer", commanders), ("claude-code", frozenset())):
+    teammates = frozenset({TeammatesTag.declared_name})
+    for name, tags in (("author", teammates), ("peer", teammates), ("claude-code", frozenset())):
         comms.registry.declare(Thread(name, tags, checkout), StoppedThreadStatus())
     author = comms.registry.require("author")
     store = comms.goals.todos
@@ -113,25 +111,25 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     claim_review_goal_id = GoalId.mint()
     request_family_goal_id = GoalId.mint()
     repository = Repo(checkout=Path.cwd(), github=RepositoryName("OpenHCSDev", "agent-comms"))
-    for name in ("claude-ai", "commander", "worker"):
+    for name in ("claude-ai", "lead", "worker"):
         thread = Thread(name, frozenset(), Checkout(repository.checkout))
         comms.registry.declare(thread, StoppedThreadStatus())
-    commander = comms.registry.require("commander")
+    lead = comms.registry.require("lead")
     worker = comms.registry.require("worker")
     store = comms.goals.todos
-    ctx = Team.on_root("commander", (repository,), comms.root)
+    ctx = Team.on_root("lead", (repository,), comms.root)
     request_main(["add", "teammate native in Core"], ctx)
     first_id = capsys.readouterr().out.strip()
     request_main(["add", "virtual bus"], ctx)
     second_id = capsys.readouterr().out.strip()
-    second, first = store.open_requests(commander.incarnation)
+    second, first = store.open_requests(lead.incarnation)
     assert (first.id.value, second.id.value) == (first_id, second_id)
-    assert NewestOpenRequest().for_order(store, commander.incarnation) == second.id
-    assert first.id.for_order(store, commander.incarnation) == first.id
+    assert NewestOpenRequest().for_order(store, lead.incarnation) == second.id
+    assert first.id.for_order(store, lead.incarnation) == first.id
     assert [
         request.id
         for request in store.open_requests(
-            commander.incarnation.renamed("commander-renamed"),
+            lead.incarnation.renamed("lead-renamed"),
         )
     ] == [second.id, first.id]
 
@@ -148,8 +146,8 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
         "P1",
         repository.github,
         "Inspect the request owner",
-        creator=commander,
-        assigner=commander.incarnation,
+        creator=lead,
+        assigner=lead.incarnation,
         owner=worker,
         generation=request_family_goal_id,
         review_at=RecordedEventTime(order.at.recorded_at("Order") + 60),
@@ -166,17 +164,17 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     with pytest.raises(ValueError):
         request_main(["complete", first_id, "--why", "The work is finished."], ctx)
-    assert len(store.open_requests(commander.incarnation)) == 2
+    assert len(store.open_requests(lead.incarnation)) == 2
     assert store.serving_orders(first.id) == (todo,)
 
     ConnectorSendTool(
-        target="commander",
+        target="lead",
         request=first.id,
         body="Read the request records and report the result.",
     ).apply(comms, CALLER)
     named = comms.bus.bus.revision()
     ConnectorSendTool(
-        target="commander",
+        target="lead",
         body="Read the stored orders and report the result.",
     ).apply(comms, CALLER)
     newest = comms.bus.bus.revision()
@@ -202,17 +200,17 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     assert claim.message.target == first.commander.name
     assert claim.message.answers == (original.reference,)
     comms.messaging.send(
-        "commander",
+        "lead",
         "claude-ai",
         "The request was read.",
         answers=(original.reference,),
     )
-    renamed = replace(first, commander=commander.incarnation.renamed("commander-renamed"))
+    renamed = replace(first, commander=lead.incarnation.renamed("lead-renamed"))
     with comms.bus.bus.reading() as source:
-        assert not renamed.directive_messages(source, comms.registry.snapshot().names_for(commander.name))
+        assert not renamed.directive_messages(source, comms.registry.snapshot().names_for(lead.name))
 
     CommsSendTool(
-        target="commander",
+        target="lead",
         body="The source records are available.",
     ).apply(comms, ThreadCaller("worker"))
     assert store.owner_request(first.id).directives == first.directives
@@ -238,29 +236,29 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     remaining = capsys.readouterr().out
     assert first_id in remaining and "P1" in remaining
     assert second_id not in remaining
-    assert [request.id for request in store.open_requests(commander.incarnation)] == [first.id]
+    assert [request.id for request in store.open_requests(lead.incarnation)] == [first.id]
     store.apply(
         todo.id,
         WithdrawTodo(
             todo.revision,
-            commander.incarnation,
+            lead.incarnation,
             todo.held(),
             "The isolated request check is complete.",
         ),
     )
-    store.complete_request(commander.incarnation, first.id, "No pending order remains.")
-    assert not store.open_requests(commander.incarnation)
+    store.complete_request(lead.incarnation, first.id, "No pending order remains.")
+    assert not store.open_requests(lead.incarnation)
 
     awaiting = store.add_request(
-        commander.incarnation, "Wait for the teammate's delivery verdict."
+        lead.incarnation, "Wait for the teammate's delivery verdict."
     )
     awaiting_order = order.reissued(order.at.recorded_at("Order") + 1)
     awaiting_todo = store.create(
         "P2",
         repository.github,
         "Review the holder's delivery claim",
-        creator=commander,
-        assigner=commander.incarnation,
+        creator=lead,
+        assigner=lead.incarnation,
         owner=worker,
         generation=claim_review_goal_id,
         request=awaiting.id,
@@ -287,7 +285,7 @@ def test_independent_requests_orders_and_directives(comms: Comms, durable_home, 
     )
     assert store.serving_orders(awaiting.id) == (claimed,)
     with pytest.raises(ValueError):
-        store.complete_request(commander.incarnation, awaiting.id, "The claim is not yet accepted.")
+        store.complete_request(lead.incarnation, awaiting.id, "The claim is not yet accepted.")
     assert store.for_request(first.id)[0].request == first.id
-    assert comms.registry.require("commander").goal == commander.goal
+    assert comms.registry.require("lead").goal == lead.goal
     assert not any(thread.process_alive for thread in comms.registry.all_threads().values())

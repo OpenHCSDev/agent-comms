@@ -32,8 +32,8 @@ def test_goal_publication_is_exact_and_coding_output_cannot_author_it():
 
 def test_order_revision_keeps_the_granted_authority():
     """An assigned or replaced problem order revises the goal; the running turn keeps working."""
-    unit_goal_id = GoalId.mint()
-    granted = Goal(ProblemGoalOrder.text, unit_goal_id, published_seq=0, order=ProblemGoalOrder())
+    order_goal_id = GoalId.mint()
+    granted = Goal(ProblemGoalOrder.text, order_goal_id, published_seq=0, order=ProblemGoalOrder())
     permission = TurnGoalPermission(OwnerGoalPermission(granted.authority))
     ordered = replace(granted, revision=granted.revision + 1, progress="")
     OrdinaryGoalRule.require(permission, ordered)

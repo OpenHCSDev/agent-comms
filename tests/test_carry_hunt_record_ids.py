@@ -13,13 +13,13 @@ from agent_comms.todos import CleanHunt, HuntRecord, TodoStore
 from agent_comms.typed_table import SQLiteCatalogObject
 from conftest import maintenance_held
 
-COMMANDER = RecordedThreadIncarnation("claude-code", 1.0)
+LEAD = RecordedThreadIncarnation("claude-code", 1.0)
 
 
 def test_carry_reissues_hunt_ids_recorded_before_hunt_id(tmp_path):
     store = TodoStore(tmp_path)
     hunts = tuple(
-        store.record_hunt(COMMANDER, CleanHunt(
+        store.record_hunt(LEAD, CleanHunt(
             FileLine("src/agent_comms/todos.py", line),
             "read the hunt table and found nothing worth ordering this time",
             RecordedEventTime(1.0)))
@@ -33,5 +33,5 @@ def test_carry_reissues_hunt_ids_recorded_before_hunt_id(tmp_path):
     assert step.carry(apply=False).changed == 1
     with maintenance_held(tmp_path):
         assert step.carry(apply=True).rewritten == (path.relative_to(tmp_path),)
-    assert sorted(hunt.where.line for hunt in store.hunts_for_team(COMMANDER)) == [1, 2]
+    assert sorted(hunt.where.line for hunt in store.hunts_for_team(LEAD)) == [1, 2]
     assert step.carry(apply=False).changed == 0

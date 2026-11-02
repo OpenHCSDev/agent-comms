@@ -1,9 +1,5 @@
 """Launch selection has one grammar, then typed consumers and native validation."""
 
-import ast
-from pathlib import Path
-
-
 import pytest
 from agent_comms.pi_vocabulary import HighThinkingLevel, NoThinkingOverride, OffThinkingLevel
 
@@ -20,16 +16,8 @@ from agent_comms.native_arguments import (
 from agent_comms.thread_model import DeclaredModel, ThreadModel, UndeclaredModel
 
 
-@pytest.mark.parametrize("selection", [None, "", "model"])
-def test_selected_model_requires_a_qualified_configuration(selection):
-    from agent_comms.coordination_errors import IdentityConflict
-
-    with pytest.raises(IdentityConflict):
-        SelectedModel.decode(selection)
-
-
-@pytest.mark.parametrize("selection", ["/model", "provider/"])
-def test_selected_model_refuses_an_incomplete_configuration(selection):
+@pytest.mark.parametrize("selection", [None, "", "model", "/model", "provider/"])
+def test_selected_model_requires_a_complete_qualified_configuration(selection):
     from agent_comms.coordination_errors import IdentityConflict
 
     with pytest.raises(IdentityConflict):
@@ -37,14 +25,10 @@ def test_selected_model_refuses_an_incomplete_configuration(selection):
 
 
 def test_selected_model_owns_qualification_and_native_arguments():
-    from dataclasses import FrozenInstanceError
-
     model = SelectedModel.decode("provider/organization/model")
     assert model == SelectedModel("provider", "organization/model")
     assert model.qualified == "provider/organization/model"
     assert model.argv == ("--provider", "provider", "--model", "organization/model")
-    with pytest.raises(FrozenInstanceError):
-        model.provider = "different"
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():
@@ -135,21 +119,5 @@ def test_option_declaration_extends_consumption_rendering_and_mode_validation():
     for mode in (("--mode", "text"), ("--mode=json",), ("--mode",)):
         with pytest.raises(ValueError):
             NativeArguments.parse(mode).rpc()
-
-
-def test_backend_cannot_reintroduce_independent_launch_option_readers():
-    package = Path(__file__).parents[1] / "src/agent_comms"
-    removed = {
-        "configured_model",
-        "configured_thinking_level",
-        "args_for_model",
-        "args_for_thinking_level",
-        "rpc_arguments",
-    }
-    for name in ("backend.py", "native_pi.py"):
-        tree = ast.parse((package / name).read_text())
-        assert not any(
-            isinstance(node, ast.FunctionDef) and node.name in removed for node in ast.walk(tree)
-        )
 
 

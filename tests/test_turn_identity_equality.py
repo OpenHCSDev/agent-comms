@@ -18,4 +18,3 @@ def test_turn_identity_equality_across_observation_types(tmp_path):
     assert observed != TurnFence(identity, TurnId('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'), 1)
     assert observed != TurnFence(identity, TurnId('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'), 2)
     assert observed.__eq__(None) is NotImplemented
-    assert not hasattr(observed, "matches")

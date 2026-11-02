@@ -18,7 +18,6 @@ from aiohttp import ClientSession, web
 
 from agent_comms.active_route import (
     ActiveRoute,
-    RouteFile,
     active_route_path,
     ActiveRouteFile,
     route_new_bus,
@@ -102,10 +101,6 @@ def test_site_notifies_only_after_successful_start(monkeypatch):
             await runner.cleanup()
 
     asyncio.run(serve())
-
-
-def test_the_connector_is_a_declared_service():
-    assert SystemdConnectorService in HostService.members_with(HostService)
 
 
 @pytest.fixture

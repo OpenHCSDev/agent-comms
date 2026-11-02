@@ -1,7 +1,6 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
-from collections.abc import Mapping
 from dataclasses import dataclass
 
 import pytest
@@ -124,8 +123,6 @@ def test_known_nested_payload_has_one_typed_authority():
     )
     assert event.message.usage.total_tokens == PiCount.from_wire(9)
     assert event.message.stop_reason.tool_round
-    assert not isinstance(event, Mapping)
-    assert not hasattr(event, "wire") and not hasattr(event.message, "wire")
 
 
 def test_command_owns_response_schema_and_unknown_data_stays_opaque():

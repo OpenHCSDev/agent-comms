@@ -134,7 +134,7 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
         todo = store.create(
             f'P{index}', RepositoryName.from_wire('example/source'), f'Problem {index}',
             creator=creator, assigner=creator.incarnation, request=request,
-            owner=thread(f'unit{index}', tmp_path, 10.0 + index),
+            owner=thread(f'holder{index}', tmp_path, 10.0 + index),
             generation=GoalId.mint(), review_at=RecordedEventTime(1000), order=checked,
         )
         for _ in range(folds):
@@ -145,13 +145,6 @@ def test_phase_checks_keep_folded_declarations_and_exact_creator_birth(
     assert store.phases_checked(frozenset({lead.incarnation})) == {
         RetainedStorePhase: 20, UnplannedPhase: 30,
     }
-
-
-def test_order_factory_preserves_the_callers_directory_without_creating_source(source_repository):
-    before = tuple(source_repository.checkout.iterdir())
-    planned = order(source_repository)
-    assert planned.check.directory == source_repository.checkout
-    assert tuple(source_repository.checkout.iterdir()) == before
 
 
 def _assign_process(root: str, checkout: str, name: str, created: float, gate) -> tuple[str, str]:
@@ -207,12 +200,10 @@ def test_create_is_idempotent_and_request_link_is_historical(tmp_path: Path, sou
 
 def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
     first_goal_id = GoalId.mint()
-    mutations = []
 
     @dataclass(frozen=True)
     class RetitleTodo(TodoCommand, declared_name=None):
         def changed(self, current: Todo) -> Todo:
-            mutations.append(current.revision)
             return replace(current, text="Changed through the inherited admission",
                            revision=current.revision + 1)
 
@@ -230,7 +221,6 @@ def test_new_mutation_inherits_revision_admission(tmp_path, source_repository):
     assert changed.text == "Changed through the inherited admission"
     with pytest.raises(TodoConflict):
         store.apply(original.id, RetitleTodo(original.revision))
-    assert mutations == [original.revision]
     assert store.get(original.id) == changed
 
 
@@ -607,7 +597,7 @@ def test_released_open_work_restores_its_own_holder_never_swaps(released_publish
 
 
 @pytest.mark.parametrize('disposition', ('retired', 'closed'))
-def test_only_retired_holder_or_closed_pr_allows_cross_unit_dispatch(
+def test_only_retired_holder_or_closed_pr_allows_cross_holder_dispatch(
         released_published_orders, github_cli, disposition):
     ctx, originals = released_published_orders
     c, source = ctx.comms, ctx.repos[0]

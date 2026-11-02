@@ -47,6 +47,17 @@ def facts(metadata, kind):
     return tuple((f for f in decode_updates(metadata) if isinstance(f, kind)))
 
 
+class RecordingClient(SessionUpdateSink):
+    """A client that keeps every session update the agent publishes to it."""
+
+    def __init__(self):
+        self.updates = []
+
+    async def publish_update(self, session_id=None, update=None, **kwargs):
+        self.updates.append(update)
+        return True
+
+
 @pytest.fixture
 def native_stdio_root(native_runtime_package):
     if not os.environ.get("AC_NATIVE_COPIED_PACKAGE"):
@@ -193,15 +204,10 @@ class TestHandlers:
         agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         if renamed:
             agent._comms.threads.rename_managed_thread("proj", "renamed", owner=ProcessIdentity.capture(os.getpid()))
-        sent = []
-
-        class Client(SessionUpdateSink):
-            async def publish_update(self, **kwargs):
-                sent.append(kwargs["update"])
-                return True
-
+        client = RecordingClient()
+        sent = client.updates
         try:
-            await agent.sessions.transcript.replay("proj", client=Client())
+            await agent.sessions.transcript.replay("proj", client=client)
             assert len(sent) == 1
             update = facts(sent[0].field_meta, TranscriptSnapshotUpdate)[0]
             assert update.identity.requested_name == "proj"
@@ -288,16 +294,7 @@ class TestHandlers:
         await first.shutdown()
         assert first._comms.registry.status("proj").declared_name == "stopped"
         second = self._agent(tmp_path)
-
-        class FakeClient(SessionUpdateSink):
-            def __init__(self):
-                self.updates = []
-
-            async def publish_update(self, session_id=None, update=None, **kwargs):
-                self.updates.append(update)
-                return True
-
-        client = FakeClient()
+        client = RecordingClient()
         second.sessions.client = client
         loaded = await second.load_session(
             cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
@@ -541,25 +538,16 @@ class TestActivityLayer:
 
 
 class TestTargetPrefix:
-    def test_dm_prefix(self):
+    @pytest.mark.parametrize("text,target", [
+        ("@fixer hello there", ("fixer", "hello there")),
+        ("#ci flake again", ("#ci", "flake again")),
+        ("plain text", ("#all", "plain text")),
+        ("@fixer", ("#all", "@fixer")),
+    ])
+    def test_prefix_names_the_target(self, text, target):
         from agent_comms.turn_runner import parse_target
 
-        assert parse_target("@fixer hello there") == ("fixer", "hello there")
-
-    def test_channel_prefix(self):
-        from agent_comms.turn_runner import parse_target
-
-        assert parse_target("#ci flake again") == ("#ci", "flake again")
-
-    def test_plain_goes_global(self):
-        from agent_comms.turn_runner import parse_target
-
-        assert parse_target("plain text") == ("#all", "plain text")
-
-    def test_bare_target_not_sent(self):
-        from agent_comms.turn_runner import parse_target
-
-        assert parse_target("@fixer")[0] == "#all"
+        assert parse_target(text) == target
 
     async def test_dm_prompt_reaches_only_target(self, wired, native_runtime_package):
         agent = canonical_agent(wired)
