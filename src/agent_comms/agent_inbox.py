@@ -36,9 +36,11 @@ class TakenInputCursor(ReadCursor):
         raise TypeError("A taken-input cursor reads only once attached to its root's coordinator")
 
     def attached(self, db: sqlite3.Connection, root: Path, privacy: RegistryPrivacy) -> AttachedTakenInputs:
-        """The coordinator joins the held bus snapshot read-only, once per snapshot."""
-        db.execute(f'ATTACH DATABASE ? AS "{AttachedTakenInputs.database}"',
-                   (CoordinationStore.path_in(root).resolve().as_uri() + "?mode=ro",))
+        """The coordinator joins the bus reader read-only, once per reader: readers are reused
+        per thread (OpenSQLiteReadConnection.acquire), and a root's coordinator never moves."""
+        if AttachedTakenInputs.database not in {row[1] for row in db.execute("PRAGMA database_list")}:
+            db.execute(f'ATTACH DATABASE ? AS "{AttachedTakenInputs.database}"',
+                       (CoordinationStore.path_in(root).resolve().as_uri() + "?mode=ro",))
         return AttachedTakenInputs(self.conversations, privacy=privacy)
 
 
